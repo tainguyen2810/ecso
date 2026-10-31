@@ -47,7 +47,7 @@ Như Phase 4 cho TikTok Shop.
 **Tiền điều kiện:** chọn cổng thanh toán (đã chọn: chuyển khoản + admin xác nhận; cổng online cắm thêm sau). **Phạm vi:** plans, entitlements, trial, nâng/hạ gói, thanh toán + IPN idempotent, hóa đơn, usage limits, dashboard tài chính (doanh thu đặt/hoàn thành, phí, lợi nhuận ước tính/đối soát), báo cáo bán chạy/chậm, admin MRR.
 **Nghiệm thu:** test limit + payment idempotency; ảnh chụp gói dịch vụ, thanh toán, tài chính, báo cáo, admin.
 
-### Phase 7 — Lazada & Tiki
+### Phase 7 — Lazada & Tiki ⚠️ khung (2026-10-31, xem PHASE-7-REPORT.md) — chưa tích hợp thật
 Như Phase 4. Tiki: polling event queue; nếu không có API cập nhật tồn ⇒ `UnsupportedCapability` + UI hướng dẫn cập nhật tay.
 
 ### Phase 8 — Production Hardening

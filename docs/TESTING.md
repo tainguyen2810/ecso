@@ -85,4 +85,5 @@ CI (GitHub Actions): service MySQL 8 + Redis, chạy lint (Pint, ESLint), PHPSta
 | 4 | 192 (9 mới: ủy quyền shop, state một lần, chống chiếm shop, giới hạn shop) | – | 16 | 20 |
 | 5 | 195 (3 mới) | – | 16 | 21 |
 | 6 | 212 (17 mới: hóa đơn, idempotency thanh toán, chuyển thiếu/thừa, nâng gói trừ tiền, hạ gói bị chặn/hẹn, dùng thử 1 lần, gia hạn/quá hạn/về Free, IPN giả lập ký HMAC, đếm đơn, tách tenant, admin MRR, tài chính, báo cáo, gating `reports.advanced`) | – | 19 | 23 |
+| 7 | 218 (6 mới: Lazada/Tiki UNKNOWN, từ chối kết nối, từ chối webhook) | – | 19 | 24 |
 | 3 | 183 (41 mới: pipeline đơn, webhook trùng/sai thứ tự, hủy, trả hàng, đẩy tồn, API) | 5 kịch bản (mới: 1.000 đơn / 50 SKU / 20 tiến trình, webhook gửi trùng) | 16 | 18 (6 mới) |

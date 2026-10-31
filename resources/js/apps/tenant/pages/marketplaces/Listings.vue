@@ -18,7 +18,7 @@ import { api, ApiError } from '@/shared/lib/api';
 import { formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
-import { mappingStatus, pushStatus } from '../orders/labels';
+import { manualStockHint, mappingStatus, pushStatus } from '../orders/labels';
 import type { ListingVariantData, MarketplaceAccountData, Variant } from '@/shared/types';
 
 const route = useRoute();
@@ -160,7 +160,8 @@ function pickVariant(v: Variant) {
                             <template v-if="r.push_status">
                                 <Badge :tone="pushStatus[r.push_status]?.tone">{{ pushStatus[r.push_status]?.label ?? r.push_status }}</Badge>
                                 <div v-if="r.last_pushed_qty !== null" class="mt-1 text-muted-foreground">{{ formatNumber(r.last_pushed_qty) }} · {{ formatDateTime(r.last_pushed_at) }}</div>
-                                <div v-if="r.push_error" class="mt-1 text-destructive">{{ r.push_error }}</div>
+                                <div v-if="r.push_status === 'unsupported'" class="mt-1 max-w-56 text-muted-foreground">{{ manualStockHint }}</div>
+                                <div v-else-if="r.push_error" class="mt-1 text-destructive">{{ r.push_error }}</div>
                             </template>
                             <span v-else class="text-muted-foreground">—</span>
                         </td>

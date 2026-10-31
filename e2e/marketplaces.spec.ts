@@ -35,3 +35,20 @@ test('TikTok Shop: skeleton connector, connect refused without credentials', asy
     await expect(page.getByTestId('connect-notice-tiktok')).toContainText('chưa được cấu hình app credentials');
     await page.screenshot({ path: 'docs/screenshots/phase-5/01-tiktok-connect-refused.png', clip: { x: 0, y: 0, width: 1440, height: 640 } });
 });
+
+test('Lazada and Tiki: skeleton connectors, connect refused without credentials, manual stock update guidance', async ({ page }) => {
+    await login(page, 'owner@demo.test');
+    await page.goto('/marketplaces');
+    const card = page.getByTestId('real-marketplaces');
+    await expect(card).toContainText('Lazada');
+    await expect(card).toContainText('Tiki');
+    await expect(card).not.toContainText('Chưa có connector');
+    await expect(page.getByTestId('stock-note-tiki')).toContainText('cập nhật tay trên Seller Center');
+
+    await page.getByTestId('connect-lazada').click();
+    await expect(page.getByTestId('connect-notice-lazada')).toContainText('chưa được cấu hình app credentials');
+    await page.getByTestId('connect-tiki').click();
+    await expect(page.getByTestId('connect-notice-tiki')).toContainText('chưa được cấu hình app credentials');
+    await card.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: 'docs/screenshots/phase-7/01-lazada-tiki-connect-refused.png', clip: { x: 0, y: 0, width: 1440, height: 640 } });
+});

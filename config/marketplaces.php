@@ -1,7 +1,9 @@
 <?php
 
 use App\Modules\Marketplace\Connectors\Fake\FakeConnector;
+use App\Modules\Marketplace\Connectors\Lazada\LazadaConnector;
 use App\Modules\Marketplace\Connectors\Shopee\ShopeeConnector;
+use App\Modules\Marketplace\Connectors\Tiki\TikiConnector;
 use App\Modules\Marketplace\Connectors\TikTok\TikTokConnector;
 
 return [
@@ -19,6 +21,8 @@ return [
         // Skeleton: all capabilities UNKNOWN until verified with official docs and partner credentials.
         'shopee' => ShopeeConnector::class,
         'tiktok' => TikTokConnector::class,
+        'lazada' => LazadaConnector::class,
+        'tiki' => TikiConnector::class,
     ],
 
     // App credentials per marketplace (issued by the marketplace's developer portal). Never committed; set on the
@@ -31,6 +35,14 @@ return [
         'tiktok' => [
             'app_key' => env('TIKTOK_SHOP_APP_KEY'),
             'app_secret' => env('TIKTOK_SHOP_APP_SECRET'),
+        ],
+        'lazada' => [
+            'app_key' => env('LAZADA_APP_KEY'),
+            'app_secret' => env('LAZADA_APP_SECRET'),
+        ],
+        'tiki' => [
+            'client_id' => env('TIKI_CLIENT_ID'),
+            'client_secret' => env('TIKI_CLIENT_SECRET'),
         ],
     ],
 
