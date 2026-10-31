@@ -33,11 +33,11 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
         label: 'Vận hành',
         items: [
             { name: 'dashboard', label: 'Tổng quan', path: '/', icon: LayoutDashboard, permission: 'dashboard.view', shortcut: 'd' },
-            { name: 'orders', label: 'Đơn hàng', path: '/orders', icon: ShoppingCart, permission: 'orders.view', phase: 3, shortcut: 'o', description: 'Quản lý đơn tập trung từ mọi sàn: lọc, xử lý hàng loạt, in phiếu, theo dõi trạng thái.' },
+            { name: 'orders', label: 'Đơn hàng', path: '/orders', icon: ShoppingCart, permission: 'orders.view', shortcut: 'o', description: 'Quản lý đơn tập trung từ mọi sàn: lọc, xử lý hàng loạt, in phiếu, theo dõi trạng thái.' },
             { name: 'products', label: 'Sản phẩm', path: '/products', icon: Package, permission: 'products.view', shortcut: 'p', description: 'SKU, biến thể, mã vạch, mapping với listing trên sàn.' },
             { name: 'inventory', label: 'Kho hàng', path: '/inventory', icon: Boxes, permission: 'inventory.view', shortcut: 'i', description: 'Tồn kho nhiều kho, sổ kho, giữ tồn, điều chỉnh và chuyển kho.' },
             { name: 'purchasing', label: 'Mua hàng', path: '/purchasing', icon: Truck, permission: 'purchasing.view', phase: 6, description: 'Nhà cung cấp, đơn mua, phiếu nhập và giá vốn.' },
-            { name: 'returns', label: 'Trả hàng', path: '/returns', icon: Undo2, permission: 'returns.view', phase: 3, description: 'Hàng hoàn từ khách, kiểm hàng và nhập kho lại.' },
+            { name: 'returns', label: 'Trả hàng', path: '/returns', icon: Undo2, permission: 'returns.view', description: 'Hàng hoàn từ khách, kiểm hàng và nhập kho lại.' },
         ],
     },
     {
@@ -50,7 +50,7 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
     {
         label: 'Thiết lập',
         items: [
-            { name: 'marketplaces', label: 'Kết nối sàn', path: '/marketplaces', icon: PlugZap, permission: 'marketplace.view', phase: 4, description: 'Kết nối Shopee, TikTok Shop, Lazada, Tiki bằng API chính thức.' },
+            { name: 'marketplaces', label: 'Kết nối sàn', path: '/marketplaces', icon: PlugZap, permission: 'marketplace.view', description: 'Kết nối Shopee, TikTok Shop, Lazada, Tiki bằng API chính thức.' },
             { name: 'members', label: 'Nhân viên', path: '/members', icon: Users, permission: 'members.view', shortcut: 'm' },
             { name: 'subscription', label: 'Gói dịch vụ', path: '/subscription', icon: CreditCard, permission: 'billing.view' },
             { name: 'audit', label: 'Nhật ký', path: '/audit', icon: ScrollText, permission: 'audit.view' },

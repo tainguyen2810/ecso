@@ -178,3 +178,137 @@ export interface InventoryDocument {
     total_quantity?: number | null;
     total_value?: string | null;
 }
+
+export interface OrderSummary {
+    id: string;
+    marketplace: string;
+    shop?: { id: string; name: string; marketplace: string };
+    external_order_id: string;
+    status: string;
+    raw_status: string;
+    payment_method: string | null;
+    is_cod: boolean;
+    subtotal: string;
+    shipping_fee: string;
+    discount: string;
+    total: string;
+    buyer_name: string | null;
+    buyer_phone: string | null;
+    shipping_address: string | null;
+    carrier: string | null;
+    tracking_number: string | null;
+    buyer_note: string | null;
+    placed_at: string | null;
+    paid_at: string | null;
+    ship_by_at: string | null;
+    handed_over_at: string | null;
+    cancelled_at: string | null;
+    cancel_reason: string | null;
+    external_updated_at: string | null;
+    flags: { shortage: boolean; unmapped: boolean; overdue: boolean; due_soon: boolean; printed: boolean };
+    sync_warning: string | null;
+    warehouse?: { id: string; code: string; name: string } | null;
+    assignee?: Ref | null;
+    items_count?: number;
+    items_preview?: { name: string; variant_name: string | null; quantity: number; sku: string | null }[];
+}
+
+export interface OrderItemDetail {
+    id: number;
+    name: string;
+    variant_name: string | null;
+    seller_sku: string | null;
+    external_sku_id: string | null;
+    quantity: number;
+    unit_price: string;
+    discount: string;
+    mapping_status: string;
+    listing_id: string | null;
+    variant: { id: string; sku: string; name: string } | null;
+    reservation: { quantity: number; shortage: number; status: string } | null;
+}
+
+export interface OrderDetail extends OrderSummary {
+    items: OrderItemDetail[];
+    history: { from: string | null; to: string; raw_status: string | null; source: string; actor: string | null; note: string | null; occurred_at: string | null; created_at: string }[];
+    notes: { id: number; body: string; user: string | null; created_at: string | null }[];
+    returns: OrderReturnData[];
+    actions: Record<string, { allowed: boolean; capability: string }>;
+    capabilities: Record<string, string>;
+}
+
+export interface OrderReturnLineData {
+    id: number;
+    name: string | null;
+    variant_name: string | null;
+    sku: string | null;
+    mapped: boolean;
+    quantity: number;
+    received_qty: number;
+    sellable_qty: number;
+    damaged_qty: number;
+}
+
+export interface OrderReturnData {
+    id: string;
+    number: string;
+    type: string;
+    status: string;
+    reason: string | null;
+    refund_amount: string | null;
+    note: string | null;
+    expects_goods: boolean;
+    next: string[];
+    order?: { id: string; external_order_id: string; status: string; marketplace: string };
+    warehouse?: { id: string; code: string; name: string } | null;
+    lines?: OrderReturnLineData[];
+    lines_count?: number;
+    created_by?: string | null;
+    inspected_by?: string | null;
+    received_at: string | null;
+    inspected_at: string | null;
+    closed_at: string | null;
+    created_at: string | null;
+}
+
+export interface MarketplaceCatalogEntry {
+    key: string;
+    name: string;
+    available: boolean;
+    is_fake: boolean;
+    capabilities: Record<string, string>;
+}
+
+export interface MarketplaceAccountData {
+    id: string;
+    marketplace: string;
+    marketplace_name: string;
+    shop_name: string;
+    external_shop_id: string;
+    status: string;
+    sync_enabled: boolean;
+    warehouse: { id: string; code: string; name: string } | null;
+    connected_at: string | null;
+    last_synced_at: string | null;
+    last_error: string | null;
+    circuit_open: boolean;
+    stats?: { listings: number; mapped: number; suggested: number; push_errors: number; pending_push: number };
+}
+
+export interface ListingVariantData {
+    id: string;
+    external_product_id: string | null;
+    external_sku_id: string;
+    title: string;
+    name: string;
+    seller_sku: string | null;
+    price: string | null;
+    marketplace_stock: number | null;
+    mapping_status: string;
+    variant: { id: string; sku: string; name: string } | null;
+    last_pushed_qty: number | null;
+    last_pushed_at: string | null;
+    push_status: string | null;
+    push_error: string | null;
+    mapped_at: string | null;
+}

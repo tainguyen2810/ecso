@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Phase 3 — Order Engine (2026-10-31)
+- Module Marketplace: tài khoản shop (credential mã hóa), listing + listing variant, bảng ánh xạ trạng thái, inbox webhook, outbox đẩy tồn (debounce, backoff, circuit breaker), sync cursor. Connector interface + `UnverifiedConnector` (mọi thứ UNKNOWN) + sàn giả lập FAKE đầy đủ (webhook ký HMAC).
+- Module Orders: đơn, dòng đơn, lịch sử trạng thái, ghi chú, phân công, trả hàng/kiểm hàng/nhập lại. `OrderIngestor` chống trùng, chống sai thứ tự, chống chuyển lùi. Chính sách giữ/xuất/nhả tồn theo trạng thái; bù thiếu hàng theo đơn cũ trước.
+- Mapping SKU: chỉ gợi ý khi SKU trùng chính xác, người dùng xác nhận; map xong tự giữ tồn cho đơn đang mở.
+- API: `/orders` (tabs + đếm, lọc, bulk, in phiếu, đồng bộ, ghi chú, phân công, tóm tắt), `/returns`, `/marketplaces`, `/marketplace-accounts`, `/listings`, `/fake-marketplace`, `POST /webhooks/{marketplace}`.
+- Giao diện: Đơn hàng (tabs, lọc, cờ quá hạn/thiếu hàng/chưa map, bulk, in phiếu đóng gói PDF), chi tiết đơn, Trả hàng (kiểm hàng), Kết nối sàn (ma trận capability, bảng điều khiển sàn giả lập, theo dõi webhook), Liên kết SKU, KPI đơn trên Tổng quan.
+- Sửa trong lúc test: 3 deadlock thật (gap lock khi khóa dòng chưa tồn tại, thứ tự khóa dòng đơn, outbox `updateOrCreate`) và lỗi đọc snapshot sau insert trùng, đều do test 1.000 đơn đồng thời phát hiện.
+
 ### Phase 2 — Catalog & Inventory (2026-10-31)
 - Catalog: sản phẩm, biến thể (SKU duy nhất theo tenant, không phân biệt hoa thường, kể cả SKU đã xóa), mã vạch, danh mục, thương hiệu, ảnh (đường dẫn ngẫu nhiên theo tenant), thao tác trạng thái hàng loạt, kiểm tra SKU trực tiếp.
 - Import CSV/XLSX (OpenSpout): kiểm tra toàn bộ trước, có lỗi thì không ghi gì; gộp biến thể theo `product_key`, không ghép theo tên; tồn đầu kỳ chỉ cho SKU mới. Export CSV/XLSX. 10.000 SKU ≈ 9 giây.

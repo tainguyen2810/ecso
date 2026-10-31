@@ -5,7 +5,10 @@ import PageHeader from '../PageHeader.vue';
 import Card from '@/shared/ui/Card.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import { api } from '@/shared/lib/api';
-import { formatNumber } from '@/shared/lib/utils';
+import { formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
+import Badge from '@/shared/ui/Badge.vue';
+import { marketplaceNames, orderStatus } from './orders/labels';
+import type { OrderSummary } from '@/shared/types';
 import { useAuthStore } from '@/shared/stores/auth';
 import { useTenantStore } from '@/shared/stores/tenant';
 
@@ -13,15 +16,36 @@ const auth = useAuthStore();
 const tenant = useTenantStore();
 
 const stock = ref<{ low_stock: number; out_of_stock: number } | null>(null);
+const orders = ref<{ today_orders: number; today_ordered_revenue: string; to_process: number; overdue: number; shortage: number; recent: OrderSummary[] } | null>(null);
+const accountsCount = ref<number | null>(null);
 onMounted(async () => {
-    if (tenant.can('inventory.view')) stock.value = (await api.get('/inventory/summary')).data.data;
+    if (tenant.can('inventory.view')) api.get('/inventory/summary').then(({ data }) => (stock.value = data.data)).catch(() => {});
+    if (tenant.can('orders.view')) api.get('/orders/summary').then(({ data }) => (orders.value = data.data)).catch(() => {});
+    if (tenant.can('marketplace.view')) api.get('/marketplace-accounts').then(({ data }) => (accountsCount.value = data.data.filter((a: { status: string }) => a.status === 'connected').length)).catch(() => {});
 });
 
-// Order KPIs arrive with the order engine (Phase 3); stock KPIs are live from Phase 2.
 const kpis = computed(() => [
-    { label: 'Doanh thu đặt hàng hôm nay', icon: TrendingUp, value: null, hint: 'Chưa có dữ liệu', to: null },
-    { label: 'Đơn mới', icon: ShoppingCart, value: null, hint: 'Chưa có dữ liệu', to: null },
-    { label: 'Đơn quá hạn xử lý', icon: PackageX, value: null, hint: 'Chưa có dữ liệu', to: null },
+    {
+        label: 'Doanh thu đặt hàng hôm nay',
+        icon: TrendingUp,
+        value: orders.value ? formatMoney(orders.value.today_ordered_revenue) : null,
+        hint: orders.value ? 'Giá trị khách trả, chưa trừ phí sàn' : 'Chưa có dữ liệu',
+        to: null,
+    },
+    {
+        label: 'Đơn hôm nay',
+        icon: ShoppingCart,
+        value: orders.value ? formatNumber(orders.value.today_orders) : null,
+        hint: orders.value ? `${formatNumber(orders.value.to_process)} đơn đang chờ xử lý` : 'Chưa có dữ liệu',
+        to: orders.value ? '/orders?tab=to_pack' : null,
+    },
+    {
+        label: 'Đơn quá hạn giao',
+        icon: PackageX,
+        value: orders.value ? formatNumber(orders.value.overdue) : null,
+        hint: orders.value ? `${formatNumber(orders.value.shortage)} đơn đang thiếu hàng` : 'Chưa có dữ liệu',
+        to: orders.value ? '/orders?flags=overdue' : null,
+    },
     {
         label: 'SKU sắp hết hàng',
         icon: Boxes,
@@ -35,7 +59,7 @@ const steps = computed(() => [
     { done: true, label: 'Tạo doanh nghiệp', to: null },
     { done: false, label: 'Mời nhân viên và phân quyền', to: tenant.can('members.view') ? '/members' : null },
     { done: false, label: 'Tạo sản phẩm và nhập kho', to: tenant.can('products.view') ? '/products' : null },
-    { done: false, label: 'Kết nối shop Shopee hoặc TikTok Shop (Phase 4–5)', to: null },
+    { done: (accountsCount.value ?? 0) > 0, label: 'Kết nối gian hàng', to: tenant.can('marketplace.view') ? '/marketplaces' : null },
 ]);
 </script>
 
@@ -58,8 +82,23 @@ const steps = computed(() => [
     </div>
 
     <div class="mt-6 grid gap-6 lg:grid-cols-3">
-        <Card class="lg:col-span-2" title="Đơn hàng gần đây" description="Đơn từ tất cả các sàn sẽ hiển thị tại đây.">
-            <EmptyState :icon="PlugZap" title="Chưa kết nối sàn nào" description="Kết nối Shopee, TikTok Shop, Lazada hoặc Tiki để bắt đầu nhận đơn. Tính năng có từ Phase 4." />
+        <Card class="lg:col-span-2" title="Đơn hàng gần đây" description="Đơn từ tất cả các sàn.">
+            <template v-if="orders?.recent.length" #actions><RouterLink to="/orders" class="text-sm text-primary hover:underline">Xem tất cả</RouterLink></template>
+            <ul v-if="orders?.recent.length" class="divide-y" data-testid="recent-orders">
+                <li v-for="o in orders.recent" :key="o.id">
+                    <RouterLink :to="`/orders/${o.id}`" class="flex items-center gap-3 px-5 py-3 text-sm hover:bg-muted/30">
+                        <div class="flex-1">
+                            <div class="font-mono text-xs font-medium">{{ o.external_order_id }}</div>
+                            <div class="text-xs text-muted-foreground">{{ marketplaceNames[o.marketplace] ?? o.marketplace }} · {{ o.shop?.name }} · {{ formatDateTime(o.placed_at) }}</div>
+                        </div>
+                        <span class="tabular-nums">{{ formatMoney(o.total) }}</span>
+                        <Badge :tone="orderStatus[o.status]?.tone">{{ orderStatus[o.status]?.label ?? o.status }}</Badge>
+                    </RouterLink>
+                </li>
+            </ul>
+            <EmptyState v-else :icon="PlugZap" title="Chưa có đơn hàng" description="Kết nối gian hàng để bắt đầu nhận đơn. Đơn mới sẽ xuất hiện tại đây.">
+                <RouterLink v-if="tenant.can('marketplace.view')" to="/marketplaces" class="text-sm text-primary hover:underline">Kết nối sàn</RouterLink>
+            </EmptyState>
         </Card>
         <Card title="Bắt đầu" description="Các bước thiết lập cửa hàng">
             <ul class="divide-y">

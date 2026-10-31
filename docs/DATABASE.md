@@ -132,3 +132,25 @@ Vai trò hệ thống seed: TENANT_OWNER, TENANT_ADMIN, MANAGER, WAREHOUSE_STAFF
 
 - `webhook_events.payload`, `orders.raw`, `sync_attempts`: dọn theo `data_retention_days` của gói (job hằng đêm), giữ tối thiểu 30 ngày.
 - `stock_movements`, `audit_logs`: không xóa trong thời gian tenant còn hoạt động; có thể partition theo năm khi > 50M dòng.
+
+## Phase 3 — Marketplace & Orders (đã tạo)
+
+Migrations `2026_10_31_300000_create_marketplace_tables`, `2026_10_31_300100_create_order_tables`.
+
+| Bảng | Ghi chú chính |
+|---|---|
+| marketplace_accounts | U(marketplace, external_shop_id); `warehouse_id` kho xuất; `consecutive_failures`, `circuit_open_until` |
+| marketplace_credentials | token mã hóa (encrypted cast), ẩn khỏi JSON |
+| marketplace_listings / listing_variants | U(account, external_sku_id); `mapping_status` unmapped/suggested/mapped/ignored; trạng thái đẩy tồn |
+| marketplace_status_maps | raw status → trạng thái nội bộ, theo sàn |
+| webhook_events | inbox, U(marketplace, dedupe_key); không thuộc tenant scope (tenant được xác định server-side khi xử lý) |
+| inventory_sync_outbox | U(listing_variant_id); pending/sent/failed, `available_at`, `attempts` |
+| sync_cursors | mốc đối soát theo shop |
+| fake_marketplace_products / fake_marketplace_orders | chỉ dùng cho sàn giả lập |
+| orders | U(account, external_order_id); `external_updated_at` timestamp(6); `buyer_name`, `shipping_address` mã hóa; điện thoại lưu dạng che; cờ `has_shortage`, `has_unmapped`, `sync_warning` |
+| order_items | U(order, external_item_id); `product_variant_id` cố định khi đã giữ tồn |
+| order_status_history | nguồn (webhook/user/reconcile), người thao tác, raw status |
+| order_notes | ghi chú nội bộ |
+| order_returns / order_return_lines | U(tenant, number), U(tenant, order, source_key) chống tạo trùng phiếu tự động; số lượng nhận / bán được / hỏng |
+
+Reservation của dòng đơn: `stock_reservations` với `reference_type = 'order_item'`.

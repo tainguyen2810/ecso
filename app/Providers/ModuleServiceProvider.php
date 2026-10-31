@@ -8,6 +8,7 @@ use App\Modules\Catalog\Models\Product;
 use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Catalog\Policies\ProductPolicy;
 use App\Modules\Inventory\Console\VerifyInventoryCommand;
+use App\Modules\Inventory\Events\AvailableStockChanged;
 use App\Modules\Inventory\Listeners\CreateDefaultWarehouse;
 use App\Modules\Inventory\Models\InventoryAdjustment;
 use App\Modules\Inventory\Models\StockBalance;
@@ -16,6 +17,21 @@ use App\Modules\Inventory\Models\StockTransfer;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Policies\InventoryPolicy;
 use App\Modules\Inventory\Policies\WarehousePolicy;
+use App\Modules\Marketplace\Console\PushDueInventoryCommand;
+use App\Modules\Marketplace\Events\ListingMappingChanged;
+use App\Modules\Marketplace\Events\WebhookReceived;
+use App\Modules\Marketplace\Listeners\PlanInventoryPush;
+use App\Modules\Marketplace\Models\ListingVariant;
+use App\Modules\Marketplace\Models\MarketplaceAccount;
+use App\Modules\Marketplace\Policies\MarketplacePolicy;
+use App\Modules\Orders\Console\ReconcileOrdersCommand;
+use App\Modules\Orders\Listeners\FillOrderShortages;
+use App\Modules\Orders\Listeners\QueueWebhookProcessing;
+use App\Modules\Orders\Listeners\RemapOrderItems;
+use App\Modules\Orders\Models\Order;
+use App\Modules\Orders\Models\OrderReturn;
+use App\Modules\Orders\Policies\OrderPolicy;
+use App\Modules\Orders\Policies\ReturnPolicy;
 use App\Modules\Platform\Console\CheckEnvCommand;
 use App\Modules\Platform\Console\InstallCommand;
 use App\Modules\Tenancy\Events\TenantCreated;
@@ -37,7 +53,7 @@ use Illuminate\Support\ServiceProvider;
 class ModuleServiceProvider extends ServiceProvider
 {
     /** Modules whose Routes/api.php is mounted under /api/v1. */
-    private const API_MODULES = ['Identity', 'Tenancy', 'Billing', 'Audit', 'Admin', 'Catalog', 'Inventory'];
+    private const API_MODULES = ['Identity', 'Tenancy', 'Billing', 'Audit', 'Admin', 'Catalog', 'Inventory', 'Marketplace', 'Orders'];
 
     public function register(): void
     {
@@ -57,7 +73,18 @@ class ModuleServiceProvider extends ServiceProvider
             Gate::policy($model, InventoryPolicy::class);
         }
 
+        Gate::policy(MarketplaceAccount::class, MarketplacePolicy::class);
+        Gate::policy(ListingVariant::class, MarketplacePolicy::class);
+        Gate::policy(Order::class, OrderPolicy::class);
+        Gate::policy(OrderReturn::class, ReturnPolicy::class);
+
         Event::listen(TenantCreated::class, CreateDefaultWarehouse::class);
+        Event::listen(WebhookReceived::class, QueueWebhookProcessing::class);
+        // Order shortages are filled first, then the marketplaces get the resulting published stock.
+        Event::listen(AvailableStockChanged::class, FillOrderShortages::class);
+        Event::listen(AvailableStockChanged::class, PlanInventoryPush::class);
+        Event::listen(ListingMappingChanged::class, RemapOrderItems::class);
+        Event::listen(ListingMappingChanged::class, PlanInventoryPush::class);
 
         foreach (self::API_MODULES as $module) {
             Route::middleware('api')->prefix('api/v1')->group(app_path("Modules/{$module}/Routes/api.php"));
@@ -66,7 +93,7 @@ class ModuleServiceProvider extends ServiceProvider
         $this->configureAuthLinks();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class]);
+            $this->commands([CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, PushDueInventoryCommand::class, ReconcileOrdersCommand::class]);
         }
     }
 

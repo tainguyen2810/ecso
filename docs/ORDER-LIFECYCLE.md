@@ -103,9 +103,24 @@ RETURN_REQUESTED → APPROVED → IN_TRANSIT_BACK → RECEIVED → INSPECTED →
 | Sự kiện cũ đến sau sự kiện mới | `external_updated_at` cũ hơn ⇒ bỏ qua chuyển trạng thái |
 | Webhook bị mất | `OrderReconcile` polling định kỳ |
 
-## 7. Màn hình đơn hàng (Phase 3, giao diện sẽ gửi ảnh khi xong)
+## 7. Màn hình đơn hàng (Phase 3 — đã làm, ảnh tại `docs/screenshots/phase-3/`)
 
 - Tabs theo §1 với bộ đếm; lọc theo sàn, shop, thời gian, trạng thái, SKU, nhân viên phụ trách, cờ (thiếu hàng, chưa mapping, quá hạn).
 - Bulk: xác nhận, in phiếu đóng gói, in vận đơn (khi connector hỗ trợ), phân công.
 - Chi tiết đơn: items + mapping, lịch sử trạng thái (raw + nội bộ), ghi chú nội bộ, reservation/kho, phí (ước tính/đối soát).
 - Cảnh báo quá hạn: `ship_by_at` < now + ngưỡng.
+
+## 8. Ghi chú triển khai (Phase 3)
+
+- **Inbox webhook** (`webhook_events`, U(marketplace, dedupe_key)): xác thực chữ ký → lưu → trả 200. Webhook không mang `tenant_id`; job `ProcessWebhookEvent` (queue `webhooks`, 6 lần thử) tìm tenant qua `marketplace_accounts` (marketplace + shop id) ở phía server, rồi gọi API lấy chi tiết đơn (snapshot của sàn là sự thật), rồi `OrderIngestor`.
+- **OrderIngestor**: tạo/khóa đơn không dùng gap lock (đọc thường → insert có unique key → nếu trùng thì đọc hiện tại có khóa → khóa theo PK); `external_updated_at` lưu tới micro giây; kết quả `created | updated | unchanged | stale | ignored_transition`. Chuyển trạng thái lùi bị từ chối và ghi `sync_warning`. Trạng thái thô chưa ánh xạ ⇒ `UNKNOWN_STATUS`, giữ nguyên reservation.
+- **Chính sách tồn**: RESERVE (UNPAID…PACKED), CONSUME (đã rời kho; bù shortage trước khi xuất, phần không có hàng ghi nhận là shortage của reservation đã consume, **không trừ âm kho**), RELEASE (CANCELLED). Hủy sau khi đã gửi ⇒ tự tạo phiếu `cancel_after_ship` (đang hoàn về). Giao thất bại ⇒ phiếu `failed_delivery`.
+- **Thiếu hàng**: giữ phần có, ghi shortage; listener `FillOrderShortages` bù theo `placed_at` cũ trước khi có hàng nhập (sự kiện `AvailableStockChanged`).
+- **Mapping**: SKU người bán trùng chính xác (đã chuẩn hóa) chỉ thành `SUGGESTED`; người dùng xác nhận thành `MAPPED`. Không bao giờ ghép theo tên. Map xong ⇒ `RemapOrderItems` gắn SKU nội bộ cho đơn đang mở trong 30 ngày và giữ tồn.
+- **Outbox đẩy tồn** (`inventory_sync_outbox`, 1 dòng/listing): giảm tồn đẩy ngay, tăng tồn debounce 3 giây; `PushInventoryJob` khóa theo shop, backoff 10s→30 phút, tối đa 8 lần; 5 lỗi liên tiếp mở circuit breaker 5 phút; sàn không hỗ trợ ⇒ `unsupported` (không giả lập thành công). Lệnh `ecso:marketplace:push-due` mỗi phút.
+- **Đối soát**: `ecso:orders:reconcile` mỗi 15 phút (lấy đơn cập nhật gần đây, chồng lấn 5 phút).
+- **Thao tác người dùng** (xác nhận/đóng gói/bàn giao/hủy) gửi lên sàn trước, rồi đọc lại đơn qua API. Sàn chưa xác minh hỗ trợ ⇒ HTTP 422 `UNSUPPORTED_CAPABILITY`; giao diện vô hiệu nút và ghi rõ UNKNOWN.
+- **Trả hàng**: requested → approved → in_transit → received → inspected → closed (hoặc rejected; approved → closed cho hoàn tiền không kèm hàng). Kho chỉ cộng lại khi kiểm hàng, theo số "bán được" (`InventoryService::restockReturn`, khóa idempotency `restock:return:{id}`). Hoàn tiền không bao giờ cộng kho.
+- **PII**: `buyer_name`, `shipping_address` mã hóa (encrypted cast); điện thoại chỉ lưu dạng che.
+- **Phiếu đóng gói PDF**: server trả dữ liệu + đánh dấu đã in; PDF tạo ở trình duyệt bằng pdfmake (font Roboto hỗ trợ tiếng Việt). Lý do: môi trường build không tải được dompdf; tránh phụ thuộc PHP nặng.
+- **Sàn giả lập (FAKE)**: bảng `fake_marketplace_*`, webhook ký HMAC-SHA256(timestamp.body), lệch tối đa 300 giây. Chỉ bật khi `FAKE_MARKETPLACE_ENABLED=true`; `ecso:check-env --production` báo lỗi nếu bật trên production.

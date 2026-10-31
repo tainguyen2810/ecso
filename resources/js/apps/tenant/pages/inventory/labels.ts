@@ -20,6 +20,8 @@ export const referenceLabels: Record<string, string> = {
     InventoryAdjustment: 'Phiếu điều chỉnh',
     StockTransfer: 'Phiếu chuyển',
     StockReservation: 'Giữ hàng',
+    order_item: 'Đơn hàng',
+    OrderReturn: 'Phiếu trả hàng',
 };
 
 export const adjustmentReasons: Record<string, string> = {
