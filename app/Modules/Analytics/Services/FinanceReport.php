@@ -24,12 +24,12 @@ class FinanceReport
         $orders = fn () => Order::query()->when($accountId, fn ($q) => $q->where('marketplace_account_id', $accountId));
 
         $placed = $orders()->whereBetween('placed_at', [$from, $to]);
-        $ordered = (clone $placed)->where('status', '!=', OrderStatus::CANCELLED)
+        $ordered = (clone $placed)->where('status', '!=', OrderStatus::CANCELLED)->toBase()
             ->selectRaw('COUNT(*) as n, COALESCE(SUM(total), 0) as total, COALESCE(SUM(subtotal - discount), 0) as goods')->first();
-        $cancelled = (clone $placed)->where('status', OrderStatus::CANCELLED)->selectRaw('COUNT(*) as n, COALESCE(SUM(total), 0) as total')->first();
+        $cancelled = (clone $placed)->where('status', OrderStatus::CANCELLED)->toBase()->selectRaw('COUNT(*) as n, COALESCE(SUM(total), 0) as total')->first();
 
         $completedStatuses = [OrderStatus::DELIVERED, OrderStatus::COMPLETED];
-        $completed = $orders()->whereIn('status', $completedStatuses)->whereBetween('delivered_at', [$from, $to])
+        $completed = $orders()->whereIn('status', $completedStatuses)->whereBetween('delivered_at', [$from, $to])->toBase()
             ->selectRaw('COUNT(*) as n, COALESCE(SUM(total), 0) as total, COALESCE(SUM(subtotal - discount), 0) as goods')->first();
 
         $cogs = (float) DB::table('order_items')->join('orders', 'orders.id', '=', 'order_items.order_id')

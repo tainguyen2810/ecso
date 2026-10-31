@@ -167,9 +167,10 @@ class SubscriptionService
         $limits = $plan->features()->get()->mapWithKeys(fn ($f) => [$f->key => $f->pivot->getAttribute('enabled') ? $f->pivot->getAttribute('limit_value') : 0]);
         $out = [];
         foreach (UsageService::HARD_LIMITS as $feature) {
-            $limit = $limits[$feature] ?? 0;
+            // Missing feature = not included (0); null = unlimited.
+            $limit = $limits->has($feature) ? $limits->get($feature) : 0;
             $used = $this->usage->current($feature);
-            if ($limit !== null && $used > (int) $limit) {
+            if (is_numeric($limit) && $used > (int) $limit) {
                 $out[$feature] = ['used' => $used, 'limit' => (int) $limit];
             }
         }
