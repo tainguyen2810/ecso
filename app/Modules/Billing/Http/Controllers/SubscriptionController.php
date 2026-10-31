@@ -30,8 +30,8 @@ class SubscriptionController extends Controller
                 'name' => $plan->name,
                 'price_monthly' => (float) $plan->price_monthly,
                 'features' => $plan->features->mapWithKeys(fn ($f) => [$f->key => [
-                    'enabled' => (bool) $f->pivot->enabled,
-                    'limit' => $f->pivot->limit_value,
+                    'enabled' => (bool) $f->pivot->getAttribute('enabled'),
+                    'limit' => $f->pivot->getAttribute('limit_value'),
                 ]]),
             ]),
         ]]);

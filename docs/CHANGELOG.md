@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+### Phase 2 — Catalog & Inventory (2026-10-31)
+- Catalog: sản phẩm, biến thể (SKU duy nhất theo tenant, không phân biệt hoa thường, kể cả SKU đã xóa), mã vạch, danh mục, thương hiệu, ảnh (đường dẫn ngẫu nhiên theo tenant), thao tác trạng thái hàng loạt, kiểm tra SKU trực tiếp.
+- Import CSV/XLSX (OpenSpout): kiểm tra toàn bộ trước, có lỗi thì không ghi gì; gộp biến thể theo `product_key`, không ghép theo tên; tồn đầu kỳ chỉ cho SKU mới. Export CSV/XLSX. 10.000 SKU ≈ 9 giây.
+- Inventory: nhiều kho (giới hạn theo gói), sổ kho bất biến, giữ tồn có shortage, nhả/xuất theo reservation, phiếu nhập (giá vốn bình quân gia quyền), phiếu điều chỉnh có duyệt (đếm thực tế hoặc chênh lệch), phiếu chuyển kho (nháp → đang chuyển → đã nhận, hủy khi đang chuyển trả hàng về kho nguồn), tồn an toàn, thẻ kho.
+- `InventoryService` là điểm ghi duy nhất (test arch); khóa dòng theo thứ tự cố định; idempotency key; sự kiện `AvailableStockChanged` sau commit.
+- `ecso:inventory:verify` (chạy hằng ngày), `AllocationCalculator`.
+- Quyền mới `inventory.receive`. Tenant mới tự có kho mặc định `MAIN`.
+- Giao diện: Sản phẩm (danh sách, form + tạo nhanh biến thể, import), Kho hàng (tồn kho, thẻ kho, phiếu nhập/điều chỉnh/chuyển kho, danh sách kho), KPI sắp hết hàng trên Tổng quan. Ô chọn SKU hỗ trợ máy quét mã vạch.
+- Sửa: 2 deadlock thật do test đa tiến trình phát hiện (INSERT IGNORE trên dòng có sẵn; khóa ngoại khi insert movement).
+- CI: thêm PHPStan (Larastan level 5) và bước test concurrency.
+
 ### Phase 1 — SaaS Foundation (2026-10-31)
 - Khởi tạo Laravel 12.70 (PHP 8.3), Sanctum (SPA cookie), Horizon, Pest; Vue 3 + TypeScript + Tailwind 4 + Pinia + Vue Router, Lucide.
 - Identity: đăng ký, đăng nhập (giới hạn 5 lần sai/phút), đăng xuất, xác minh email (link ký số), quên/đặt lại mật khẩu, khóa tài khoản.

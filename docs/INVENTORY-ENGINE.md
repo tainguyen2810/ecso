@@ -171,3 +171,33 @@ AvailableStockChanged(variant_ids)
 - Chuyển kho ⇒ tổng on_hand toàn tenant không đổi.
 - Property-based test: chuỗi lệnh ngẫu nhiên ⇒ bất biến §1 luôn đúng.
 - Deadlock: đơn A (SKU1, SKU2) và đơn B (SKU2, SKU1) đồng thời ⇒ không treo, cả hai hoàn tất.
+
+
+## 11. Triển khai thực tế (Phase 2, 2026-10-31)
+
+Phần này ghi lại chỗ code khác hoặc cụ thể hơn thiết kế ở trên. Code: `app/Modules/Inventory/Services/InventoryService.php`.
+
+**API thực tế** (thay cho các Command object ở §3, cho gọn):
+
+| Hàm | Movement | Ghi chú |
+|---|---|---|
+| `receive(warehouse, lines, key, ref, type)` | RECEIPT / OPENING / RETURN_RESTOCK | RECEIPT/OPENING cập nhật giá vốn bình quân; RETURN_RESTOCK không đổi giá vốn |
+| `issue(warehouse, lines, key, ref, type)` | TRANSFER_OUT / DAMAGE_OUT / SUPPLIER_RETURN / SHIP_UNRESERVED | Không lấy phần đã giữ cho người khác (cần `available ≥ qty`) trừ kho `allow_negative` |
+| `transferIn(warehouse, lines, key, ref)` | TRANSFER_IN | |
+| `adjust(warehouse, lines{mode: delta/count}, key, ref, reason)` | ADJUSTMENT_IN / ADJUSTMENT_OUT | Số đếm (count) tính chênh lệch **dưới khóa** lúc duyệt; không cho `on_hand < 0`; cho phép `on_hand < reserved` (thực tế kiểm kê) ⇒ khả dụng âm, hiển thị "Thiếu hàng" |
+| `reserve(warehouse, variant, qty, refType, refId, key, allowShortage)` | RESERVE | Giữ tối đa `available`, phần thiếu ghi `shortage`. Idempotent theo (reference, kho) **và** theo key |
+| `release(reservation, key)` / `ship(reservation, key)` | RELEASE / SHIP | Chỉ tác động reservation `active`; gọi lặp là no-op |
+| `setSafetyStock(warehouse, variant, n)` | — | Không tạo movement (không đổi on_hand/reserved); phát `AvailableStockChanged` |
+
+**Thứ tự khóa (bắt buộc, chống deadlock):** `phiếu (adjustment/transfer) → product_variants (theo id tăng) → stock_balances (theo variant tăng, cùng kho)`.
+- Mọi thao tác khóa dòng `product_variants` trước: **shared lock** (`LOCK IN SHARE MODE`), riêng phiếu nhập dùng **FOR UPDATE** để cập nhật giá vốn. Lý do: insert `stock_movements`/`stock_reservations` lấy shared lock khóa ngoại trên `product_variants`; nếu không khóa trước sẽ có vòng chờ với phiếu nhập (test concurrency đã bắt được lỗi này).
+- Dòng `stock_balances` chưa có được tạo **trước** transaction và **chỉ insert dòng còn thiếu**. `INSERT IGNORE` trên dòng đã tồn tại lấy shared lock và gây deadlock với transaction đang giữ FOR UPDATE (test concurrency đã bắt được).
+- Transaction retry 3 lần khi deadlock/lock wait timeout (`DB::transaction(..., 3)`).
+
+**Idempotency key:** mỗi movement có key `"{key thao tác}#{n}"`; thao tác coi là đã chạy khi tồn tại `#0`. Phiếu điều chỉnh có thể không sinh movement nào (đếm đúng bằng tồn) nên ghi thêm 1 movement `MARKER` (delta 0, key `#done`), ẩn khỏi thẻ kho. Key do hệ thống sinh: `receipt:{id}`, `adjustment:{id}`, `transfer:{id}:out|in|return`. Header `Idempotency-Key` từ client **chưa làm** (phiếu đã có khóa trạng thái + key theo id phiếu).
+
+**Kiểm tra bất biến:** `StockVerifier` + lệnh `php artisan ecso:inventory:verify [--tenant=]` (chỉ đọc, chạy hằng ngày 02:30, lỗi ghi log `critical`). Không có chức năng "sửa" sổ: sai lệch xử lý bằng phiếu điều chỉnh.
+
+**Phân bổ cho sàn:** `Domain/AllocationCalculator` (all/percent/fixed, `sellable = max(0, Σ(on_hand − reserved − safety))`) đã có và test; bảng `marketplace_allocations` làm ở Phase 4 cùng `marketplace_accounts`.
+
+**Safety stock** không chặn reservation (đơn đã tồn tại trên sàn), chỉ giảm số "có thể bán"/đẩy lên sàn.

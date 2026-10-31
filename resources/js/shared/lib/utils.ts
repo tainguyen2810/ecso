@@ -22,3 +22,13 @@ export function initials(name: string): string {
         .map((p) => p[0]!.toUpperCase())
         .join('');
 }
+
+export function formatNumber(value: number | string | null | undefined): string {
+    if (value === null || value === undefined || value === '') return '—';
+    return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Number(value));
+}
+
+export function formatMoney(value: number | string | null | undefined): string {
+    if (value === null || value === undefined || value === '') return '—';
+    return `${formatNumber(value)} ₫`;
+}

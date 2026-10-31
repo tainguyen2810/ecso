@@ -2,6 +2,7 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/shared/stores/auth';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { allNavItems } from './navigation';
+import { documentKinds } from './pages/inventory/labels';
 
 const moduleRoutes: RouteRecordRaw[] = allNavItems
     .filter((item) => item.phase !== undefined)
@@ -27,6 +28,17 @@ const routes: RouteRecordRaw[] = [
         children: [
             { path: '', name: 'dashboard', component: () => import('./pages/Dashboard.vue'), meta: { nav: 'dashboard' } },
             ...moduleRoutes,
+            { path: 'products', name: 'products', component: () => import('./pages/products/ProductList.vue'), meta: { permission: 'products.view', nav: 'products' } },
+            { path: 'products/new', name: 'product-new', component: () => import('./pages/products/ProductForm.vue'), meta: { permission: 'products.manage', nav: 'products' } },
+            { path: 'products/:id', name: 'product-edit', component: () => import('./pages/products/ProductForm.vue'), meta: { permission: 'products.view', nav: 'products' } },
+            { path: 'inventory', name: 'inventory', component: () => import('./pages/inventory/StockList.vue'), meta: { permission: 'inventory.view', nav: 'inventory' } },
+            { path: 'inventory/sku/:id', name: 'inventory-card', component: () => import('./pages/inventory/StockCard.vue'), meta: { permission: 'inventory.view', nav: 'inventory' } },
+            { path: 'inventory/warehouses', name: 'warehouses', component: () => import('./pages/inventory/Warehouses.vue'), meta: { permission: 'inventory.view', nav: 'inventory' } },
+            ...(['receipts', 'adjustments', 'transfers'] as const).flatMap((kind) => [
+                { path: `inventory/${kind}`, name: `inventory-${kind}`, component: () => import('./pages/inventory/DocumentList.vue'), meta: { permission: 'inventory.view', nav: 'inventory', kind } },
+                { path: `inventory/${kind}/new`, name: `inventory-${kind}-new`, component: () => import('./pages/inventory/DocumentForm.vue'), meta: { permission: documentKinds[kind].permission, nav: 'inventory', kind, section: `inventory-${kind}` } },
+                { path: `inventory/${kind}/:id`, name: `inventory-${kind}-show`, component: () => import('./pages/inventory/DocumentDetail.vue'), meta: { permission: 'inventory.view', nav: 'inventory', kind, section: `inventory-${kind}` } },
+            ]),
             { path: 'members', name: 'members', component: () => import('./pages/Members.vue'), meta: { permission: 'members.view', nav: 'members' } },
             { path: 'subscription', name: 'subscription', component: () => import('./pages/Subscription.vue'), meta: { permission: 'billing.view', nav: 'subscription' } },
             { path: 'audit', name: 'audit', component: () => import('./pages/AuditLog.vue'), meta: { permission: 'audit.view', nav: 'audit' } },

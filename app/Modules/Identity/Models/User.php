@@ -60,12 +60,15 @@ class User extends Authenticatable implements MustVerifyEmail
 
     /**
      * @tenant-bypass a user's memberships span tenants by definition.
+     *
+     * @return HasMany<TenantUser, $this>
      */
     public function memberships(): HasMany
     {
         return $this->hasMany(TenantUser::class)->withoutGlobalScope(TenantScope::class);
     }
 
+    /** @return BelongsToMany<Tenant, $this> */
     public function tenants(): BelongsToMany
     {
         return $this->belongsToMany(Tenant::class, 'tenant_users')

@@ -84,3 +84,19 @@ export const api = createApi();
 export async function ensureCsrf(): Promise<void> {
     await axios.get('/sanctum/csrf-cookie', { withCredentials: true });
 }
+
+/**
+ * Downloads a file from the API. Plain links cannot send the X-Tenant header, so the file is fetched
+ * as a blob and saved through an object URL.
+ */
+export async function downloadFile(url: string, fallbackName: string): Promise<void> {
+    const response = await api.get(url, { responseType: 'blob' });
+    const disposition = String(response.headers['content-disposition'] ?? '');
+    const name = /filename="?([^";]+)"?/.exec(disposition)?.[1] ?? fallbackName;
+    const href = URL.createObjectURL(response.data as Blob);
+    const link = document.createElement('a');
+    link.href = href;
+    link.download = name;
+    link.click();
+    URL.revokeObjectURL(href);
+}

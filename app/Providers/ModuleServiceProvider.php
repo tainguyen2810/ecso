@@ -2,8 +2,23 @@
 
 namespace App\Providers;
 
+use App\Modules\Catalog\Models\Brand;
+use App\Modules\Catalog\Models\Category;
+use App\Modules\Catalog\Models\Product;
+use App\Modules\Catalog\Models\ProductVariant;
+use App\Modules\Catalog\Policies\ProductPolicy;
+use App\Modules\Inventory\Console\VerifyInventoryCommand;
+use App\Modules\Inventory\Listeners\CreateDefaultWarehouse;
+use App\Modules\Inventory\Models\InventoryAdjustment;
+use App\Modules\Inventory\Models\StockBalance;
+use App\Modules\Inventory\Models\StockReceipt;
+use App\Modules\Inventory\Models\StockTransfer;
+use App\Modules\Inventory\Models\Warehouse;
+use App\Modules\Inventory\Policies\InventoryPolicy;
+use App\Modules\Inventory\Policies\WarehousePolicy;
 use App\Modules\Platform\Console\CheckEnvCommand;
 use App\Modules\Platform\Console\InstallCommand;
+use App\Modules\Tenancy\Events\TenantCreated;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Models\TenantInvitation;
 use App\Modules\Tenancy\Models\TenantUser;
@@ -13,6 +28,7 @@ use App\Modules\Tenancy\Policies\TenantUserPolicy;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Auth\Notifications\VerifyEmail;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\URL;
@@ -21,7 +37,7 @@ use Illuminate\Support\ServiceProvider;
 class ModuleServiceProvider extends ServiceProvider
 {
     /** Modules whose Routes/api.php is mounted under /api/v1. */
-    private const API_MODULES = ['Identity', 'Tenancy', 'Billing', 'Audit', 'Admin'];
+    private const API_MODULES = ['Identity', 'Tenancy', 'Billing', 'Audit', 'Admin', 'Catalog', 'Inventory'];
 
     public function register(): void
     {
@@ -33,6 +49,15 @@ class ModuleServiceProvider extends ServiceProvider
         Gate::policy(Tenant::class, TenantPolicy::class);
         Gate::policy(TenantUser::class, TenantUserPolicy::class);
         Gate::policy(TenantInvitation::class, TenantInvitationPolicy::class);
+        foreach ([Product::class, ProductVariant::class, Category::class, Brand::class] as $model) {
+            Gate::policy($model, ProductPolicy::class);
+        }
+        Gate::policy(Warehouse::class, WarehousePolicy::class);
+        foreach ([StockBalance::class, StockReceipt::class, InventoryAdjustment::class, StockTransfer::class] as $model) {
+            Gate::policy($model, InventoryPolicy::class);
+        }
+
+        Event::listen(TenantCreated::class, CreateDefaultWarehouse::class);
 
         foreach (self::API_MODULES as $module) {
             Route::middleware('api')->prefix('api/v1')->group(app_path("Modules/{$module}/Routes/api.php"));
@@ -41,7 +66,7 @@ class ModuleServiceProvider extends ServiceProvider
         $this->configureAuthLinks();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([CheckEnvCommand::class, InstallCommand::class]);
+            $this->commands([CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class]);
         }
     }
 

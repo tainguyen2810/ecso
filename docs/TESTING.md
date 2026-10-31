@@ -60,7 +60,10 @@ php artisan migrate:fresh --seed && php artisan db:seed --class=DemoSeeder
 php artisan serve --port=8000 &
 npx playwright test
 
-# Từ Phase 2: php artisan test --group=concurrency ; từ Phase 4: RUN_SANDBOX_TESTS=1 ... --group=sandbox
+# Phase 2: test đa tiến trình (mỗi worker là 1 tiến trình PHP riêng, kết nối MySQL riêng, dữ liệu commit thật).
+# Bị loại khỏi lần chạy mặc định vì dùng DatabaseTruncation; CI chạy riêng một bước.
+php artisan test --group=concurrency
+# Từ Phase 4: RUN_SANDBOX_TESTS=1 ... --group=sandbox
 ```
 
 Tài khoản demo (chỉ môi trường local/E2E, DemoSeeder từ chối chạy trên production): `owner@demo.test`, `staff@demo.test`, `admin@demo.test`, mật khẩu `password1`.
@@ -72,3 +75,10 @@ CI (GitHub Actions): service MySQL 8 + Redis, chạy lint (Pint, ESLint), PHPSta
 - Toàn bộ test của phase pass trên MySQL 8, log kết quả đính kèm báo cáo.
 - Không giảm coverage của module Inventory/Orders (mục tiêu ≥ 85% dòng cho 2 module này).
 - Có ảnh chụp giao diện (Playwright screenshot) cho mọi màn hình mới.
+
+## 5. Kết quả theo phase
+
+| Phase | Pest | Concurrency | Vitest | Playwright |
+|---|---|---|---|---|
+| 1 | 72 | – | 8 | 7 |
+| 2 | 142 (gồm property-based 5 seed × 150 thao tác, import 10.000 SKU) | 4 kịch bản | 12 | 12 (5 mới) |

@@ -27,7 +27,7 @@ Song song (chủ dự án): đăng ký app Shopee/TikTok ngay ─► credentials
 - Ảnh chụp: đăng nhập, đăng ký, chọn tenant, dashboard, nhân viên, admin.
 - `ecso:check-env` báo đúng lỗi khi thiếu extension / APP_DEBUG=true.
 
-### Phase 2 — Catalog & Inventory
+### Phase 2 — Catalog & Inventory ✅ (2026-10-31, xem PHASE-2-REPORT.md)
 **Phạm vi:** products, variants (SKU), barcode, category/brand, ảnh, import/export CSV/XLSX, kiểm SKU trùng; warehouses, balances, movements, reservations, adjustments (có phê duyệt), transfers, safety stock, allocation, InventoryService, thẻ kho, giá vốn bình quân.
 **Nghiệm thu:** test concurrency (20 tiến trình), idempotency, bất biến ledger, property-based pass; import 10.000 SKU < 2 phút; ảnh chụp màn hình sản phẩm, tồn kho, thẻ kho, phiếu điều chỉnh, chuyển kho.
 

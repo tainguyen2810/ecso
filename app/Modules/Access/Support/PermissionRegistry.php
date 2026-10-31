@@ -25,6 +25,7 @@ final class PermissionRegistry
         ],
         'inventory' => [
             'inventory.view' => 'Xem tồn kho',
+            'inventory.receive' => 'Nhập kho',
             'inventory.adjust' => 'Tạo phiếu điều chỉnh kho',
             'inventory.adjust.approve' => 'Duyệt điều chỉnh kho',
             'inventory.transfer' => 'Chuyển kho',
@@ -72,12 +73,12 @@ final class PermissionRegistry
             Role::ADMIN => ['name' => 'Quản trị doanh nghiệp', 'rank' => 90, 'permissions' => array_values(array_diff($all, ['billing.manage']))],
             Role::MANAGER => ['name' => 'Quản lý vận hành', 'rank' => 70, 'permissions' => [
                 ...self::READ_ALL, 'orders.update', 'orders.assign', 'orders.print', 'products.manage',
-                'inventory.adjust', 'inventory.adjust.approve', 'inventory.transfer', 'purchasing.manage',
+                'inventory.receive', 'inventory.adjust', 'inventory.adjust.approve', 'inventory.transfer', 'purchasing.manage',
                 'returns.inspect', 'finance.view', 'members.view',
             ]],
             Role::WAREHOUSE_STAFF => ['name' => 'Nhân viên kho', 'rank' => 40, 'permissions' => [
                 'dashboard.view', 'orders.view', 'orders.print', 'products.view', 'inventory.view',
-                'inventory.adjust', 'inventory.transfer', 'purchasing.view', 'returns.view', 'returns.inspect',
+                'inventory.receive', 'inventory.adjust', 'inventory.transfer', 'purchasing.view', 'returns.view', 'returns.inspect',
             ]],
             Role::ORDER_STAFF => ['name' => 'Nhân viên xử lý đơn', 'rank' => 40, 'permissions' => [
                 'dashboard.view', 'orders.view', 'orders.update', 'orders.print', 'products.view',

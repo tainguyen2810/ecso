@@ -13,6 +13,7 @@ class Plan extends Model
 
     protected $hidden = ['id', 'pivot'];
 
+    /** @return BelongsToMany<Feature, $this> */
     public function features(): BelongsToMany
     {
         return $this->belongsToMany(Feature::class, 'plan_features')->withPivot(['enabled', 'limit_value']);

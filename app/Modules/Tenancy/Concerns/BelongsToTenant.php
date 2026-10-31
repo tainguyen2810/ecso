@@ -27,6 +27,7 @@ trait BelongsToTenant
         $this->guarded = array_values(array_unique([...$this->guarded, 'tenant_id']));
     }
 
+    /** @return BelongsTo<Tenant, $this> */
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(Tenant::class);

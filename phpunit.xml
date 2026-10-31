@@ -14,7 +14,16 @@
         <testsuite name="Arch">
             <directory>tests/Arch</directory>
         </testsuite>
+        <testsuite name="Concurrency">
+            <directory>tests/Concurrency</directory>
+        </testsuite>
     </testsuites>
+    <groups>
+        <exclude>
+            <!-- Multi-process tests (real committed data); run explicitly with the concurrency group -->
+            <group>concurrency</group>
+        </exclude>
+    </groups>
     <source>
         <include>
             <directory>app</directory>

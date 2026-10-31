@@ -44,7 +44,10 @@
 php artisan ecso:check-env      # kiểm PHP version, extensions, pcntl, quyền ghi, kết nối DB/Redis, APP_DEBUG=false, APP_KEY, key mã hóa token
 php artisan ecso:install        # wizard CLI: tạo .env, key, migrate, seed permission/plan, tạo super admin (có validate)
 php artisan horizon:install
+php artisan storage:link        # ảnh sản phẩm (disk public, thư mục tenants/{ulid}/products, tên file ngẫu nhiên)
 ```
+
+Cron Scheduler (đã có từ Phase 1) chạy thêm `ecso:inventory:verify` lúc 02:30 hằng ngày.
 
 ## 6. Quy trình deploy (script `deploy.sh`, Phase 1/8)
 

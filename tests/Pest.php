@@ -1,16 +1,25 @@
 <?php
 
 use App\Modules\Access\Models\Role;
+use App\Modules\Catalog\Models\Product;
+use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Identity\Models\User;
+use App\Modules\Inventory\Models\StockBalance;
+use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Models\TenantUser;
 use App\Modules\Tenancy\Services\TenantService;
 use App\Modules\Tenancy\Support\TenantContext;
+use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 pest()->extend(TestCase::class)->use(RefreshDatabase::class)->in('Feature', 'Arch');
+// Concurrency tests need committed data visible to other processes: no wrapping transaction.
+// Excluded from the default run (phpunit.xml); run with: php artisan test --group=concurrency
+pest()->extend(TestCase::class)->use(DatabaseTruncation::class)->group('concurrency')->in('Concurrency');
 
 /**
  * Creates a tenant through the real service (owner membership, free subscription, audit).
@@ -49,4 +58,31 @@ function actingInTenant(User $user, Tenant $tenant): TestCase
     Sanctum::actingAs($user);
 
     return test()->withHeader('X-Tenant', $tenant->ulid);
+}
+
+/**
+ * Sets the tenant context for service-level tests (as a job or command would).
+ */
+function inTenant(Tenant $tenant): void
+{
+    app(TenantContext::class)->set($tenant);
+}
+
+function makeVariant(Tenant $tenant, ?string $sku = null, array $attributes = []): ProductVariant
+{
+    return TenantContext::run($tenant, function () use ($sku, $attributes) {
+        $product = Product::create(['name' => $attributes['product_name'] ?? 'Sản phẩm '.Str::random(4), 'status' => 'active']);
+
+        return $product->variants()->create(['sku' => $sku ?? 'SKU-'.Str::upper(Str::random(6))] + collect($attributes)->except('product_name')->all());
+    });
+}
+
+function defaultWarehouse(Tenant $tenant): Warehouse
+{
+    return Warehouse::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('is_default', true)->firstOrFail();
+}
+
+function balanceOf(Warehouse $warehouse, ProductVariant $variant): ?StockBalance
+{
+    return StockBalance::withoutGlobalScopes()->where('warehouse_id', $warehouse->id)->where('product_variant_id', $variant->id)->first();
 }
