@@ -266,6 +266,9 @@ async function copy(text: string) {
                     </p>
                     <p class="text-2xl font-semibold">{{ formatMoney(data.open_invoice.amount) }}</p>
                     <p class="text-muted-foreground">Hạn thanh toán {{ formatDateTime(data.open_invoice.due_at) }}</p>
+                    <p class="text-muted-foreground">
+                        Mã thanh toán <span class="font-mono font-semibold text-foreground" data-testid="transfer-code">{{ data.open_invoice.transfer_code }}</span>
+                    </p>
                 </div>
                 <div v-if="data.open_invoice.payment" class="rounded-lg border bg-muted/40 p-4 text-sm" data-testid="bank-instructions">
                     <p class="mb-3 flex items-center gap-2 font-medium"><Landmark class="size-4" /> Chuyển khoản ngân hàng</p>
@@ -282,7 +285,7 @@ async function copy(text: string) {
                             <dd class="font-semibold">{{ formatMoney(data.open_invoice.payment.amount) }}</dd>
                             <span />
                             <dt class="text-muted-foreground">Nội dung</dt>
-                            <dd class="font-mono font-semibold" data-testid="transfer-code">{{ data.open_invoice.payment.memo }}</dd>
+                            <dd class="font-mono font-semibold">{{ data.open_invoice.payment.memo }}</dd>
                             <button class="text-muted-foreground hover:text-foreground" aria-label="Sao chép nội dung" @click="copy(data.open_invoice.payment.memo)"><Copy class="size-4" /></button>
                         </dl>
                         <p class="mt-3 text-xs text-muted-foreground">
