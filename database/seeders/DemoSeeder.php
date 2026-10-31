@@ -14,12 +14,20 @@ use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Services\InventoryDocumentService;
 use App\Modules\Inventory\Services\InventoryService;
 use App\Modules\Inventory\Services\WarehouseService;
+use App\Modules\Marketplace\Connectors\Fake\FakeMarketplace;
+use App\Modules\Marketplace\Services\AccountService;
+use App\Modules\Marketplace\Services\ListingService;
+use App\Modules\Orders\Models\Order;
+use App\Modules\Orders\Models\OrderReturn;
+use App\Modules\Orders\Services\OrderActions;
+use App\Modules\Orders\Services\ReturnService;
 use App\Modules\Tenancy\Models\TenantUser;
 use App\Modules\Tenancy\Services\TenantService;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -61,6 +69,74 @@ class DemoSeeder extends Seeder
 
         Auth::setUser($owner);
         TenantContext::run($shop, fn () => $this->catalog($staff));
+        Auth::setUser($owner);
+        TenantContext::run($shop, fn () => $this->marketplace($owner, $staff));
+    }
+
+    /**
+     * A shop on the FAKE marketplace with orders in every state, created through the real webhook pipeline.
+     * Skipped when the Fake marketplace is disabled.
+     */
+    private function marketplace(User $owner, User $staff): void
+    {
+        if (! config('marketplaces.fake.enabled')) {
+            return;
+        }
+
+        $account = app(AccountService::class)->connectFake('Shop Demo (sàn giả lập)', null);
+        app(ListingService::class)->confirmSuggestions($account);
+        $fake = app(FakeMarketplace::class);
+        $actions = app(OrderActions::class);
+
+        $mapped = DB::table('fake_marketplace_products')->where('shop_id', $account->external_shop_id)
+            ->where('price', '>', 0)->whereNotLike('seller_sku', '%-CU')->pluck('sku_id')->all();
+        $unmapped = DB::table('fake_marketplace_products')->where('shop_id', $account->external_shop_id)
+            ->whereLike('seller_sku', '%-CU')->value('sku_id');
+
+        mt_srand(7);
+        $make = function (string $status, array $overrides = [], ?array $lines = null) use ($fake, $account, $mapped) {
+            $lines ??= array_map(fn ($k) => ['sku_id' => $mapped[$k], 'quantity' => mt_rand(1, 2)], (array) array_rand($mapped, mt_rand(1, 2)));
+
+            return $fake->createOrder($account->external_shop_id, $lines, $status, $overrides)['order_sn'];
+        };
+
+        foreach (['fake_unpaid', 'fake_pending', 'fake_pending', 'fake_ready', 'fake_ready', 'fake_ready', 'fake_ready', 'fake_packed', 'fake_packed'] as $status) {
+            $make($status);
+        }
+        // Due soon and overdue orders.
+        $make('fake_ready', ['ship_by' => now()->addHours(3)->toIso8601String()]);
+        $make('fake_ready', ['ship_by' => now()->subHours(2)->toIso8601String()]);
+        // An order with a listing that is not linked to an internal SKU.
+        if ($unmapped) {
+            $make('fake_ready', [], [['sku_id' => $unmapped, 'quantity' => 1], ['sku_id' => $mapped[0], 'quantity' => 1]]);
+        }
+        // An order larger than the stock: partial reservation, flagged as shortage.
+        $make('fake_ready', [], [['sku_id' => $mapped[1], 'quantity' => 60]]);
+
+        foreach (['fake_shipped', 'fake_in_transit', 'fake_delivered', 'fake_completed', 'fake_completed'] as $status) {
+            $sn = $make('fake_ready');
+            $fake->setStatus($sn, $status);
+        }
+        $cancelled = $make('fake_ready');
+        $fake->setStatus($cancelled, 'fake_cancelled', ['cancel_reason' => 'Khách đổi ý']);
+
+        // Cancel after handover: a parcel on its way back.
+        $back = $make('fake_ready');
+        $fake->setStatus($back, 'fake_shipped');
+        $fake->setStatus($back, 'fake_cancelled', ['cancel_reason' => 'Khách từ chối nhận']);
+
+        // A customer return received at the warehouse, waiting for inspection.
+        $returned = Order::query()->where('external_order_id', $make('fake_ready'))->firstOrFail();
+        $fake->setStatus($returned->external_order_id, 'fake_delivered');
+        $item = $returned->items()->first();
+        $return = app(ReturnService::class)->create($returned, ['type' => OrderReturn::TYPE_RETURN, 'reason' => 'Sai kích cỡ', 'lines' => [['order_item_id' => $item->id, 'quantity' => 1]]]);
+        app(ReturnService::class)->move($return, OrderReturn::APPROVED);
+        app(ReturnService::class)->move($return, OrderReturn::RECEIVED);
+
+        $ready = Order::query()->where('status', 'READY_TO_PACK')->orderBy('id')->get();
+        $actions->assign($ready[0], $staff);
+        $actions->assign($ready[1], $staff);
+        $actions->addNote($ready[0], 'Khách dặn gói kỹ, giao giờ hành chính.');
     }
 
     /**

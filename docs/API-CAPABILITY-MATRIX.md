@@ -63,6 +63,21 @@
 | Trả hàng / hoàn tiền | UNKNOWN (thứ cấp: returns API) | UNKNOWN | UNKNOWN | UNKNOWN |
 | Đối soát / settlement | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
 
+### 3.1 Capability trong code (Phase 3)
+
+`App\Modules\Marketplace\Connectors\Capability` khai báo 12 thao tác; mỗi connector trả `supported | unsupported | unknown`. Hệ thống chỉ gọi thao tác `supported`; còn lại trả `UnsupportedCapability` (HTTP 422, mã `UNSUPPORTED_CAPABILITY`). Trang "Kết nối sàn" hiển thị bảng này trực tiếp từ code.
+
+| Capability | Shopee | TikTok Shop | Lazada | Tiki | Sàn giả lập (FAKE) |
+|---|---|---|---|---|---|
+| orders.webhook / fetch / list | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | supported |
+| orders.confirm / pack / handover / cancel | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | supported |
+| shipping.label | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | unsupported |
+| products.list | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | supported |
+| inventory.update / inventory.get | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | supported |
+| returns.list | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | unsupported |
+
+FAKE chỉ để kiểm thử pipeline nội bộ, **không** chứng minh tích hợp với sàn thật.
+
 ## 4. Rủi ro tích hợp đã thấy
 
 1. **Không có credentials và không đọc được docs chính thức** ⇒ chưa thể cam kết lịch Phase 4–7. Mọi connector sẽ chỉ có Fake adapter cho tới khi có tài khoản.

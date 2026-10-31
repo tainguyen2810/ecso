@@ -2,6 +2,7 @@
 
 use App\Modules\Access\Models\Role;
 use App\Modules\Audit\Models\AuditLog;
+use App\Modules\Marketplace\Models\WebhookEvent;
 use App\Modules\Tenancy\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Schema;
@@ -11,6 +12,7 @@ use Illuminate\Support\Str;
 const TENANT_SCOPE_EXCEPTIONS = [
     Role::class,     // NULL tenant_id = system roles shared by all tenants
     AuditLog::class,  // NULL tenant_id = platform actions; readers filter explicitly
+    WebhookEvent::class, // inbox row written before the shop/tenant is known; readers filter explicitly
 ];
 
 it('scopes every model that has a tenant_id column', function () {

@@ -68,6 +68,16 @@ class InventoryService
     }
 
     /**
+     * Returned goods inspected as sellable come back into stock (RETURN_RESTOCK; does not change the average cost).
+     *
+     * @param  array<int, array{variant_id: int, quantity: int}>  $lines
+     */
+    public function restockReturn(Warehouse $warehouse, array $lines, string $key, ?Model $reference = null, ?string $reason = null): OperationResult
+    {
+        return $this->receive($warehouse, $lines, $key, $reference, StockMovement::RETURN_RESTOCK, $reason);
+    }
+
+    /**
      * Goods out that do not consume a reservation (transfer out, damage, supplier return, manual shipment).
      * Never takes stock that is reserved for someone else unless the warehouse allows negative stock.
      *
@@ -172,9 +182,15 @@ class InventoryService
             throw new InvalidStockOperation('Số lượng giữ phải lớn hơn 0.');
         }
 
-        $find = fn (bool $lock = false) => StockReservation::query()
-            ->where('reference_type', $referenceType)->where('reference_id', $referenceId)->where('warehouse_id', $warehouse->id)
-            ->when($lock, fn ($q) => $q->lockForUpdate())->first();
+        // Absence is checked with a plain read and only an existing row is locked (by primary key): a locking read
+        // of a missing row takes a gap lock, and concurrent inserts into the same gap deadlock (tests/Concurrency).
+        // The unique key on (reference, warehouse) still prevents a second reservation.
+        $find = function (bool $lock = false) use ($referenceType, $referenceId, $warehouse) {
+            $id = StockReservation::query()->where('reference_type', $referenceType)->where('reference_id', $referenceId)
+                ->where('warehouse_id', $warehouse->id)->value('id');
+
+            return $id ? StockReservation::query()->whereKey($id)->when($lock, fn ($q) => $q->lockForUpdate())->first() : null;
+        };
 
         $result = $this->run($key, $warehouse, [$variant->id], function (array $balances) use ($warehouse, $variant, $quantity, $referenceType, $referenceId, $key, $allowShortage, $find) {
             $existing = $find(true);
@@ -222,6 +238,37 @@ class InventoryService
     public function ship(StockReservation $reservation, string $key, ?string $reason = null): StockReservation
     {
         return $this->settle($reservation, $key, StockMovement::SHIP, $reason);
+    }
+
+    /**
+     * Tops up an active reservation that was short, with whatever is available now (INVENTORY-ENGINE §5.3).
+     * The key includes the shortage before the fill, so each fill step is idempotent and a retry is a no-op.
+     */
+    public function fillShortage(StockReservation $reservation): StockReservation
+    {
+        if (! $reservation->isActive() || $reservation->shortage <= 0) {
+            return $reservation;
+        }
+
+        $warehouse = Warehouse::query()->withTrashed()->findOrFail($reservation->warehouse_id);
+        $key = "fill:{$reservation->id}:{$reservation->shortage}";
+
+        $this->run($key, $warehouse, [$reservation->product_variant_id], function (array $balances) use ($reservation, $key) {
+            $locked = StockReservation::query()->whereKey($reservation->id)->lockForUpdate()->firstOrFail();
+            $balance = $balances[$locked->product_variant_id];
+            $add = min($locked->shortage, max(0, $balance->available()));
+
+            if (! $locked->isActive() || $add <= 0) {
+                return OperationResult::duplicate();
+            }
+
+            $this->write($balance, StockMovement::RESERVE, 0, $add, "{$key}#0", $locked, null, 'shortage-fill');
+            $locked->forceFill(['quantity' => $locked->quantity + $add, 'shortage' => $locked->shortage - $add])->save();
+
+            return new OperationResult(true);
+        });
+
+        return $reservation->refresh();
     }
 
     public function setSafetyStock(Warehouse $warehouse, ProductVariant $variant, int $safetyStock): StockBalance

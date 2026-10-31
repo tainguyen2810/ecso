@@ -63,8 +63,8 @@ test('owner works in the tenant dashboard', async ({ page }) => {
     await page.getByRole('link', { name: 'Cài đặt' }).click();
     await shot(page, '12-settings');
 
-    await page.getByRole('link', { name: 'Đơn hàng' }).click();
-    await expect(page.getByText('Đơn hàng đang được xây dựng')).toBeVisible();
+    await page.getByRole('link', { name: 'Tài chính' }).click();
+    await expect(page.getByText('Tài chính đang được xây dựng')).toBeVisible();
     await shot(page, '13-module-placeholder');
 
     // Keyboard shortcut g then m opens members.

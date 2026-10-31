@@ -31,7 +31,7 @@ Song song (chủ dự án): đăng ký app Shopee/TikTok ngay ─► credentials
 **Phạm vi:** products, variants (SKU), barcode, category/brand, ảnh, import/export CSV/XLSX, kiểm SKU trùng; warehouses, balances, movements, reservations, adjustments (có phê duyệt), transfers, safety stock, allocation, InventoryService, thẻ kho, giá vốn bình quân.
 **Nghiệm thu:** test concurrency (20 tiến trình), idempotency, bất biến ledger, property-based pass; import 10.000 SKU < 2 phút; ảnh chụp màn hình sản phẩm, tồn kho, thẻ kho, phiếu điều chỉnh, chuyển kho.
 
-### Phase 3 — Order Engine
+### Phase 3 — Order Engine ✅ (2026-10-31, xem PHASE-3-REPORT.md)
 **Phạm vi:** orders, items, status map, history, reservation theo policy, hủy, hoàn/kiểm hàng/nhập lại, ghi chú, phân công, cảnh báo quá hạn, phiếu đóng gói (PDF), webhook inbox + pipeline, Fake connector đầy đủ, outbox đẩy tồn (tới Fake).
 **Nghiệm thu:** test duplicate/out-of-order/cancel/return pass; mô phỏng 1.000 đơn đồng thời trên 50 SKU không oversell; ảnh chụp màn hình đơn hàng (tabs, lọc, bulk, chi tiết), trả hàng.
 

@@ -10,6 +10,7 @@ use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Inventory\Models\StockMovement;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Services\InventoryService;
+use App\Modules\Marketplace\Connectors\Fake\FakeMarketplace;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Contracts\Console\Kernel;
@@ -40,6 +41,17 @@ try {
             $res = $inventory->issue($warehouse, $job['lines'], $job['key'], null, StockMovement::DAMAGE_OUT);
 
             return ['applied' => $res->applied];
+        })(),
+        // Delivers fake-marketplace webhooks through the full pipeline (inbox, job, API fetch, ingest).
+        'webhooks' => (function () use ($job) {
+            $fake = app(FakeMarketplace::class);
+            $failed = 0;
+            foreach ($job['orders'] as $orderSn) {
+                $r = $fake->notify($orderSn, $job['event_prefix'].$orderSn);
+                $failed += $r['event_id'] === null ? 1 : 0;
+            }
+
+            return ['delivered' => count($job['orders']), 'failed' => $failed];
         })(),
         'receive' => (function () use ($inventory, $warehouse, $job) {
             $res = $inventory->receive($warehouse, $job['lines'], $job['key']);

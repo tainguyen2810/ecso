@@ -50,6 +50,7 @@ class CheckEnvCommand extends Command
             $this->check('APP_URL dùng https', str_starts_with((string) config('app.url'), 'https://'));
             $this->check('QUEUE_CONNECTION=redis', config('queue.default') === 'redis');
             $this->check('.env không cho người khác đọc', $this->envNotWorldReadable(), 'chmod 600 .env');
+            $this->check('Sàn giả lập (Fake) tắt', ! config('marketplaces.fake.enabled'), 'FAKE_MARKETPLACE_ENABLED=false');
         }
 
         $this->table(['Kiểm tra', 'Kết quả', 'Ghi chú'], $this->rows);
