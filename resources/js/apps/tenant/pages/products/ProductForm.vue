@@ -58,13 +58,12 @@ function emptyRow(): VariantRow {
 }
 
 onMounted(async () => {
+    // Set the first row before awaiting: rows generated while the lookups load must not be overwritten.
+    if (isNew.value) variants.value = [emptyRow()];
     const [c, b] = await Promise.all([api.get('/categories'), api.get('/brands')]);
     categories.value = c.data.data;
     brands.value = b.data.data;
-    if (isNew.value) {
-        variants.value = [emptyRow()];
-        return;
-    }
+    if (isNew.value) return;
     try {
         const p: Product = (await api.get(`/products/${productId.value}`)).data.data;
         Object.assign(form, { name: p.name, description: p.description ?? '', status: p.status, category_id: p.category?.id ?? '', brand_id: p.brand?.id ?? '' });
