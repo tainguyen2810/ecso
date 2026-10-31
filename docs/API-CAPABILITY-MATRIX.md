@@ -88,6 +88,12 @@ Từ Phase 4 có thêm `shop.authorize` (kết nối shop qua trang ủy quyền
 - Chưa làm (chờ tài liệu + credentials, **không đoán**): ký request, URL ủy quyền, đổi code lấy token, refresh token, lấy đơn/sản phẩm, cập nhật tồn, chữ ký push, bảng ánh xạ trạng thái Shopee → nội bộ, rate limit.
 - Để nâng lên VERIFIED: khai báo `SHOPEE_PARTNER_ID`, `SHOPEE_PARTNER_KEY` (server/CI secret), cấp test shop, mở truy cập tài liệu; sau đó hiện thực từng method trong `ShopeeConnector`, viết test hợp đồng với sandbox (`RUN_SANDBOX_TESTS=1`), rồi đổi capability tương ứng sang `supported`.
 
+### 3.3 TikTok Shop — trạng thái Phase 5 (2026-10-31)
+
+- Kiểm tra truy cập `partner.tiktokshop.com` từ môi trường build: **bị chặn** (proxy từ chối kết nối). Không có app key/secret, không có test shop.
+- Đã làm: `TikTokConnector` (UNKNOWN toàn bộ), cấu hình `TIKTOK_SHOP_APP_KEY` / `TIKTOK_SHOP_APP_SECRET`, dùng chung luồng ủy quyền shop của Phase 4. Webhook `/api/v1/webhooks/tiktok` bị từ chối kể cả khi có header `Authorization` trông hợp lệ: thông tin thứ cấp về chữ ký HMAC-SHA256 **chưa được xác minh** nên không được dùng.
+- Chưa làm: ký request, version API theo ngày, token, đơn, sản phẩm, tồn, webhook, ánh xạ trạng thái, rate limit.
+
 ## 4. Rủi ro tích hợp đã thấy
 
 1. **Không có credentials và không đọc được docs chính thức** ⇒ chưa thể cam kết lịch Phase 4–7. Mọi connector sẽ chỉ có Fake adapter cho tới khi có tài khoản.

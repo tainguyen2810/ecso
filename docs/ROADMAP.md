@@ -39,7 +39,7 @@ Song song (chủ dự án): đăng ký app Shopee/TikTok ngay ─► credentials
 **Tiền điều kiện:** app Shopee được duyệt, test shop, đọc docs chính thức. **Phạm vi:** auth, token refresh, import sản phẩm + mapping, import đơn (polling + push), cập nhật tồn, webhook verify, reconcile, rate limit, circuit breaker.
 **Nghiệm thu:** API-CAPABILITY-MATRIX cột Shopee chuyển sang VERIFIED cho các method đã làm; luồng thật trên test shop: đơn mới ⇒ reservation ⇒ tồn trên sàn giảm; ảnh chụp màn hình kết nối sàn, mapping.
 
-### Phase 5 — TikTok Shop Integration
+### Phase 5 — TikTok Shop Integration ⚠️ khung (2026-10-31, xem PHASE-5-REPORT.md) — chưa tích hợp thật
 Như Phase 4 cho TikTok Shop.
 
 ### Phase 6 — SaaS Commercial

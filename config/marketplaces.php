@@ -2,6 +2,7 @@
 
 use App\Modules\Marketplace\Connectors\Fake\FakeConnector;
 use App\Modules\Marketplace\Connectors\Shopee\ShopeeConnector;
+use App\Modules\Marketplace\Connectors\TikTok\TikTokConnector;
 
 return [
     // Marketplaces shown in the UI. Without a connector class below they are listed as "not available yet".
@@ -17,6 +18,7 @@ return [
         'fake' => FakeConnector::class,
         // Skeleton: all capabilities UNKNOWN until verified with official docs and partner credentials.
         'shopee' => ShopeeConnector::class,
+        'tiktok' => TikTokConnector::class,
     ],
 
     // App credentials per marketplace (issued by the marketplace's developer portal). Never committed; set on the
@@ -25,6 +27,10 @@ return [
         'shopee' => [
             'partner_id' => env('SHOPEE_PARTNER_ID'),
             'partner_key' => env('SHOPEE_PARTNER_KEY'),
+        ],
+        'tiktok' => [
+            'app_key' => env('TIKTOK_SHOP_APP_KEY'),
+            'app_secret' => env('TIKTOK_SHOP_APP_SECRET'),
         ],
     ],
 
