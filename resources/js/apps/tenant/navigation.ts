@@ -34,8 +34,8 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
         items: [
             { name: 'dashboard', label: 'Tổng quan', path: '/', icon: LayoutDashboard, permission: 'dashboard.view', shortcut: 'd' },
             { name: 'orders', label: 'Đơn hàng', path: '/orders', icon: ShoppingCart, permission: 'orders.view', phase: 3, shortcut: 'o', description: 'Quản lý đơn tập trung từ mọi sàn: lọc, xử lý hàng loạt, in phiếu, theo dõi trạng thái.' },
-            { name: 'products', label: 'Sản phẩm', path: '/products', icon: Package, permission: 'products.view', phase: 2, shortcut: 'p', description: 'SKU, biến thể, mã vạch, mapping với listing trên sàn.' },
-            { name: 'inventory', label: 'Kho hàng', path: '/inventory', icon: Boxes, permission: 'inventory.view', phase: 2, shortcut: 'i', description: 'Tồn kho nhiều kho, sổ kho, giữ tồn, điều chỉnh và chuyển kho.' },
+            { name: 'products', label: 'Sản phẩm', path: '/products', icon: Package, permission: 'products.view', shortcut: 'p', description: 'SKU, biến thể, mã vạch, mapping với listing trên sàn.' },
+            { name: 'inventory', label: 'Kho hàng', path: '/inventory', icon: Boxes, permission: 'inventory.view', shortcut: 'i', description: 'Tồn kho nhiều kho, sổ kho, giữ tồn, điều chỉnh và chuyển kho.' },
             { name: 'purchasing', label: 'Mua hàng', path: '/purchasing', icon: Truck, permission: 'purchasing.view', phase: 6, description: 'Nhà cung cấp, đơn mua, phiếu nhập và giá vốn.' },
             { name: 'returns', label: 'Trả hàng', path: '/returns', icon: Undo2, permission: 'returns.view', phase: 3, description: 'Hàng hoàn từ khách, kiểm hàng và nhập kho lại.' },
         ],

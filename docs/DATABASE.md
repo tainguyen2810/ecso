@@ -57,6 +57,8 @@ Vai trò hệ thống seed: TENANT_OWNER, TENANT_ADMIN, MANAGER, WAREHOUSE_STAFF
 
 ### 2.4 Catalog
 
+> Phase 2: đã tạo `categories`, `brands`, `products`, `product_variants`, `product_images` (migration `2026_10_31_200000`). `product_bundles` để sau MVP.
+
 | Bảng | Cột chính | Ràng buộc |
 |---|---|---|
 | `categories`, `brands` | id, tenant_id, name, parent_id | U(tenant_id, name, parent_id) |
@@ -66,6 +68,8 @@ Vai trò hệ thống seed: TENANT_OWNER, TENANT_ADMIN, MANAGER, WAREHOUSE_STAFF
 | `product_bundles` *(bổ sung, sau MVP)* | bundle_variant_id, component_variant_id, qty | Combo bán trên sàn trừ tồn thành phần |
 
 ### 2.5 Inventory (chi tiết tại INVENTORY-ENGINE.md)
+
+> Phase 2: đã tạo `warehouses`, `stock_balances`, `stock_movements`, `stock_reservations`, `inventory_adjustments(+_lines)`, `stock_transfers(+_lines)`, **`stock_receipts(+_lines)`** (phiếu nhập, bổ sung), **`document_sequences`** (đánh số RCV-/ADJ-/TRF- theo tenant, bổ sung). Khác thiết kế: `stock_reservations` dùng `reference_type` + `reference_id` (Phase 3 trỏ tới order item) và cột `shortage`; idempotency nằm ở `stock_movements`. `marketplace_allocations`, `inventory_sync_outbox` làm ở Phase 4.
 
 | Bảng | Cột chính | Ràng buộc |
 |---|---|---|

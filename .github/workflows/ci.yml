@@ -41,7 +41,12 @@ jobs:
       - run: composer install --no-interaction --prefer-dist --no-progress
       - run: cp .env.example .env && php artisan key:generate
       - run: vendor/bin/pint --test
+      - run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
       - run: php artisan test
+        env:
+          DB_DATABASE: ecso_test
+      - name: Concurrency tests (multi-process, real MySQL locks)
+        run: php artisan test --group=concurrency
         env:
           DB_DATABASE: ecso_test
 

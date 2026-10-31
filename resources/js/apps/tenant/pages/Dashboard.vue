@@ -1,26 +1,40 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { ArrowRight, Boxes, CheckCircle2, Circle, PackageX, PlugZap, ShoppingCart, TrendingUp, Users } from 'lucide-vue-next';
 import PageHeader from '../PageHeader.vue';
 import Card from '@/shared/ui/Card.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
+import { api } from '@/shared/lib/api';
+import { formatNumber } from '@/shared/lib/utils';
 import { useAuthStore } from '@/shared/stores/auth';
 import { useTenantStore } from '@/shared/stores/tenant';
 
 const auth = useAuthStore();
 const tenant = useTenantStore();
 
-const kpis = [
-    { label: 'Doanh thu đặt hàng hôm nay', icon: TrendingUp },
-    { label: 'Đơn mới', icon: ShoppingCart },
-    { label: 'Đơn quá hạn xử lý', icon: PackageX },
-    { label: 'SKU sắp hết hàng', icon: Boxes },
-];
+const stock = ref<{ low_stock: number; out_of_stock: number } | null>(null);
+onMounted(async () => {
+    if (tenant.can('inventory.view')) stock.value = (await api.get('/inventory/summary')).data.data;
+});
+
+// Order KPIs arrive with the order engine (Phase 3); stock KPIs are live from Phase 2.
+const kpis = computed(() => [
+    { label: 'Doanh thu đặt hàng hôm nay', icon: TrendingUp, value: null, hint: 'Chưa có dữ liệu', to: null },
+    { label: 'Đơn mới', icon: ShoppingCart, value: null, hint: 'Chưa có dữ liệu', to: null },
+    { label: 'Đơn quá hạn xử lý', icon: PackageX, value: null, hint: 'Chưa có dữ liệu', to: null },
+    {
+        label: 'SKU sắp hết hàng',
+        icon: Boxes,
+        value: stock.value ? formatNumber(stock.value.low_stock) : null,
+        hint: stock.value ? `${formatNumber(stock.value.out_of_stock)} SKU đã hết hàng` : 'Chưa có dữ liệu',
+        to: stock.value ? '/inventory' : null,
+    },
+]);
 
 const steps = computed(() => [
     { done: true, label: 'Tạo doanh nghiệp', to: null },
     { done: false, label: 'Mời nhân viên và phân quyền', to: tenant.can('members.view') ? '/members' : null },
-    { done: false, label: 'Tạo kho và nhập sản phẩm (Phase 2)', to: null },
+    { done: false, label: 'Tạo sản phẩm và nhập kho', to: tenant.can('products.view') ? '/products' : null },
     { done: false, label: 'Kết nối shop Shopee hoặc TikTok Shop (Phase 4–5)', to: null },
 ]);
 </script>
@@ -34,8 +48,12 @@ const steps = computed(() => [
                 {{ k.label }}
                 <component :is="k.icon" class="size-4" />
             </div>
-            <p class="mt-3 text-2xl font-semibold tracking-tight text-muted-foreground/60">—</p>
-            <p class="mt-1 text-xs text-muted-foreground">Chưa có dữ liệu</p>
+            <p v-if="k.value !== null" class="mt-3 text-2xl font-semibold tracking-tight">{{ k.value }}</p>
+            <p v-else class="mt-3 text-2xl font-semibold tracking-tight text-muted-foreground/60">—</p>
+            <p class="mt-1 text-xs text-muted-foreground">
+                {{ k.hint }}
+                <RouterLink v-if="k.to" :to="k.to" class="ml-1 text-primary hover:underline">Xem</RouterLink>
+            </p>
         </Card>
     </div>
 

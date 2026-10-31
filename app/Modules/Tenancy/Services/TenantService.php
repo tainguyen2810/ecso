@@ -7,6 +7,7 @@ use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Billing\Models\Plan;
 use App\Modules\Billing\Models\Subscription;
 use App\Modules\Identity\Models\User;
+use App\Modules\Tenancy\Events\TenantCreated;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Models\TenantUser;
 use App\Modules\Tenancy\Support\TenantContext;
@@ -45,6 +46,8 @@ class TenantService
 
                 $this->audit->record('tenant.created', $tenant, ['name' => $tenant->name], $tenant->id, $owner->id);
                 $this->audit->record('member.joined', $membership, ['role' => Role::OWNER], $tenant->id, $owner->id);
+
+                TenantCreated::dispatch($tenant);
 
                 return $tenant;
             });

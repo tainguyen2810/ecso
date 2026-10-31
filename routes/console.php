@@ -9,3 +9,6 @@ Schedule::call(fn () => Cache::put('ecso:scheduler:heartbeat', now()->timestamp,
     ->everyMinute();
 
 Schedule::command('horizon:snapshot')->everyFiveMinutes();
+
+// Read-only ledger integrity check; mismatches are logged as critical (INVENTORY-ENGINE.md §8).
+Schedule::command('ecso:inventory:verify')->dailyAt('02:30')->withoutOverlapping()->onOneServer();
