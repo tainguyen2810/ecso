@@ -3,6 +3,7 @@
 namespace App\Modules\Platform\Console;
 
 use App\Modules\Identity\Models\User;
+use App\Modules\Platform\Installer\Installer;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Validator;
@@ -34,6 +35,7 @@ class InstallCommand extends Command
 
         if (User::query()->where('is_super_admin', true)->exists()) {
             $this->info('Đã có super admin, bỏ qua bước tạo tài khoản.');
+            app(Installer::class)->writeLock();
 
             return self::SUCCESS;
         }
@@ -67,6 +69,7 @@ class InstallCommand extends Command
             'is_super_admin' => true,
         ])->save();
 
+        app(Installer::class)->writeLock();
         $this->info("Đã tạo super admin {$admin->email}. Cài đặt hoàn tất.");
 
         return self::SUCCESS;

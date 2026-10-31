@@ -26,4 +26,11 @@ return [
         'bcmath', 'ctype', 'curl', 'dom', 'fileinfo', 'intl', 'mbstring', 'openssl',
         'pcntl', 'pdo_mysql', 'redis', 'tokenizer', 'xml', 'zip',
     ],
+
+    // Web setup wizard (/install). The wizard is open only while the app has no APP_KEY and no lock file;
+    // every call needs the one-time token written to token_path (readable only by someone with server access).
+    'installer' => [
+        'lock_path' => storage_path('app/installed.lock'),
+        'token_path' => storage_path('app/install-token.txt'),
+    ],
 ];

@@ -199,7 +199,8 @@ return [
     'defaults' => [
         'supervisor-1' => [
             'connection' => 'redis',
-            'queue' => ['default'],
+            // Every queue the app dispatches to: webhook processing, marketplace sync, everything else.
+            'queue' => ['webhooks', 'sync', 'default'],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',
             'maxProcesses' => 1,
