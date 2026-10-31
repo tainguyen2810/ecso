@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Phase 5 — TikTok Shop (khung) (2026-10-31)
+- `TikTokConnector` (UNKNOWN toàn bộ), cấu hình `TIKTOK_SHOP_APP_KEY` / `TIKTOK_SHOP_APP_SECRET`; dùng luồng ủy quyền chung của Phase 4.
+- **Không** có tích hợp TikTok Shop thật: không truy cập được tài liệu Partner Center và chưa có credentials.
+
 ### Phase 4 — Shopee (khung) (2026-10-31)
 - `ShopeeConnector` (UNKNOWN toàn bộ), cấu hình `SHOPEE_PARTNER_ID` / `SHOPEE_PARTNER_KEY`, `ecso:check-env` báo sàn chưa có credentials.
 - Luồng ủy quyền shop dùng chung cho mọi sàn: state một lần gắn tenant + người dùng, chống chiếm shop của tenant khác, token mã hóa, giới hạn shop theo gói; lỗi `CREDENTIALS_MISSING` / `UNSUPPORTED_CAPABILITY` rõ ràng.

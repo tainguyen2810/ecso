@@ -26,3 +26,12 @@ test('callback with an unknown state is rejected', async ({ page }) => {
     await expect(page.getByText('Không kết nối được')).toBeVisible();
     await shot(page, '02-callback-rejected');
 });
+
+test('TikTok Shop: skeleton connector, connect refused without credentials', async ({ page }) => {
+    await login(page, 'owner@demo.test');
+    await page.goto('/marketplaces');
+    await expect(page.getByTestId('real-marketplaces')).toContainText('TikTok Shop');
+    await page.getByTestId('connect-tiktok').click();
+    await expect(page.getByTestId('connect-notice-tiktok')).toContainText('chưa được cấu hình app credentials');
+    await page.screenshot({ path: 'docs/screenshots/phase-5/01-tiktok-connect-refused.png', clip: { x: 0, y: 0, width: 1440, height: 640 } });
+});
