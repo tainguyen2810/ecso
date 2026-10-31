@@ -18,6 +18,7 @@ class StockTransferLine extends Model
         return ['quantity' => 'integer'];
     }
 
+    /** @return BelongsTo<ProductVariant, $this> */
     public function variant(): BelongsTo
     {
         return $this->belongsTo(ProductVariant::class, 'product_variant_id')->withTrashed();

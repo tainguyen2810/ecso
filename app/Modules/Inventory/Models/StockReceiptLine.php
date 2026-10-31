@@ -18,6 +18,7 @@ class StockReceiptLine extends Model
         return ['quantity' => 'integer', 'unit_cost' => 'decimal:4'];
     }
 
+    /** @return BelongsTo<ProductVariant, $this> */
     public function variant(): BelongsTo
     {
         return $this->belongsTo(ProductVariant::class, 'product_variant_id')->withTrashed();

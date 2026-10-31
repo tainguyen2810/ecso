@@ -11,6 +11,10 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 /**
  * A sellable SKU. Stock is tracked per variant and warehouse by the Inventory module.
  * cost_price (weighted average) is only written by InventoryService.
+ *
+ * @property-read int|string|null $on_hand  stock join in listings
+ * @property-read int|string|null $reserved  stock join in listings
+ * @property-read int|string|null $safety_stock  stock join in listings
  */
 class ProductVariant extends Model
 {
@@ -28,6 +32,7 @@ class ProductVariant extends Model
         ];
     }
 
+    /** @return BelongsTo<Product, $this> */
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);

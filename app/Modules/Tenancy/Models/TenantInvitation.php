@@ -8,7 +8,13 @@ use App\Modules\Tenancy\Concerns\BelongsToTenant;
 use App\Shared\Concerns\HasPublicUlid;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
+/**
+ * @property Carbon $expires_at
+ * @property Carbon|null $accepted_at
+ * @property Carbon|null $revoked_at
+ */
 class TenantInvitation extends Model
 {
     use BelongsToTenant, HasPublicUlid;
@@ -26,11 +32,13 @@ class TenantInvitation extends Model
         ];
     }
 
+    /** @return BelongsTo<Role, $this> */
     public function role(): BelongsTo
     {
         return $this->belongsTo(Role::class);
     }
 
+    /** @return BelongsTo<User, $this> */
     public function inviter(): BelongsTo
     {
         return $this->belongsTo(User::class, 'invited_by');

@@ -9,6 +9,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * @property-read int|string|null $on_hand  stock join in listings
+ * @property-read int|string|null $reserved  stock join in listings
+ */
 class Product extends Model
 {
     use BelongsToTenant, HasPublicUlid, SoftDeletes;
@@ -23,21 +27,25 @@ class Product extends Model
 
     protected $fillable = ['name', 'category_id', 'brand_id', 'description', 'status'];
 
+    /** @return BelongsTo<Category, $this> */
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
     }
 
+    /** @return BelongsTo<Brand, $this> */
     public function brand(): BelongsTo
     {
         return $this->belongsTo(Brand::class);
     }
 
+    /** @return HasMany<ProductVariant, $this> */
     public function variants(): HasMany
     {
         return $this->hasMany(ProductVariant::class)->orderBy('id');
     }
 
+    /** @return HasMany<ProductImage, $this> */
     public function images(): HasMany
     {
         return $this->hasMany(ProductImage::class)->orderBy('sort');

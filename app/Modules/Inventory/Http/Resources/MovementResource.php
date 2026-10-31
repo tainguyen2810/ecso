@@ -24,7 +24,7 @@ class MovementResource extends JsonResource
             'reference' => $this->reference_type ? ['type' => $this->reference_type, 'number' => $this->reference_number ?? null] : null,
             'reason' => $this->reason,
             'actor' => $this->actor_type === 'user' ? $this->actor?->name : $this->actor_type,
-            'created_at' => $this->created_at?->toIso8601String(),
+            'created_at' => $this->created_at->toIso8601String(),
         ];
     }
 }

@@ -60,6 +60,7 @@ class StockController extends Controller
                 'short' => $q->whereRaw("{$available} < 0"),
                 'low' => $q->whereRaw("{$available} > 0 AND {$available} <= COALESCE(s.safety_stock, 0)"),
                 'in' => $q->whereRaw("{$available} > 0"),
+                default => $q,
             })
             ->orderBy('sku')
             ->paginate($filters['per_page'] ?? 50);

@@ -19,16 +19,19 @@ class StockReceipt extends Model
 
     protected $fillable = ['warehouse_id', 'source', 'note'];
 
+    /** @return BelongsTo<Warehouse, $this> */
     public function warehouse(): BelongsTo
     {
         return $this->belongsTo(Warehouse::class)->withTrashed();
     }
 
+    /** @return HasMany<StockReceiptLine, $this> */
     public function lines(): HasMany
     {
         return $this->hasMany(StockReceiptLine::class)->orderBy('id');
     }
 
+    /** @return BelongsTo<User, $this> */
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');

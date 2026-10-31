@@ -8,6 +8,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * @property-read int|string|null $sku_count  aggregate in the warehouse list
+ * @property-read int|string|null $total_on_hand  aggregate in the warehouse list
+ */
 class Warehouse extends Model
 {
     use BelongsToTenant, HasPublicUlid, SoftDeletes;
@@ -23,6 +27,7 @@ class Warehouse extends Model
         return ['is_default' => 'boolean', 'allow_negative' => 'boolean'];
     }
 
+    /** @return HasMany<StockBalance, $this> */
     public function balances(): HasMany
     {
         return $this->hasMany(StockBalance::class);

@@ -13,6 +13,7 @@ class ProductImage extends Model
 
     protected $fillable = ['product_variant_id', 'path', 'sort'];
 
+    /** @return BelongsTo<Product, $this> */
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);

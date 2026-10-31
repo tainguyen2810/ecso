@@ -67,6 +67,7 @@ class DocumentResource extends JsonResource
                 'dispatched_at' => $doc->dispatched_at?->toIso8601String(),
                 'received_at' => $doc->received_at?->toIso8601String(),
             ],
+            default => [],
         };
     }
 }

@@ -97,7 +97,7 @@ class ProductImporter
     {
         $existing = ProductVariant::query()->withTrashed()->get(['id', 'sku', 'barcode', 'product_id', 'deleted_at'])
             ->keyBy(fn ($v) => mb_strtolower($v->sku));
-        $barcodes = $existing->filter(fn ($v) => $v->barcode)->mapWithKeys(fn ($v) => [mb_strtolower($v->barcode) => mb_strtolower($v->sku)]);
+        $barcodes = $existing->filter(fn ($v) => filled($v->barcode))->mapWithKeys(fn ($v) => [mb_strtolower($v->barcode) => mb_strtolower($v->sku)]);
 
         $errors = $this->validate($rows, $existing, $barcodes, $openingWarehouse);
         $creates = 0;
