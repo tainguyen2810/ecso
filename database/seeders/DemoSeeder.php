@@ -35,6 +35,9 @@ use Illuminate\Support\Str;
  */
 class DemoSeeder extends Seeder
 {
+    /** Base32 TOTP secret of admin@demo.test (demo data only). */
+    public const DEMO_ADMIN_TOTP_SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
+
     public function run(TenantService $tenants): void
     {
         if (App::isProduction()) {
@@ -47,7 +50,14 @@ class DemoSeeder extends Seeder
 
         $owner = $this->user('owner@demo.test', 'Nguyễn Văn Chủ');
         $staff = $this->user('staff@demo.test', 'Trần Thị Kho');
-        $this->user('admin@demo.test', 'Super Admin', superAdmin: true);
+        $admin = $this->user('admin@demo.test', 'Super Admin', superAdmin: true);
+        // Demo only (this seeder refuses to run on production): a fixed TOTP secret so the demo admin and the
+        // e2e tests can pass 2FA. Real super admins set up their own secret on first login.
+        if ($admin->two_factor_confirmed_at === null) {
+            $admin->forceFill(['two_factor_secret' => self::DEMO_ADMIN_TOTP_SECRET, 'two_factor_confirmed_at' => now(), 'two_factor_recovery_codes' => []])->save();
+        }
+        // Super admin without 2FA yet: shows the first-login setup screen.
+        $this->user('security@demo.test', 'Security Admin', superAdmin: true);
 
         if ($owner->memberships()->exists()) {
             return;

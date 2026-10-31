@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+### Phase 8 — Production Hardening (2026-10-31)
+- 2FA TOTP bắt buộc cho super admin: cài đặt bằng mã QR, 8 mã khôi phục, mỗi mã chỉ dùng được một lần, phải nhập mã ở mỗi phiên đăng nhập; API admin trả `TWO_FACTOR_SETUP_REQUIRED` / `TWO_FACTOR_REQUIRED`.
+- Header bảo mật trên mọi response; trên production thêm CSP và HSTS.
+- Che token, secret, mật khẩu, số điện thoại, địa chỉ, tên người mua và email trong mọi kênh log.
+- Giám sát: trang Admin → Giám sát hệ thống, `ecso:monitor` cảnh báo mức CRITICAL (gửi Slack qua log), `/health/ready` đọc kích thước queue thật (Redis) thay vì bảng `jobs`.
+- `scripts/backup-db.sh` (mã hóa, checksum, giữ theo số ngày), `scripts/restore-db.sh` (restore vào DB diễn tập rồi kiểm tra sổ kho), `scripts/deploy.sh` (zero-downtime, tự rollback), cấu hình mẫu Supervisor và Nginx.
+- Kịch bản load test k6, RELEASE-CHECKLIST, LOAD-TEST, cập nhật DEPLOYMENT-AAPANEL và SECURITY (kết quả audit).
+- CI thêm `composer audit` và `npm audit --omit=dev`. `ecso:check-env --production` kiểm thêm 2FA admin, cookie secure, mã hóa session.
+- Các mục admin còn lại (feature flags, hỗ trợ khách hàng, audit logs, thông báo, cấu hình) chuyển sang "Sau MVP".
+
 ### Phase 7 — Lazada & Tiki (khung) (2026-10-31)
 - `LazadaConnector`, `TikiConnector` (UNKNOWN toàn bộ), cấu hình `LAZADA_APP_KEY/SECRET`, `TIKI_CLIENT_ID/SECRET`; dùng chung luồng ủy quyền shop.
 - Hướng dẫn cập nhật tồn thủ công khi sàn chưa/không cập nhật tồn được qua API (thẻ sàn và trang Liên kết SKU); trạng thái đẩy tồn `unsupported` đổi nhãn thành "Cập nhật tay trên sàn".

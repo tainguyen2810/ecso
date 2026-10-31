@@ -167,3 +167,7 @@ Migration `2026_10_31_400000_create_billing_payment_tables`.
 | usage_counters | U(tenant, metric, period YYYY-MM); tăng nguyên tử bằng `INSERT … ON DUPLICATE KEY UPDATE` |
 
 Thiết kế ban đầu ở §2.2 có `idempotency_key`, `tax`, `subscription_id`; bản triển khai dùng (provider, provider_txn_id) làm khóa idempotency và chưa tính thuế (chưa có thông tin pháp nhân/thuế suất — cần chủ dự án quyết khi xuất hóa đơn VAT).
+
+## Phase 8 — Identity (đã tạo)
+
+Migration `2026_10_31_500000_add_two_factor_to_users`: `users.two_factor_secret` (mã hóa), `two_factor_recovery_codes` (mã hóa, danh sách hash SHA-256), `two_factor_confirmed_at`.

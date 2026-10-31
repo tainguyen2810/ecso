@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { login, shot as baseShot } from './helpers';
+import { login, loginAdmin, shot as baseShot } from './helpers';
 
 const DIR = 'docs/screenshots/phase-6';
 const shot = (page: Page, name: string) => baseShot(page, name, DIR);
@@ -35,7 +35,7 @@ test('tenant upgrades by bank transfer, admin confirms, plan and entitlements ch
 
     // Super admin confirms the transfer seen on the bank statement.
     const adminPage = await browser.newPage();
-    await login(adminPage, 'admin@demo.test');
+    await loginAdmin(adminPage);
     await adminPage.goto('/admin/billing');
     await expect(adminPage.getByTestId('billing-summary')).toContainText('MRR');
     await adminPage.getByTestId('invoice-search').fill(code);
