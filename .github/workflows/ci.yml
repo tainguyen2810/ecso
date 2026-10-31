@@ -42,6 +42,8 @@ jobs:
       - run: cp .env.example .env && php artisan key:generate
       - run: vendor/bin/pint --test
       - run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+      - name: Dependency advisories (PHP)
+        run: composer audit --no-interaction
       - run: php artisan test
         env:
           DB_DATABASE: ecso_test
@@ -59,6 +61,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Dependency advisories (JS shipped to browsers)
+        run: npm audit --omit=dev --audit-level=high
       - run: npm run typecheck
       - run: npm test
       - run: npx vite build

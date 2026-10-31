@@ -19,5 +19,8 @@ Schedule::command('ecso:marketplace:push-due')->everyMinute()->withoutOverlappin
 // Order reconcile: recovers lost webhooks by polling recently changed orders (ORDER-LIFECYCLE.md §6).
 Schedule::command('ecso:orders:reconcile')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
 
+// Monitoring alerts (queues, failed jobs, scheduler, circuits, disk) — Phase 8.
+Schedule::command('ecso:monitor')->everyFiveMinutes()->withoutOverlapping()->onOneServer();
+
 // Subscriptions: trial end, renewal invoices, scheduled downgrades, past due -> Free (Phase 6).
 Schedule::command('ecso:billing:sweep')->hourly()->withoutOverlapping()->onOneServer();

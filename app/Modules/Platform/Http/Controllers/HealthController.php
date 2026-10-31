@@ -3,6 +3,7 @@
 namespace App\Modules\Platform\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Platform\Services\SystemMonitor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -32,8 +33,10 @@ class HealthController extends Controller
             'scheduler' => $this->check(fn () => Cache::get('ecso:scheduler:heartbeat') >= now()->subMinutes(2)->timestamp
                 ?: throw new \RuntimeException('no heartbeat')),
         ];
-        $checks['queue_backlog'] = DB::table('jobs')->count();
-        $checks['failed_jobs'] = DB::table('failed_jobs')->count();
+        $snapshot = app(SystemMonitor::class)->snapshot();
+        $checks['queues'] = $snapshot['queues'];
+        $checks['failed_jobs_24h'] = $snapshot['failed_jobs_24h'];
+        $checks['disk_free_percent'] = $snapshot['disk_free_percent'];
 
         $healthy = collect($checks)->only(['database', 'redis', 'cache'])->every(fn ($c) => $c === 'ok');
 

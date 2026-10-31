@@ -38,6 +38,7 @@ use App\Modules\Orders\Policies\OrderPolicy;
 use App\Modules\Orders\Policies\ReturnPolicy;
 use App\Modules\Platform\Console\CheckEnvCommand;
 use App\Modules\Platform\Console\InstallCommand;
+use App\Modules\Platform\Console\MonitorCommand;
 use App\Modules\Tenancy\Events\TenantCreated;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Models\TenantInvitation;
@@ -99,7 +100,7 @@ class ModuleServiceProvider extends ServiceProvider
         $this->configureAuthLinks();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, PushDueInventoryCommand::class, ReconcileOrdersCommand::class, BillingSweepCommand::class]);
+            $this->commands([CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, PushDueInventoryCommand::class, ReconcileOrdersCommand::class, BillingSweepCommand::class, MonitorCommand::class]);
         }
     }
 

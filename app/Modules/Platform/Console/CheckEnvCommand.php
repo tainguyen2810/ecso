@@ -52,6 +52,9 @@ class CheckEnvCommand extends Command
             $this->check('QUEUE_CONNECTION=redis', config('queue.default') === 'redis');
             $this->check('.env không cho người khác đọc', $this->envNotWorldReadable(), 'chmod 600 .env');
             $this->check('Sàn giả lập (Fake) tắt', ! config('marketplaces.fake.enabled'), 'FAKE_MARKETPLACE_ENABLED=false');
+            $this->check('2FA bắt buộc cho super admin', (bool) config('ecso.admin_two_factor'), 'ECSO_ADMIN_2FA=true');
+            $this->check('Cookie phiên chỉ gửi qua HTTPS', config('session.secure') === true, 'SESSION_SECURE_COOKIE=true');
+            $this->check('Mã hóa phiên', (bool) config('session.encrypt'), 'SESSION_ENCRYPT=true');
         }
 
         // Informational: a marketplace without app credentials simply cannot be connected yet.

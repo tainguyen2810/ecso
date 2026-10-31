@@ -50,7 +50,7 @@ Như Phase 4 cho TikTok Shop.
 ### Phase 7 — Lazada & Tiki ⚠️ khung (2026-10-31, xem PHASE-7-REPORT.md) — chưa tích hợp thật
 Như Phase 4. Tiki: polling event queue; nếu không có API cập nhật tồn ⇒ `UnsupportedCapability` + UI hướng dẫn cập nhật tay.
 
-### Phase 8 — Production Hardening
+### Phase 8 — Production Hardening ✅ (2026-10-31, xem PHASE-8-REPORT.md) — chưa có server thật; k6 chưa chạy trên staging
 Security audit, load test (k6 hoặc Artillery), queue monitoring, backup/restore diễn tập, error monitoring, tài liệu deploy hoàn chỉnh, release checklist, 2FA admin.
 
 ## 3. Rủi ro và giảm thiểu

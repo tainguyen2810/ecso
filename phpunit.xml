@@ -33,6 +33,8 @@
         <env name="APP_ENV" value="testing"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
+        <!-- Admin 2FA is exercised by tests/Feature/Admin/TwoFactorTest.php, which turns it on. -->
+        <env name="ECSO_ADMIN_2FA" value="false"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
         <!-- Tests run on real MySQL 8: row locks, JSON and unique behaviour must match production. -->
