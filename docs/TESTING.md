@@ -47,13 +47,23 @@ Quy tắc:
 ## 3. Chạy test
 
 ```bash
-cp .env.testing.example .env.testing    # DB_DATABASE=omni_test
-php artisan test --parallel             # Pest
-php artisan test --group=concurrency    # cần MySQL thật
-npm run test                            # Vitest
-npx playwright test                     # E2E (tự seed + Fake connector)
-RUN_SANDBOX_TESTS=1 php artisan test --group=sandbox   # chỉ khi có credentials sandbox
+# Backend: phpunit.xml trỏ DB_DATABASE=ecso_test trên MySQL 8 (user/pass lấy từ .env)
+./vendor/bin/pest                       # Unit + Feature + Arch
+./vendor/bin/pint --test                # code style
+
+# Frontend
+npm run typecheck                       # vue-tsc
+npm test                                # Vitest
+
+# E2E (Playwright) – cần server chạy với dữ liệu demo, ảnh chụp lưu ở docs/screenshots/phase-N/
+php artisan migrate:fresh --seed && php artisan db:seed --class=DemoSeeder
+php artisan serve --port=8000 &
+npx playwright test
+
+# Từ Phase 2: php artisan test --group=concurrency ; từ Phase 4: RUN_SANDBOX_TESTS=1 ... --group=sandbox
 ```
+
+Tài khoản demo (chỉ môi trường local/E2E, DemoSeeder từ chối chạy trên production): `owner@demo.test`, `staff@demo.test`, `admin@demo.test`, mật khẩu `password1`.
 
 CI (GitHub Actions): service MySQL 8 + Redis, chạy lint (Pint, ESLint), PHPStan level 6+, Pest, Vitest, Playwright headless.
 

@@ -15,7 +15,7 @@
 ## 2. Cấu trúc thư mục (deploy không gián đoạn)
 
 ```
-/www/wwwroot/omni/
+/www/wwwroot/ecso/
   releases/20261031120000/     # mỗi lần deploy một thư mục
   shared/.env                  # chmod 600
   shared/storage/
@@ -24,7 +24,7 @@
 
 ## 3. Nginx (site aaPanel)
 
-- Root: `/www/wwwroot/omni/current/public`, rewrite Laravel (`try_files $uri $uri/ /index.php?$query_string;`).
+- Root: `/www/wwwroot/ecso/current/public`, rewrite Laravel (`try_files $uri $uri/ /index.php?$query_string;`).
 - SSL Let's Encrypt qua aaPanel, bật Force HTTPS + HSTS.
 - Chặn truy cập `.env`, `.git`, `storage` từ web.
 - `client_max_body_size 20m` (import Excel).
@@ -33,16 +33,16 @@
 
 | Tên | Lệnh | User |
 |---|---|---|
-| omni-horizon | `php /www/wwwroot/omni/current/artisan horizon` | www |
-| omni-scheduler | `php /www/wwwroot/omni/current/artisan schedule:work` (hoặc cron `* * * * *` `schedule:run`) | www |
+| ecso-horizon | `php /www/wwwroot/ecso/current/artisan horizon` | www |
+| ecso-scheduler | `php /www/wwwroot/ecso/current/artisan schedule:work` (hoặc cron `* * * * *` `schedule:run`) | www |
 
 `stopwaitsecs=3600` cho Horizon để job dở được làm xong khi deploy. **Không chạy worker bằng phiên SSH.**
 
 ## 5. Cài đặt lần đầu
 
 ```bash
-php artisan omni:check-env      # kiểm PHP version, extensions, pcntl, quyền ghi, kết nối DB/Redis, APP_DEBUG=false, APP_KEY, key mã hóa token
-php artisan omni:install        # wizard CLI: tạo .env, key, migrate, seed permission/plan, tạo super admin (có validate)
+php artisan ecso:check-env      # kiểm PHP version, extensions, pcntl, quyền ghi, kết nối DB/Redis, APP_DEBUG=false, APP_KEY, key mã hóa token
+php artisan ecso:install        # wizard CLI: tạo .env, key, migrate, seed permission/plan, tạo super admin (có validate)
 php artisan horizon:install
 ```
 
@@ -50,7 +50,7 @@ php artisan horizon:install
 
 1. Tạo thư mục release mới, giải nén artifact build từ CI (vendor + public/build có sẵn).
 2. Link `shared/.env`, `shared/storage`.
-3. `php artisan omni:check-env`
+3. `php artisan ecso:check-env`
 4. `php artisan migrate --force` (migrations phải tương thích ngược: thêm cột trước, xóa cột ở release sau).
 5. `php artisan config:cache route:cache view:cache event:cache`
 6. Đổi symlink `current` (atomic `ln -sfn`), reload PHP-FPM.
@@ -68,10 +68,10 @@ php artisan horizon:install
 
 ## 8. Backup & restore
 
-- DB: `mysqldump --single-transaction --routines --triggers` hằng đêm (cron aaPanel hoặc lệnh `omni:backup`), nén + mã hóa, giữ 7 ngày/4 tuần/6 tháng, đẩy sang storage ngoài server (S3-compatible).
+- DB: `mysqldump --single-transaction --routines --triggers` hằng đêm (cron aaPanel hoặc lệnh `ecso:backup`), nén + mã hóa, giữ 7 ngày/4 tuần/6 tháng, đẩy sang storage ngoài server (S3-compatible).
 - Bật binlog nếu cần point-in-time recovery.
 - Storage (`shared/storage/app`): rsync/backup hằng đêm.
-- Restore: hướng dẫn từng bước + **diễn tập restore mỗi quý**, sau restore chạy `omni:inventory:verify` kiểm bất biến tồn kho.
+- Restore: hướng dẫn từng bước + **diễn tập restore mỗi quý**, sau restore chạy `ecso:inventory:verify` kiểm bất biến tồn kho.
 
 ## 9. Checklist bảo mật server
 

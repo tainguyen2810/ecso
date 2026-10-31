@@ -4,7 +4,7 @@
 
 ## 1. Bối cảnh và hiện trạng
 
-- Chưa có repository cho dự án (kiểm tra danh sách repo GitHub của chủ dự án ngày 2026-10-31, không có repo TMDT/omnichannel). Phase 1 sẽ **khởi tạo dự án mới**.
+- Repository: `tainguyen2810/ecso` (tạo 2026-10-31). Phase 1 đã khởi tạo Laravel 12.70 + Vue 3.
 - Môi trường build có sẵn: PHP 8.3.6, Node 22, Redis 7. MySQL 8 sẽ cài khi chạy test tích hợp (Phase 1).
 - Mục tiêu triển khai: Ubuntu + aaPanel + Nginx + PHP-FPM 8.3 + MySQL 8 + Redis, **không Docker bắt buộc**.
 
@@ -175,3 +175,21 @@ interface MarketplaceConnectorInterface
 2. Tên miền và cách tách subdomain admin (`admin.` hay `/admin`).
 3. Có cần xuất hóa đơn điện tử VAT cho khách SaaS không (ảnh hưởng Billing).
 4. Dịch vụ email giao dịch (SMTP riêng, Amazon SES, Mailgun...).
+
+## 9. Ghi chú hiện thực (Phase 1)
+
+Những điểm hiện thực khác hoặc cụ thể hơn so với thiết kế ở trên:
+
+| Hạng mục | Hiện thực | Lý do |
+|---|---|---|
+| Migrations | Đặt chung ở `database/migrations/` (không chia theo module) | Thứ tự chạy rõ ràng, quen thuộc khi deploy trên aaPanel |
+| User model | `App\Modules\Identity\Models\User` | Giữ cấu trúc module |
+| Route | Mỗi module có `Routes/api.php`, `ModuleServiceProvider` gắn vào `/api/v1` | |
+| Tenant context | `TenantContext` (scoped singleton) + middleware `tenant` (header `X-Tenant`), chạy **trước** route model binding (middleware priority) | Model binding đã nằm trong scope tenant |
+| Fail-closed | `TenantScope` ném `NoTenantContext` khi truy vấn model tenant mà chưa có context | Thà lỗi còn hơn trả dữ liệu mọi tenant |
+| Bỏ scope có chủ đích | Đánh dấu `@tenant-bypass` (membership của user, tra lời mời theo token, Admin) | Dễ grep khi audit |
+| UI components | Bộ component tự viết theo phong cách shadcn-vue (cva + tailwind-merge) trong `resources/js/shared/ui` | CLI shadcn-vue cần tải registry từ internet; bộ tự viết không phụ thuộc |
+| Hai SPA | `resources/js/apps/tenant` (đường dẫn `/`) và `resources/js/apps/admin` (`/admin`), hai entry Vite | Phân tách quyền và bundle |
+| Lệnh vận hành | `ecso:check-env`, `ecso:install` | |
+| Health | `/health` (công khai), `/health/ready` (cần header `X-Health-Token`) | |
+| Phím tắt | `g` rồi `d/o/p/i/m/s` để chuyển trang | |

@@ -2,11 +2,27 @@
 
 Nền tảng SaaS quản lý bán hàng đa sàn (Shopee, TikTok Shop, Lazada, Tiki) cho người bán tại Việt Nam.
 
-Stack dự kiến: Laravel 12 (PHP 8.3), Vue 3 + TypeScript, Tailwind, MySQL 8, Redis, Horizon. Kiến trúc modular monolith, triển khai trên Ubuntu + aaPanel.
+Stack: Laravel 12 (PHP 8.3), Vue 3 + TypeScript, Tailwind 4, MySQL 8, Redis, Horizon, Sanctum. Kiến trúc modular monolith, triển khai trên Ubuntu + aaPanel.
 
 ## Trạng thái
 
-- Phase 0 (Discovery & Architecture): hoàn thành tài liệu, chưa có code. Xem [docs/PHASE-0-REPORT.md](docs/PHASE-0-REPORT.md).
+| Phase | Nội dung | Trạng thái |
+|---|---|---|
+| 0 | Discovery & Architecture | ✅ [báo cáo](docs/PHASE-0-REPORT.md) |
+| 1 | SaaS Foundation: auth, multi-tenant, RBAC, dashboard | ✅ [báo cáo](docs/PHASE-1-REPORT.md) |
+| 2 | Catalog & Inventory | ⏳ |
+
+## Chạy local
+
+```bash
+composer install && npm ci
+cp .env.example .env && php artisan key:generate   # điền DB_*, REDIS_*
+php artisan ecso:install                            # kiểm tra môi trường, migrate, seed, tạo super admin
+php artisan db:seed --class=DemoSeeder              # tuỳ chọn: dữ liệu demo
+npm run build && php artisan serve
+```
+
+Test: `./vendor/bin/pest` (MySQL 8, DB `ecso_test`), `npm test`, `npx playwright test`. Chi tiết ở [docs/TESTING.md](docs/TESTING.md).
 
 ## Tài liệu
 
