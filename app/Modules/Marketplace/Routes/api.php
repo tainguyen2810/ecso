@@ -15,6 +15,8 @@ Route::post('webhooks/{marketplace}', WebhookController::class)
 Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::get('marketplaces', [MarketplaceAccountController::class, 'catalog']);
     Route::get('marketplace-accounts', [MarketplaceAccountController::class, 'index']);
+    Route::post('marketplace-accounts/authorize/{marketplace}', [MarketplaceAccountController::class, 'authorizeShop'])->where('marketplace', '[a-z]+')->middleware('throttle:10,1');
+    Route::post('marketplace-accounts/callback/{marketplace}', [MarketplaceAccountController::class, 'completeAuthorization'])->where('marketplace', '[a-z]+')->middleware('throttle:10,1');
     Route::post('marketplace-accounts/fake', [MarketplaceAccountController::class, 'connectFake']);
     Route::patch('marketplace-accounts/{account}', [MarketplaceAccountController::class, 'update']);
     Route::post('marketplace-accounts/{account}/disconnect', [MarketplaceAccountController::class, 'disconnect']);

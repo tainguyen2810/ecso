@@ -78,6 +78,16 @@
 
 FAKE chỉ để kiểm thử pipeline nội bộ, **không** chứng minh tích hợp với sàn thật.
 
+Từ Phase 4 có thêm `shop.authorize` (kết nối shop qua trang ủy quyền của sàn) và `auth.refresh` (làm mới token): UNKNOWN với mọi sàn thật, `unsupported` với FAKE (shop giả lập kết nối trực tiếp).
+
+### 3.2 Shopee — trạng thái Phase 4 (2026-10-31)
+
+- Kiểm tra lại truy cập `open.shopee.com` từ môi trường build: **bị chặn** (proxy trả 403). Không có partner credentials, không có test shop.
+- Đã làm: `ShopeeConnector` (kế thừa `UnverifiedConnector`) được đăng ký; mọi capability = UNKNOWN; webhook `/api/v1/webhooks/shopee` luôn bị từ chối (401, lưu lại để theo dõi, không xử lý); thao tác đơn trả `UNSUPPORTED_CAPABILITY`.
+- Đã làm (dùng chung cho mọi sàn): luồng ủy quyền shop — `POST /marketplace-accounts/authorize/{marketplace}` → trang của sàn → trang callback SPA `/marketplaces/{marketplace}/callback` → `POST /marketplace-accounts/callback/{marketplace}`. State ngẫu nhiên dùng một lần (lưu cache 10 phút, băm SHA-256), gắn với tenant + người dùng phía server; một shop chỉ thuộc một tenant; token lưu mã hóa; giới hạn số shop theo gói. Thiếu credentials ⇒ `CREDENTIALS_MISSING`.
+- Chưa làm (chờ tài liệu + credentials, **không đoán**): ký request, URL ủy quyền, đổi code lấy token, refresh token, lấy đơn/sản phẩm, cập nhật tồn, chữ ký push, bảng ánh xạ trạng thái Shopee → nội bộ, rate limit.
+- Để nâng lên VERIFIED: khai báo `SHOPEE_PARTNER_ID`, `SHOPEE_PARTNER_KEY` (server/CI secret), cấp test shop, mở truy cập tài liệu; sau đó hiện thực từng method trong `ShopeeConnector`, viết test hợp đồng với sandbox (`RUN_SANDBOX_TESTS=1`), rồi đổi capability tương ứng sang `supported`.
+
 ## 4. Rủi ro tích hợp đã thấy
 
 1. **Không có credentials và không đọc được docs chính thức** ⇒ chưa thể cam kết lịch Phase 4–7. Mọi connector sẽ chỉ có Fake adapter cho tới khi có tài khoản.

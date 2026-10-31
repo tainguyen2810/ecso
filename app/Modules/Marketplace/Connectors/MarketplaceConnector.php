@@ -5,6 +5,7 @@ namespace App\Modules\Marketplace\Connectors;
 use App\Modules\Marketplace\Connectors\Data\OrderData;
 use App\Modules\Marketplace\Connectors\Data\OrderPage;
 use App\Modules\Marketplace\Connectors\Data\ProductPage;
+use App\Modules\Marketplace\Connectors\Data\ShopAuthorization;
 use App\Modules\Marketplace\Connectors\Data\StockUpdate;
 use App\Modules\Marketplace\Connectors\Data\StockUpdateResult;
 use App\Modules\Marketplace\Connectors\Data\WebhookMessage;
@@ -20,6 +21,25 @@ use Carbon\CarbonImmutable;
 interface MarketplaceConnector
 {
     public function marketplace(): string;
+
+    /**
+     * URL of the marketplace page where the seller authorizes our app. $state is opaque and must come back.
+     *
+     * @throws UnsupportedCapability
+     */
+    public function authorizationUrl(string $state, string $redirectUri): string;
+
+    /**
+     * Exchanges the callback parameters (code, shop id…) for tokens and shop identity.
+     *
+     * @param  array<string, string>  $query
+     *
+     * @throws UnsupportedCapability|ConnectorException
+     */
+    public function completeAuthorization(array $query, string $redirectUri): ShopAuthorization;
+
+    /** @throws UnsupportedCapability|ConnectorException */
+    public function refreshCredentials(MarketplaceAccount $account): ShopAuthorization;
 
     /** @return array<string, string> capability => Capability::SUPPORTED|UNSUPPORTED|UNKNOWN */
     public function capabilities(): array;

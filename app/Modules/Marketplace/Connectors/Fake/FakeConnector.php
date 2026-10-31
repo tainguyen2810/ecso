@@ -8,6 +8,7 @@ use App\Modules\Marketplace\Connectors\Data\OrderItemData;
 use App\Modules\Marketplace\Connectors\Data\OrderPage;
 use App\Modules\Marketplace\Connectors\Data\ProductData;
 use App\Modules\Marketplace\Connectors\Data\ProductPage;
+use App\Modules\Marketplace\Connectors\Data\ShopAuthorization;
 use App\Modules\Marketplace\Connectors\Data\StockUpdateResult;
 use App\Modules\Marketplace\Connectors\Data\WebhookMessage;
 use App\Modules\Marketplace\Connectors\MarketplaceConnector;
@@ -63,6 +64,9 @@ class FakeConnector implements MarketplaceConnector
             ...array_fill_keys(Capability::ALL, Capability::SUPPORTED),
             // Left unsupported on purpose so the UnsupportedCapability path is exercised end to end.
             Capability::SHIPPING_LABEL => Capability::UNSUPPORTED,
+            // The fake shop is connected directly (no OAuth) and has no tokens.
+            Capability::SHOP_AUTHORIZE => Capability::UNSUPPORTED,
+            Capability::TOKEN_REFRESH => Capability::UNSUPPORTED,
             Capability::RETURNS_LIST => Capability::UNSUPPORTED,
         ];
     }
@@ -225,5 +229,20 @@ class FakeConnector implements MarketplaceConnector
         $value = $headers[$name] ?? null;
 
         return is_array($value) ? ($value[0] ?? null) : $value;
+    }
+
+    public function authorizationUrl(string $state, string $redirectUri): string
+    {
+        throw new UnsupportedCapability(self::MARKETPLACE, Capability::SHOP_AUTHORIZE);
+    }
+
+    public function completeAuthorization(array $query, string $redirectUri): ShopAuthorization
+    {
+        throw new UnsupportedCapability(self::MARKETPLACE, Capability::SHOP_AUTHORIZE);
+    }
+
+    public function refreshCredentials(MarketplaceAccount $account): ShopAuthorization
+    {
+        throw new UnsupportedCapability(self::MARKETPLACE, Capability::TOKEN_REFRESH);
     }
 }

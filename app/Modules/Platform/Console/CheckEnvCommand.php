@@ -2,6 +2,7 @@
 
 namespace App\Modules\Platform\Console;
 
+use App\Modules\Marketplace\Services\ShopAuthorizationService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
@@ -51,6 +52,11 @@ class CheckEnvCommand extends Command
             $this->check('QUEUE_CONNECTION=redis', config('queue.default') === 'redis');
             $this->check('.env không cho người khác đọc', $this->envNotWorldReadable(), 'chmod 600 .env');
             $this->check('Sàn giả lập (Fake) tắt', ! config('marketplaces.fake.enabled'), 'FAKE_MARKETPLACE_ENABLED=false');
+        }
+
+        // Informational: a marketplace without app credentials simply cannot be connected yet.
+        foreach (array_keys((array) config('marketplaces.credentials')) as $marketplace) {
+            $this->rows[] = ["App credentials {$marketplace}", ShopAuthorizationService::configured($marketplace) ? 'OK' : 'CHƯA CÓ', 'Không bắt buộc; thiếu thì chưa kết nối được sàn này'];
         }
 
         $this->table(['Kiểm tra', 'Kết quả', 'Ghi chú'], $this->rows);

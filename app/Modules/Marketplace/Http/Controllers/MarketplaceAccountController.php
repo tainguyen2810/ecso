@@ -14,6 +14,7 @@ use App\Modules\Marketplace\Models\WebhookEvent;
 use App\Modules\Marketplace\Services\AccountService;
 use App\Modules\Marketplace\Services\InventorySyncPlanner;
 use App\Modules\Marketplace\Services\ListingService;
+use App\Modules\Marketplace\Services\ShopAuthorizationService;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -37,6 +38,7 @@ class MarketplaceAccountController extends Controller
                 'key' => $key,
                 'name' => $name,
                 'available' => $available,
+                'credentials_configured' => $key === 'fake' || ShopAuthorizationService::configured($key),
                 'is_fake' => $key === 'fake',
                 'capabilities' => $capabilities,
             ];
@@ -73,6 +75,24 @@ class MarketplaceAccountController extends Controller
         $warehouse = isset($data['warehouse_id']) ? Warehouse::query()->where('ulid', $data['warehouse_id'])->firstOrFail() : null;
 
         $account = $service->connectFake($data['shop_name'], $warehouse);
+
+        return (new AccountResource($account->load('warehouse')))->response()->setStatusCode(201);
+    }
+
+    /** Starts the seller authorization of a real marketplace shop: returns the marketplace URL to open. */
+    public function authorizeShop(Request $request, string $marketplace, ShopAuthorizationService $auth): JsonResponse
+    {
+        $this->authorize('connect', MarketplaceAccount::class);
+
+        return response()->json(['data' => ['url' => $auth->start($marketplace, $request->user()->id)['url']]]);
+    }
+
+    /** Called by the SPA callback page with the parameters the marketplace appended to the redirect. */
+    public function completeAuthorization(Request $request, string $marketplace, ShopAuthorizationService $auth): JsonResponse
+    {
+        $this->authorize('connect', MarketplaceAccount::class);
+        $query = $request->validate(['state' => ['required', 'string', 'max:100'], 'params' => ['array', 'max:20'], 'params.*' => ['nullable', 'string', 'max:2000']]);
+        $account = $auth->complete($marketplace, ['state' => $query['state']] + ($query['params'] ?? []), $request->user()->id);
 
         return (new AccountResource($account->load('warehouse')))->response()->setStatusCode(201);
     }

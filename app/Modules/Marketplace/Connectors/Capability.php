@@ -15,6 +15,11 @@ final class Capability
     /** Not verified yet: no access to official docs or credentials. Treated as not available. */
     public const UNKNOWN = 'unknown';
 
+    /** Seller authorizes our app for a shop (OAuth-style redirect). */
+    public const SHOP_AUTHORIZE = 'shop.authorize';
+
+    public const TOKEN_REFRESH = 'auth.refresh';
+
     public const ORDERS_WEBHOOK = 'orders.webhook';
 
     public const ORDERS_FETCH = 'orders.fetch';
@@ -40,6 +45,7 @@ final class Capability
     public const RETURNS_LIST = 'returns.list';
 
     public const ALL = [
+        self::SHOP_AUTHORIZE, self::TOKEN_REFRESH,
         self::ORDERS_WEBHOOK, self::ORDERS_FETCH, self::ORDERS_LIST, self::ORDERS_CONFIRM, self::ORDERS_PACK,
         self::ORDERS_HANDOVER, self::ORDERS_CANCEL, self::SHIPPING_LABEL, self::PRODUCTS_LIST,
         self::INVENTORY_UPDATE, self::INVENTORY_GET, self::RETURNS_LIST,

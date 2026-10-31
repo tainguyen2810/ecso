@@ -38,6 +38,31 @@ const connectError = ref<ApiError | null>(null);
 const sim = ref<{ account: MarketplaceAccountData; failing: boolean; statuses: string[]; orders: OrderSummary[] } | null>(null);
 const simForm = ref({ count: 3, status: 'fake_ready', max_items: 2, order: '', to: 'fake_packed' });
 
+const realMarketplaces = computed(() => catalog.value.filter((c) => !c.is_fake));
+const connectNotice = ref<{ key: string; message: string } | null>(null);
+
+async function connectReal(c: MarketplaceCatalogEntry) {
+    busy.value = `real-${c.key}`;
+    connectNotice.value = null;
+    try {
+        const { data } = await api.post(`/marketplace-accounts/authorize/${c.key}`);
+        window.location.href = data.data.url;
+    } catch (e) {
+        const err = e as ApiError;
+        connectNotice.value = {
+            key: c.key,
+            message:
+                err.body.code === 'CREDENTIALS_MISSING'
+                    ? `Nền tảng chưa được cấu hình app credentials cho ${c.name}. Quản trị viên cần đăng ký ứng dụng trên cổng nhà phát triển của sàn và khai báo trong cấu hình máy chủ.`
+                    : err.body.code === 'UNSUPPORTED_CAPABILITY'
+                      ? `Kết nối ${c.name} chưa được xác minh với tài liệu chính thức (UNKNOWN). Hệ thống không giả lập đăng nhập hay kết nối.`
+                      : err.message,
+        };
+    } finally {
+        busy.value = null;
+    }
+}
+
 const fakeAccounts = computed(() => accounts.value.filter((a) => a.marketplace === 'fake' && a.status === 'connected'));
 const capabilityKeys = computed(() => Object.keys(catalog.value[0]?.capabilities ?? {}));
 
@@ -193,6 +218,36 @@ const accountLabel = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 
                     </div>
                 </li>
             </ul>
+        </Card>
+
+        <Card title="Kết nối sàn thương mại điện tử" description="Kết nối qua trang ủy quyền chính thức của sàn. Không dùng mật khẩu, cookie hay giả lập đăng nhập.">
+            <div class="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4" data-testid="real-marketplaces">
+                <div v-for="c in realMarketplaces" :key="c.key" class="flex flex-col rounded-md border p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="font-medium">{{ c.name }}</span>
+                        <Badge v-if="!c.available" tone="muted">Chưa có connector</Badge>
+                        <Badge v-else-if="!c.credentials_configured" tone="warning">Chưa có credentials</Badge>
+                        <Badge v-else-if="c.capabilities['shop.authorize'] !== 'supported'" tone="muted">UNKNOWN</Badge>
+                        <Badge v-else tone="success">Sẵn sàng</Badge>
+                    </div>
+                    <p class="mt-1 flex-1 text-xs text-muted-foreground">
+                        {{ Object.values(c.capabilities).filter((s) => s === 'supported').length }}/{{ Object.keys(c.capabilities).length }} thao tác đã xác minh
+                    </p>
+                    <Button
+                        v-if="tenant.can('marketplace.connect')"
+                        class="mt-3"
+                        size="sm"
+                        variant="outline"
+                        :disabled="!c.available"
+                        :loading="busy === `real-${c.key}`"
+                        :data-testid="`connect-${c.key}`"
+                        @click="connectReal(c)"
+                    >
+                        <PlugZap /> Kết nối {{ c.name }}
+                    </Button>
+                    <p v-if="connectNotice?.key === c.key" class="mt-2 text-xs text-destructive" :data-testid="`connect-notice-${c.key}`">{{ connectNotice.message }}</p>
+                </div>
+            </div>
         </Card>
 
         <Card v-if="sim" title="Bảng điều khiển sàn giả lập" :description="`Đóng vai sàn TMĐT cho shop “${sim.account.shop_name}”: tạo đơn, đổi trạng thái, gửi lại webhook, giả lập sàn lỗi. Mọi thay đổi đi qua đúng pipeline thật (webhook có chữ ký → hàng đợi → gọi API lấy đơn → xử lý tồn).`" data-testid="simulator">

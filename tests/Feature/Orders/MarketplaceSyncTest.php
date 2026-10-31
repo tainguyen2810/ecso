@@ -108,7 +108,7 @@ it('rejects webhooks with a bad signature or an old timestamp', function () {
         ->assertOk()->assertJsonPath('duplicate', false);
 
     expect(WebhookEvent::query()->where('signature_valid', false)->count())->toBe(2);
-    $this->postJson('/api/v1/webhooks/shopee', [])->assertNotFound();
+    $this->postJson('/api/v1/webhooks/nosuchmarket', [])->assertNotFound();
 });
 
 it('ignores webhooks for a shop that is not connected', function () {

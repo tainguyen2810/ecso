@@ -150,7 +150,7 @@ it('maps listings through the API and lets the simulator create orders', functio
     $api->postJson("/api/v1/fake-marketplace/{$fresh->ulid}/orders", ['count' => 3])->assertCreated()->assertJsonCount(3, 'data.orders');
     expect(Order::withoutGlobalScopes()->where('tenant_id', $this->tenant->id)->count())->toBe(3);
 
-    $api->getJson('/api/v1/marketplaces')->assertOk()->assertJsonPath('data.0.key', 'shopee')->assertJsonPath('data.0.available', false)
+    $api->getJson('/api/v1/marketplaces')->assertOk()->assertJsonPath('data.0.key', 'shopee')->assertJsonPath('data.0.available', true)
         ->assertJson(fn ($json) => $json->where('data.0.capabilities', fn ($c) => $c['inventory.update'] === 'unknown')->etc());
     $api->getJson('/api/v1/marketplace-accounts')->assertOk()->assertJsonPath('data.0.stats.mapped', 2);
 });

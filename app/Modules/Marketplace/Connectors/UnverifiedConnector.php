@@ -5,6 +5,7 @@ namespace App\Modules\Marketplace\Connectors;
 use App\Modules\Marketplace\Connectors\Data\OrderData;
 use App\Modules\Marketplace\Connectors\Data\OrderPage;
 use App\Modules\Marketplace\Connectors\Data\ProductPage;
+use App\Modules\Marketplace\Connectors\Data\ShopAuthorization;
 use App\Modules\Marketplace\Connectors\Data\WebhookMessage;
 use App\Modules\Marketplace\Exceptions\UnsupportedCapability;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
@@ -20,6 +21,21 @@ abstract class UnverifiedConnector implements MarketplaceConnector
     public function capabilities(): array
     {
         return Capability::allUnknown();
+    }
+
+    public function authorizationUrl(string $state, string $redirectUri): string
+    {
+        throw $this->unknown(Capability::SHOP_AUTHORIZE);
+    }
+
+    public function completeAuthorization(array $query, string $redirectUri): ShopAuthorization
+    {
+        throw $this->unknown(Capability::SHOP_AUTHORIZE);
+    }
+
+    public function refreshCredentials(MarketplaceAccount $account): ShopAuthorization
+    {
+        throw $this->unknown(Capability::TOKEN_REFRESH);
     }
 
     public function verifyWebhook(string $body, array $headers): bool

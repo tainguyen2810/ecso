@@ -52,6 +52,8 @@ export const capabilityLabels: Record<string, { label: string; tone: Tone }> = {
 };
 
 export const capabilityNames: Record<string, string> = {
+    'shop.authorize': 'Kết nối shop (ủy quyền)',
+    'auth.refresh': 'Làm mới token',
     'orders.webhook': 'Webhook đơn hàng',
     'orders.fetch': 'Lấy chi tiết đơn',
     'orders.list': 'Liệt kê đơn (đối soát)',
