@@ -27,7 +27,7 @@ interface MarketplaceConnector
     /** Checks the signature (and timestamp, when the marketplace sends one) of a raw webhook request. */
     public function verifyWebhook(string $body, array $headers): bool;
 
-    /** @throws UnsupportedCapability */
+    /** @throws UnsupportedCapability|ConnectorException */
     public function parseWebhook(string $body): WebhookMessage;
 
     /** @throws UnsupportedCapability|ConnectorException */

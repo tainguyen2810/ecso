@@ -90,7 +90,7 @@ class PushInventoryJob implements ShouldQueue
     private function send(MarketplaceAccount $account, ConnectorRegistry $connectors, Collection $rows): void
     {
         $updates = $rows->map(fn (InventorySyncOutbox $row) => new StockUpdate(
-            (string) ($row->listingVariant->listing?->external_product_id ?? ''),
+            (string) ($row->listingVariant->listing->external_product_id ?? ''),
             $row->listingVariant->external_sku_id,
             $row->desired_qty,
         ))->all();
@@ -115,7 +115,7 @@ class PushInventoryJob implements ShouldQueue
             match ($result?->status) {
                 StockUpdateResult::OK => $this->succeed($row),
                 StockUpdateResult::REJECTED => $this->settle($row, InventorySyncOutbox::REJECTED, 'rejected', $result->message),
-                default => $this->retry($row, $result?->message ?? 'Sàn không trả kết quả cho SKU này'),
+                default => $this->retry($row, $result->message ?? 'Sàn không trả kết quả cho SKU này'),
             };
         }
 

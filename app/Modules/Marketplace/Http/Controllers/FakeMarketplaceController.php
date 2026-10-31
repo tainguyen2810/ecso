@@ -50,7 +50,7 @@ class FakeMarketplaceController extends Controller
     {
         $this->guard($account);
         $data = $request->validate(['status' => ['required', Rule::in(array_keys(FakeConnector::STATUSES))]]);
-        abort_unless($fake->find($account->external_shop_id, $orderSn), 404);
+        abort_if($fake->find($account->external_shop_id, $orderSn) === null, 404);
 
         $fake->setStatus($orderSn, $data['status']);
 
@@ -61,7 +61,7 @@ class FakeMarketplaceController extends Controller
     public function replay(MarketplaceAccount $account, string $orderSn, FakeMarketplace $fake): JsonResponse
     {
         $this->guard($account);
-        abort_unless($fake->find($account->external_shop_id, $orderSn), 404);
+        abort_if($fake->find($account->external_shop_id, $orderSn) === null, 404);
 
         return response()->json(['data' => $fake->notify($orderSn, 'replay-'.$orderSn.'-'.md5((string) $fake->find($account->external_shop_id, $orderSn)['update_time']))]);
     }

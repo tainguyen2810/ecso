@@ -106,7 +106,7 @@ class OrderStockSync
     private function warehouse(Order $order): ?Warehouse
     {
         if ($order->warehouse_id === null) {
-            $order->warehouse_id = $order->account?->warehouse_id
+            $order->warehouse_id = $order->account->warehouse_id
                 ?? Warehouse::query()->where('is_default', true)->value('id')
                 ?? Warehouse::query()->orderBy('id')->value('id');
             $order->save();

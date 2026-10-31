@@ -18,7 +18,6 @@ class AccountService
 {
     public function __construct(
         private readonly TenantContext $context,
-        private readonly ConnectorRegistry $connectors,
         private readonly FakeMarketplace $fake,
         private readonly ListingService $listings,
         private readonly AuditLogger $audit,
@@ -44,7 +43,7 @@ class AccountService
                 'shop_name' => $shopName,
                 'region' => 'VN',
                 'status' => MarketplaceAccount::CONNECTED,
-                'warehouse_id' => $warehouse?->id ?? Warehouse::query()->where('is_default', true)->value('id'),
+                'warehouse_id' => $warehouse->id ?? Warehouse::query()->where('is_default', true)->value('id'),
                 'connected_at' => now(),
             ]);
             $this->audit->record('marketplace.connected', $account, ['marketplace' => $account->marketplace, 'shop' => $shopName]);

@@ -54,7 +54,7 @@ class OrderResource extends JsonResource
             'assignee' => $this->whenLoaded('assignee', fn () => $this->assignee ? ['id' => $this->assignee->ulid, 'name' => $this->assignee->name] : null),
             'items_count' => $this->whenCounted('items'),
             'items_preview' => $this->whenLoaded('items', fn () => $this->items->take(3)->map(fn ($i) => [
-                'name' => $i->name, 'variant_name' => $i->variant_name, 'quantity' => $i->quantity, 'sku' => $i->variant?->sku ?? $i->seller_sku,
+                'name' => $i->name, 'variant_name' => $i->variant_name, 'quantity' => $i->quantity, 'sku' => $i->variant->sku ?? $i->seller_sku,
             ])),
         ];
     }

@@ -33,7 +33,7 @@ class ReturnResource extends JsonResource
                 'id' => $l->id,
                 'name' => $l->item?->name,
                 'variant_name' => $l->item?->variant_name,
-                'sku' => $l->variant?->sku ?? $l->item?->seller_sku,
+                'sku' => $l->variant->sku ?? $l->item->seller_sku ?? null,
                 'mapped' => $l->product_variant_id !== null,
                 'quantity' => $l->quantity,
                 'received_qty' => $l->received_qty,

@@ -15,7 +15,7 @@ class ListingVariantResource extends JsonResource
             'id' => $this->ulid,
             'external_product_id' => $this->listing?->external_product_id,
             'external_sku_id' => $this->external_sku_id,
-            'title' => $this->listing?->title ?? $this->name,
+            'title' => $this->listing->title ?? $this->name,
             'name' => $this->name,
             'seller_sku' => $this->seller_sku,
             'price' => $this->price,

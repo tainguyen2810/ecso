@@ -179,7 +179,7 @@ class OrderController extends Controller
             'note' => $o->buyer_note,
             'warehouse' => $o->warehouse?->name,
             'items' => $o->items->map(fn (OrderItem $i) => [
-                'sku' => $i->variant?->sku ?? $i->seller_sku,
+                'sku' => $i->variant->sku ?? $i->seller_sku,
                 'name' => $i->name,
                 'variant_name' => $i->variant_name,
                 'quantity' => $i->quantity,
@@ -213,7 +213,7 @@ class OrderController extends Controller
         $this->authorize('viewAny', Order::class);
         $members = TenantUser::query()->with('user:id,ulid,name')->where('status', TenantUser::STATUS_ACTIVE)->get();
 
-        return response()->json(['data' => $members->filter(fn ($m) => $m->user)->map(fn ($m) => ['id' => $m->user->ulid, 'name' => $m->user->name])->values()]);
+        return response()->json(['data' => $members->filter(fn (TenantUser $m) => $m->user !== null)->map(fn ($m) => ['id' => $m->user->ulid, 'name' => $m->user->name])->values()]);
     }
 
     private function member(?string $ulid): ?User
