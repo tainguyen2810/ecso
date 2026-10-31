@@ -1,0 +1,42 @@
+name: Release package
+
+# Builds the ready-to-upload package for aaPanel (vendor/ and public/build included, no Node or Composer
+# needed on the server) and attaches it to the GitHub release of the pushed tag, e.g. `git tag v1.0.0`.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: bcmath, intl, pdo_mysql, redis, zip
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --no-progress
+      - run: npm ci && npx vite build
+      - name: Build package
+        run: |
+          NAME="ecso-${GITHUB_REF_NAME}"
+          mkdir -p "dist/$NAME"
+          tar --exclude=./.git --exclude=./.github --exclude=./node_modules --exclude=./tests --exclude=./e2e \
+              --exclude=./loadtest --exclude=./dist --exclude=./.env -cf - . | tar -C "dist/$NAME" -xf -
+          (cd dist && zip -qr "$NAME.zip" "$NAME" && tar -czf "$NAME.tar.gz" "$NAME" && sha256sum "$NAME.zip" "$NAME.tar.gz" > "$NAME.sha256")
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NAME="ecso-${GITHUB_REF_NAME}"
+          gh release create "$GITHUB_REF_NAME" "dist/$NAME.zip" "dist/$NAME.tar.gz" "dist/$NAME.sha256" \
+            --title "ECSO $GITHUB_REF_NAME" --notes "Gói cài đặt cho aaPanel. Hướng dẫn: docs/INSTALL-AAPANEL.md" \
+            || gh release upload "$GITHUB_REF_NAME" "dist/$NAME.zip" "dist/$NAME.tar.gz" "dist/$NAME.sha256" --clobber

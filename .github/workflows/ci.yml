@@ -110,6 +110,10 @@ jobs:
           npx playwright test
         env:
           DB_DATABASE: ecso
+      - name: Setup wizard E2E (fresh copy without .env)
+        run: |
+          mysql -h127.0.0.1 -uroot -proot -e "CREATE DATABASE ecso_wizard CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+          INSTALL_DB_DATABASE=ecso_wizard INSTALL_DB_USERNAME=root INSTALL_DB_PASSWORD=root scripts/e2e-install.sh
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

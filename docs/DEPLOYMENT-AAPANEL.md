@@ -44,6 +44,8 @@ Lệnh định kỳ do scheduler chạy: heartbeat (mỗi phút), `ecso:marketpl
 
 ## 5. Cài đặt lần đầu
 
+Cách dễ nhất: dùng **trình cài đặt trên web** (`/install`), làm theo INSTALL-AAPANEL.md. Cách dòng lệnh bên dưới dùng khi cài qua SSH hoặc theo cấu trúc release.
+
 ```bash
 php artisan ecso:check-env      # kiểm PHP version, extensions, pcntl, quyền ghi, kết nối DB/Redis, APP_DEBUG=false, APP_KEY, key mã hóa token
 php artisan ecso:install        # wizard CLI: tạo .env, key, migrate, seed permission/plan, tạo super admin (có validate)

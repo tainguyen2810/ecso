@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+### Trình cài đặt trên web (2026-10-31)
+- `/install`: trình cài đặt 7 bước kiểu WordPress. Gồm mã cài đặt, kiểm tra máy chủ, database, Redis (có thể bỏ qua), thông tin website và tài khoản nhận tiền, quản trị viên, hoàn tất.
+- Upload mới (chưa có `.env`) thì mọi trang tự chuyển đến `/install`; API trả `503 NOT_INSTALLED`.
+- Chống chiếm quyền cài đặt: mỗi lượt gọi phải kèm mã một lần lưu trong `storage/app/install-token.txt`, chỉ người có quyền truy cập file trên server đọc được.
+- Wizard tự khóa sau khi cài (`storage/app/installed.lock`); `ecso:install` cũng ghi file khóa này. Không mở lại được từ trình duyệt khi app đã có `APP_KEY`.
+- `.env` được tạo ở chế độ production, quyền 600: tắt debug, mã hóa session, cookie secure khi dùng https, tắt sàn giả lập, `HEALTH_TOKEN` ngẫu nhiên, bật 2FA admin.
+- Workflow `release.yml`: đẩy tag `v*` sẽ build gói zip/tar.gz có sẵn `vendor/` và giao diện build sẵn, đính kèm vào GitHub Release.
+- Hướng dẫn mới INSTALL-AAPANEL.md (từng bước trên aaPanel).
+- Sửa lỗi: Horizon trước đây chỉ xử lý queue `default`, bỏ sót queue `webhooks` và `sync` (xử lý webhook, đồng bộ sàn). Nay xử lý cả ba queue.
+
 ### Phase 8 — Production Hardening (2026-10-31)
 - 2FA TOTP bắt buộc cho super admin: cài đặt bằng mã QR, 8 mã khôi phục, mỗi mã chỉ dùng được một lần, phải nhập mã ở mỗi phiên đăng nhập; API admin trả `TWO_FACTOR_SETUP_REQUIRED` / `TWO_FACTOR_REQUIRED`.
 - Header bảo mật trên mọi response; trên production thêm CSP và HSTS.

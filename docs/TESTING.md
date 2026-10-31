@@ -60,6 +60,9 @@ php artisan migrate:fresh --seed && php artisan db:seed --class=DemoSeeder
 php artisan serve --port=8000 &
 npx playwright test
 
+# Trình cài đặt trên web: chạy trên một bản sao chưa cài (không .env) với một DB trống, ảnh ở docs/screenshots/install/
+INSTALL_DB_DATABASE=ecso_wizard INSTALL_DB_USERNAME=root INSTALL_DB_PASSWORD=root scripts/e2e-install.sh
+
 # Phase 2: test đa tiến trình (mỗi worker là 1 tiến trình PHP riêng, kết nối MySQL riêng, dữ liệu commit thật).
 # Bị loại khỏi lần chạy mặc định vì dùng DatabaseTruncation; CI chạy riêng một bước.
 php artisan test --group=concurrency
@@ -88,3 +91,4 @@ CI (GitHub Actions): service MySQL 8 + Redis, chạy lint (Pint, ESLint), PHPSta
 | 7 | 218 (6 mới: Lazada/Tiki UNKNOWN, từ chối kết nối, từ chối webhook) | – | 19 | 24 |
 | 8 | 226 (8 mới: TOTP theo RFC 6238, bắt buộc cài/nhập 2FA, chống dùng lại mã, mã khôi phục dùng 1 lần, header bảo mật/CSP/HSTS, che log, giám sát + cảnh báo) | 5 | 19 | 26 (2FA cài đặt + từ chối khi chưa qua 2FA, giám sát) |
 | 3 | 183 (41 mới: pipeline đơn, webhook trùng/sai thứ tự, hủy, trả hàng, đẩy tồn, API) | 5 kịch bản (mới: 1.000 đơn / 50 SKU / 20 tiến trình, webhook gửi trùng) | 16 | 18 (6 mới) |
+| Wizard cài đặt | 234 (8 mới: chuyển hướng khi chưa cài, mã cài đặt bắt buộc và không lộ, thử kết nối DB/Redis, cài đặt ghi `.env` production và tự khóa, từ chối DB đã có admin, `.env` giữ đúng ký tự đặc biệt, CLI ghi khóa) | 5 | 22 | 26 + 1 (cài thật trên bản sao chưa cài, rồi đăng nhập tới màn hình 2FA) |

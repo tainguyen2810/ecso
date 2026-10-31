@@ -7,7 +7,7 @@ import { fileURLToPath, URL } from 'node:url';
 export default defineConfig({
     plugins: [
         laravel({
-            input: ['resources/js/apps/tenant/main.ts', 'resources/js/apps/admin/main.ts'],
+            input: ['resources/js/apps/tenant/main.ts', 'resources/js/apps/admin/main.ts', 'resources/js/apps/install/main.ts'],
             refresh: true,
         }),
         vue({ template: { transformAssetUrls: { base: null, includeAbsolute: false } } }),

@@ -10,6 +10,7 @@
 - Lệnh định kỳ Phase 6: `ecso:billing:sweep` (mỗi giờ). Xác nhận chuyển khoản tại `/admin/billing`.
 - Super admin bắt buộc 2FA. Tài khoản demo `admin@demo.test` dùng secret cố định `JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP` (chỉ dữ liệu demo); `security@demo.test` cho thấy màn hình cài đặt lần đầu.
 - Mất cả điện thoại lẫn mã khôi phục của super admin: trên server chạy `php artisan tinker --execute="App\Modules\Identity\Models\User::where('email','…')->update(['two_factor_secret'=>null,'two_factor_recovery_codes'=>null,'two_factor_confirmed_at'=>null]);"` rồi người đó cài lại 2FA ở lần đăng nhập sau (ghi vào sổ vận hành).
+- Cài đặt trên server: INSTALL-AAPANEL.md (trình cài đặt trên web `/install`, mã cài đặt ở `storage/app/install-token.txt`, tự khóa sau khi cài). Cài lại: xóa `.env` và `storage/app/installed.lock`, dùng DB trống.
 - Vận hành production: RELEASE-CHECKLIST.md, DEPLOYMENT-AAPANEL.md (deploy, backup/restore, giám sát), LOAD-TEST.md.
 - Kiểm tra sổ kho bất kỳ lúc nào: `php artisan ecso:inventory:verify`.
 - Repository: `tainguyen2810/ecso`.
