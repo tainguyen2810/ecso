@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Phase 4 — Shopee (khung) (2026-10-31)
+- `ShopeeConnector` (UNKNOWN toàn bộ), cấu hình `SHOPEE_PARTNER_ID` / `SHOPEE_PARTNER_KEY`, `ecso:check-env` báo sàn chưa có credentials.
+- Luồng ủy quyền shop dùng chung cho mọi sàn: state một lần gắn tenant + người dùng, chống chiếm shop của tenant khác, token mã hóa, giới hạn shop theo gói; lỗi `CREDENTIALS_MISSING` / `UNSUPPORTED_CAPABILITY` rõ ràng.
+- Capability mới `shop.authorize`, `auth.refresh`.
+- Giao diện: thẻ kết nối từng sàn trên trang Kết nối sàn, trang callback.
+- **Không** có tích hợp Shopee thật: không truy cập được tài liệu chính thức và chưa có credentials.
+
 ### Phase 3 — Order Engine (2026-10-31)
 - Module Marketplace: tài khoản shop (credential mã hóa), listing + listing variant, bảng ánh xạ trạng thái, inbox webhook, outbox đẩy tồn (debounce, backoff, circuit breaker), sync cursor. Connector interface + `UnverifiedConnector` (mọi thứ UNKNOWN) + sàn giả lập FAKE đầy đủ (webhook ký HMAC).
 - Module Orders: đơn, dòng đơn, lịch sử trạng thái, ghi chú, phân công, trả hàng/kiểm hàng/nhập lại. `OrderIngestor` chống trùng, chống sai thứ tự, chống chuyển lùi. Chính sách giữ/xuất/nhả tồn theo trạng thái; bù thiếu hàng theo đơn cũ trước.

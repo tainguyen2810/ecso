@@ -1,0 +1,28 @@
+import { expect, test, type Page } from '@playwright/test';
+import { login, shot as baseShot } from './helpers';
+
+const DIR = 'docs/screenshots/phase-4';
+const shot = (page: Page, name: string) => baseShot(page, name, DIR);
+
+test('Shopee: connector skeleton is visible, connecting is refused honestly without credentials', async ({ page }) => {
+    await login(page, 'owner@demo.test');
+    await page.goto('/marketplaces');
+    const card = page.getByTestId('real-marketplaces');
+    await expect(card).toContainText('Shopee');
+    await expect(card).toContainText('Chưa có credentials');
+
+    await page.getByTestId('connect-shopee').click();
+    await expect(page.getByTestId('connect-notice-shopee')).toContainText('chưa được cấu hình app credentials');
+    await expect(page).toHaveURL(/\/marketplaces$/);
+    await shot(page, '01-shopee-connect-refused');
+
+    await page.getByTestId('capability-matrix').scrollIntoViewIfNeeded();
+    await expect(page.getByTestId('capability-matrix')).toContainText('Kết nối shop (ủy quyền)');
+});
+
+test('callback with an unknown state is rejected', async ({ page }) => {
+    await login(page, 'owner@demo.test');
+    await page.goto('/marketplaces/shopee/callback?state=forged&code=abc&shop_id=1');
+    await expect(page.getByText('Không kết nối được')).toBeVisible();
+    await shot(page, '02-callback-rejected');
+});

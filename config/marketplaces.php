@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Marketplace\Connectors\Fake\FakeConnector;
+use App\Modules\Marketplace\Connectors\Shopee\ShopeeConnector;
 
 return [
     // Marketplaces shown in the UI. Without a connector class below they are listed as "not available yet".
@@ -14,7 +15,21 @@ return [
 
     'connectors' => [
         'fake' => FakeConnector::class,
+        // Skeleton: all capabilities UNKNOWN until verified with official docs and partner credentials.
+        'shopee' => ShopeeConnector::class,
     ],
+
+    // App credentials per marketplace (issued by the marketplace's developer portal). Never committed; set on the
+    // server / CI secrets. A marketplace whose credentials are empty cannot start a shop authorization.
+    'credentials' => [
+        'shopee' => [
+            'partner_id' => env('SHOPEE_PARTNER_ID'),
+            'partner_key' => env('SHOPEE_PARTNER_KEY'),
+        ],
+    ],
+
+    // Lifetime of the one-time "state" that links a marketplace callback to the tenant and user who started it.
+    'authorization_state_ttl' => 600,
 
     // The Fake marketplace simulates a marketplace for development, demos and tests. It is never a real
     // integration and is off unless FAKE_MARKETPLACE_ENABLED=true (never enable it on production).

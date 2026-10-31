@@ -276,6 +276,7 @@ export interface MarketplaceCatalogEntry {
     name: string;
     available: boolean;
     is_fake: boolean;
+    credentials_configured: boolean;
     capabilities: Record<string, string>;
 }
 

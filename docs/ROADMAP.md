@@ -35,7 +35,7 @@ Song song (chủ dự án): đăng ký app Shopee/TikTok ngay ─► credentials
 **Phạm vi:** orders, items, status map, history, reservation theo policy, hủy, hoàn/kiểm hàng/nhập lại, ghi chú, phân công, cảnh báo quá hạn, phiếu đóng gói (PDF), webhook inbox + pipeline, Fake connector đầy đủ, outbox đẩy tồn (tới Fake).
 **Nghiệm thu:** test duplicate/out-of-order/cancel/return pass; mô phỏng 1.000 đơn đồng thời trên 50 SKU không oversell; ảnh chụp màn hình đơn hàng (tabs, lọc, bulk, chi tiết), trả hàng.
 
-### Phase 4 — Shopee Integration
+### Phase 4 — Shopee Integration ⚠️ khung (2026-10-31, xem PHASE-4-REPORT.md) — chưa tích hợp thật: thiếu credentials và tài liệu
 **Tiền điều kiện:** app Shopee được duyệt, test shop, đọc docs chính thức. **Phạm vi:** auth, token refresh, import sản phẩm + mapping, import đơn (polling + push), cập nhật tồn, webhook verify, reconcile, rate limit, circuit breaker.
 **Nghiệm thu:** API-CAPABILITY-MATRIX cột Shopee chuyển sang VERIFIED cho các method đã làm; luồng thật trên test shop: đơn mới ⇒ reservation ⇒ tồn trên sàn giảm; ảnh chụp màn hình kết nối sàn, mapping.
 
