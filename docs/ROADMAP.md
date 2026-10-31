@@ -12,7 +12,8 @@ Song song (chủ dự án): đăng ký app Shopee/TikTok ngay ─► credentials
 ```
 
 - P4, P5 phụ thuộc **credentials + docs chính thức** (xem API-CAPABILITY-MATRIX). Không có ⇒ chỉ làm được phần khung connector + Fake, không được gọi là "tích hợp xong".
-- P6 cần quyết định cổng thanh toán.
+- P6 cần quyết định cổng thanh toán (đã quyết: chuyển khoản, admin xác nhận).
+- Mua hàng (nhà cung cấp, đơn mua) để sau MVP; giá vốn hiện đi qua phiếu nhập kho.
 - P4 và P5 có thể đổi thứ tự tùy sàn nào được duyệt trước.
 
 ## 2. Chi tiết phase và tiêu chí nghiệm thu
@@ -42,8 +43,8 @@ Song song (chủ dự án): đăng ký app Shopee/TikTok ngay ─► credentials
 ### Phase 5 — TikTok Shop Integration ⚠️ khung (2026-10-31, xem PHASE-5-REPORT.md) — chưa tích hợp thật
 Như Phase 4 cho TikTok Shop.
 
-### Phase 6 — SaaS Commercial
-**Tiền điều kiện:** chọn cổng thanh toán. **Phạm vi:** plans, entitlements, trial, nâng/hạ gói, thanh toán + IPN idempotent, hóa đơn, usage limits, dashboard tài chính (doanh thu đặt/hoàn thành, phí, lợi nhuận ước tính/đối soát), báo cáo bán chạy/chậm, admin MRR.
+### Phase 6 — SaaS Commercial ✅ (2026-10-31, xem PHASE-6-REPORT.md) — thanh toán chuyển khoản, admin xác nhận
+**Tiền điều kiện:** chọn cổng thanh toán (đã chọn: chuyển khoản + admin xác nhận; cổng online cắm thêm sau). **Phạm vi:** plans, entitlements, trial, nâng/hạ gói, thanh toán + IPN idempotent, hóa đơn, usage limits, dashboard tài chính (doanh thu đặt/hoàn thành, phí, lợi nhuận ước tính/đối soát), báo cáo bán chạy/chậm, admin MRR.
 **Nghiệm thu:** test limit + payment idempotency; ảnh chụp gói dịch vụ, thanh toán, tài chính, báo cáo, admin.
 
 ### Phase 7 — Lazada & Tiki

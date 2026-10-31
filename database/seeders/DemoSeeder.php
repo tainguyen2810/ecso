@@ -57,8 +57,14 @@ class DemoSeeder extends Seeder
         $tenants->create($owner, ['name' => 'Thời trang Demo']);
 
         // Demo shop on Starter so the members screen has room for invitations (free plan allows 2 users).
-        Subscription::withoutGlobalScopes()->where('tenant_id', $shop->id)
-            ->update(['plan_id' => Plan::query()->where('key', 'starter')->value('id')]);
+        // A paid monthly period that started 10 days ago (as if the first invoice had been paid).
+        Subscription::withoutGlobalScopes()->where('tenant_id', $shop->id)->update([
+            'plan_id' => Plan::query()->where('key', 'starter')->value('id'),
+            'billing_cycle' => 'monthly',
+            'status' => Subscription::STATUS_ACTIVE,
+            'current_period_start' => now()->subDays(10),
+            'current_period_end' => now()->subDays(10)->addMonth(),
+        ]);
 
         TenantContext::run($shop, fn () => TenantUser::create([
             'user_id' => $staff->id,

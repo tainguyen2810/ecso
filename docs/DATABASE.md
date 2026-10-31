@@ -154,3 +154,16 @@ Migrations `2026_10_31_300000_create_marketplace_tables`, `2026_10_31_300100_cre
 | order_returns / order_return_lines | U(tenant, number), U(tenant, order, source_key) chống tạo trùng phiếu tự động; số lượng nhận / bán được / hỏng |
 
 Reservation của dòng đơn: `stock_reservations` với `reference_type = 'order_item'`.
+
+## Phase 6 — Billing (đã tạo)
+
+Migration `2026_10_31_400000_create_billing_payment_tables`.
+
+| Bảng | Ghi chú chính |
+|---|---|
+| subscriptions (+cột) | `pending_plan_id`, `pending_billing_cycle` (hạ gói hẹn cuối kỳ), `trial_used_at` (dùng thử 1 lần), `past_due_since` |
+| invoices | U(number), U(transfer_code); kind subscribe/upgrade/renewal; subtotal − credit = amount; status pending/paid/cancelled; kỳ được thanh toán `period_start/end` |
+| payments | U(provider, provider_txn_id) — chống ghi nhận trùng; status applied/underpaid/unapplied; `recorded_by` (admin xác nhận), `raw` (IPN) |
+| usage_counters | U(tenant, metric, period YYYY-MM); tăng nguyên tử bằng `INSERT … ON DUPLICATE KEY UPDATE` |
+
+Thiết kế ban đầu ở §2.2 có `idempotency_key`, `tax`, `subscription_id`; bản triển khai dùng (provider, provider_txn_id) làm khóa idempotency và chưa tính thuế (chưa có thông tin pháp nhân/thuế suất — cần chủ dự án quyết khi xuất hóa đơn VAT).

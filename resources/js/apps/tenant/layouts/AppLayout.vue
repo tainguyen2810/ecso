@@ -105,7 +105,7 @@ useGoShortcuts(
                     >
                         <component :is="item.icon" class="size-4 shrink-0" />
                         <span class="flex-1">{{ item.label }}</span>
-                        <Badge v-if="item.phase" tone="muted" class="px-1.5 text-[10px]">P{{ item.phase }}</Badge>
+                        <Badge v-if="item.phase" tone="muted" class="px-1.5 text-[10px]">{{ item.phase > 8 ? "Sau MVP" : "P" + item.phase }}</Badge>
                     </RouterLink>
                 </div>
             </nav>

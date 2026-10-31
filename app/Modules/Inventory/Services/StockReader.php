@@ -29,4 +29,15 @@ class StockReader
 
         return $result;
     }
+
+    /**
+     * On-hand quantity per variant over all warehouses of the current tenant (reports).
+     *
+     * @return array<int, int> variant id => on hand (only variants with a balance row)
+     */
+    public function onHandByVariant(): array
+    {
+        return StockBalance::query()->groupBy('product_variant_id')->selectRaw('product_variant_id, SUM(on_hand) as qty')
+            ->pluck('qty', 'product_variant_id')->map(fn ($q) => (int) $q)->all();
+    }
 }

@@ -22,7 +22,7 @@ export interface NavItem {
     path: string;
     icon: Component;
     permission: string;
-    /** Phase that delivers the module; undefined = available now. */
+    /** Phase that delivers the module; undefined = available now; 9 = after MVP (not scheduled). */
     phase?: number;
     shortcut?: string;
     description?: string;
@@ -36,15 +36,15 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
             { name: 'orders', label: 'Đơn hàng', path: '/orders', icon: ShoppingCart, permission: 'orders.view', shortcut: 'o', description: 'Quản lý đơn tập trung từ mọi sàn: lọc, xử lý hàng loạt, in phiếu, theo dõi trạng thái.' },
             { name: 'products', label: 'Sản phẩm', path: '/products', icon: Package, permission: 'products.view', shortcut: 'p', description: 'SKU, biến thể, mã vạch, mapping với listing trên sàn.' },
             { name: 'inventory', label: 'Kho hàng', path: '/inventory', icon: Boxes, permission: 'inventory.view', shortcut: 'i', description: 'Tồn kho nhiều kho, sổ kho, giữ tồn, điều chỉnh và chuyển kho.' },
-            { name: 'purchasing', label: 'Mua hàng', path: '/purchasing', icon: Truck, permission: 'purchasing.view', phase: 6, description: 'Nhà cung cấp, đơn mua, phiếu nhập và giá vốn.' },
+            { name: 'purchasing', label: 'Mua hàng', path: '/purchasing', icon: Truck, permission: 'purchasing.view', phase: 9, description: 'Nhà cung cấp, đơn mua, phiếu nhập và giá vốn.' },
             { name: 'returns', label: 'Trả hàng', path: '/returns', icon: Undo2, permission: 'returns.view', description: 'Hàng hoàn từ khách, kiểm hàng và nhập kho lại.' },
         ],
     },
     {
         label: 'Phân tích',
         items: [
-            { name: 'finance', label: 'Tài chính', path: '/finance', icon: Wallet, permission: 'finance.view', phase: 6, description: 'Doanh thu, phí sàn, đối soát, lợi nhuận ước tính và đã xác nhận.' },
-            { name: 'reports', label: 'Báo cáo', path: '/reports', icon: BarChart3, permission: 'reports.view', phase: 6, description: 'Sản phẩm bán chạy, bán chậm, giá trị tồn kho.' },
+            { name: 'finance', label: 'Tài chính', path: '/finance', icon: Wallet, permission: 'finance.view', description: 'Doanh thu, phí sàn, đối soát, lợi nhuận ước tính và đã xác nhận.' },
+            { name: 'reports', label: 'Báo cáo', path: '/reports', icon: BarChart3, permission: 'reports.view', description: 'Sản phẩm bán chạy, bán chậm, giá trị tồn kho.' },
         ],
     },
     {
