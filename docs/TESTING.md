@@ -1,0 +1,64 @@
+# Testing Strategy
+
+> Phase 0 (2026-10-31): **kế hoạch**. Mỗi phase phải chạy test thật và ghi kết quả vào báo cáo phase.
+
+## 1. Tầng kiểm thử
+
+| Tầng | Công cụ | DB | Mục đích |
+|---|---|---|---|
+| Unit | Pest | không / in-memory | Quy tắc thuần: công thức tồn, map trạng thái, ký request, backoff |
+| Feature/API | Pest + Laravel HTTP | **MySQL 8** (không dùng SQLite vì cần `FOR UPDATE`, JSON, unique giống production) | Endpoint, validation, policy, tenant isolation |
+| Concurrency | Pest + `pcntl_fork`/process pool | MySQL 8 | Reservation đồng thời, deadlock, idempotency |
+| Integration (mock) | Pest + `Http::fake()` + **Fake connectors** + fixture JSON | MySQL 8 | Luồng đầy đủ webhook → đơn → tồn → outbox → đẩy tồn |
+| Contract (sandbox) | Pest group `@sandbox`, **tắt mặc định** | sandbox sàn | Gọi API thật bằng test shop, chỉ chạy tay khi có credentials (`RUN_SANDBOX_TESTS=1`) |
+| Frontend unit | Vitest + Vue Test Utils | – | Component, composable, store |
+| E2E | Playwright | MySQL test + Fake connector | Luồng người dùng chính, chụp ảnh giao diện gửi kèm báo cáo |
+| Architecture | Pest `arch()` | – | Không ghi tồn ngoài InventoryService; model tenant phải dùng trait; module không import model module khác để ghi |
+
+Quy tắc:
+- **Không gọi API production trong test tự động.** HTTP client của connector bị chặn ra ngoài khi `APP_ENV=testing` trừ group `@sandbox`.
+- Báo cáo phân biệt rõ: "pass với Fake/mock" ≠ "đã xác minh với sàn".
+- Fixture payload sàn chỉ được tạo từ tài liệu chính thức/sandbox thật; trước khi có, dùng payload Fake connector tự định nghĩa và ghi chú rõ.
+
+## 2. Danh mục kịch bản bắt buộc
+
+| Nhóm | Kịch bản chính | Phase |
+|---|---|---|
+| Tenant isolation | User tenant A truy cập mọi endpoint với ULID tenant B ⇒ 404; list không lẫn dữ liệu; job không có tenant ⇒ fail | 1 (+ mỗi phase thêm endpoint) |
+| Authentication | Đăng ký, xác minh email, đăng nhập sai nhiều lần bị khóa, quên mật khẩu, token hết hạn | 1 |
+| Authorization | Ma trận role × permission × endpoint (dataset), privilege escalation khi gán role | 1 |
+| SKU mapping | Map theo external_sku_id/seller_sku chính xác; tên giống nhau không tự map; SKU trùng bị chặn | 2, 4 |
+| Concurrent reservations | 20 tiến trình giữ 1 SKU tồn 10 | 2 |
+| Duplicate webhooks | Gửi 1 webhook 5 lần ⇒ 1 event xử lý, 1 reservation | 3, 4, 5 |
+| Out-of-order events | DELIVERED trước HANDED_OVER; sự kiện cũ đến sau | 3 |
+| Token expiration | Access token hết hạn ⇒ refresh 1 lần dù 10 job song song; refresh hỏng ⇒ account expired | 4 |
+| API rate limit | Connector nhận 429 ⇒ backoff + jitter, không vượt limit cấu hình | 4 |
+| Retry / Timeout | Timeout ⇒ retry tối đa N; lỗi vĩnh viễn ⇒ không retry, cảnh báo | 4 |
+| Overselling | Tổng published các sàn không vượt sellable; đơn thiếu hàng ⇒ shortage, không âm kho | 2, 3 |
+| Order cancellation | Hủy trước/sau xuất kho; hủy lặp | 3 |
+| Returns | Refund không cộng kho; kiểm đạt mới cộng; hàng lỗi không cộng | 3 |
+| Stock reconciliation | Lệch ledger phát hiện được; lệch sàn tạo outbox đẩy lại | 2, 4 |
+| Failed queue recovery | Job fail vào failed_jobs, retry thủ công từ admin chạy idempotent | 3, 8 |
+| Subscription limits | Vượt số shop/user/kho bị chặn đúng mã lỗi; override tenant thắng | 6 |
+| Payment idempotency | IPN lặp ⇒ 1 payment; chữ ký sai ⇒ từ chối | 6 |
+| Backup/restore | Script backup → restore vào DB trống → kiểm bất biến tồn kho | 8 |
+| Security | Webhook chữ ký sai/replay, CSRF, mass assignment tenant_id, token không lộ trong log | 1, 4, 8 |
+
+## 3. Chạy test
+
+```bash
+cp .env.testing.example .env.testing    # DB_DATABASE=omni_test
+php artisan test --parallel             # Pest
+php artisan test --group=concurrency    # cần MySQL thật
+npm run test                            # Vitest
+npx playwright test                     # E2E (tự seed + Fake connector)
+RUN_SANDBOX_TESTS=1 php artisan test --group=sandbox   # chỉ khi có credentials sandbox
+```
+
+CI (GitHub Actions): service MySQL 8 + Redis, chạy lint (Pint, ESLint), PHPStan level 6+, Pest, Vitest, Playwright headless.
+
+## 4. Tiêu chí "xong" của mỗi phase
+
+- Toàn bộ test của phase pass trên MySQL 8, log kết quả đính kèm báo cáo.
+- Không giảm coverage của module Inventory/Orders (mục tiêu ≥ 85% dòng cho 2 module này).
+- Có ảnh chụp giao diện (Playwright screenshot) cho mọi màn hình mới.
