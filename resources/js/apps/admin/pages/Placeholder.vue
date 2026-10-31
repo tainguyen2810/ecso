@@ -12,6 +12,6 @@ const item = computed(() => adminNav.find((i) => i.name === route.name)!);
 <template>
     <h1 class="mb-6 text-xl font-semibold">{{ item.label }}</h1>
     <Card>
-        <EmptyState :icon="item.icon" :title="`${item.label} đang được xây dựng`" :description="`Có trong Phase ${item.phase} theo lộ trình.`" />
+        <EmptyState :icon="item.icon" :title="`${item.label} đang được xây dựng`" :description="(item.phase ?? 0) > 8 ? 'Ngoài phạm vi MVP, sẽ lên lịch sau khi phát hành.' : `Có trong Phase ${item.phase} theo lộ trình.`" />
     </Card>
 </template>

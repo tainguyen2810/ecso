@@ -28,11 +28,13 @@ class AdminDashboardController extends Controller
                 ->pluck(DB::raw('count(*) as total'), 'plans.key'),
             'failed_jobs' => DB::table('failed_jobs')->count(),
             'queue_backlog' => DB::table('jobs')->count(),
-            // Filled in by later phases (marketplace, orders, billing).
-            'shops_connected' => null,
-            'orders_processed' => null,
-            'mrr' => null,
-            'webhook_failures' => null,
+            // Counts only: no tenant business content.
+            'shops_connected' => DB::table('marketplace_accounts')->where('status', 'connected')->count(),
+            'orders_processed' => DB::table('orders')->count(),
+            'mrr' => round((float) DB::table('subscriptions')->join('plans', 'plans.id', '=', 'subscriptions.plan_id')
+                ->whereIn('subscriptions.status', ['active', 'past_due'])->where('subscriptions.current_period_end', '>', now())
+                ->sum(DB::raw("CASE WHEN subscriptions.billing_cycle = 'yearly' THEN plans.price_yearly / 12 ELSE plans.price_monthly END")), 2),
+            'webhook_failures' => DB::table('webhook_events')->whereIn('status', ['failed', 'rejected'])->where('received_at', '>=', now()->subDay())->count(),
         ]]);
     }
 }

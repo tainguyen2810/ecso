@@ -53,7 +53,7 @@ test('owner works in the tenant dashboard', async ({ page }) => {
     await shot(page, '09-invitations');
 
     await page.getByRole('link', { name: 'Gói dịch vụ' }).click();
-    await expect(page.getByText('So sánh gói')).toBeVisible();
+    await expect(page.getByText('Các gói dịch vụ')).toBeVisible();
     await shot(page, '10-subscription');
 
     await page.getByRole('link', { name: 'Nhật ký' }).click();
@@ -63,8 +63,8 @@ test('owner works in the tenant dashboard', async ({ page }) => {
     await page.getByRole('link', { name: 'Cài đặt' }).click();
     await shot(page, '12-settings');
 
-    await page.getByRole('link', { name: 'Tài chính' }).click();
-    await expect(page.getByText('Tài chính đang được xây dựng')).toBeVisible();
+    await page.getByRole('link', { name: 'Mua hàng' }).click();
+    await expect(page.getByText('Mua hàng đang được xây dựng')).toBeVisible();
     await shot(page, '13-module-placeholder');
 
     // Keyboard shortcut g then m opens members.

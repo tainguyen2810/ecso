@@ -7,6 +7,7 @@ export const router = createRouter({
     routes: [
         { path: '/admin', name: 'dashboard', component: () => import('./pages/Dashboard.vue') },
         { path: '/admin/tenants', name: 'tenants', component: () => import('./pages/Tenants.vue') },
+        { path: '/admin/billing', name: 'billing', component: () => import('./pages/Billing.vue') },
         ...adminNav
             .filter((i) => i.phase)
             .map((i) => ({ path: i.path, name: i.name, component: () => import('./pages/Placeholder.vue') })),

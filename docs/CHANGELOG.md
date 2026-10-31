@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+### Phase 6 — SaaS Commercial (2026-10-31)
+- Thanh toán **chuyển khoản ngân hàng, admin xác nhận** (quyết định của chủ dự án). Thiết kế cắm thêm cổng (`PaymentGateway`, `GatewayRegistry`, IPN `POST /billing/notifications/{gateway}`); VNPay/PayOS/MoMo chưa làm (UNKNOWN, chưa có hợp đồng/credentials).
+- Hóa đơn (`invoices`) với mã nội dung chuyển khoản riêng; thanh toán (`payments`) idempotent theo (provider, mã giao dịch): cùng một giao dịch ghi nhận lần hai không cộng thêm kỳ. Chuyển thiếu được cộng dồn; tiền vào hóa đơn đã đóng ghi `unapplied` để đối soát/hoàn.
+- Nâng gói: tạo hóa đơn, trừ giá trị thời gian chưa dùng của kỳ hiện tại; gói đổi khi nhận đủ tiền. Hạ gói: chặn nếu đang dùng vượt giới hạn gói mới, hẹn đổi khi hết kỳ đã trả. Dùng thử 1 lần/tenant.
+- `ecso:billing:sweep` (mỗi giờ): hết dùng thử → Free, phát hành hóa đơn gia hạn trước 7 ngày, áp dụng hạ gói khi hết kỳ, quá hạn → `past_due` → Free sau 3 ngày ân hạn. Không xóa dữ liệu, chỉ đổi entitlements.
+- Đếm đơn/tháng (`usage_counters`, sự kiện `OrderImported`): giới hạn mềm, không chặn nhập đơn (chặn sẽ làm sai tồn kho), cảnh báo trên trang Gói dịch vụ.
+- Tài chính: doanh thu đặt hàng, doanh thu hoàn thành, giá vốn (từ sổ kho), hoàn tiền, lợi nhuận gộp ước tính. Phí sàn và tiền sàn chuyển về = **Chưa xác định** (cần API đối soát).
+- Báo cáo: bán chạy; hàng bán chậm theo entitlement `reports.advanced` (không theo tên gói).
+- Admin: trang Hóa đơn & doanh thu (MRR/ARR, đã thu 30 ngày, hóa đơn chờ, xác nhận chuyển khoản, hủy hóa đơn); MRR trên Tổng quan.
+- Mục Mua hàng chuyển sang "Sau MVP".
+
 ### Phase 5 — TikTok Shop (khung) (2026-10-31)
 - `TikTokConnector` (UNKNOWN toàn bộ), cấu hình `TIKTOK_SHOP_APP_KEY` / `TIKTOK_SHOP_APP_SECRET`; dùng luồng ủy quyền chung của Phase 4.
 - **Không** có tích hợp TikTok Shop thật: không truy cập được tài liệu Partner Center và chưa có credentials.

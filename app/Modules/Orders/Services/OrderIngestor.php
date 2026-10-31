@@ -7,6 +7,7 @@ use App\Modules\Marketplace\Connectors\Data\OrderItemData;
 use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Orders\Domain\OrderStatus;
+use App\Modules\Orders\Events\OrderImported;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
 use App\Modules\Orders\Models\OrderStatusHistory;
@@ -82,6 +83,12 @@ class OrderIngestor
             }
 
             $this->stock->apply($order);
+
+            if ($isNew) {
+                $tenantId = $order->tenant_id;
+                $orderId = $order->id;
+                DB::afterCommit(fn () => OrderImported::dispatch($tenantId, $orderId));
+            }
 
             return ['result' => $isNew ? self::CREATED : self::UPDATED, 'order' => $order];
         }, 5);

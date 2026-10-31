@@ -2,6 +2,9 @@
 
 namespace App\Providers;
 
+use App\Modules\Billing\Console\BillingSweepCommand;
+use App\Modules\Billing\Listeners\CountOrderUsage;
+use App\Modules\Billing\Payments\GatewayRegistry;
 use App\Modules\Catalog\Models\Brand;
 use App\Modules\Catalog\Models\Category;
 use App\Modules\Catalog\Models\Product;
@@ -25,6 +28,7 @@ use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Policies\MarketplacePolicy;
 use App\Modules\Orders\Console\ReconcileOrdersCommand;
+use App\Modules\Orders\Events\OrderImported;
 use App\Modules\Orders\Listeners\FillOrderShortages;
 use App\Modules\Orders\Listeners\QueueWebhookProcessing;
 use App\Modules\Orders\Listeners\RemapOrderItems;
@@ -53,11 +57,12 @@ use Illuminate\Support\ServiceProvider;
 class ModuleServiceProvider extends ServiceProvider
 {
     /** Modules whose Routes/api.php is mounted under /api/v1. */
-    private const API_MODULES = ['Identity', 'Tenancy', 'Billing', 'Audit', 'Admin', 'Catalog', 'Inventory', 'Marketplace', 'Orders'];
+    private const API_MODULES = ['Identity', 'Tenancy', 'Billing', 'Audit', 'Admin', 'Catalog', 'Inventory', 'Marketplace', 'Orders', 'Analytics'];
 
     public function register(): void
     {
         $this->app->scoped(TenantContext::class);
+        $this->app->singleton(GatewayRegistry::class);
     }
 
     public function boot(): void
@@ -79,6 +84,7 @@ class ModuleServiceProvider extends ServiceProvider
         Gate::policy(OrderReturn::class, ReturnPolicy::class);
 
         Event::listen(TenantCreated::class, CreateDefaultWarehouse::class);
+        Event::listen(OrderImported::class, CountOrderUsage::class);
         Event::listen(WebhookReceived::class, QueueWebhookProcessing::class);
         // Order shortages are filled first, then the marketplaces get the resulting published stock.
         Event::listen(AvailableStockChanged::class, FillOrderShortages::class);
@@ -93,7 +99,7 @@ class ModuleServiceProvider extends ServiceProvider
         $this->configureAuthLinks();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, PushDueInventoryCommand::class, ReconcileOrdersCommand::class]);
+            $this->commands([CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, PushDueInventoryCommand::class, ReconcileOrdersCommand::class, BillingSweepCommand::class]);
         }
     }
 

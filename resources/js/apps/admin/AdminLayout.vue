@@ -30,7 +30,7 @@ async function logout() {
                 >
                     <component :is="item.icon" class="size-4" />
                     <span class="flex-1">{{ item.label }}</span>
-                    <span v-if="item.phase" class="text-[10px] text-white/40">P{{ item.phase }}</span>
+                    <span v-if="item.phase" class="text-[10px] text-white/40">{{ item.phase > 8 ? "Sau MVP" : "P" + item.phase }}</span>
                 </RouterLink>
             </nav>
             <div class="flex items-center gap-2 border-t border-white/10 p-4 text-sm">
