@@ -1,10 +1,11 @@
 # Handover
 
-> Cập nhật sau mỗi phase. Lần cập nhật: Phase 0, 2026-10-31.
+> Cập nhật sau mỗi phase. Lần cập nhật: Phase 1, 2026-10-31.
 
 ## Trạng thái hiện tại
 
-- Phase hoàn thành: **Phase 0 (tài liệu)**. Chưa có code. Repository: `tainguyen2810/ecso`.
+- Phase hoàn thành: **Phase 0 (tài liệu)**, **Phase 1 (SaaS Foundation)** – xem PHASE-1-REPORT.md.
+- Repository: `tainguyen2810/ecso`.
 - Tài liệu nằm tại `docs/` của repo.
 
 ## Việc chủ dự án cần làm
@@ -14,9 +15,20 @@
 3. Chuẩn bị test shop/sandbox cho từng sàn.
 4. Quyết định: cổng thanh toán, tên miền, nhà cung cấp email.
 
+## Chạy local
+
+```bash
+composer install && npm ci
+cp .env.example .env && php artisan key:generate   # sửa DB_*, REDIS_* trong .env
+php artisan ecso:install                            # check-env, migrate, seed quyền + gói, tạo super admin
+php artisan db:seed --class=DemoSeeder              # (tuỳ chọn) dữ liệu demo
+npm run build && php artisan serve                  # http://localhost:8000 , admin: /admin
+```
+Môi trường dev không có worker thì đặt `QUEUE_CONNECTION=sync` (email mời nhân viên là job queue). Email ở môi trường dev ghi vào `storage/logs/laravel.log` (`MAIL_MAILER=log`).
+
 ## Thông tin vận hành
 
-Chưa có môi trường. Xem DEPLOYMENT-AAPANEL.md khi triển khai.
+Chưa có môi trường production. Xem DEPLOYMENT-AAPANEL.md khi triển khai.
 
 ## Credentials cần (không gửi qua chat, nhập vào `.env` trên server/CI secrets)
 

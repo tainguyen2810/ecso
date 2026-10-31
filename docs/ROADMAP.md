@@ -17,15 +17,15 @@ Song song (chủ dự án): đăng ký app Shopee/TikTok ngay ─► credentials
 
 ## 2. Chi tiết phase và tiêu chí nghiệm thu
 
-### Phase 1 — SaaS Foundation
-**Phạm vi:** khởi tạo Laravel 12 + Vue 3/TS/Tailwind/shadcn-vue, cấu trúc module, Sanctum SPA, đăng ký/đăng nhập/xác minh email/quên mật khẩu, tạo & chuyển tenant, mời nhân viên, RBAC + Policies, TenantContext + scope, audit log cơ bản, layout Tenant Dashboard (sidebar đủ mục, trang trống có empty state), Admin skeleton, `omni:check-env`, `omni:install`, CI.
+### Phase 1 — SaaS Foundation ✅ (2026-10-31, xem PHASE-1-REPORT.md)
+**Phạm vi:** khởi tạo Laravel 12 + Vue 3/TS/Tailwind/shadcn-vue, cấu trúc module, Sanctum SPA, đăng ký/đăng nhập/xác minh email/quên mật khẩu, tạo & chuyển tenant, mời nhân viên, RBAC + Policies, TenantContext + scope, audit log cơ bản, layout Tenant Dashboard (sidebar đủ mục, trang trống có empty state), Admin skeleton, `ecso:check-env`, `ecso:install`, CI.
 **Migrations:** users, tenants, tenant_users, tenant_invitations, roles, permissions, role_permissions, audit_logs, notifications, personal_access_tokens, plans/features/plan_features (seed tối thiểu cho entitlement).
 **Nghiệm thu:**
 - Test tenant isolation + authorization dataset pass trên MySQL 8.
 - User thuộc 2 tenant chuyển qua lại, không thấy dữ liệu chéo.
 - Mời nhân viên qua email (mail log), chấp nhận lời mời, phân quyền đúng.
 - Ảnh chụp: đăng nhập, đăng ký, chọn tenant, dashboard, nhân viên, admin.
-- `omni:check-env` báo đúng lỗi khi thiếu extension / APP_DEBUG=true.
+- `ecso:check-env` báo đúng lỗi khi thiếu extension / APP_DEBUG=true.
 
 ### Phase 2 — Catalog & Inventory
 **Phạm vi:** products, variants (SKU), barcode, category/brand, ảnh, import/export CSV/XLSX, kiểm SKU trùng; warehouses, balances, movements, reservations, adjustments (có phê duyệt), transfers, safety stock, allocation, InventoryService, thẻ kho, giá vốn bình quân.
@@ -62,7 +62,7 @@ Security audit, load test (k6 hoặc Artillery), queue monitoring, backup/restor
 | R4 | Oversell do trễ đồng bộ giữa sàn | Cao | Reservation tức thời, đẩy ưu tiên khi giảm tồn, safety stock, reconcile |
 | R5 | Rate limit sàn khi tenant lớn | Trung bình | Coalescing outbox, token bucket theo shop, batch API |
 | R6 | Thay đổi API/version của sàn | Trung bình | Client version cô lập, contract test sandbox định kỳ |
-| R7 | aaPanel tắt `pcntl`/`proc_open` | Thấp | `omni:check-env` phát hiện, tài liệu hướng dẫn bật |
+| R7 | aaPanel tắt `pcntl`/`proc_open` | Thấp | `ecso:check-env` phát hiện, tài liệu hướng dẫn bật |
 | R8 | Lỗi rò rỉ dữ liệu giữa tenant | Cao | Scope + test arch + test IDOR tự sinh mọi route |
 | R9 | Pháp lý dữ liệu cá nhân (Nghị định 13/2023/NĐ-CP) | Trung bình | Mã hóa PII, retention, nhật ký truy cập; cần tư vấn pháp lý khi thương mại hóa |
 | R10 | Chi phí vận hành tăng theo số tenant | Thấp | Monolith một VPS, chỉ tách khi số liệu chứng minh |

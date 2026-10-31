@@ -3,6 +3,8 @@
 namespace Database\Seeders;
 
 use App\Modules\Access\Models\Role;
+use App\Modules\Billing\Models\Plan;
+use App\Modules\Billing\Models\Subscription;
 use App\Modules\Identity\Models\User;
 use App\Modules\Tenancy\Models\TenantUser;
 use App\Modules\Tenancy\Services\TenantService;
@@ -35,6 +37,10 @@ class DemoSeeder extends Seeder
 
         $shop = $tenants->create($owner, ['name' => 'Cửa hàng Mẫu']);
         $tenants->create($owner, ['name' => 'Thời trang Demo']);
+
+        // Demo shop on Starter so the members screen has room for invitations (free plan allows 2 users).
+        Subscription::withoutGlobalScopes()->where('tenant_id', $shop->id)
+            ->update(['plan_id' => Plan::query()->where('key', 'starter')->value('id')]);
 
         TenantContext::run($shop, fn () => TenantUser::create([
             'user_id' => $staff->id,
