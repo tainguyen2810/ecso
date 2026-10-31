@@ -115,8 +115,12 @@ export const pushStatus: Record<string, { label: string; tone: Tone }> = {
     retrying: { label: 'Đang thử lại', tone: 'warning' },
     rejected: { label: 'Sàn từ chối', tone: 'danger' },
     failed: { label: 'Lỗi', tone: 'danger' },
-    unsupported: { label: 'Sàn không hỗ trợ', tone: 'muted' },
+    unsupported: { label: 'Cập nhật tay trên sàn', tone: 'muted' },
 };
+
+/** Shown where a marketplace cannot (or is not yet verified to) receive stock updates through its API. */
+export const manualStockHint =
+    'Sàn này chưa cập nhật tồn được qua API. Hãy cập nhật số lượng trên trang quản lý của sàn (Seller Center) theo cột “Có thể bán” trong Kho hàng của ECSO.';
 
 /** Hours left until the ship-by deadline, as a short label ("còn 3 giờ", "quá 2 giờ"). */
 export function deadlineLabel(iso: string | null, now = new Date()): string | null {

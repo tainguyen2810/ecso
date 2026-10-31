@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Phase 7 — Lazada & Tiki (khung) (2026-10-31)
+- `LazadaConnector`, `TikiConnector` (UNKNOWN toàn bộ), cấu hình `LAZADA_APP_KEY/SECRET`, `TIKI_CLIENT_ID/SECRET`; dùng chung luồng ủy quyền shop.
+- Hướng dẫn cập nhật tồn thủ công khi sàn chưa/không cập nhật tồn được qua API (thẻ sàn và trang Liên kết SKU); trạng thái đẩy tồn `unsupported` đổi nhãn thành "Cập nhật tay trên sàn".
+- **Không** có tích hợp Lazada/Tiki thật: tài liệu bị chặn từ môi trường làm việc, chưa có credentials.
+
 ### Phase 6 — SaaS Commercial (2026-10-31)
 - Thanh toán **chuyển khoản ngân hàng, admin xác nhận** (quyết định của chủ dự án). Thiết kế cắm thêm cổng (`PaymentGateway`, `GatewayRegistry`, IPN `POST /billing/notifications/{gateway}`); VNPay/PayOS/MoMo chưa làm (UNKNOWN, chưa có hợp đồng/credentials).
 - Hóa đơn (`invoices`) với mã nội dung chuyển khoản riêng; thanh toán (`payments`) idempotent theo (provider, mã giao dịch): cùng một giao dịch ghi nhận lần hai không cộng thêm kỳ. Chuyển thiếu được cộng dồn; tiền vào hóa đơn đã đóng ghi `unapplied` để đối soát/hoàn.

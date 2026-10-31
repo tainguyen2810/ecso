@@ -94,6 +94,19 @@ Từ Phase 4 có thêm `shop.authorize` (kết nối shop qua trang ủy quyền
 - Đã làm: `TikTokConnector` (UNKNOWN toàn bộ), cấu hình `TIKTOK_SHOP_APP_KEY` / `TIKTOK_SHOP_APP_SECRET`, dùng chung luồng ủy quyền shop của Phase 4. Webhook `/api/v1/webhooks/tiktok` bị từ chối kể cả khi có header `Authorization` trông hợp lệ: thông tin thứ cấp về chữ ký HMAC-SHA256 **chưa được xác minh** nên không được dùng.
 - Chưa làm: ký request, version API theo ngày, token, đơn, sản phẩm, tồn, webhook, ánh xạ trạng thái, rate limit.
 
+### 3.4 Lazada — trạng thái Phase 7 (2026-10-31)
+
+- Kiểm tra truy cập `open.lazada.com` từ môi trường build: **bị chặn** (proxy từ chối kết nối). Không có app key/secret, không có tài khoản seller test.
+- Đã làm: `LazadaConnector` (UNKNOWN toàn bộ), cấu hình `LAZADA_APP_KEY` / `LAZADA_APP_SECRET`, dùng chung luồng ủy quyền shop. Webhook `/api/v1/webhooks/lazada` bị từ chối (401) và lưu lại để theo dõi.
+- Chưa làm: ký request (thông tin thứ cấp: HMAC-SHA256 — chưa xác minh), token, đơn, sản phẩm, tồn, push, ánh xạ trạng thái, rate limit, khu vực (VN dùng gateway riêng — chưa xác minh).
+
+### 3.5 Tiki — trạng thái Phase 7 (2026-10-31)
+
+- Kiểm tra truy cập `open.tiki.vn` từ môi trường build: **bị chặn** ở Phase 7 (Phase 0 đọc được mục lục Guides: OAuth 2.0, event queue dạng polling). Không có client id/secret.
+- Đã làm: `TikiConnector` (UNKNOWN toàn bộ), cấu hình `TIKI_CLIENT_ID` / `TIKI_CLIENT_SECRET`, dùng chung luồng ủy quyền shop. Webhook `/api/v1/webhooks/tiki` bị từ chối.
+- **Cập nhật tồn**: UNKNOWN — không biết API cho seller có cho cập nhật tồn hay không. Không ghi `unsupported` khi chưa đọc được tài liệu. Giao diện đã sẵn: thẻ sàn ghi "Cập nhật tồn qua API: chưa xác minh — cập nhật tay trên Seller Center"; nếu sau này xác minh là không hỗ trợ, connector trả `UnsupportedCapability`, outbox ghi `unsupported` và trang Liên kết SKU hiển thị hướng dẫn cập nhật tay theo cột "Có thể bán".
+- Chưa làm: event queue (polling — cần `orders.list` + cursor sẵn có trong `sync_cursors`), token, đơn, sản phẩm, ánh xạ trạng thái.
+
 ## 4. Rủi ro tích hợp đã thấy
 
 1. **Không có credentials và không đọc được docs chính thức** ⇒ chưa thể cam kết lịch Phase 4–7. Mọi connector sẽ chỉ có Fake adapter cho tới khi có tài khoản.

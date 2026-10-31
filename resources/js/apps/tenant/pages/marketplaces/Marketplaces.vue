@@ -230,9 +230,13 @@ const accountLabel = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 
                         <Badge v-else-if="c.capabilities['shop.authorize'] !== 'supported'" tone="muted">UNKNOWN</Badge>
                         <Badge v-else tone="success">Sẵn sàng</Badge>
                     </div>
-                    <p class="mt-1 flex-1 text-xs text-muted-foreground">
+                    <p class="mt-1 text-xs text-muted-foreground">
                         {{ Object.values(c.capabilities).filter((s) => s === 'supported').length }}/{{ Object.keys(c.capabilities).length }} thao tác đã xác minh
                     </p>
+                    <p v-if="c.capabilities['inventory.update'] !== 'supported'" class="mt-1 flex-1 text-xs text-muted-foreground" :data-testid="`stock-note-${c.key}`">
+                        Cập nhật tồn qua API: {{ c.capabilities['inventory.update'] === 'unsupported' ? 'sàn không hỗ trợ' : 'chưa xác minh' }} — cập nhật tay trên Seller Center.
+                    </p>
+                    <span v-else class="flex-1" />
                     <Button
                         v-if="tenant.can('marketplace.connect')"
                         class="mt-3"
