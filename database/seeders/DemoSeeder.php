@@ -22,6 +22,10 @@ use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Orders\Services\OrderActions;
 use App\Modules\Orders\Services\ReturnService;
+use App\Modules\Purchasing\Services\PurchaseService;
+use App\Modules\Purchasing\Services\SupplierPaymentService;
+use App\Modules\Purchasing\Services\SupplierReturnService;
+use App\Modules\Purchasing\Services\SupplierService;
 use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Sales\Services\CustomerService;
 use App\Modules\Sales\Services\ManualOrderService;
@@ -94,6 +98,42 @@ class DemoSeeder extends Seeder
         TenantContext::run($shop, fn () => $this->marketplace($owner, $staff));
         Auth::setUser($owner);
         TenantContext::run($shop, fn () => $this->sales());
+        Auth::setUser($owner);
+        TenantContext::run($shop, fn () => $this->purchasing());
+    }
+
+    /** Suppliers and purchase orders in every state, with deliveries, a return and payments (Phase 11). */
+    private function purchasing(): void
+    {
+        $suppliers = app(SupplierService::class);
+        $purchases = app(PurchaseService::class);
+
+        $minhLong = $suppliers->create(['name' => 'Xưởng May Minh Long', 'contact_name' => 'Anh Long', 'phone' => '0283 845 1122', 'address' => 'KCN Tân Bình, TP.HCM', 'tax_code' => '0312345678']);
+        $anPhat = $suppliers->create(['name' => 'Công ty TNHH Phụ Kiện An Phát', 'contact_name' => 'Chị Hạnh', 'phone' => '0243 765 4321', 'email' => 'sales@anphat.example', 'address' => 'Long Biên, Hà Nội']);
+        $suppliers->create(['name' => 'Kho Sỉ Chợ Lớn', 'contact_name' => 'Cô Mai', 'phone' => '0908 222 333', 'address' => 'Quận 5, TP.HCM']);
+
+        $warehouse = Warehouse::query()->where('is_default', true)->firstOrFail();
+        // SKUs no order uses, so the deliveries below do not fill the demo orders' shortages.
+        $variants = ProductVariant::query()->whereNotIn('id', DB::table('order_items')->where('tenant_id', app(TenantContext::class)->id())->whereNotNull('product_variant_id')->pluck('product_variant_id'))->orderBy('id')->limit(6)->get();
+        if ($variants->count() < 5) {
+            return;
+        }
+        $cost = fn (ProductVariant $v) => max(10000, (int) round((float) $v->ref_price * 0.55 / 1000) * 1000);
+        $line = fn (int $i, int $qty) => ['variant_id' => $variants[$i]->id, 'quantity' => $qty, 'unit_cost' => $cost($variants[$i])];
+
+        // Fully received, part paid, two defective items sent back.
+        $done = $purchases->create(['supplier' => $minhLong, 'warehouse' => $warehouse, 'lines' => [$line(0, 40), $line(1, 30)], 'place' => true, 'note' => 'Hàng thu đông']);
+        $purchases->receive($done, [['variant_id' => $variants[0]->id, 'quantity' => 40], ['variant_id' => $variants[1]->id, 'quantity' => 30]], 'HĐ 0001234');
+        app(SupplierReturnService::class)->create($minhLong, $warehouse, [['variant_id' => $variants[0]->id, 'quantity' => 2]], $done->fresh(), 'Lỗi đường may');
+        app(SupplierPaymentService::class)->record($minhLong, ['method' => 'bank_transfer', 'amount' => 1000000, 'reference' => 'UNC 26110301'], $done->fresh());
+
+        // Half arrived; the rest is still expected.
+        $partial = $purchases->create(['supplier' => $anPhat, 'warehouse' => $warehouse, 'lines' => [$line(2, 50), $line(3, 20)], 'place' => true, 'expected_at' => now()->addDays(3)->toDateString()]);
+        $purchases->receive($partial, [['variant_id' => $variants[2]->id, 'quantity' => 25]]);
+
+        // Ordered, nothing arrived yet; and a draft.
+        $purchases->create(['supplier' => $minhLong, 'warehouse' => $warehouse, 'lines' => [$line(1, 20), $line(4, 15)], 'place' => true, 'expected_at' => now()->addDays(7)->toDateString()]);
+        $purchases->create(['supplier' => $anPhat, 'warehouse' => $warehouse, 'lines' => [$line(3, 10)], 'note' => 'Chờ báo giá']);
     }
 
     /** Own sales channels, customers and manual orders in several states (Phase 9). */

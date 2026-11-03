@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+### Phase 11 — Mua hàng / nhập hàng (2026-11-03)
+- Nhà cung cấp (`/purchasing/suppliers`, phím tắt `g n`): danh bạ, ngừng giao dịch thay vì xóa khi đã có giao dịch, tổng nhập, đã trả, còn nợ (hoặc trả trước).
+- Đơn nhập hàng: nháp → đã đặt → nhận một phần → đã nhận đủ, hoặc đóng sớm / hủy. Sửa được đến khi hàng về.
+- Nhận hàng nhiều đợt: mỗi đợt tạo phiếu nhập kho (RCV) gắn với đơn, cập nhật tồn và giá vốn bình quân theo giá thực nhận; không nhận vượt số còn chờ. Nhân viên kho nhận hàng được nhưng không đổi giá.
+- Trả hàng nhà cung cấp (TNC): xuất kho ngay (SUPPLIER_RETURN), giảm công nợ theo giá nhập của đơn, không trả vượt số đã nhận.
+- Chi tiền nhà cung cấp theo đơn (không vượt số còn nợ) hoặc thanh toán chung; hủy phiếu chi nhập nhầm.
+- Gợi ý nhập hàng: bán trung bình/ngày 30 ngày qua × số ngày cần đủ hàng + tồn an toàn − khả dụng − đang về; chọn dòng → tạo đơn nhập.
+- Quyền mới `purchasing.payment` (Quản lý vận hành, Kế toán). `purchasing.view` / `purchasing.manage` đã có từ trước.
+
 ### Phase 10 — Bán tại quầy (POS) (2026-11-03)
 - Màn hình `/pos` (phím tắt `g b`): lưới sản phẩm có tồn khả dụng theo kho, quét mã vạch (Enter thêm ngay, quét lại tăng số lượng), sửa giá và số lượng, giảm giá đơn.
 - Nhiều đơn chờ song song (giữ trên trình duyệt khi tải lại trang), chọn khách để ghi nợ, khách lẻ bắt buộc trả đủ (kiểm ở cả máy chủ).

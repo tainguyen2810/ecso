@@ -64,8 +64,8 @@ test('owner works in the tenant dashboard', async ({ page }) => {
     await shot(page, '12-settings');
 
     await page.getByRole('link', { name: 'Mua hàng' }).click();
-    await expect(page.getByText('Mua hàng đang được xây dựng')).toBeVisible();
-    await shot(page, '13-module-placeholder');
+    // Purchasing used to be a placeholder; it is a real module since Phase 11.
+    await expect(page.getByRole('heading', { name: 'Mua hàng' })).toBeVisible();
 
     // Keyboard shortcut g then m opens members.
     await page.keyboard.press('g');

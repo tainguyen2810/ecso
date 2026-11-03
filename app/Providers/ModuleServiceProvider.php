@@ -39,6 +39,11 @@ use App\Modules\Orders\Policies\ReturnPolicy;
 use App\Modules\Platform\Console\CheckEnvCommand;
 use App\Modules\Platform\Console\InstallCommand;
 use App\Modules\Platform\Console\MonitorCommand;
+use App\Modules\Purchasing\Models\PurchaseOrder;
+use App\Modules\Purchasing\Models\Supplier;
+use App\Modules\Purchasing\Models\SupplierPayment;
+use App\Modules\Purchasing\Models\SupplierReturn;
+use App\Modules\Purchasing\Policies\PurchasingPolicy;
 use App\Modules\Sales\Listeners\CreateDefaultSalesChannel;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\SalesChannel;
@@ -63,7 +68,7 @@ use Illuminate\Support\ServiceProvider;
 class ModuleServiceProvider extends ServiceProvider
 {
     /** Modules whose Routes/api.php is mounted under /api/v1. */
-    private const API_MODULES = ['Identity', 'Tenancy', 'Billing', 'Audit', 'Admin', 'Catalog', 'Inventory', 'Marketplace', 'Orders', 'Analytics', 'Sales'];
+    private const API_MODULES = ['Identity', 'Tenancy', 'Billing', 'Audit', 'Admin', 'Catalog', 'Inventory', 'Marketplace', 'Orders', 'Analytics', 'Sales', 'Purchasing'];
 
     public function register(): void
     {
@@ -90,6 +95,9 @@ class ModuleServiceProvider extends ServiceProvider
         Gate::policy(OrderReturn::class, ReturnPolicy::class);
         Gate::policy(Customer::class, CustomerPolicy::class);
         Gate::policy(SalesChannel::class, SalesChannelPolicy::class);
+        foreach ([Supplier::class, PurchaseOrder::class, SupplierReturn::class, SupplierPayment::class] as $model) {
+            Gate::policy($model, PurchasingPolicy::class);
+        }
 
         Event::listen(TenantCreated::class, CreateDefaultWarehouse::class);
         Event::listen(TenantCreated::class, CreateDefaultSalesChannel::class);

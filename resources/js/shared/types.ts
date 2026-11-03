@@ -362,3 +362,83 @@ export interface ListingVariantData {
     push_error: string | null;
     mapped_at: string | null;
 }
+
+export interface Supplier {
+    id: string;
+    code: string;
+    name: string;
+    contact_name: string | null;
+    phone: string | null;
+    email: string | null;
+    address: string | null;
+    tax_code: string | null;
+    note: string | null;
+    is_active: boolean;
+    orders_count?: number;
+    purchased?: string;
+    paid?: string;
+    debt?: string;
+    created_at: string | null;
+}
+
+export interface SupplierPaymentData {
+    id: string;
+    method: string;
+    amount: string;
+    reference: string | null;
+    note: string | null;
+    paid_at: string;
+    created_by?: string | null;
+    voided_at: string | null;
+    void_reason: string | null;
+    order?: { id: string; number: string } | null;
+}
+
+export interface SupplierReturnData {
+    id: string;
+    number: string;
+    total: string;
+    reason: string | null;
+    created_by?: string | null;
+    created_at: string | null;
+    supplier?: { id: string; code: string; name: string };
+    order?: { id: string; number: string } | null;
+    warehouse?: { id: string; name: string };
+    lines?: { variant: { id: string; sku: string; name: string }; quantity: number; unit_cost: string }[];
+}
+
+export interface PurchaseOrderLineData {
+    variant: { id: string; sku: string; name: string } | null;
+    quantity: number;
+    received_qty: number;
+    returned_qty: number;
+    remaining: number;
+    unit_cost: string;
+}
+
+export interface PurchaseOrderData {
+    id: string;
+    number: string;
+    status: string;
+    supplier?: { id: string; code: string; name: string };
+    warehouse?: { id: string; code: string; name: string };
+    expected_at: string | null;
+    ordered_at: string | null;
+    received_at: string | null;
+    closed_at: string | null;
+    total: string;
+    received_value: string;
+    returned_value: string;
+    paid_amount: string;
+    balance_due: string;
+    note: string | null;
+    editable: boolean;
+    created_by?: string | null;
+    created_at: string | null;
+    total_quantity: number | null;
+    received_quantity: number | null;
+    lines?: PurchaseOrderLineData[];
+    receipts?: { id: string; number: string; created_at: string | null; created_by: string | null; total_quantity: number; total_value: string }[];
+    payments?: SupplierPaymentData[];
+    returns?: SupplierReturnData[];
+}

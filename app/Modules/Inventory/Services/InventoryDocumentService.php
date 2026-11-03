@@ -24,13 +24,13 @@ class InventoryDocumentService
     /**
      * @param  array<int, array{variant_id: int, quantity: int, unit_cost: string|float|int}>  $lines
      */
-    public function receive(Warehouse $warehouse, array $lines, ?string $note = null, string $source = StockReceipt::SOURCE_MANUAL): StockReceipt
+    public function receive(Warehouse $warehouse, array $lines, ?string $note = null, string $source = StockReceipt::SOURCE_MANUAL, ?int $purchaseOrderId = null): StockReceipt
     {
         $this->assertActive($warehouse);
 
-        return DB::transaction(function () use ($warehouse, $lines, $note, $source) {
+        return DB::transaction(function () use ($warehouse, $lines, $note, $source, $purchaseOrderId) {
             $receipt = new StockReceipt(['warehouse_id' => $warehouse->id, 'source' => $source, 'note' => $note]);
-            $receipt->forceFill(['number' => DocumentNumber::next('RCV'), 'created_by' => Auth::id()])->save();
+            $receipt->forceFill(['number' => DocumentNumber::next('RCV'), 'created_by' => Auth::id(), 'purchase_order_id' => $purchaseOrderId])->save();
             $receipt->lines()->createMany(array_map(fn ($l) => ['product_variant_id' => $l['variant_id'], 'quantity' => $l['quantity'], 'unit_cost' => $l['unit_cost']], $lines));
 
             $type = $source === StockReceipt::SOURCE_OPENING ? StockMovement::OPENING : StockMovement::RECEIPT;
