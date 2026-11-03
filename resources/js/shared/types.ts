@@ -251,6 +251,7 @@ export interface OrderDetail extends OrderSummary {
     editable: boolean;
     payments: OrderPaymentData[];
     created_by: string | null;
+    customer_stats: { orders_count: number; total_spent: string; debt: string; returns_count: number; failed_deliveries: number } | null;
 }
 
 export interface OrderPaymentData {

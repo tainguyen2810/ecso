@@ -7,6 +7,8 @@ use Illuminate\Support\Facades\Route;
 Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::get('orders', [OrderController::class, 'index']);
     Route::get('orders/summary', [OrderController::class, 'summary']);
+    Route::get('orders/pipeline', [OrderController::class, 'pipeline']);
+    Route::get('orders/export', [OrderController::class, 'export'])->middleware('throttle:10,1');
     Route::get('orders/assignees', [OrderController::class, 'assignees']);
     Route::post('orders/bulk', [OrderController::class, 'bulk'])->middleware('throttle:30,1');
     Route::post('orders/packing-slips', [OrderController::class, 'packingSlips']);

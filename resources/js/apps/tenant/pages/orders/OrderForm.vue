@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ArrowLeft, PackageOpen, Trash2, UserRound, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
@@ -33,6 +33,8 @@ const router = useRouter();
 const toast = useToast();
 const tenant = useTenantStore();
 const editId = computed(() => (route.name === 'order-edit' ? String(route.params.id) : null));
+const copyId = computed(() => (editId.value ? null : ((route.query.copy as string | undefined) ?? null)));
+const copiedFrom = ref<string | null>(null);
 
 const loading = ref(true);
 const channels = ref<SalesChannel[]>([]);
@@ -83,22 +85,29 @@ onMounted(async () => {
                 const { data } = await api.get(`/customers/${route.query.customer}`);
                 chooseCustomer(data.data);
             }
+            if (copyId.value) await loadOrder(copyId.value, true);
         }
     } finally {
         loading.value = false;
     }
 });
 
-async function loadOrder(id: string) {
+/** Fills the form from an order: to edit it, or ("Sao chép") as the start of a new order. */
+async function loadOrder(id: string, asCopy = false) {
     const { data } = await api.get(`/orders/${id}`);
     const o = data.data as OrderDetail;
-    if (!o.editable) {
+    if (!asCopy && !o.editable) {
         toast.error('Đơn này không còn sửa được.');
         await router.replace(`/orders/${id}`);
         return;
     }
-    form.channel_id = o.channel?.id ?? '';
-    form.warehouse_id = o.warehouse?.id ?? '';
+    if (!asCopy || o.channel) form.channel_id = o.channel?.id ?? '';
+    if (!asCopy || o.warehouse) form.warehouse_id = o.warehouse?.id ?? form.warehouse_id;
+    copiedFrom.value = asCopy ? o.external_order_id : null;
+    // A marketplace line without an internal SKU cannot be sold again from here.
+    const skipped = o.items.filter((i) => !i.variant).length;
+    if (asCopy && skipped) toast.info(`Bỏ qua ${skipped} dòng chưa liên kết SKU nội bộ.`);
+    o.items = o.items.filter((i) => i.variant);
     form.buyer_name = o.buyer_name ?? '';
     form.buyer_phone = o.buyer_phone ?? '';
     form.shipping_address = o.shipping_address ?? '';
@@ -122,7 +131,7 @@ async function loadOrder(id: string) {
 watch(
     () => form.channel_id,
     (id, old) => {
-        if (!old || editId.value) return;
+        if (!old || editId.value || loading.value) return;
         const ch = channels.value.find((c) => c.id === id);
         if (ch?.warehouse) form.warehouse_id = ch.warehouse.id;
     },
@@ -241,18 +250,38 @@ const stages = [
     { value: 'confirmed', label: 'Đã xác nhận', hint: 'Chuyển thẳng sang chờ đóng gói.' },
     { value: 'completed', label: 'Hoàn tất ngay', hint: 'Khách nhận hàng tại chỗ: trừ kho ngay.' },
 ];
+
+// Counter shortcuts: F1 save, F3 product search, F4 customer search, F6 order discount, F7 shipping fee.
+const shortcuts: Record<string, string> = { F3: '[data-shortcut="sku"] input', F4: '[data-testid="customer-search"]', F6: '[data-testid="order-discount"]', F7: '[data-testid="shipping-fee"]' };
+function onShortcut(e: KeyboardEvent) {
+    if (loading.value) return;
+    if (e.key === 'F1') {
+        e.preventDefault();
+        if (!saving.value && lines.value.length && form.channel_id) submit();
+    } else if (shortcuts[e.key]) {
+        e.preventDefault();
+        const el = document.querySelector<HTMLInputElement>(shortcuts[e.key]!);
+        el?.focus();
+        el?.select?.();
+    }
+}
+onMounted(() => window.addEventListener('keydown', onShortcut));
+onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
 </script>
 
 <template>
     <RouterLink :to="editId ? `/orders/${editId}` : '/orders'" class="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft class="size-4" /> {{ editId ? 'Chi tiết đơn' : 'Đơn hàng' }}</RouterLink>
-    <PageHeader :title="editId ? 'Sửa đơn bán' : 'Tạo đơn bán'" description="Đơn của kênh bán riêng (cửa hàng, Facebook, Zalo, website…). Hàng được giữ trong kho ngay khi lưu đơn." />
+    <PageHeader
+        :title="editId ? 'Sửa đơn bán' : copiedFrom ? `Tạo đơn bán (sao chép từ ${copiedFrom})` : 'Tạo đơn bán'"
+        description="Đơn của kênh bán riêng (cửa hàng, Facebook, Zalo, website…). Hàng được giữ trong kho ngay khi lưu đơn. Phím tắt: F1 lưu đơn · F3 tìm sản phẩm · F4 tìm khách · F6 giảm giá · F7 phí giao."
+    />
 
     <div v-if="loading" class="space-y-4"><Skeleton class="h-40" /><Skeleton class="h-64" /></div>
     <form v-else class="grid gap-5 lg:grid-cols-3" data-testid="order-form" @submit.prevent="submit">
         <div class="space-y-5 lg:col-span-2">
             <Card title="Sản phẩm" description="Quét mã vạch hoặc tìm SKU để thêm. Giá mặc định là giá bán tham khảo của SKU.">
                 <div class="border-b p-4">
-                    <SkuPicker :warehouse="form.warehouse_id" :exclude="[]" @pick="add" />
+                    <SkuPicker :warehouse="form.warehouse_id" :exclude="[]" placeholder="Tìm SKU, tên sản phẩm hoặc quét mã vạch (F3)" data-shortcut="sku" @pick="add" />
                     <p v-if="error?.field('lines')" class="mt-2 text-xs text-destructive">{{ error.field('lines') }}</p>
                 </div>
                 <EmptyState v-if="!lines.length" :icon="PackageOpen" title="Chưa có sản phẩm" description="Tìm SKU, tên sản phẩm hoặc quét mã vạch ở ô phía trên." />
@@ -315,7 +344,7 @@ const stages = [
                     </div>
                     <template v-else-if="!newCustomer.enabled">
                         <div class="relative">
-                            <Input v-model="customerQuery" placeholder="Tìm khách theo tên, mã, số điện thoại…" data-testid="customer-search" />
+                            <Input v-model="customerQuery" placeholder="Tìm khách theo tên, mã, số điện thoại… (F4)" data-testid="customer-search" />
                             <ul v-if="customerResults.length" class="absolute z-20 mt-1 w-full overflow-hidden rounded-md border bg-card shadow-lg">
                                 <li v-for="c in customerResults" :key="c.id">
                                     <button type="button" class="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-muted" @click="chooseCustomer(c)">
@@ -374,8 +403,8 @@ const stages = [
 
                     <dl class="space-y-2 rounded-md bg-muted/50 p-3 text-sm">
                         <div class="flex justify-between"><dt class="text-muted-foreground">Tiền hàng</dt><dd class="tabular-nums">{{ formatMoney(subtotal) }}</dd></div>
-                        <div class="flex items-center justify-between gap-2"><dt class="text-muted-foreground">Phí giao hàng</dt><dd><input v-model="form.shipping_fee" type="number" min="0" class="h-7 w-28 rounded border border-input bg-card px-2 text-right text-sm tabular-nums" data-testid="shipping-fee" /></dd></div>
-                        <div class="flex items-center justify-between gap-2"><dt class="text-muted-foreground">Giảm giá đơn</dt><dd><input v-model="form.discount" type="number" min="0" class="h-7 w-28 rounded border border-input bg-card px-2 text-right text-sm tabular-nums" data-testid="order-discount" /></dd></div>
+                        <div class="flex items-center justify-between gap-2"><dt class="text-muted-foreground">Phí giao hàng <kbd class="text-[10px]">F7</kbd></dt><dd><input v-model="form.shipping_fee" type="number" min="0" class="h-7 w-28 rounded border border-input bg-card px-2 text-right text-sm tabular-nums" data-testid="shipping-fee" /></dd></div>
+                        <div class="flex items-center justify-between gap-2"><dt class="text-muted-foreground">Giảm giá đơn <kbd class="text-[10px]">F6</kbd></dt><dd><input v-model="form.discount" type="number" min="0" class="h-7 w-28 rounded border border-input bg-card px-2 text-right text-sm tabular-nums" data-testid="order-discount" /></dd></div>
                         <p v-if="error?.field('discount')" class="text-xs text-destructive">{{ error.field('discount') }}</p>
                         <div class="flex justify-between border-t pt-2 text-base font-semibold"><dt>Khách phải trả</dt><dd class="tabular-nums" data-testid="order-total">{{ formatMoney(total) }}</dd></div>
                     </dl>
@@ -391,7 +420,7 @@ const stages = [
                     </div>
 
                     <p v-if="error && error.field('stock')" class="text-sm text-destructive" data-testid="stock-error">{{ error.field('stock') }}</p>
-                    <Button type="submit" class="w-full" :loading="saving" :disabled="!lines.length || !form.channel_id" data-testid="submit-order">{{ editId ? 'Lưu thay đổi' : 'Tạo đơn' }}</Button>
+                    <Button type="submit" class="w-full" :loading="saving" :disabled="!lines.length || !form.channel_id" data-testid="submit-order">{{ editId ? 'Lưu thay đổi' : 'Tạo đơn' }} <kbd class="ml-1 text-[10px] opacity-70">F1</kbd></Button>
                 </div>
             </Card>
         </div>
