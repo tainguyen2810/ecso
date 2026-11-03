@@ -32,3 +32,8 @@ export function formatMoney(value: number | string | null | undefined): string {
     if (value === null || value === undefined || value === '') return '—';
     return `${formatNumber(value)} ₫`;
 }
+
+export function formatDate(iso: string | null | undefined): string {
+    if (!iso) return '—';
+    return new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short' }).format(new Date(iso));
+}

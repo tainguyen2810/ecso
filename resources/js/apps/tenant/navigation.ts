@@ -41,7 +41,7 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
             { name: 'customers', label: 'Khách hàng', path: '/customers', icon: UsersRound, permission: 'customers.view', shortcut: 'k', description: 'Danh bạ khách mua qua kênh riêng, lịch sử mua và công nợ.' },
             { name: 'products', label: 'Sản phẩm', path: '/products', icon: Package, permission: 'products.view', shortcut: 'p', description: 'SKU, biến thể, mã vạch, mapping với listing trên sàn.' },
             { name: 'inventory', label: 'Kho hàng', path: '/inventory', icon: Boxes, permission: 'inventory.view', shortcut: 'i', description: 'Tồn kho nhiều kho, sổ kho, giữ tồn, điều chỉnh và chuyển kho.' },
-            { name: 'purchasing', label: 'Mua hàng', path: '/purchasing', icon: Truck, permission: 'purchasing.view', phase: 9, description: 'Nhà cung cấp, đơn mua, phiếu nhập và giá vốn.' },
+            { name: 'purchasing', label: 'Mua hàng', path: '/purchasing', icon: Truck, permission: 'purchasing.view', shortcut: 'n', description: 'Nhà cung cấp, đơn nhập hàng, nhận hàng nhiều đợt, trả hàng và công nợ NCC.' },
             { name: 'returns', label: 'Trả hàng', path: '/returns', icon: Undo2, permission: 'returns.view', description: 'Hàng hoàn từ khách, kiểm hàng và nhập kho lại.' },
         ],
     },

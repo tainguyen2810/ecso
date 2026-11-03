@@ -184,3 +184,10 @@ Migration `2026_10_31_500000_add_two_factor_to_users`: `users.two_factor_secret`
 | `order_payments` | Phiếu thu (`payment`) / hoàn (`refund`) của đơn kênh riêng: hình thức, số tiền, mã giao dịch. Không sửa; nhập nhầm thì hủy (`voided_at`, lý do) để giữ dấu vết. |
 
 Migration này chạy lại `AccessSeeder` để đưa quyền mới (`orders.create`, `orders.payment`, `customers.view`, `customers.manage`) vào các vai trò hệ thống, vì `ecso-update` chỉ chạy migrate.
+
+## Phase 11 — Mua hàng (đã tạo, migration `2026_11_03_700000_create_purchasing_tables`)
+- `suppliers` (code NCC-xxxxxx, is_active). Công nợ tính khi đọc: Σ(received_value − returned_value) của đơn − Σ phiếu chi chưa hủy.
+- `purchase_orders` (number PO-xxxxxx, status draft|ordered|partial|received|closed|cancelled, total, received_value, returned_value, paid_amount) và `purchase_order_lines` (quantity, received_qty, returned_qty, unit_cost; unique theo đơn + SKU).
+- `stock_receipts.purchase_order_id`: mỗi đợt nhận hàng là một phiếu nhập kho (source = purchase).
+- `supplier_returns` (TNC-xxxxxx) + `supplier_return_lines`: tồn đi ra qua `InventoryService::returnToSupplier` (SUPPLIER_RETURN).
+- `supplier_payments` (method, amount, paid_at, voided_at). Đơn nhập giữ `paid_amount` = tổng phiếu chi chưa hủy của đơn.

@@ -39,6 +39,7 @@ final class PermissionRegistry
         'purchasing' => [
             'purchasing.view' => 'Xem mua hàng',
             'purchasing.manage' => 'Quản lý mua hàng, nhập kho',
+            'purchasing.payment' => 'Chi tiền, theo dõi công nợ nhà cung cấp',
         ],
         'returns' => [
             'returns.view' => 'Xem trả hàng',
@@ -79,7 +80,7 @@ final class PermissionRegistry
             Role::ADMIN => ['name' => 'Quản trị doanh nghiệp', 'rank' => 90, 'permissions' => array_values(array_diff($all, ['billing.manage']))],
             Role::MANAGER => ['name' => 'Quản lý vận hành', 'rank' => 70, 'permissions' => [
                 ...self::READ_ALL, 'orders.update', 'orders.assign', 'orders.print', 'orders.create', 'orders.payment', 'customers.manage', 'products.manage',
-                'inventory.receive', 'inventory.adjust', 'inventory.adjust.approve', 'inventory.transfer', 'purchasing.manage',
+                'inventory.receive', 'inventory.adjust', 'inventory.adjust.approve', 'inventory.transfer', 'purchasing.manage', 'purchasing.payment',
                 'returns.inspect', 'finance.view', 'members.view',
             ]],
             Role::WAREHOUSE_STAFF => ['name' => 'Nhân viên kho', 'rank' => 40, 'permissions' => [
@@ -92,7 +93,7 @@ final class PermissionRegistry
             ]],
             Role::ACCOUNTANT => ['name' => 'Kế toán', 'rank' => 40, 'permissions' => [
                 'dashboard.view', 'orders.view', 'products.view', 'inventory.view', 'purchasing.view',
-                'returns.view', 'finance.view', 'reports.view', 'billing.view', 'customers.view', 'orders.payment',
+                'returns.view', 'finance.view', 'reports.view', 'billing.view', 'customers.view', 'orders.payment', 'purchasing.payment',
             ]],
             Role::VIEWER => ['name' => 'Chỉ xem', 'rank' => 10, 'permissions' => self::READ_ALL],
         ];

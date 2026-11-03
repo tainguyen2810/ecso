@@ -17,6 +17,8 @@ class StockReceipt extends Model
 
     public const SOURCE_OPENING = 'opening';
 
+    public const SOURCE_PURCHASE = 'purchase';
+
     protected $fillable = ['warehouse_id', 'source', 'note'];
 
     /** @return BelongsTo<Warehouse, $this> */
