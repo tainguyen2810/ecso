@@ -182,7 +182,14 @@ export interface InventoryDocument {
 export interface OrderSummary {
     id: string;
     marketplace: string;
-    shop?: { id: string; name: string; marketplace: string };
+    source?: 'manual' | 'marketplace';
+    shop?: { id: string; name: string; marketplace: string } | null;
+    channel?: { id: string; name: string; type: string } | null;
+    customer?: { id: string; code: string; name: string } | null;
+    paid_amount?: string;
+    refunded_amount?: string;
+    payment_status?: 'unpaid' | 'partial' | 'paid' | null;
+    balance_due?: string | null;
     external_order_id: string;
     status: string;
     raw_status: string;
@@ -235,6 +242,48 @@ export interface OrderDetail extends OrderSummary {
     returns: OrderReturnData[];
     actions: Record<string, { allowed: boolean; capability: string }>;
     capabilities: Record<string, string>;
+    editable: boolean;
+    payments: OrderPaymentData[];
+    created_by: string | null;
+}
+
+export interface OrderPaymentData {
+    id: string;
+    kind: 'payment' | 'refund';
+    method: string;
+    amount: string;
+    reference: string | null;
+    note: string | null;
+    paid_at: string;
+    created_by?: string | null;
+    voided_at: string | null;
+    void_reason: string | null;
+    order?: { id: string; number: string };
+}
+
+export interface SalesChannel {
+    id: string;
+    name: string;
+    type: string;
+    is_active: boolean;
+    warehouse?: { id: string; code: string; name: string } | null;
+    orders_count?: number;
+}
+
+export interface Customer {
+    id: string;
+    code: string;
+    name: string;
+    phone: string | null;
+    email: string | null;
+    address: string | null;
+    group: string | null;
+    note: string | null;
+    orders_count: number | null;
+    total_spent: string | null;
+    debt: string | null;
+    last_order_at: string | null;
+    created_at: string | null;
 }
 
 export interface OrderReturnLineData {

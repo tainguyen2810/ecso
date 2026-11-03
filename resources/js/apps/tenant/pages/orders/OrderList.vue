@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { AlertTriangle, Clock, PackageX, Printer, RefreshCw, Search, ShoppingCart, Unlink, UserPlus } from 'lucide-vue-next';
+import { AlertTriangle, Clock, PackageX, Plus, Printer, RefreshCw, Search, ShoppingCart, Unlink, UserPlus } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import Tabs from '../../components/Tabs.vue';
@@ -18,9 +18,9 @@ import { api, ApiError } from '@/shared/lib/api';
 import { cn, formatDateTime, formatMoney } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
-import { actionLabels, deadlineLabel, marketplaceNames, orderFlags, orderStatus, orderTabs } from './labels';
+import { actionLabels, deadlineLabel, marketplaceNames, orderFlags, orderStatus, orderTabs, paymentStatus } from './labels';
 import { downloadPackingSlips } from './packingSlip';
-import type { MarketplaceAccountData, OrderSummary, Ref } from '@/shared/types';
+import type { MarketplaceAccountData, OrderSummary, Ref, SalesChannel } from '@/shared/types';
 
 const route = useRoute();
 const router = useRouter();
@@ -33,12 +33,15 @@ const meta = ref({ current_page: 1, last_page: 1, total: 0 });
 const loading = ref(true);
 const loadError = ref<string | null>(null);
 const accounts = ref<MarketplaceAccountData[]>([]);
+const channels = ref<SalesChannel[]>([]);
 const assignees = ref<Ref[]>([]);
 
 const filters = reactive({
     tab: (route.query.tab as string) ?? 'all',
     q: (route.query.q as string) ?? '',
     account: (route.query.account as string) ?? '',
+    source: (route.query.source as string) ?? '',
+    channel: (route.query.channel as string) ?? '',
     assignee: (route.query.assignee as string) ?? '',
     flags: route.query.flags ? String(route.query.flags).split(',') : ([] as string[]),
     sort: (route.query.sort as string) ?? 'newest',
@@ -59,6 +62,8 @@ function query() {
         tab: filters.tab === 'all' ? undefined : filters.tab,
         q: filters.q || undefined,
         account: filters.account || undefined,
+        source: filters.source || undefined,
+        channel: filters.channel || undefined,
         assignee: filters.assignee || undefined,
         flags: filters.flags.length ? filters.flags : undefined,
         sort: filters.sort === 'newest' ? undefined : filters.sort,
@@ -85,8 +90,9 @@ async function load() {
 
 onMounted(async () => {
     load();
-    const [a, m] = await Promise.allSettled([api.get('/marketplace-accounts'), api.get('/orders/assignees')]);
+    const [a, m, c] = await Promise.allSettled([api.get('/marketplace-accounts'), api.get('/orders/assignees'), api.get('/sales-channels')]);
     if (a.status === 'fulfilled') accounts.value = a.value.data.data;
+    if (c.status === 'fulfilled') channels.value = c.value.data.data;
     if (m.status === 'fulfilled') assignees.value = m.value.data.data;
 });
 
@@ -95,7 +101,7 @@ watch(() => filters.q, () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => ((filters.page = 1), load()), 300);
 });
-watch(() => [filters.tab, filters.account, filters.assignee, filters.sort, filters.flags.join()], () => ((filters.page = 1), (selected.value = new Set()), load()));
+watch(() => [filters.tab, filters.account, filters.source, filters.channel, filters.assignee, filters.sort, filters.flags.join()], () => ((filters.page = 1), (selected.value = new Set()), load()));
 
 function toggleFlag(flag: string) {
     filters.flags = filters.flags.includes(flag) ? filters.flags.filter((f) => f !== flag) : [...filters.flags, flag];
@@ -151,8 +157,9 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
 </script>
 
 <template>
-    <PageHeader title="Đơn hàng" description="Đơn từ mọi gian hàng, cập nhật theo webhook và đối soát định kỳ. Thao tác trạng thái được gửi lên sàn qua API chính thức.">
+    <PageHeader title="Đơn hàng" description="Đơn từ các sàn (cập nhật theo webhook, thao tác gửi lên sàn qua API) và đơn của kênh bán riêng (xử lý ngay trên ECSO).">
         <Button variant="outline" :loading="loading" @click="load"><RefreshCw /> Làm mới</Button>
+        <Button v-if="tenant.can('orders.create')" data-testid="create-order" @click="$router.push('/orders/new')"><Plus /> Tạo đơn</Button>
     </PageHeader>
 
     <Card>
@@ -163,7 +170,9 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                     <Search class="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
                     <Input v-model="filters.q" class="pl-8" placeholder="Mã đơn, mã vận đơn, SKU, tên sản phẩm…" data-testid="order-search" />
                 </div>
-                <Select v-model="filters.account" class="w-48" :options="[{ value: '', label: 'Tất cả gian hàng' }, ...accounts.map((a) => ({ value: a.id, label: a.shop_name }))]" aria-label="Gian hàng" />
+                <Select v-model="filters.source" class="w-40" :options="[{ value: '', label: 'Mọi nguồn đơn' }, { value: 'manual', label: 'Kênh bán riêng' }, { value: 'marketplace', label: 'Sàn TMĐT' }]" aria-label="Nguồn đơn" data-testid="filter-source" />
+                <Select v-if="filters.source !== 'marketplace' && channels.length" v-model="filters.channel" class="w-44" :options="[{ value: '', label: 'Mọi kênh riêng' }, ...channels.map((c) => ({ value: c.id, label: c.name }))]" aria-label="Kênh bán" />
+                <Select v-if="filters.source !== 'manual' && accounts.length" v-model="filters.account" class="w-48" :options="[{ value: '', label: 'Tất cả gian hàng' }, ...accounts.map((a) => ({ value: a.id, label: a.shop_name }))]" aria-label="Gian hàng" />
                 <Select v-model="filters.assignee" class="w-44" :options="[{ value: '', label: 'Mọi người xử lý' }, { value: 'me', label: 'Đơn của tôi' }, { value: 'none', label: 'Chưa phân công' }, ...assignees.map((a) => ({ value: a.id, label: a.name }))]" aria-label="Người xử lý" />
                 <Select v-model="filters.sort" class="w-44" :options="[{ value: 'newest', label: 'Mới nhất' }, { value: 'oldest', label: 'Cũ nhất' }, { value: 'ship_by', label: 'Hạn giao gần nhất' }]" aria-label="Sắp xếp" />
             </div>
@@ -199,7 +208,7 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
             v-else-if="!orders.length"
             :icon="ShoppingCart"
             title="Không có đơn nào"
-            :description="accounts.length ? 'Không có đơn khớp bộ lọc. Đơn mới từ sàn sẽ xuất hiện ở đây trong vài giây sau khi sàn gửi webhook.' : 'Kết nối gian hàng để bắt đầu nhận đơn.'"
+            :description="accounts.length ? 'Không có đơn khớp bộ lọc. Đơn mới từ sàn sẽ xuất hiện ở đây trong vài giây sau khi sàn gửi webhook.' : 'Tạo đơn bán ở kênh riêng, hoặc kết nối gian hàng để nhận đơn từ sàn.'"
         >
             <RouterLink v-if="!accounts.length" to="/marketplaces"><Button>Kết nối gian hàng</Button></RouterLink>
         </EmptyState>
@@ -221,7 +230,8 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                         <td class="px-4 py-3" @click.stop><input type="checkbox" :checked="selected.has(o.id)" :aria-label="`Chọn đơn ${o.external_order_id}`" @change="toggle(o.id)" /></td>
                         <td class="px-2 py-3">
                             <div class="font-mono text-xs font-medium">{{ o.external_order_id }}</div>
-                            <div class="mt-0.5 text-xs text-muted-foreground">{{ marketplaceNames[o.marketplace] ?? o.marketplace }} · {{ o.shop?.name }}</div>
+                            <div class="mt-0.5 text-xs text-muted-foreground">{{ marketplaceNames[o.marketplace] ?? o.marketplace }} · {{ o.shop?.name ?? o.channel?.name }}</div>
+                            <div v-if="o.customer" class="text-xs">{{ o.customer.name }}</div>
                             <div class="text-xs text-muted-foreground">{{ formatDateTime(o.placed_at) }}</div>
                         </td>
                         <td class="max-w-80 px-4 py-3">
@@ -238,6 +248,7 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                         </td>
                         <td class="px-4 py-3 text-right tabular-nums">
                             {{ formatMoney(o.total) }}
+                            <div v-if="o.payment_status && o.status !== 'CANCELLED'" class="text-xs" :class="o.payment_status === 'paid' ? 'text-success' : 'text-destructive'">{{ paymentStatus[o.payment_status]?.label }}</div>
                             <div v-if="o.is_cod" class="text-xs text-muted-foreground">COD</div>
                         </td>
                         <td class="px-4 py-3"><Badge :tone="orderStatus[o.status]?.tone">{{ orderStatus[o.status]?.label ?? o.status }}</Badge></td>

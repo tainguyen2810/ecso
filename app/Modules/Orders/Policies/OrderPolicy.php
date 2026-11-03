@@ -31,4 +31,14 @@ class OrderPolicy extends PermissionPolicy
     {
         return $this->allows('orders.print');
     }
+
+    public function create(User $user): bool
+    {
+        return $this->allows('orders.create');
+    }
+
+    public function pay(User $user): bool
+    {
+        return $this->allows('orders.payment');
+    }
 }

@@ -7,6 +7,9 @@ use App\Modules\Identity\Models\User;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Sales\Models\Customer;
+use App\Modules\Sales\Models\SalesChannel;
+use App\Modules\Sales\Support\PhoneNumber;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -30,6 +33,18 @@ class OrderQuery
         if ($account = $filters['account'] ?? null) {
             $query->where('marketplace_account_id', MarketplaceAccount::query()->where('ulid', $account)->value('id') ?? 0);
         }
+        if ($channel = $filters['channel'] ?? null) {
+            $query->where('sales_channel_id', SalesChannel::query()->where('ulid', $channel)->value('id') ?? 0);
+        }
+        if ($customer = $filters['customer'] ?? null) {
+            $query->where('customer_id', Customer::query()->where('ulid', $customer)->value('id') ?? 0);
+        }
+        if ($source = $filters['source'] ?? null) {
+            $source === 'manual' ? $query->where('marketplace', Order::SOURCE_MANUAL) : $query->where('marketplace', '!=', Order::SOURCE_MANUAL);
+        }
+        if ($paymentStatus = $filters['payment_status'] ?? null) {
+            $query->where('payment_status', $paymentStatus);
+        }
         if ($marketplace = $filters['marketplace'] ?? null) {
             $query->where('marketplace', $marketplace);
         }
@@ -42,6 +57,7 @@ class OrderQuery
         if ($q = trim((string) ($filters['q'] ?? ''))) {
             $query->where(fn (Builder $w) => $w->where('external_order_id', 'like', "%{$q}%")
                 ->orWhere('tracking_number', $q)
+                ->orWhereHas('customer', fn ($c) => $c->where('name', 'like', "%{$q}%")->orWhere('phone_hash', PhoneNumber::hash(PhoneNumber::normalize($q)) ?? '-'))
                 ->orWhereHas('items', fn ($i) => $i->where('seller_sku', $q)->orWhere('name', 'like', "%{$q}%")));
         }
         if ($sku = $filters['sku'] ?? null) {

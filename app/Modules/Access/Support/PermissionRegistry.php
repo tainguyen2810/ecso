@@ -18,6 +18,12 @@ final class PermissionRegistry
             'orders.update' => 'Xử lý đơn hàng',
             'orders.assign' => 'Phân công đơn',
             'orders.print' => 'In phiếu đóng gói, vận đơn',
+            'orders.create' => 'Tạo đơn bán, bán tại quầy',
+            'orders.payment' => 'Thu tiền, hoàn tiền đơn bán',
+        ],
+        'customers' => [
+            'customers.view' => 'Xem khách hàng',
+            'customers.manage' => 'Thêm, sửa khách hàng',
         ],
         'products' => [
             'products.view' => 'Xem sản phẩm',
@@ -58,7 +64,7 @@ final class PermissionRegistry
 
     private const READ_ALL = [
         'dashboard.view', 'orders.view', 'products.view', 'inventory.view', 'purchasing.view',
-        'returns.view', 'reports.view', 'marketplace.view',
+        'returns.view', 'reports.view', 'marketplace.view', 'customers.view',
     ];
 
     /**
@@ -72,7 +78,7 @@ final class PermissionRegistry
             Role::OWNER => ['name' => 'Chủ doanh nghiệp', 'rank' => 100, 'permissions' => $all],
             Role::ADMIN => ['name' => 'Quản trị doanh nghiệp', 'rank' => 90, 'permissions' => array_values(array_diff($all, ['billing.manage']))],
             Role::MANAGER => ['name' => 'Quản lý vận hành', 'rank' => 70, 'permissions' => [
-                ...self::READ_ALL, 'orders.update', 'orders.assign', 'orders.print', 'products.manage',
+                ...self::READ_ALL, 'orders.update', 'orders.assign', 'orders.print', 'orders.create', 'orders.payment', 'customers.manage', 'products.manage',
                 'inventory.receive', 'inventory.adjust', 'inventory.adjust.approve', 'inventory.transfer', 'purchasing.manage',
                 'returns.inspect', 'finance.view', 'members.view',
             ]],
@@ -81,12 +87,12 @@ final class PermissionRegistry
                 'inventory.receive', 'inventory.adjust', 'inventory.transfer', 'purchasing.view', 'returns.view', 'returns.inspect',
             ]],
             Role::ORDER_STAFF => ['name' => 'Nhân viên xử lý đơn', 'rank' => 40, 'permissions' => [
-                'dashboard.view', 'orders.view', 'orders.update', 'orders.print', 'products.view',
-                'inventory.view', 'returns.view',
+                'dashboard.view', 'orders.view', 'orders.update', 'orders.print', 'orders.create', 'orders.payment', 'products.view',
+                'inventory.view', 'returns.view', 'customers.view', 'customers.manage',
             ]],
             Role::ACCOUNTANT => ['name' => 'Kế toán', 'rank' => 40, 'permissions' => [
                 'dashboard.view', 'orders.view', 'products.view', 'inventory.view', 'purchasing.view',
-                'returns.view', 'finance.view', 'reports.view', 'billing.view',
+                'returns.view', 'finance.view', 'reports.view', 'billing.view', 'customers.view', 'orders.payment',
             ]],
             Role::VIEWER => ['name' => 'Chỉ xem', 'rank' => 10, 'permissions' => self::READ_ALL],
         ];

@@ -11,6 +11,7 @@ use App\Modules\Marketplace\Exceptions\UnsupportedCapability;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderNote;
+use App\Modules\Sales\Services\ManualOrderService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 
@@ -32,6 +33,7 @@ class OrderActions
         private readonly ConnectorRegistry $connectors,
         private readonly OrderSync $sync,
         private readonly AuditLogger $audit,
+        private readonly ManualOrderService $manual,
     ) {}
 
     /**
@@ -39,6 +41,10 @@ class OrderActions
      */
     public function perform(Order $order, string $action, array $params = []): Order
     {
+        // Orders of the seller's own channels are processed in ECSO, not on a marketplace.
+        if ($order->isManual()) {
+            return $this->manual->transition($order, $action, $params);
+        }
         if (! isset(self::ALLOWED_FROM[$action])) {
             throw ValidationException::withMessages(['action' => 'Thao tác không hợp lệ.']);
         }

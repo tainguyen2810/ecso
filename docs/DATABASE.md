@@ -171,3 +171,16 @@ Thiết kế ban đầu ở §2.2 có `idempotency_key`, `tax`, `subscription_id
 ## Phase 8 — Identity (đã tạo)
 
 Migration `2026_10_31_500000_add_two_factor_to_users`: `users.two_factor_secret` (mã hóa), `two_factor_recovery_codes` (mã hóa, danh sách hash SHA-256), `two_factor_confirmed_at`.
+
+## Phase 9 — Bán hàng kênh riêng (đã tạo, migration `2026_11_03_600000_create_sales_tables`)
+
+| Bảng / cột | Mục đích |
+|---|---|
+| `sales_channels` | Kênh bán riêng của doanh nghiệp (quầy, cửa hàng, Facebook, Zalo, website…): tên duy nhất trong tenant, loại, kho xuất mặc định, bật/tắt. Mỗi tenant có sẵn kênh "Bán tại cửa hàng". |
+| `customers` | Khách mua qua kênh riêng. `phone`, `address` mã hóa; tìm theo `phone_hash` (HMAC theo `APP_KEY`, duy nhất trong tenant) và `phone_last4`. Mã `KH-000001`. |
+| `orders.marketplace_account_id` | Nay **nullable**. Đơn kênh riêng có `marketplace = 'manual'`, `sales_channel_id`, `customer_id`, `created_by`. |
+| `orders.buyer_phone` | Số điện thoại đầy đủ (mã hóa) cho đơn kênh riêng để giao hàng; đơn sàn vẫn chỉ lưu dạng che. |
+| `orders.paid_amount / refunded_amount / payment_status` | Tính lại từ `order_payments` dưới khóa dòng đơn. `payment_status` null với đơn sàn. |
+| `order_payments` | Phiếu thu (`payment`) / hoàn (`refund`) của đơn kênh riêng: hình thức, số tiền, mã giao dịch. Không sửa; nhập nhầm thì hủy (`voided_at`, lý do) để giữ dấu vết. |
+
+Migration này chạy lại `AccessSeeder` để đưa quyền mới (`orders.create`, `orders.payment`, `customers.view`, `customers.manage`) vào các vai trò hệ thống, vì `ecso-update` chỉ chạy migrate.

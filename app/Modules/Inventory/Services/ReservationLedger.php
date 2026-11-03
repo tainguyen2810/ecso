@@ -74,6 +74,26 @@ class ReservationLedger
     }
 
     /**
+     * Tops up the short active reservations of the references with what is available now and returns the shortage
+     * left per reference (only references still short are listed).
+     *
+     * @param  array<int, int>  $referenceIds
+     * @return array<int, int> reference id => shortage
+     */
+    public function topUp(string $referenceType, array $referenceIds): array
+    {
+        $short = [];
+        foreach ($this->active($referenceType, $referenceIds) as $reservation) {
+            $reservation = $this->inventory->fillShortage($reservation);
+            if ($reservation->shortage > 0) {
+                $short[(int) $reservation->reference_id] = $reservation->shortage;
+            }
+        }
+
+        return $short;
+    }
+
+    /**
      * Tops up short active reservations of the given variants, oldest reference order first.
      *
      * @param  array<int, int>  $variantIds

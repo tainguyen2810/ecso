@@ -43,6 +43,37 @@ export const actionLabels: Record<string, string> = {
     pack: 'Đóng gói',
     handover: 'Bàn giao vận chuyển',
     cancel: 'Hủy đơn',
+    deliver: 'Đã giao cho khách',
+    complete: 'Hoàn tất đơn',
+    fail_delivery: 'Giao thất bại',
+};
+
+/** Order of the buttons on a manual order (primary action first). */
+export const manualActionOrder = ['confirm', 'pack', 'handover', 'deliver', 'complete', 'fail_delivery', 'cancel'];
+
+export const channelTypes: Record<string, string> = {
+    pos: 'Bán tại quầy',
+    store: 'Cửa hàng',
+    facebook: 'Facebook',
+    zalo: 'Zalo',
+    website: 'Website',
+    phone: 'Điện thoại',
+    other: 'Khác',
+};
+
+export const paymentMethods: Record<string, string> = {
+    cash: 'Tiền mặt',
+    bank_transfer: 'Chuyển khoản',
+    card: 'Thẻ',
+    ewallet: 'Ví điện tử',
+    cod: 'Thu hộ (COD)',
+    other: 'Khác',
+};
+
+export const paymentStatus: Record<string, { label: string; tone: Tone }> = {
+    unpaid: { label: 'Chưa thanh toán', tone: 'danger' },
+    partial: { label: 'Thanh toán một phần', tone: 'warning' },
+    paid: { label: 'Đã thanh toán', tone: 'success' },
 };
 
 export const capabilityLabels: Record<string, { label: string; tone: Tone }> = {
@@ -100,6 +131,7 @@ export const marketplaceNames: Record<string, string> = {
     lazada: 'Lazada',
     tiki: 'Tiki',
     fake: 'Sàn giả lập',
+    manual: 'Kênh riêng',
 };
 
 export const mappingStatus: Record<string, { label: string; tone: Tone }> = {

@@ -18,6 +18,8 @@ use App\Modules\Orders\Models\OrderStatusHistory;
 use App\Modules\Orders\Services\OrderActions;
 use App\Modules\Orders\Services\OrderQuery;
 use App\Modules\Orders\Services\OrderSync;
+use App\Modules\Sales\Http\Resources\PaymentResource;
+use App\Modules\Sales\Services\ManualOrderService;
 use App\Modules\Tenancy\Models\TenantUser;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -32,7 +34,7 @@ class OrderController extends Controller
         $filters = $this->filters($request);
 
         $page = $orders->build($filters, $request->user()->id)
-            ->with(['account', 'assignee', 'items.variant'])->withCount('items')
+            ->with(['account', 'channel', 'customer', 'assignee', 'items.variant'])->withCount('items')
             ->orderBy(match ($filters['sort'] ?? 'newest') {
                 'ship_by' => 'ship_by_at',
                 'oldest', 'newest' => 'placed_at',
@@ -47,7 +49,7 @@ class OrderController extends Controller
     public function show(Order $order, ReservationLedger $ledger, ConnectorRegistry $connectors): JsonResponse
     {
         $this->authorize('view', $order);
-        $order->load(['account', 'warehouse', 'assignee', 'items.variant.product', 'items.listingVariant']);
+        $order->load(['account', 'channel', 'customer', 'creator', 'warehouse', 'assignee', 'items.variant.product', 'items.listingVariant', 'payments.creator']);
         $reservations = $ledger->snapshot(Order::STOCK_REFERENCE, $order->items->pluck('id')->all());
         $capabilities = $connectors->has($order->marketplace) ? $connectors->for($order->marketplace)->capabilities() : Capability::allUnknown();
 
@@ -84,10 +86,15 @@ class OrderController extends Controller
                 'id' => $n->id, 'body' => $n->body, 'user' => $n->user?->name, 'created_at' => $n->created_at?->toIso8601String(),
             ]),
             'returns' => ReturnResource::collection($order->returns()->get()),
-            'actions' => collect(OrderActions::ALLOWED_FROM)->map(fn ($from, $action) => [
-                'allowed' => in_array($order->status, $from, true),
-                'capability' => $capabilities[Capability::ORDER_ACTIONS[$action]] ?? Capability::UNKNOWN,
-            ]),
+            'actions' => $order->isManual()
+                ? collect(ManualOrderService::ACTIONS)->map(fn ($def) => ['allowed' => in_array($order->status, $def[0], true), 'capability' => Capability::SUPPORTED])
+                : collect(OrderActions::ALLOWED_FROM)->map(fn ($from, $action) => [
+                    'allowed' => in_array($order->status, $from, true),
+                    'capability' => $capabilities[Capability::ORDER_ACTIONS[$action]] ?? Capability::UNKNOWN,
+                ]),
+            'editable' => $order->isManual() && in_array($order->status, ManualOrderService::EDITABLE, true),
+            'payments' => PaymentResource::collection($order->payments),
+            'created_by' => $order->creator?->name,
             'capabilities' => $capabilities,
         ]])->response();
     }
@@ -97,7 +104,7 @@ class OrderController extends Controller
         $this->authorize('update', $order);
         $params = $request->validate(['reason' => ['nullable', 'string', 'max:255']]);
 
-        return new OrderResource($actions->perform($order, $action, $params)->load(['account', 'assignee']));
+        return new OrderResource($actions->perform($order, $action, $params)->load(['account', 'channel', 'assignee']));
     }
 
     public function bulk(Request $request, OrderActions $actions): JsonResponse
@@ -109,7 +116,7 @@ class OrderController extends Controller
             'user_id' => ['nullable', 'string'],
         ]);
         $this->authorize($data['action'] === 'assign' ? 'assign' : 'update', Order::class);
-        $orders = Order::query()->with('account')->whereIn('ulid', $data['ids'])->get();
+        $orders = Order::query()->with(['account', 'channel'])->whereIn('ulid', $data['ids'])->get();
 
         if ($data['action'] === 'assign') {
             $user = $this->member($data['user_id'] ?? null);
@@ -144,6 +151,9 @@ class OrderController extends Controller
     public function sync(Request $request, Order $order, OrderSync $sync): JsonResponse
     {
         $this->authorize('update', $order);
+        if ($order->isManual()) {
+            throw ValidationException::withMessages(['order' => 'Đơn bán tại kênh riêng không có trên sàn để đồng bộ.']);
+        }
         try {
             $result = $sync->syncOne($order->account, $order->external_order_id, 'user', null, $request->user()->id);
         } catch (ConnectorException $e) {
@@ -158,19 +168,19 @@ class OrderController extends Controller
     {
         $this->authorize('print', Order::class);
         $data = $request->validate(['ids' => ['required', 'array', 'min:1', 'max:200'], 'ids.*' => ['string']]);
-        $orders = Order::query()->with(['account', 'warehouse', 'items.variant'])->whereIn('ulid', $data['ids'])->orderBy('placed_at')->get();
+        $orders = Order::query()->with(['account', 'channel', 'warehouse', 'items.variant'])->whereIn('ulid', $data['ids'])->orderBy('placed_at')->get();
 
         Order::query()->whereIn('id', $orders->pluck('id'))->whereNull('packing_slip_printed_at')->update(['packing_slip_printed_at' => now()]);
 
         return response()->json(['data' => $orders->map(fn (Order $o) => [
             'id' => $o->ulid,
             'external_order_id' => $o->external_order_id,
-            'shop' => $o->account?->shop_name,
+            'shop' => $o->account->shop_name ?? $o->channel?->name,
             'marketplace' => $o->marketplace,
             'placed_at' => $o->placed_at?->toIso8601String(),
             'ship_by_at' => $o->ship_by_at?->toIso8601String(),
             'buyer_name' => $o->buyer_name,
-            'buyer_phone' => $o->buyer_phone_masked,
+            'buyer_phone' => $o->isManual() ? $o->buyer_phone : $o->buyer_phone_masked,
             'shipping_address' => $o->shipping_address,
             'carrier' => $o->shipping_carrier,
             'tracking_number' => $o->tracking_number,
@@ -203,7 +213,7 @@ class OrderController extends Controller
             'to_process' => Order::query()->whereIn('status', OrderStatus::OPEN)->count(),
             'overdue' => Order::query()->whereIn('status', OrderStatus::OPEN)->where('ship_by_at', '<', now())->count(),
             'shortage' => Order::query()->where('has_shortage', true)->whereIn('status', OrderStatus::OPEN)->count(),
-            'recent' => OrderResource::collection(Order::query()->with(['account'])->orderByDesc('placed_at')->orderByDesc('id')->limit(6)->get()),
+            'recent' => OrderResource::collection(Order::query()->with(['account', 'channel'])->orderByDesc('placed_at')->orderByDesc('id')->limit(6)->get()),
         ]]);
     }
 
@@ -238,6 +248,10 @@ class OrderController extends Controller
             'tab' => ['nullable', Rule::in(array_keys(OrderStatus::TABS))],
             'status' => ['nullable', Rule::in(OrderStatus::ALL)],
             'account' => ['nullable', 'string'],
+            'channel' => ['nullable', 'string'],
+            'customer' => ['nullable', 'string'],
+            'source' => ['nullable', Rule::in(['manual', 'marketplace'])],
+            'payment_status' => ['nullable', Rule::in([Order::PAYMENT_UNPAID, Order::PAYMENT_PARTIAL, Order::PAYMENT_PAID])],
             'marketplace' => ['nullable', 'string', 'max:20'],
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date'],

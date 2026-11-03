@@ -1,0 +1,75 @@
+<?php
+
+namespace App\Modules\Sales\Models;
+
+use App\Modules\Orders\Domain\OrderStatus;
+use App\Modules\Orders\Models\Order;
+use App\Modules\Sales\Support\PhoneNumber;
+use App\Modules\Tenancy\Concerns\BelongsToTenant;
+use App\Shared\Concerns\HasPublicUlid;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+/**
+ * A buyer of the seller's own channels. Phone and address are encrypted at rest; the phone is found through a
+ * keyed hash (exact match) and its last four digits (partial search).
+ *
+ * @property-read int|string|null $orders_count
+ * @property-read int|string|null $total_spent
+ * @property-read int|string|null $debt
+ * @property-read string|null $last_order_at
+ */
+class Customer extends Model
+{
+    use BelongsToTenant, HasPublicUlid;
+
+    protected $fillable = ['name', 'email', 'address', 'group', 'note'];
+
+    protected $hidden = ['id', 'tenant_id', 'phone_hash', 'created_by'];
+
+    protected function casts(): array
+    {
+        return ['phone' => 'encrypted', 'address' => 'encrypted'];
+    }
+
+    public function setPhone(?string $phone): void
+    {
+        $normalized = PhoneNumber::normalize($phone);
+        $this->phone = $normalized;
+        $this->phone_hash = PhoneNumber::hash($normalized);
+        $this->phone_last4 = $normalized ? substr($normalized, -4) : null;
+    }
+
+    /**
+     * Adds orders_count, total_spent, debt and last_order_at. Cancelled and returned orders do not count; debt is
+     * what is still unpaid on the other orders.
+     *
+     * @param  Builder<Customer>  $query
+     * @return Builder<Customer>
+     */
+    public function scopeWithStats(Builder $query): Builder
+    {
+        $excluded = "'".OrderStatus::CANCELLED."','".OrderStatus::RETURNED."'";
+        $base = fn (string $select) => Order::query()->selectRaw($select)
+            ->whereColumn('orders.customer_id', 'customers.id')->whereRaw("orders.status NOT IN ({$excluded})");
+
+        return $query->select('customers.*')
+            ->selectSub($base('COUNT(*)'), 'orders_count')
+            ->selectSub($base('COALESCE(SUM(total), 0)'), 'total_spent')
+            ->selectSub($base('COALESCE(SUM(GREATEST(total - paid_amount, 0)), 0)'), 'debt')
+            ->selectSub(Order::query()->selectRaw('MAX(placed_at)')->whereColumn('orders.customer_id', 'customers.id'), 'last_order_at');
+    }
+
+    /** @return HasMany<Order, $this> */
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
+    }
+
+    /** @return HasMany<OrderPayment, $this> */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(OrderPayment::class);
+    }
+}

@@ -107,6 +107,7 @@ class OrderStockSync
     {
         if ($order->warehouse_id === null) {
             $order->warehouse_id = $order->account->warehouse_id
+                ?? $order->channel->warehouse_id
                 ?? Warehouse::query()->where('is_default', true)->value('id')
                 ?? Warehouse::query()->orderBy('id')->value('id');
             $order->save();
