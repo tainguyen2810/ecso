@@ -5,6 +5,7 @@ namespace App\Modules\Sales\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Orders\Http\Resources\OrderResource;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Orders\Support\OrderTags;
 use App\Modules\Sales\Http\Resources\PaymentResource;
 use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Sales\Services\ManualOrderService;
@@ -29,6 +30,7 @@ class SalesOrderController extends Controller
             'payments.*.method' => ['required', Rule::in(OrderPayment::METHODS)],
             'payments.*.amount' => ['required', 'numeric', 'min:0', 'max:9999999999'],
             'payments.*.reference' => ['nullable', 'string', 'max:100'],
+            'exchange_return_id' => ['nullable', 'string'],
         ]);
 
         $order = $orders->create($data);
@@ -102,6 +104,9 @@ class SalesOrderController extends Controller
             'carrier' => ['nullable', 'string', 'max:100'],
             'tracking_number' => ['nullable', 'string', 'max:100'],
             'ship_by_at' => ['nullable', 'date'],
+            'deliver_on' => ['nullable', 'date'],
+            'tags' => ['nullable', 'array', 'max:'.OrderTags::MAX],
+            'tags.*' => ['nullable', 'string', 'max:40'],
             'note' => ['nullable', 'string', 'max:500'],
         ];
     }

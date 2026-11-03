@@ -11,8 +11,11 @@ use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Events\OrderImported;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
+use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Orders\Models\OrderStatusHistory;
+use App\Modules\Orders\Services\ExchangeService;
 use App\Modules\Orders\Services\OrderIngestor;
+use App\Modules\Orders\Support\OrderTags;
 use App\Modules\Orders\Services\OrderStockSync;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\SalesChannel;
@@ -51,6 +54,7 @@ class ManualOrderService
         private readonly CustomerService $customers,
         private readonly PaymentService $payments,
         private readonly AuditLogger $audit,
+        private readonly ExchangeService $exchanges,
     ) {}
 
     /**
@@ -97,8 +101,16 @@ class ManualOrderService
                 $this->moveTo($order, $target);
             }
 
+            // Exchange: the returned goods pay for (part of) this order before any money changes hands.
+            if ($returnId = $data['exchange_return_id'] ?? null) {
+                $return = OrderReturn::query()->where('ulid', $returnId)->first()
+                    ?? throw ValidationException::withMessages(['exchange_return_id' => 'Phiếu trả hàng không tồn tại.']);
+                $this->exchanges->attach($return, $order);
+                $order->refresh();
+            }
+
             // A walk-in buyer who takes the goods must pay in full: there is nobody to record the debt against.
-            $paying = collect($data['payments'] ?? [])->reduce(fn (string $sum, $p) => bcadd($sum, (string) $p['amount'], 2), '0');
+            $paying = collect($data['payments'] ?? [])->reduce(fn (string $sum, $p) => bcadd($sum, (string) $p['amount'], 2), (string) $order->paid_amount);
             if ($target === OrderStatus::COMPLETED && $customer === null && bccomp($paying, (string) $order->total, 2) < 0) {
                 throw ValidationException::withMessages(['payments' => 'Khách lẻ phải thanh toán đủ. Chọn khách hàng để ghi nợ.']);
             }
@@ -278,10 +290,13 @@ class ManualOrderService
                 $order->forceFill([$field => bcadd((string) ($data[$field] ?? 0), '0', 2)]);
             }
         }
-        foreach (['note' => 'buyer_note', 'carrier' => 'shipping_carrier', 'tracking_number' => 'tracking_number', 'ship_by_at' => 'ship_by_at'] as $input => $column) {
+        foreach (['note' => 'buyer_note', 'carrier' => 'shipping_carrier', 'tracking_number' => 'tracking_number', 'ship_by_at' => 'ship_by_at', 'deliver_on' => 'deliver_on'] as $input => $column) {
             if (array_key_exists($input, $data)) {
                 $order->{$column} = $data[$input];
             }
+        }
+        if (array_key_exists('tags', $data)) {
+            $order->tags = OrderTags::normalize($data['tags']);
         }
         if (array_key_exists('is_cod', $data)) {
             $order->is_cod = (bool) $data['is_cod'];

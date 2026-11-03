@@ -70,6 +70,8 @@ class Order extends Model
             'cancelled_at' => 'datetime',
             'packing_slip_printed_at' => 'datetime',
             'raw' => 'array',
+            'tags' => 'array',
+            'deliver_on' => 'date',
             'version' => 'integer',
         ];
     }

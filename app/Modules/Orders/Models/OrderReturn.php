@@ -64,7 +64,7 @@ class OrderReturn extends Model
 
     protected function casts(): array
     {
-        return ['refund_amount' => 'decimal:2', 'received_at' => 'datetime', 'inspected_at' => 'datetime', 'closed_at' => 'datetime'];
+        return ['refund_amount' => 'decimal:2', 'exchange_credit' => 'decimal:2', 'received_at' => 'datetime', 'inspected_at' => 'datetime', 'closed_at' => 'datetime'];
     }
 
     public function expectsGoods(): bool
@@ -82,6 +82,37 @@ class OrderReturn extends Model
     public function lines(): HasMany
     {
         return $this->hasMany(OrderReturnLine::class)->orderBy('id');
+    }
+
+    /**
+     * The new order the buyer took in exchange, paid (partly) by this return's credit.
+     *
+     * @return BelongsTo<Order, $this>
+     */
+    public function exchangeOrder(): BelongsTo
+    {
+        return $this->belongsTo(Order::class, 'exchange_order_id');
+    }
+
+    /**
+     * What the returned goods are worth to the buyer: the refund agreed on the return, or else what was paid for the
+     * returned quantities (each line's discount spread over its units).
+     */
+    public function goodsValue(): string
+    {
+        if ($this->refund_amount !== null) {
+            return (string) $this->refund_amount;
+        }
+
+        return $this->lines()->with('item')->get()->reduce(function (string $sum, OrderReturnLine $line) {
+            $item = $line->item;
+            if ($item === null || $item->quantity === 0) {
+                return $sum;
+            }
+            $paid = bcsub(bcmul((string) $item->unit_price, (string) $item->quantity, 2), (string) $item->discount, 2);
+
+            return bcadd($sum, bcdiv(bcmul($paid, (string) $line->quantity, 4), (string) $item->quantity, 2), 2);
+        }, '0.00');
     }
 
     /** @return BelongsTo<Warehouse, $this> */

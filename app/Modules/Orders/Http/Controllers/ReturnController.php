@@ -40,7 +40,7 @@ class ReturnController extends Controller
     {
         $this->authorize('view', $return);
 
-        return new ReturnResource($return->load(['order', 'warehouse', 'lines.item', 'lines.variant', 'creator', 'inspector']));
+        return new ReturnResource($return->load(['order', 'exchangeOrder', 'warehouse', 'lines.item', 'lines.variant', 'creator', 'inspector']));
     }
 
     public function store(Request $request, Order $order, ReturnService $returns): JsonResponse
