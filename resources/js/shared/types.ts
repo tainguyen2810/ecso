@@ -276,6 +276,44 @@ export interface SalesChannel {
     orders_count?: number;
 }
 
+export interface CustomerGroup {
+    id: string;
+    code: string;
+    name: string;
+    description: string | null;
+    price_tier: 'retail' | 'wholesale';
+    discount_percent: string;
+    payment_method: string | null;
+    customers_count: number | null;
+    created_at: string | null;
+}
+
+export interface CustomerAddress {
+    id: string;
+    label: string | null;
+    recipient: string | null;
+    phone: string | null;
+    address: string;
+}
+
+export interface CustomerNote {
+    id: string;
+    body: string;
+    author: string | null;
+    mine: boolean;
+    created_at: string | null;
+}
+
+export interface CustomerLedgerEntry {
+    type: 'order' | 'payment';
+    ref: string | null;
+    order_id: string | null;
+    at: string | null;
+    note: string | null;
+    change: string;
+    balance: string;
+}
+
 export interface Customer {
     id: string;
     code: string;
@@ -283,7 +321,13 @@ export interface Customer {
     phone: string | null;
     email: string | null;
     address: string | null;
-    group: string | null;
+    group: { id: string; code: string; name: string; price_tier: 'retail' | 'wholesale'; discount_percent: string; payment_method: string | null } | null;
+    assignee: { id: string; name: string } | null;
+    birthday: string | null;
+    gender: 'male' | 'female' | 'other' | null;
+    tax_code: string | null;
+    tags: string[];
+    status: 'active' | 'inactive';
     note: string | null;
     orders_count: number | null;
     total_spent: string | null;

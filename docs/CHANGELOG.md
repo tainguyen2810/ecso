@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Khách hàng — nhóm, hồ sơ, bộ lọc, công nợ, nhập/xuất (2026-11-03)
+- Nhóm khách hàng thành danh mục riêng (`/customers/groups`): mã, tên, mô tả, giá áp dụng (lẻ/buôn), chiết khấu %, cách thanh toán quen dùng, số khách mỗi nhóm. Nhóm chữ cũ được chuyển tự động.
+- Hồ sơ khách: mã khách tự nhập (để trống thì tự đánh `KH-…`), ngày sinh, giới tính, mã số thuế, nhân viên phụ trách, tags, trạng thái đang/ngừng giao dịch.
+- Danh sách: tab Tất cả / Đang giao dịch / Ngừng giao dịch / Đang nợ; lọc theo nhóm, giới tính, tháng sinh (nút "Tháng này"), nhân viên phụ trách, tag, khoảng chi tiêu, số đơn, ngày mua cuối, ngày thêm; bộ lọc nằm trên URL; chọn cột hiển thị (nhớ trên máy).
+- Thao tác hàng loạt: chuyển nhóm, gắn/gỡ tag, giao nhân viên, đổi trạng thái, xóa (giữ lại khách đã có đơn), xuất các khách đã chọn.
+- Nhập/xuất Excel khách hàng: tiêu đề tiếng Việt, file mẫu, khớp theo mã khách rồi số điện thoại, kiểm tra toàn bộ trước khi ghi. File xuất nhập lại được.
+- Trang chi tiết: tab Đơn hàng / Công nợ (sổ nợ có số dư chạy) / Thu-hoàn tiền / Địa chỉ giao hàng (nhiều địa chỉ) / Ghi chú theo thời gian; thẻ điều khoản của nhóm.
+
 ### Phase 14 — Combo sản phẩm (2026-11-03)
 - Loại sản phẩm Combo: một SKU gồm nhiều SKU thành phần, không có tồn riêng; tồn = số combo ghép được, theo kho.
 - Đơn hàng, POS, hàng hoàn và đồng bộ tồn lên sàn xử lý combo trên SKU thành phần; giá vốn combo = tổng giá vốn thành phần.

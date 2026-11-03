@@ -191,3 +191,16 @@ Migration này chạy lại `AccessSeeder` để đưa quyền mới (`orders.cr
 - `stock_receipts.purchase_order_id`: mỗi đợt nhận hàng là một phiếu nhập kho (source = purchase).
 - `supplier_returns` (TNC-xxxxxx) + `supplier_return_lines`: tồn đi ra qua `InventoryService::returnToSupplier` (SUPPLIER_RETURN).
 - `supplier_payments` (method, amount, paid_at, voided_at). Đơn nhập giữ `paid_amount` = tổng phiếu chi chưa hủy của đơn.
+
+## Khách hàng mở rộng (đã tạo, migration `2026_11_07_100000_extend_customers`)
+
+| Bảng / cột | Mục đích |
+|---|---|
+| `customer_groups` | Nhóm khách: `code`, `name` (duy nhất trong tenant), `description`, `price_tier` (`retail` \| `wholesale`), `discount_percent` DECIMAL(5,2), `payment_method` (một trong `order_payments.method`). |
+| `customers.customer_group_id` | Thay cột chữ `customers.group` cũ. Migration tạo nhóm từ các giá trị cũ (mã viết hoa từ tên) rồi bỏ cột; `down()` trả lại tên nhóm vào cột chữ. |
+| `customers.birthday / gender / tax_code` | Ngày sinh, giới tính (`male` \| `female` \| `other`), mã số thuế. |
+| `customers.assigned_user_id` | Nhân viên phụ trách (thành viên đang hoạt động của doanh nghiệp). |
+| `customers.tags` | JSON, tối đa 20 tag, không trùng (không phân biệt hoa thường). |
+| `customers.status` | `active` (đang giao dịch) \| `inactive` (ngừng giao dịch). Khách đã có đơn không xóa được, chỉ chuyển ngừng giao dịch. |
+| `customer_addresses` | Địa chỉ giao hàng thêm (tối đa 20/khách): nhãn, người nhận, `phone` và `address` mã hóa. Địa chỉ chính vẫn ở `customers.address`. |
+| `customer_notes` | Ghi chú theo dòng thời gian: nội dung, người viết, thời gian. |

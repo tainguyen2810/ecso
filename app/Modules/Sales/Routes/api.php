@@ -1,6 +1,9 @@
 <?php
 
 use App\Modules\Sales\Http\Controllers\CustomerController;
+use App\Modules\Sales\Http\Controllers\CustomerGroupController;
+use App\Modules\Sales\Http\Controllers\CustomerProfileController;
+use App\Modules\Sales\Http\Controllers\CustomerTransferController;
 use App\Modules\Sales\Http\Controllers\PosController;
 use App\Modules\Sales\Http\Controllers\SalesChannelController;
 use App\Modules\Sales\Http\Controllers\SalesOrderController;
@@ -10,8 +13,20 @@ use Illuminate\Support\Facades\Route;
 Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::apiResource('sales-channels', SalesChannelController::class)->except('show');
 
-    Route::get('customers/groups', [CustomerController::class, 'groups']);
+    Route::apiResource('customer-groups', CustomerGroupController::class)->except('show');
+    Route::get('customers/tags', [CustomerController::class, 'tags']);
+    Route::get('customers/staff', [CustomerController::class, 'staff']);
+    Route::post('customers/bulk', [CustomerController::class, 'bulk']);
+    Route::get('customers/export', [CustomerTransferController::class, 'export'])->middleware('throttle:10,1');
+    Route::get('customers/import-template', [CustomerTransferController::class, 'template']);
+    Route::post('customers/import', [CustomerTransferController::class, 'import'])->middleware('throttle:10,1');
     Route::apiResource('customers', CustomerController::class);
+    Route::get('customers/{customer}/ledger', [CustomerController::class, 'ledger']);
+    Route::post('customers/{customer}/addresses', [CustomerProfileController::class, 'storeAddress']);
+    Route::put('customers/{customer}/addresses/{address}', [CustomerProfileController::class, 'updateAddress']);
+    Route::delete('customers/{customer}/addresses/{address}', [CustomerProfileController::class, 'destroyAddress']);
+    Route::post('customers/{customer}/notes', [CustomerProfileController::class, 'storeNote'])->middleware('throttle:60,1');
+    Route::delete('customers/{customer}/notes/{note}', [CustomerProfileController::class, 'destroyNote']);
 
     Route::get('pos/summary', [PosController::class, 'summary']);
 
