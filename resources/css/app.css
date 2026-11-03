@@ -34,13 +34,13 @@
     --color-sidebar-border: oklch(0.33 0.04 258);
     --color-sidebar-active: oklch(0.62 0.19 259);
 
-    /* Chart series per sales channel (Tailwind 400 tones: brand hue, kept light). */
-    --color-channel-shopee: var(--color-orange-400);
-    --color-channel-tiktok: var(--color-slate-500);
-    --color-channel-lazada: var(--color-indigo-400);
-    --color-channel-tiki: var(--color-sky-300);
-    --color-channel-manual: var(--color-emerald-300);
-    --color-channel-other: var(--color-violet-300);
+    /* Chart series per sales channel: each marketplace's own brand colour (same as its logo). */
+    --color-channel-shopee: #ee4d2d;
+    --color-channel-tiktok: #161823;
+    --color-channel-lazada: #f0167b;
+    --color-channel-tiki: #1a94ff;
+    --color-channel-manual: var(--color-emerald-400);
+    --color-channel-other: var(--color-violet-400);
 
     --radius-md: 0.5rem;
     --radius-lg: 0.75rem;

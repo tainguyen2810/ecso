@@ -17,14 +17,14 @@ Chốt ngày 03/11/2026 cùng màn Tổng quan mới (tham khảo bố cục T�
    | `slate` | Số đếm thường | Tổng tồn kho |
 
    Một dải nhiều mục cùng loại (ví dụ các trạng thái đơn) dùng **một** tông, chỉ mục cảnh báo đổi màu.
-4. **Màu theo kênh bán** chỉ dùng trong biểu đồ và ô chữ cái gian hàng: Shopee cam, TikTok xám đậm, Lazada chàm, Tiki xanh trời, kênh riêng xanh ngọc (tông 300–400).
+4. **Màu theo kênh bán** dùng đúng màu thương hiệu của sàn (trùng logo), chỉ trong biểu đồ và chú thích: Shopee `#ee4d2d`, TikTok Shop `#161823`, Lazada `#f0167b`, Tiki `#1a94ff`; kênh riêng xanh ngọc `emerald-400`, kênh khác `violet-400`. Đây là ngoại lệ duy nhất của quy tắc "màu nhạt".
 5. Tiền `1.234.000 ₫` (`formatMoney`), số `formatNumber`, ngày giờ `formatDateTime`. Số trong bảng/thẻ thêm `tabular-nums`.
 
 ## Token màu (`resources/css/app.css`)
 
 - Chung: `background`, `foreground`, `card`, `muted`, `muted-foreground`, `border`, `primary`, `success`, `warning`, `destructive`.
 - Sidebar: `sidebar` (nền), `sidebar-foreground` (chữ), `sidebar-muted` (chữ phụ), `sidebar-hover`, `sidebar-border`, `sidebar-active` (mục đang chọn, xanh dương).
-- Kênh bán: `channel-shopee`, `channel-tiktok`, `channel-lazada`, `channel-tiki`, `channel-manual`, `channel-other`. Trong code lấy qua `channelColor(key)` (`resources/js/shared/lib/tones.ts`).
+- Kênh bán (màu thương hiệu): `channel-shopee`, `channel-tiktok`, `channel-lazada`, `channel-tiki`, `channel-manual`, `channel-other`. Trong code lấy qua `channelColor(key)` (`resources/js/shared/lib/tones.ts`).
 - Tone: `toneClasses[tone].bubble | value | soft` trong `tones.ts`. Không viết lại bộ class màu ở từng màn.
 
 ## Thành phần dùng chung (`resources/js/shared/ui`)
