@@ -11,6 +11,7 @@ const links = computed(() =>
         { to: '/inventory', label: 'Tồn kho', match: ['inventory', 'inventory-card'] },
         { to: '/inventory/receipts', label: 'Nhập kho', match: ['inventory-receipts'] },
         { to: '/inventory/adjustments', label: 'Điều chỉnh', match: ['inventory-adjustments'] },
+        { to: '/inventory/stocktake', label: 'Kiểm kho', match: ['stocktake'] },
         { to: '/inventory/transfers', label: 'Chuyển kho', match: ['inventory-transfers'] },
         { to: '/inventory/warehouses', label: 'Danh sách kho', match: ['warehouses'] },
     ].filter(() => tenant.can('inventory.view')),

@@ -55,10 +55,14 @@ class FinanceReport
             $series[] = ['day' => $d->toDateString(), 'orders' => (int) ($row->orders ?? 0), 'revenue' => (float) ($row->revenue ?? 0)];
         }
 
-        $byShop = DB::table('orders')->join('marketplace_accounts', 'marketplace_accounts.id', '=', 'orders.marketplace_account_id')
+        // Marketplace shops and the seller's own channels (Phase 9) side by side.
+        $byShop = DB::table('orders')
+            ->leftJoin('marketplace_accounts', 'marketplace_accounts.id', '=', 'orders.marketplace_account_id')
+            ->leftJoin('sales_channels', 'sales_channels.id', '=', 'orders.sales_channel_id')
             ->where('orders.tenant_id', $this->tenantId())->whereBetween('orders.placed_at', [$from, $to])->where('orders.status', '!=', OrderStatus::CANCELLED)
-            ->groupBy('marketplace_accounts.id', 'marketplace_accounts.shop_name', 'marketplace_accounts.marketplace')
-            ->selectRaw('marketplace_accounts.shop_name as shop, marketplace_accounts.marketplace, COUNT(*) as orders, SUM(orders.total) as revenue')
+            ->when($accountId, fn ($q) => $q->where('orders.marketplace_account_id', $accountId))
+            ->groupBy('orders.marketplace_account_id', 'orders.sales_channel_id', 'marketplace_accounts.shop_name', 'marketplace_accounts.marketplace', 'sales_channels.name')
+            ->selectRaw("COALESCE(marketplace_accounts.shop_name, sales_channels.name, 'Khác') as shop, COALESCE(marketplace_accounts.marketplace, 'manual') as marketplace, COUNT(*) as orders, SUM(orders.total) as revenue")
             ->orderByDesc('revenue')->get();
 
         $completedGoods = (float) $completed->goods;

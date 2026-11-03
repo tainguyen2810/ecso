@@ -11,6 +11,9 @@ Schedule::call(fn () => Cache::put('ecso:scheduler:heartbeat', now()->timestamp,
 Schedule::command('horizon:snapshot')->everyFiveMinutes();
 
 // Read-only ledger integrity check; mismatches are logged as critical (INVENTORY-ENGINE.md §8).
+// Low-stock e-mail to buyers (Phase 12).
+Schedule::command('ecso:inventory:low-stock-digest')->dailyAt('07:30')->withoutOverlapping()->onOneServer();
+
 Schedule::command('ecso:inventory:verify')->dailyAt('02:30')->withoutOverlapping()->onOneServer();
 
 // Inventory outbox: retries and debounced pushes to marketplaces (INVENTORY-ENGINE.md §7).

@@ -88,16 +88,6 @@ class InventoryService
     }
 
     /**
-     * Damaged, expired or lost goods written off (DAMAGE_OUT). Same rules as issue().
-     *
-     * @param  array<int, array{variant_id: int, quantity: int}>  $lines
-     */
-    public function writeOff(Warehouse $warehouse, array $lines, string $key, ?Model $reference, ?string $reason = null): OperationResult
-    {
-        return $this->issue($warehouse, $lines, $key, $reference, StockMovement::DAMAGE_OUT, $reason);
-    }
-
-    /**
      * Goods out that do not consume a reservation (transfer out, damage, supplier return, manual shipment).
      * Never takes stock that is reserved for someone else unless the warehouse allows negative stock.
      *

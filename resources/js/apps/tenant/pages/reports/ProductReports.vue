@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 import { Lock } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
+import ReportsNav from './ReportsNav.vue';
 import Card from '@/shared/ui/Card.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
@@ -63,6 +64,7 @@ onMounted(() => {
 
 <template>
     <PageHeader title="Báo cáo" description="Sản phẩm bán chạy (tháng này) và hàng tồn bán chậm." />
+    <ReportsNav />
     <ErrorState v-if="error" :message="error" @retry="() => { error = null; loadBest(); loadSlow(); }" />
     <template v-else>
         <Card title="Bán chạy tháng này" description="Tính theo số lượng đã xuất kho (đơn đã bàn giao trở đi)." data-testid="best-sellers">
