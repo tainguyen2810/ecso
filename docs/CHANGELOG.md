@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Phase 15 — Đơn vị quy đổi (2026-11-03)
+- SKU quy đổi (thùng, hộp, lốc) = N × SKU đơn vị gốc trong cùng sản phẩm; tồn giữ ở đơn vị gốc; bán, giá vốn, hàng hoàn, đồng bộ sàn tính theo đơn vị gốc.
+
 ### Phase 14 — Combo sản phẩm (2026-11-03)
 - Loại sản phẩm Combo: một SKU gồm nhiều SKU thành phần, không có tồn riêng; tồn = số combo ghép được, theo kho.
 - Đơn hàng, POS, hàng hoàn và đồng bộ tồn lên sàn xử lý combo trên SKU thành phần; giá vốn combo = tổng giá vốn thành phần.

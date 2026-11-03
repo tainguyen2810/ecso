@@ -43,6 +43,10 @@ class ProductRequest extends FormRequest
             'variants.*.wholesale_price' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             'variants.*.weight_gram' => ['nullable', 'integer', 'min:0', 'max:1000000'],
             'variants.*.status' => ['sometimes', Rule::in(['active', 'inactive'])],
+            // Pack size (đơn vị quy đổi): this SKU = quantity × the base SKU of the same product.
+            'variants.*.conversion' => ['nullable', 'array'],
+            'variants.*.conversion.base_sku' => ['required_with:variants.*.conversion', 'string', 'max:64'],
+            'variants.*.conversion.quantity' => ['required_with:variants.*.conversion', 'integer', 'min:2', 'max:100000'],
             // Combos: the type is chosen when creating; a combo has one SKU and its components.
             'type' => $creating ? ['sometimes', Rule::in([Product::TYPE_STANDARD, Product::TYPE_COMBO])] : ['prohibited'],
             'components' => ['sometimes', 'array', 'max:30'],
@@ -88,13 +92,15 @@ class ProductRequest extends FormRequest
             return;
         }
 
-        $found = ProductVariant::query()->with('product')->whereIn('ulid', array_column($components, 'variant_id'))->get()->keyBy('ulid');
+        $found = ProductVariant::query()->with('product')->withCount('components')->whereIn('ulid', array_column($components, 'variant_id'))->get()->keyBy('ulid');
         foreach ($components as $i => $c) {
             $variant = $found->get($c['variant_id']);
             if ($variant === null) {
                 $validator->errors()->add("components.{$i}.variant_id", 'SKU không tồn tại.');
             } elseif ($variant->product?->isCombo()) {
                 $validator->errors()->add("components.{$i}.variant_id", "SKU {$variant->sku} là combo, không dùng làm thành phần.");
+            } elseif ($variant->components_count > 0) {
+                $validator->errors()->add("components.{$i}.variant_id", "SKU {$variant->sku} là đơn vị quy đổi: chọn SKU đơn vị gốc.");
             }
         }
     }
@@ -117,6 +123,7 @@ class ProductRequest extends FormRequest
             $this->checkUnique($validator, 'sku');
             $this->checkUnique($validator, 'barcode');
             $this->checkCombo($validator);
+            $this->checkConversions($validator);
         }];
     }
 
@@ -146,6 +153,33 @@ class ProductRequest extends FormRequest
             if ($conflict) {
                 $label = $field === 'sku' ? 'SKU' : 'Barcode';
                 $validator->errors()->add("variants.{$i}.{$field}", "{$label} {$value} đã tồn tại.");
+            }
+        }
+    }
+
+    /**
+     * A pack size points at a base SKU of the same request that is not itself a pack.
+     */
+    private function checkConversions(Validator $validator): void
+    {
+        $variants = $this->input('variants', []);
+        $plain = [];
+        foreach ($variants as $v) {
+            if (empty($v['conversion'])) {
+                $plain[mb_strtolower(trim((string) ($v['sku'] ?? '')))] = true;
+            }
+        }
+        foreach ($variants as $i => $v) {
+            if (empty($v['conversion'])) {
+                continue;
+            }
+            if ($this->isCombo()) {
+                $validator->errors()->add("variants.{$i}.conversion", 'Combo không có đơn vị quy đổi.');
+            } elseif (! isset($plain[mb_strtolower(trim((string) $v['conversion']['base_sku']))])) {
+                $validator->errors()->add("variants.{$i}.conversion.base_sku", 'Chọn SKU đơn vị gốc trong cùng sản phẩm.');
+            }
+            if (! empty($v['opening_qty'])) {
+                $validator->errors()->add("variants.{$i}.opening_qty", 'Nhập tồn đầu cho SKU đơn vị gốc.');
             }
         }
     }
