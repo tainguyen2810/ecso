@@ -35,7 +35,9 @@ test('payment voucher, customer debt receipt, void and print, cashbook', async (
     await page.getByTestId('v-party').fill('Tuấn');
     await page.getByTestId('v-party-results').getByRole('button').first().click();
     await expect(page.getByTestId('v-debt-mode')).toBeChecked();
-    await page.getByTestId('v-debt-all').click();
+    await expect(page.getByTestId('v-debt-all')).toBeVisible();
+    // Collect part of it: later specs (customers, sales) still need this customer to owe money.
+    await page.getByTestId('v-amount').fill('200000');
     await shot(page, '03-customer-debt-receipt');
     await page.getByTestId('v-save').click();
     await page.getByTestId('voucher-direction').getByRole('button', { name: 'Phiếu thu' }).click();

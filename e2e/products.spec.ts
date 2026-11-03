@@ -57,6 +57,9 @@ test('list filters, bulk actions and label printing', async ({ page }) => {
     await expect(page).toHaveURL(/tag=/);
     await shot(page, '04-product-filters');
     await page.getByRole('button', { name: 'Xóa bộ lọc' }).click();
+    // Wait for the unfiltered list: a reload landing after the click below would clear the selection.
+    await expect(page.getByTestId('product-table')).toContainText('Quần jean');
+    await page.waitForLoadState('networkidle');
 
     await page.getByRole('checkbox', { name: 'Chọn tất cả' }).check();
     await expect(page.getByTestId('bulk-print')).toBeVisible();
