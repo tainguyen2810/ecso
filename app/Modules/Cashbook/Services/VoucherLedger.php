@@ -2,6 +2,7 @@
 
 namespace App\Modules\Cashbook\Services;
 
+use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -75,6 +76,8 @@ class VoucherLedger
             ->leftJoin('customers as c', 'c.id', '=', 'op.customer_id')
             ->leftJoin('users as u', 'u.id', '=', 'op.created_by')
             ->where('op.tenant_id', $tenant)
+            // Exchange set-offs move no money (a refund and a payment that cancel out): not cash book entries.
+            ->where('op.method', '!=', OrderPayment::EXCHANGE)
             ->selectRaw("'order_payment' as source, op.ulid as id, NULL as number, CASE WHEN op.kind = 'refund' THEN 'payment' ELSE 'receipt' END as direction, "
                 ."NULL as type_id, CASE WHEN op.kind = 'refund' THEN 'Hoàn tiền khách' ELSE 'Thu tiền đơn hàng' END as type_name, 0 as counts_in_pnl, "
                 ."'customer' as party_kind, c.ulid as party_id, COALESCE(c.name, o.buyer_name, 'Khách lẻ') as party_name, op.method, op.amount, op.paid_at, "

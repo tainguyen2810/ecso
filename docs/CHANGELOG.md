@@ -6,7 +6,7 @@
 
 ### Phase 19 — Tag đơn, ngày hẹn giao, đổi hàng (2026-11-03)
 - Tag và ngày hẹn giao trên mọi đơn (cả đơn sàn), lọc theo tag / ngày hẹn giao, có trong file Excel.
-- Đổi hàng: tạo đơn đổi từ phiếu trả, giá trị hàng trả được bù trừ vào đơn mới (hai bút toán "Bù trừ đổi hàng", không tính là tiền mặt).
+- Đổi hàng: tạo đơn đổi từ phiếu trả, giá trị hàng trả được bù trừ vào đơn mới (hai bút toán "Bù trừ đổi hàng", không tính là tiền mặt, không vào sổ quỹ và báo cáo thanh toán).
 - Danh sách đơn: lưu bộ lọc, chọn cột hiển thị.
 
 ### Phase 18 — Thu chi: phiếu thu, phiếu chi, sổ quỹ (2026-11-03)

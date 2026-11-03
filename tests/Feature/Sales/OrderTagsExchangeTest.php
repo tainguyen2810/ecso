@@ -64,6 +64,9 @@ it('sets the returned goods off against an exchange order', function () {
 
     // Cash of the shift: 280.000 + 50.000, the set-off is not cash.
     actingInTenant($owner, $tenant)->getJson('/api/v1/pos/summary')->assertOk()->assertJsonPath('data.by_method.cash', '330000.00');
+    // Nor is it a cash book entry: only the two cash receipts are listed.
+    $vouchers = actingInTenant($owner, $tenant)->getJson('/api/v1/cash-vouchers')->assertOk()->json('data');
+    expect(collect($vouchers)->pluck('method')->all())->not->toContain(OrderPayment::EXCHANGE)->toHaveCount(2);
 
     // The set-off cannot be voided on one side only.
     $setOff = collect(actingInTenant($owner, $tenant)->getJson("/api/v1/orders/{$exchange}")->json('data.payments'))->firstWhere('method', OrderPayment::EXCHANGE);

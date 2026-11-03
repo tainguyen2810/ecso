@@ -3,6 +3,7 @@
 namespace App\Modules\Analytics\Services;
 
 use App\Modules\Orders\Domain\OrderStatus;
+use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Tenancy\Support\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -187,6 +188,7 @@ class BusinessReports
             ->leftJoin('customers as c', 'c.id', '=', 'op.customer_id')
             ->leftJoin('users as u', 'u.id', '=', 'op.created_by')
             ->where('op.tenant_id', $this->tenant())->whereNull('op.voided_at')
+            ->where('op.method', '!=', OrderPayment::EXCHANGE) // exchange set-offs move no money
             ->when($method, fn ($q) => $q->where('op.method', $method))
             ->selectRaw("op.paid_at, op.kind as type, NULL as label, op.method, CASE WHEN op.kind = 'refund' THEN -op.amount ELSE op.amount END as amount, "
                 ."o.external_order_id as document, o.ulid as document_id, 'order' as document_kind, COALESCE(c.name, o.buyer_name, 'Khách lẻ') as party, op.reference, u.name as created_by");
