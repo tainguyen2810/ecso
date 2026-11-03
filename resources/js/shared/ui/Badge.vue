@@ -4,7 +4,7 @@ import { cn } from '@/shared/lib/utils';
 const tones = {
     default: 'bg-secondary text-secondary-foreground',
     success: 'bg-success/12 text-success',
-    warning: 'bg-warning/15 text-[oklch(0.5_0.13_70)]',
+    warning: 'bg-warning/15 text-amber-600',
     danger: 'bg-destructive/10 text-destructive',
     muted: 'bg-muted text-muted-foreground',
 } as const;

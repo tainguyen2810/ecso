@@ -82,7 +82,7 @@ watch(kindKey, () => ((status.value = 'all'), (page.value = 1), load()));
         </EmptyState>
         <div v-else class="overflow-x-auto">
             <table class="w-full text-sm" data-testid="document-table">
-                <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                     <tr>
                         <th class="px-4 py-2.5 font-medium">Số phiếu</th>
                         <th class="px-4 py-2.5 font-medium">{{ kindKey === 'transfers' ? 'Từ kho → Đến kho' : 'Kho' }}</th>

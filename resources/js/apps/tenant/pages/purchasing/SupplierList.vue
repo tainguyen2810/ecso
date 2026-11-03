@@ -70,7 +70,7 @@ watch([sort, debtOnly], () => ((page.value = 1), load()));
         <EmptyState v-else-if="!rows.length" :icon="Truck" title="Chưa có nhà cung cấp" description="Thêm nhà cung cấp để lập đơn nhập hàng và theo dõi công nợ." />
         <div v-else class="overflow-x-auto">
             <table class="w-full text-sm" data-testid="supplier-table">
-                <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                     <tr>
                         <th class="px-4 py-2.5 font-medium">Nhà cung cấp</th>
                         <th class="px-4 py-2.5 font-medium">Liên hệ</th>

@@ -270,17 +270,49 @@ class OrderController extends Controller
 
     /**
      * Dashboard figures. "Ordered revenue" is the buyer-paid total of today's non-cancelled orders, not cash received
-     * (marketplace fees and settlement come with the finance module).
+     * (marketplace fees and settlement come with the finance module). `revenue_by_day` covers the last `days` days
+     * (7 or 30) split by marketplace (`manual` = own channels), same rule as today's figure.
      */
-    public function summary(): JsonResponse
+    public function summary(Request $request, OrderQuery $orders): JsonResponse
     {
         $this->authorize('viewAny', Order::class);
+        $days = (int) ($request->validate(['days' => ['nullable', Rule::in(['7', '30'])]])['days'] ?? 7);
         $today = now()->startOfDay();
-        $todayOrders = Order::query()->where('placed_at', '>=', $today)->where('status', '!=', OrderStatus::CANCELLED);
+        $placed = fn ($from, $to = null) => Order::query()->where('placed_at', '>=', $from)->when($to, fn ($q) => $q->where('placed_at', '<', $to));
+        $todayOrders = $placed($today)->where('status', '!=', OrderStatus::CANCELLED);
+
+        $from = $today->copy()->subDays($days - 1);
+        $rows = $placed($from)->where('status', '!=', OrderStatus::CANCELLED)->toBase()
+            ->selectRaw('DATE(placed_at) as day, marketplace, SUM(total) as revenue, COUNT(*) as orders')
+            ->groupByRaw('DATE(placed_at), marketplace')->get();
+        $byDay = [];
+        for ($d = $from->copy(); $d->lte($today); $d->addDay()) {
+            $byDay[$d->toDateString()] = ['date' => $d->toDateString(), 'revenue' => '0.00', 'orders' => 0, 'channels' => []];
+        }
+        $byChannel = [];
+        foreach ($rows as $r) {
+            $day = substr((string) $r->day, 0, 10);
+            if (! isset($byDay[$day])) {
+                continue;
+            }
+            $amount = number_format((float) $r->revenue, 2, '.', '');
+            $byDay[$day]['revenue'] = bcadd($byDay[$day]['revenue'], $amount, 2);
+            $byDay[$day]['orders'] += (int) $r->orders;
+            $byDay[$day]['channels'][$r->marketplace] = $amount;
+            $byChannel[$r->marketplace] = bcadd($byChannel[$r->marketplace] ?? '0', $amount, 2);
+        }
+        arsort($byChannel, SORT_NUMERIC);
 
         return response()->json(['data' => [
             'today_orders' => (clone $todayOrders)->count(),
             'today_ordered_revenue' => (string) (clone $todayOrders)->sum('total'),
+            'yesterday_ordered_revenue' => (string) $placed($today->copy()->subDay(), $today)->where('status', '!=', OrderStatus::CANCELLED)->sum('total'),
+            'today_cancelled' => $placed($today)->where('status', OrderStatus::CANCELLED)->count(),
+            'today_returns' => $placed($today)->whereIn('status', OrderStatus::TABS['returns'])->count(),
+            'queues' => $orders->tabCounts([], $request->user()->id),
+            'days' => $days,
+            'revenue_by_day' => array_values(array_map(fn ($d) => [...$d, 'channels' => (object) $d['channels']], $byDay)),
+            'revenue_by_channel' => collect($byChannel)->map(fn ($v, $k) => ['marketplace' => (string) $k, 'revenue' => $v])->values(),
             'to_process' => Order::query()->whereIn('status', OrderStatus::OPEN)->count(),
             'overdue' => Order::query()->whereIn('status', OrderStatus::OPEN)->where('ship_by_at', '<', now())->count(),
             'shortage' => Order::query()->where('has_shortage', true)->whereIn('status', OrderStatus::OPEN)->count(),

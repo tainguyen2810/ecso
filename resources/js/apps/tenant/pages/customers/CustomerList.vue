@@ -210,7 +210,7 @@ async function exportFile(onlySelected: boolean) {
     <CustomersNav />
 
     <Card>
-        <div class="flex flex-wrap items-center gap-3 border-b px-4 py-3">
+        <div class="border-b px-3">
             <Tabs
                 v-model="filters.view"
                 :tabs="[
@@ -219,6 +219,7 @@ async function exportFile(onlySelected: boolean) {
                     { value: 'inactive', label: 'Ngừng giao dịch' },
                     { value: 'debt', label: 'Đang nợ' },
                 ]"
+                variant="underline"
                 data-testid="customer-view"
             />
         </div>
@@ -334,7 +335,7 @@ async function exportFile(onlySelected: boolean) {
         </EmptyState>
         <div v-else class="overflow-x-auto" :class="loading && 'opacity-60'">
             <table class="w-full text-sm" data-testid="customer-table">
-                <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                     <tr>
                         <th v-if="canManage" class="w-10 px-4 py-2.5"><input type="checkbox" class="size-4" :checked="allSelected" aria-label="Chọn tất cả trên trang" @change="toggleAll" /></th>
                         <th class="px-4 py-2.5 font-medium">Khách hàng</th>

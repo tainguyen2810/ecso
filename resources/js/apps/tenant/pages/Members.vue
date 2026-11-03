@@ -150,7 +150,7 @@ const statusLabel = { pending: 'Đang chờ', accepted: 'Đã nhận', revoked: 
             <EmptyState v-if="!filtered.length" :icon="Users" title="Không có thành viên phù hợp" />
             <div v-else class="overflow-x-auto">
                 <table class="w-full text-sm">
-                    <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                         <tr>
                             <th class="px-4 py-2.5 font-medium">Thành viên</th>
                             <th class="px-4 py-2.5 font-medium">Vai trò</th>
@@ -210,7 +210,7 @@ const statusLabel = { pending: 'Đang chờ', accepted: 'Đã nhận', revoked: 
             </EmptyState>
             <div v-else class="overflow-x-auto">
                 <table class="w-full text-sm">
-                    <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                         <tr>
                             <th class="px-4 py-2.5 font-medium">Email</th>
                             <th class="px-4 py-2.5 font-medium">Vai trò</th>

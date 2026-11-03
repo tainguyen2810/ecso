@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { Download, Info } from 'lucide-vue-next';
+import { Banknote, Download, Info, Package, ShoppingCart, TrendingUp } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import RangePicker from './RangePicker.vue';
 import ReportsNav from './ReportsNav.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
+import KpiCard from '@/shared/ui/KpiCard.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
@@ -92,10 +93,10 @@ function exportCsv() {
     <div v-else-if="!data" class="grid gap-4 md:grid-cols-4"><Skeleton v-for="i in 4" :key="i" class="h-24" /></div>
     <template v-else>
         <div class="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="sales-kpis">
-            <Card><div class="p-4"><p class="text-xs text-muted-foreground">Đơn hàng</p><p class="mt-1 text-2xl font-semibold tabular-nums">{{ formatNumber(data.totals.orders) }}</p><p class="text-xs text-muted-foreground">{{ formatNumber(data.totals.units) }} sản phẩm</p></div></Card>
-            <Card><div class="p-4"><p class="text-xs text-muted-foreground">Doanh thu (gồm phí giao)</p><p class="mt-1 text-2xl font-semibold tabular-nums">{{ formatMoney(data.totals.revenue) }}</p><p class="text-xs text-muted-foreground">Tiền hàng {{ formatMoney(data.totals.goods) }}</p></div></Card>
-            <Card><div class="p-4"><p class="text-xs text-muted-foreground">Giá vốn</p><p class="mt-1 text-2xl font-semibold tabular-nums">{{ formatMoney(data.totals.cogs) }}</p></div></Card>
-            <Card><div class="p-4"><p class="text-xs text-muted-foreground">Lợi nhuận gộp</p><p class="mt-1 text-2xl font-semibold tabular-nums" :class="data.totals.gross_profit < 0 && 'text-destructive'">{{ formatMoney(data.totals.gross_profit) }}</p><p class="text-xs text-muted-foreground">Biên {{ data.totals.margin ?? '—' }}%</p></div></Card>
+            <KpiCard label="Đơn hàng" :icon="ShoppingCart" :value="formatNumber(data.totals.orders)">{{ formatNumber(data.totals.units) }} sản phẩm</KpiCard>
+            <KpiCard label="Doanh thu (gồm phí giao)" :icon="Banknote" tone="blue" :value="formatMoney(data.totals.revenue)">Tiền hàng {{ formatMoney(data.totals.goods) }}</KpiCard>
+            <KpiCard label="Giá vốn" :icon="Package" :value="formatMoney(data.totals.cogs)" />
+            <KpiCard label="Lợi nhuận gộp" :icon="TrendingUp" :tone="data.totals.gross_profit < 0 ? 'red' : 'green'" :value="formatMoney(data.totals.gross_profit)">Biên {{ data.totals.margin ?? '—' }}%</KpiCard>
         </div>
         <p v-if="data.totals.missing_cost_lines || data.excluded.orders" class="mb-4 flex items-start gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
             <Info class="mt-0.5 size-3.5 shrink-0" />
@@ -114,7 +115,7 @@ function exportCsv() {
             </div>
             <div class="overflow-x-auto" :class="loading && 'opacity-60'">
                 <table class="w-full text-sm" data-testid="sales-table">
-                    <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                         <tr>
                             <th class="px-4 py-2.5 font-medium">{{ firstColumn }}</th>
                             <th class="px-4 py-2.5 text-right font-medium">Đơn</th>

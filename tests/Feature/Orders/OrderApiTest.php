@@ -168,3 +168,39 @@ it('summarises orders for the dashboard without counting cancelled orders as rev
     $viewer = addMember($this->tenant, 'accountant');
     actingInTenant($viewer, $this->tenant)->getJson('/api/v1/orders/summary')->assertOk();
 });
+
+it('gives the dashboard revenue by day and marketplace, queues and yesterday for comparison', function () {
+    $today = fakeOrder($this->shop, [[$this->shirt, 1]]);
+    $yesterday = fakeOrder($this->shop, [[$this->pants, 1]]);
+    Order::withoutGlobalScopes()->whereKey($yesterday->id)->update(['placed_at' => now()->subDay()->startOfDay()->addHours(3)]);
+    $old = fakeOrder($this->shop, [[$this->pants, 1]]);
+    Order::withoutGlobalScopes()->whereKey($old->id)->update(['placed_at' => now()->subDays(20)]);
+    fakeOrder($this->shop, [[$this->shirt, 1]], 'fake_cancelled');
+    $todayTotal = (float) Order::withoutGlobalScopes()->find($today->id)->total;
+    $yesterdayTotal = (float) Order::withoutGlobalScopes()->find($yesterday->id)->total;
+    $marketplace = $this->shop->marketplace;
+
+    $api = actingInTenant($this->owner, $this->tenant);
+    $res = $api->getJson('/api/v1/orders/summary')->assertOk()
+        ->assertJsonPath('data.days', 7)
+        ->assertJsonCount(7, 'data.revenue_by_day')
+        ->assertJsonPath('data.revenue_by_day.6.date', now()->toDateString())
+        ->assertJsonPath('data.revenue_by_day.6.orders', 1)
+        ->assertJsonPath('data.revenue_by_day.5.orders', 1)
+        ->assertJsonPath('data.revenue_by_day.0.orders', 0)
+        ->assertJsonPath('data.today_cancelled', 1)
+        ->assertJsonPath('data.queues.to_pack', 3)
+        ->assertJsonPath('data.queues.cancelled', 1)
+        ->assertJsonPath('data.revenue_by_channel.0.marketplace', $marketplace);
+
+    expect((float) $res->json('data.yesterday_ordered_revenue'))->toBe($yesterdayTotal)
+        ->and((float) $res->json("data.revenue_by_day.6.channels.{$marketplace}"))->toBe($todayTotal)
+        ->and((float) $res->json('data.revenue_by_channel.0.revenue'))->toBe($todayTotal + $yesterdayTotal);
+
+    $api->getJson('/api/v1/orders/summary?days=30')->assertOk()->assertJsonCount(30, 'data.revenue_by_day');
+    $api->getJson('/api/v1/orders/summary?days=5')->assertStatus(422);
+
+    [$other, $otherOwner] = tenantWithOwner();
+    actingInTenant($otherOwner, $other)->getJson('/api/v1/orders/summary')->assertOk()
+        ->assertJsonPath('data.revenue_by_channel', [])->assertJsonPath('data.queues.all', 0);
+});

@@ -62,7 +62,7 @@ const webhookLabels: Record<string, string> = { received: 'Đã nhận', process
     <div v-else-if="!data" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Skeleton v-for="i in 8" :key="i" class="h-24" /></div>
     <template v-else>
         <div
-            :class="['mb-6 flex items-start gap-3 rounded-lg border p-4 text-sm', data.problems.length ? 'border-destructive/30 bg-destructive/5' : 'border-success/30 bg-success/5']"
+            :class="['mb-6 flex items-start gap-3 rounded-lg border p-4 text-sm', data.problems.length ? 'border-rose-200 bg-rose-50/70' : 'border-success/30 bg-success/5']"
             data-testid="monitor-status"
         >
             <AlertTriangle v-if="data.problems.length" class="mt-0.5 size-4 text-destructive" />

@@ -202,7 +202,7 @@ async function copy(text: string) {
     <template v-else>
         <div
             v-if="data.status === 'past_due'"
-            class="mb-4 flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm"
+            class="mb-4 flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50/70 p-4 text-sm"
             data-testid="past-due-banner"
         >
             <AlertTriangle class="mt-0.5 size-4 text-destructive" />
@@ -247,7 +247,7 @@ async function copy(text: string) {
                         </div>
                     </div>
                 </div>
-                <p v-if="ordersWarning" class="mt-3 text-xs text-[oklch(0.5_0.13_70)]" data-testid="orders-warning">{{ ordersWarning }}</p>
+                <p v-if="ordersWarning" class="mt-3 text-xs text-amber-600" data-testid="orders-warning">{{ ordersWarning }}</p>
             </Card>
         </div>
 

@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { AlertTriangle, FlaskConical, Link2, PlugZap, RefreshCw, Send, Unplug, Zap } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Badge from '@/shared/ui/Badge.vue';
+import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
@@ -191,6 +192,7 @@ const accountLabel = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 
             <EmptyState v-if="!accounts.length" :icon="PlugZap" title="Chưa kết nối gian hàng nào" description="Kết nối Shopee, TikTok Shop, Lazada, Tiki cần app credentials của sàn (chưa có). Trong lúc chờ, dùng shop giả lập để chạy thử toàn bộ quy trình đơn hàng và tồn kho." />
             <ul v-else class="divide-y" data-testid="account-list">
                 <li v-for="a in accounts" :key="a.id" class="flex flex-wrap items-center gap-4 px-5 py-4">
+                    <MarketplaceLogo :marketplace="a.marketplace" :name="a.marketplace_name" size="lg" />
                     <div class="min-w-56 flex-1">
                         <div class="flex items-center gap-2">
                             <span class="font-medium">{{ a.shop_name }}</span>
@@ -224,7 +226,7 @@ const accountLabel = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 
             <div class="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4" data-testid="real-marketplaces">
                 <div v-for="c in realMarketplaces" :key="c.key" class="flex flex-col rounded-md border p-4">
                     <div class="flex items-center justify-between">
-                        <span class="font-medium">{{ c.name }}</span>
+                        <span class="flex items-center gap-2 font-medium"><MarketplaceLogo :marketplace="c.key" :name="c.name" />{{ c.name }}</span>
                         <Badge v-if="!c.available" tone="muted">Chưa có connector</Badge>
                         <Badge v-else-if="!c.credentials_configured" tone="warning">Chưa có credentials</Badge>
                         <Badge v-else-if="c.capabilities['shop.authorize'] !== 'supported'" tone="muted">UNKNOWN</Badge>
@@ -312,7 +314,7 @@ const accountLabel = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 
         <Card title="Khả năng tích hợp theo sàn" description="Chỉ đánh dấu “Hỗ trợ” khi đã kiểm chứng với tài liệu chính thức và credentials. UNKNOWN = chưa có tài liệu/credentials để xác minh, hệ thống coi là không khả dụng.">
             <div class="overflow-x-auto">
                 <table class="w-full text-sm" data-testid="capability-matrix">
-                    <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                         <tr>
                             <th class="px-4 py-2.5 font-medium">Thao tác</th>
                             <th v-for="c in catalog" :key="c.key" class="px-4 py-2.5 text-center font-medium">{{ c.name }}</th>

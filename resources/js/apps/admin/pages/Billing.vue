@@ -135,7 +135,7 @@ async function cancel(row: InvoiceRow) {
 
     <ErrorState v-if="error" :message="error" @retry="load" />
     <template v-else>
-        <div v-if="summary && !summary.bank_configured" class="mb-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">
+        <div v-if="summary && !summary.bank_configured" class="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-sm">
             <AlertTriangle class="mt-0.5 size-4" />
             Chưa cấu hình tài khoản nhận tiền (BILLING_BANK_* trong .env). Khách hàng sẽ không thấy thông tin chuyển khoản.
         </div>

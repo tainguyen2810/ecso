@@ -208,7 +208,7 @@ async function remove() {
 
         <Card v-if="product.type === 'combo'" title="Thành phần combo" class="mt-5">
             <table class="w-full text-sm" data-testid="combo-components">
-                <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                     <tr>
                         <th class="px-4 py-2.5 font-medium">SKU thành phần</th>
                         <th class="px-4 py-2.5 font-medium">Sản phẩm</th>
@@ -230,7 +230,7 @@ async function remove() {
         <Card :title="product.type === 'combo' ? 'SKU và giá combo' : 'Biến thể và giá'" :description="`${product.variants?.length ?? 0} SKU`" class="mt-5">
             <div class="overflow-x-auto">
                 <table class="w-full text-sm" data-testid="variant-prices">
-                    <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                         <tr>
                             <th class="px-4 py-2.5 font-medium">SKU</th>
                             <th class="px-4 py-2.5 font-medium">Biến thể</th>
@@ -271,7 +271,7 @@ async function remove() {
 
             <div v-if="tab === 'stock'" class="overflow-x-auto">
                 <table class="w-full text-sm" data-testid="stock-by-warehouse">
-                    <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                         <tr>
                             <th class="px-4 py-2.5 font-medium">Kho</th>
                             <th class="px-4 py-2.5 font-medium">SKU</th>
@@ -291,10 +291,10 @@ async function remove() {
                             <td class="px-4 py-2.5"><span class="font-mono text-xs">{{ r.variant.sku }}</span><span v-if="r.variant.name" class="text-muted-foreground"> · {{ r.variant.name }}</span></td>
                             <td class="px-4 py-2.5 text-right tabular-nums">{{ formatNumber(r.on_hand) }}</td>
                             <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ formatNumber(r.reserved) }}</td>
-                            <td :class="cn('px-4 py-2.5 text-right font-medium tabular-nums', r.available <= 0 && 'text-destructive', r.available > 0 && r.available <= r.safety_stock && 'text-[oklch(0.5_0.13_70)]')">{{ formatNumber(r.available) }}</td>
+                            <td :class="cn('px-4 py-2.5 text-right font-medium tabular-nums', r.available <= 0 && 'text-destructive', r.available > 0 && r.available <= r.safety_stock && 'text-amber-600')">{{ formatNumber(r.available) }}</td>
                             <td class="px-4 py-2.5 text-right tabular-nums">{{ r.incoming ? formatNumber(r.incoming) : '—' }}</td>
                             <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ r.safety_stock ? formatNumber(r.safety_stock) : '—' }}</td>
-                            <td :class="cn('px-4 py-2.5 text-right tabular-nums text-muted-foreground', r.max_stock != null && r.on_hand > r.max_stock && 'font-medium text-[oklch(0.5_0.13_70)]')" :title="r.max_stock != null && r.on_hand > r.max_stock ? 'Tồn vượt mức tối đa' : undefined">
+                            <td :class="cn('px-4 py-2.5 text-right tabular-nums text-muted-foreground', r.max_stock != null && r.on_hand > r.max_stock && 'font-medium text-amber-600')" :title="r.max_stock != null && r.on_hand > r.max_stock ? 'Tồn vượt mức tối đa' : undefined">
                                 {{ r.max_stock != null ? formatNumber(r.max_stock) : '—' }}
                             </td>
                             <td class="px-4 py-2.5">
@@ -321,7 +321,7 @@ async function remove() {
                 <div v-if="!movementsLoaded" class="space-y-2 p-4"><Skeleton v-for="i in 4" :key="i" class="h-8" /></div>
                 <div v-else class="overflow-x-auto">
                     <table class="w-full text-sm" data-testid="product-movements">
-                        <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                        <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                             <tr>
                                 <th class="px-4 py-2.5 font-medium">Thời gian</th>
                                 <th class="px-4 py-2.5 font-medium">SKU</th>

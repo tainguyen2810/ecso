@@ -6,6 +6,7 @@ import RangePicker from './RangePicker.vue';
 import CashNav from '../cash/CashNav.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
+import KpiCard from '@/shared/ui/KpiCard.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
@@ -106,10 +107,10 @@ function exportCsv() {
     <div v-else-if="!data" class="grid gap-4 md:grid-cols-4"><Skeleton v-for="i in 4" :key="i" class="h-24" /></div>
     <template v-else>
         <div class="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="cashbook-kpis">
-            <Card><div class="p-4"><p class="text-xs text-muted-foreground">Tồn đầu kỳ</p><p class="mt-1 text-2xl font-semibold tabular-nums">{{ formatMoney(data.opening) }}</p></div></Card>
-            <Card><div class="p-4"><p class="text-xs text-muted-foreground">Tổng thu</p><p class="mt-1 text-2xl font-semibold tabular-nums text-success">+{{ formatMoney(data.in) }}</p></div></Card>
-            <Card><div class="p-4"><p class="text-xs text-muted-foreground">Tổng chi</p><p class="mt-1 text-2xl font-semibold tabular-nums text-destructive">−{{ formatMoney(data.out) }}</p></div></Card>
-            <Card><div class="p-4"><p class="text-xs text-muted-foreground">Tồn cuối kỳ</p><p class="mt-1 text-2xl font-semibold tabular-nums" data-testid="cashbook-closing">{{ formatMoney(data.closing) }}</p></div></Card>
+            <KpiCard label="Tồn đầu kỳ" :value="formatMoney(data.opening)" />
+            <KpiCard label="Tổng thu" tone="green" :value="'+' + formatMoney(data.in)" />
+            <KpiCard label="Tổng chi" tone="red" :value="'−' + formatMoney(data.out)" />
+            <KpiCard label="Tồn cuối kỳ" tone="blue" :value="formatMoney(data.closing)"><template #value><span data-testid="cashbook-closing">{{ formatMoney(data.closing) }}</span></template></KpiCard>
         </div>
         <Card>
             <div class="flex gap-1 border-b px-3 pt-2" role="tablist">
@@ -142,7 +143,7 @@ function exportCsv() {
             <EmptyState v-else-if="!rows.length" :icon="Search" title="Không có dòng phù hợp" description="Thử đổi tab hoặc từ khóa tìm kiếm." />
             <div v-else class="overflow-x-auto" :class="loading && 'opacity-60'">
                 <table class="w-full text-sm" data-testid="cashbook-table">
-                    <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                         <tr>
                             <th class="px-4 py-2.5 font-medium">Thời gian</th>
                             <th class="px-4 py-2.5 font-medium">Nội dung</th>

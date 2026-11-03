@@ -105,7 +105,7 @@ const steps = computed(() => {
             <Card class="lg:col-span-2" title="Chi tiết hàng hóa">
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm" data-testid="detail-lines">
-                        <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                        <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                             <tr>
                                 <th class="px-4 py-2.5 font-medium">SKU</th>
                                 <th v-if="doc.kind === 'adjustment'" class="px-4 py-2.5 font-medium">Cách nhập</th>

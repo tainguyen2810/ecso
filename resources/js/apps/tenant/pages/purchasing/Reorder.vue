@@ -81,7 +81,7 @@ async function createOrder() {
         <EmptyState v-else-if="!rows.length" :icon="Sparkles" title="Chưa cần nhập thêm" description="Không SKU nào sắp thiếu hàng theo tốc độ bán hiện tại và tồn an toàn đã đặt." />
         <div v-else class="overflow-x-auto">
             <table class="w-full text-sm" data-testid="reorder-table">
-                <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                     <tr>
                         <th class="w-10 px-4 py-2.5" />
                         <th class="px-4 py-2.5 font-medium">SKU</th>

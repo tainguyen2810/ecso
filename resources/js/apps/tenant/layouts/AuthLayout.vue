@@ -6,7 +6,7 @@ defineProps<{ title: string; subtitle?: string }>();
 
 <template>
     <div class="grid min-h-screen lg:grid-cols-2">
-        <aside class="relative hidden flex-col justify-between overflow-hidden bg-[oklch(0.27_0.06_264)] p-10 text-white lg:flex">
+        <aside class="relative hidden flex-col justify-between overflow-hidden bg-sidebar p-10 text-white lg:flex">
             <div class="flex items-center gap-2 text-lg font-semibold">
                 <span class="flex size-8 items-center justify-center rounded-md bg-white/15">E</span>
                 ECSO

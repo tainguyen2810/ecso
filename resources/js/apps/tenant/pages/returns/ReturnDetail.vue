@@ -107,7 +107,7 @@ async function submitInspect() {
             <div class="space-y-4 lg:col-span-2">
                 <Card v-if="ret.expects_goods" :title="canInspect ? 'Kiểm hàng hoàn' : 'Hàng hoàn'" :description="canInspect ? 'Nhập số lượng nhận được, bao nhiêu còn bán được và bao nhiêu hỏng. Chỉ phần còn bán được được cộng lại vào kho.' : undefined">
                     <table class="w-full text-sm" data-testid="return-lines">
-                        <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                        <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                             <tr>
                                 <th class="px-4 py-2 font-medium">Sản phẩm</th>
                                 <th class="px-4 py-2 text-right font-medium">Trả</th>

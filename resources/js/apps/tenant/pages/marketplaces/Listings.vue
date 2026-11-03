@@ -122,8 +122,8 @@ function pickVariant(v: Variant) {
     </PageHeader>
 
     <Card>
+        <div class="border-b px-3"><Tabs v-model="status" :tabs="tabs" variant="underline" /></div>
         <div class="space-y-3 border-b p-4">
-            <Tabs v-model="status" :tabs="tabs" />
             <div class="relative max-w-md">
                 <Search class="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
                 <Input v-model="q" class="pl-8" placeholder="SKU người bán, tên sản phẩm, SKU ID trên sàn…" />
@@ -134,7 +134,7 @@ function pickVariant(v: Variant) {
         <EmptyState v-else-if="!rows.length" :icon="Link2" title="Không có listing nào" description="Bấm “Tải sản phẩm” ở trang Kết nối sàn để lấy danh sách sản phẩm từ sàn." />
         <div v-else class="overflow-x-auto">
             <table class="w-full text-sm" data-testid="listing-table">
-                <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                     <tr>
                         <th class="px-4 py-2.5 font-medium">Sản phẩm trên sàn</th>
                         <th class="px-4 py-2.5 font-medium">SKU người bán</th>
