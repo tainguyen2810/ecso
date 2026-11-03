@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, PackageOpen, Repeat, Trash2, UserRound, X } from 'lucide-vue-next';
+import { AlertTriangle, ArrowLeft, Keyboard, PackageOpen, Repeat, Trash2, UserRound, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
 import TagInput from '../../components/TagInput.vue';
+import Alert from '@/shared/ui/Alert.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
@@ -306,20 +307,24 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
     <RouterLink :to="editId ? `/orders/${editId}` : '/orders'" class="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft class="size-4" /> {{ editId ? 'Chi tiết đơn' : 'Đơn hàng' }}</RouterLink>
     <PageHeader
         :title="editId ? 'Sửa đơn bán' : copiedFrom ? `Tạo đơn bán (sao chép từ ${copiedFrom})` : 'Tạo đơn bán'"
-        description="Đơn của kênh bán riêng (cửa hàng, Facebook, Zalo, website…). Hàng được giữ trong kho ngay khi lưu đơn. Phím tắt: F1 lưu đơn · F3 tìm sản phẩm · F4 tìm khách · F6 giảm giá · F7 phí giao."
-    />
+        description="Đơn của kênh bán riêng (cửa hàng, Facebook, Zalo, website…). Hàng được giữ trong kho ngay khi lưu đơn."
+    >
+        <span class="hidden items-center gap-1.5 rounded-md border bg-card px-2.5 py-1.5 text-xs text-muted-foreground lg:inline-flex">
+            <Keyboard class="size-3.5" />
+            <template v-for="(k, i) in [['F1', 'lưu'], ['F3', 'sản phẩm'], ['F4', 'khách'], ['F6', 'giảm giá'], ['F7', 'phí giao']]" :key="k[0]"><span v-if="i" class="text-border">·</span><kbd class="rounded border bg-muted px-1 font-sans text-[10px] font-semibold text-foreground">{{ k[0] }}</kbd>{{ k[1] }}</template>
+        </span>
+    </PageHeader>
 
     <div v-if="loading" class="space-y-4"><Skeleton class="h-40" /><Skeleton class="h-64" /></div>
-    <div v-if="!loading && exchange" class="mb-4 flex items-start gap-2 rounded-md border border-primary/30 bg-primary/5 px-4 py-3 text-sm" data-testid="exchange-banner">
-        <Repeat class="mt-0.5 size-4 shrink-0 text-primary" />
+    <Alert v-if="!loading && exchange" :icon="Repeat" tone="blue" class="mb-5" data-testid="exchange-banner">
         <span>
             Đơn đổi hàng cho phiếu trả <b class="font-mono">{{ exchange.number }}</b> (đơn {{ exchange.order?.external_order_id }}). Hàng trả trị giá
             <b>{{ formatMoney(exchange.goods_value) }}</b> được trừ vào đơn này, tối đa bằng số khách đã trả ở đơn cũ. Chọn sản phẩm khách lấy đổi.
         </span>
-    </div>
+    </Alert>
     <form v-if="!loading" class="grid gap-5 lg:grid-cols-3" data-testid="order-form" @submit.prevent="submit">
         <div class="space-y-5 lg:col-span-2">
-            <Card title="Sản phẩm" description="Quét mã vạch hoặc tìm SKU để thêm. Giá mặc định là giá bán tham khảo của SKU.">
+            <Card caps title="Sản phẩm" description="Quét mã vạch hoặc tìm SKU để thêm. Giá mặc định là giá bán tham khảo của SKU.">
                 <div class="border-b p-4">
                     <SkuPicker :warehouse="form.warehouse_id" :exclude="[]" placeholder="Tìm SKU, tên sản phẩm hoặc quét mã vạch (F3)" data-shortcut="sku" @pick="add" />
                     <p v-if="error?.field('lines')" class="mt-2 text-xs text-destructive">{{ error.field('lines') }}</p>
@@ -327,7 +332,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
                 <EmptyState v-if="!lines.length" :icon="PackageOpen" title="Chưa có sản phẩm" description="Tìm SKU, tên sản phẩm hoặc quét mã vạch ở ô phía trên." />
                 <div v-else class="overflow-x-auto">
                     <table class="w-full text-sm" data-testid="order-lines">
-                        <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                        <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                             <tr>
                                 <th class="px-4 py-2 font-medium">Sản phẩm</th>
                                 <th class="whitespace-nowrap px-3 py-2 text-right font-medium">Khả dụng</th>
@@ -341,11 +346,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
                         <tbody class="divide-y">
                             <tr v-for="(l, i) in lines" :key="l.variant_id" class="align-top">
                                 <td class="px-4 py-2.5">
-                                    <p class="font-mono text-xs font-medium">{{ l.sku }}</p>
-                                    <p class="max-w-44 truncate text-xs text-muted-foreground" :title="l.name">{{ l.name }}</p>
+                                    <p class="max-w-56 truncate font-medium" :title="l.name">{{ l.name }}</p>
+                                    <p class="font-mono text-[11px] text-muted-foreground">{{ l.sku }}</p>
                                 </td>
                                 <td class="px-2 py-2.5 text-right tabular-nums">
-                                    <span v-if="l.available !== null" :class="cn(num(l.quantity) > l.available && 'font-medium text-destructive')">{{ formatNumber(l.available) }}</span>
+                                    <span v-if="l.available !== null" :class="cn(num(l.quantity) > l.available && 'rounded-full bg-rose-50 px-2 font-medium text-rose-600')">{{ formatNumber(l.available) }}</span>
                                     <span v-else class="text-muted-foreground">—</span>
                                 </td>
                                 <td class="px-2 py-2.5 text-right">
@@ -358,24 +363,24 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
                                     <input v-model="l.discount" type="number" min="0" step="any" class="h-8 w-20 rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" />
                                     <p v-if="error?.field(`lines.${i}.discount`)" class="text-xs text-destructive">{{ error.field(`lines.${i}.discount`) }}</p>
                                 </td>
-                                <td class="whitespace-nowrap px-3 py-2.5 text-right font-medium tabular-nums">{{ formatMoney(lineTotal(l)) }}</td>
+                                <td class="whitespace-nowrap px-3 py-2.5 text-right font-semibold tabular-nums">{{ formatMoney(lineTotal(l)) }}</td>
                                 <td class="px-2 py-2.5 text-right">
                                     <Button variant="ghost" size="icon" class="size-8" title="Xóa dòng" @click="lines.splice(i, 1)"><Trash2 class="text-muted-foreground" /></Button>
                                 </td>
                             </tr>
                         </tbody>
                     </table>
-                    <p v-if="lines.some((l) => l.available !== null && num(l.quantity) > l.available)" class="border-t px-4 py-2 text-xs text-destructive">
+                    <Alert v-if="lines.some((l) => l.available !== null && num(l.quantity) > l.available)" :icon="AlertTriangle" tone="amber" class="m-4 text-xs">
                         Có sản phẩm vượt số khả dụng: đơn vẫn lưu được (giữ phần còn lại, thiếu sẽ được giữ khi nhập hàng) nhưng không xuất kho được cho đến khi đủ hàng.
-                    </p>
+                    </Alert>
                 </div>
             </Card>
 
-            <Card title="Khách hàng">
+            <Card caps title="Khách hàng">
                 <div class="space-y-3 p-4">
-                    <div v-if="customer" class="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2" data-testid="selected-customer">
+                    <div v-if="customer" class="flex items-center justify-between rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2.5" data-testid="selected-customer">
                         <div class="flex items-center gap-2 text-sm">
-                            <UserRound class="size-4 text-muted-foreground" />
+                            <span class="grid size-7 place-items-center rounded-full bg-white text-blue-500"><UserRound class="size-4" /></span>
                             <span class="font-medium">{{ customer.name }}</span>
                             <span class="font-mono text-xs text-muted-foreground">{{ customer.code }}</span>
                             <span v-if="customer.phone" class="text-muted-foreground">{{ customer.phone }}</span>
@@ -403,16 +408,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
                         <FormField label="Tên khách" for="nc-name" :error="error?.field('customer.name')"><Input id="nc-name" v-model="newCustomer.name" required data-testid="nc-name" /></FormField>
                         <FormField label="Số điện thoại" for="nc-phone" :error="error?.field('phone') ?? error?.field('customer.phone')"><Input id="nc-phone" v-model="newCustomer.phone" inputmode="tel" data-testid="nc-phone" /></FormField>
                         <FormField label="Địa chỉ" for="nc-address" class="sm:col-span-2"><Input id="nc-address" v-model="newCustomer.address" /></FormField>
-                        <div v-if="phoneMatch" class="flex items-center justify-between rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm sm:col-span-2">
-                            <span>Số này đã có: <b>{{ phoneMatch.name }}</b> ({{ phoneMatch.code }})</span>
-                            <Button size="sm" variant="outline" @click="chooseCustomer(phoneMatch)">Dùng khách này</Button>
-                        </div>
+                        <Alert v-if="phoneMatch" :icon="UserRound" tone="amber" class="sm:col-span-2">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <span>Số này đã có: <b>{{ phoneMatch.name }}</b> ({{ phoneMatch.code }})</span>
+                                <Button size="sm" variant="outline" @click="chooseCustomer(phoneMatch)">Dùng khách này</Button>
+                            </div>
+                        </Alert>
                         <div class="sm:col-span-2"><Button size="sm" variant="ghost" @click="newCustomer.enabled = false">Hủy thêm khách</Button></div>
                     </div>
                 </div>
             </Card>
 
-            <Card title="Giao hàng">
+            <Card caps title="Giao hàng">
                 <div class="grid gap-3 p-4 sm:grid-cols-2">
                     <FormField label="Người nhận" for="o-name"><Input id="o-name" v-model="form.buyer_name" /></FormField>
                     <FormField label="Điện thoại" for="o-phone"><Input id="o-phone" v-model="form.buyer_phone" inputmode="tel" /></FormField>
@@ -430,7 +437,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
         </div>
 
         <div class="space-y-5">
-            <Card title="Đơn hàng" class="lg:sticky lg:top-4">
+            <Card caps title="Đơn hàng" class="lg:sticky lg:top-4">
                 <div class="space-y-4 p-5">
                     <FormField label="Kênh bán" for="o-channel" :error="error?.field('channel_id')">
                         <Select id="o-channel" v-model="form.channel_id" :options="activeChannels" :disabled="!!editId" data-testid="order-channel" />
@@ -440,20 +447,20 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
                     </FormField>
                     <div v-if="!editId" class="space-y-1.5">
                         <p class="text-xs font-medium text-muted-foreground">Trạng thái khi lưu</p>
-                        <label v-for="s in stages" :key="s.value" :class="cn('flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm', form.stage === s.value && 'border-primary bg-primary/5')">
+                        <label v-for="s in stages" :key="s.value" :class="cn('flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted/40', form.stage === s.value && 'border-blue-300 bg-blue-50/70 hover:bg-blue-50/70')">
                             <input v-model="form.stage" type="radio" :value="s.value" class="mt-1" :data-testid="`stage-${s.value}`" />
                             <span><span class="font-medium">{{ s.label }}</span><span class="block text-xs text-muted-foreground">{{ s.hint }}</span></span>
                         </label>
                     </div>
 
-                    <dl class="space-y-2 rounded-md bg-muted/50 p-3 text-sm">
+                    <dl class="space-y-2 rounded-lg border bg-slate-50 p-3 text-sm">
                         <div class="flex justify-between"><dt class="text-muted-foreground">Tiền hàng</dt><dd class="tabular-nums">{{ formatMoney(subtotal) }}</dd></div>
                         <div class="flex items-center justify-between gap-2"><dt class="text-muted-foreground">Phí giao hàng <kbd class="text-[10px]">F7</kbd></dt><dd><input v-model="form.shipping_fee" type="number" min="0" class="h-7 w-28 rounded border border-input bg-card px-2 text-right text-sm tabular-nums" data-testid="shipping-fee" /></dd></div>
                         <div class="flex items-center justify-between gap-2"><dt class="text-muted-foreground">Giảm giá đơn <kbd class="text-[10px]">F6</kbd></dt><dd><input v-model="form.discount" type="number" min="0" class="h-7 w-28 rounded border border-input bg-card px-2 text-right text-sm tabular-nums" data-testid="order-discount" /></dd></div>
                         <p v-if="error?.field('discount')" class="text-xs text-destructive">{{ error.field('discount') }}</p>
-                        <div class="flex justify-between border-t pt-2 text-base font-semibold"><dt>Khách phải trả</dt><dd class="tabular-nums" data-testid="order-total">{{ formatMoney(total) }}</dd></div>
+                        <div class="flex items-baseline justify-between border-t pt-2 font-semibold"><dt>Khách phải trả</dt><dd class="text-xl font-bold tabular-nums text-blue-600" data-testid="order-total">{{ formatMoney(total) }}</dd></div>
                         <template v-if="exchange">
-                            <div class="flex justify-between text-primary"><dt>Trừ hàng đổi trả</dt><dd class="tabular-nums" data-testid="exchange-credit">−{{ formatMoney(exchangeCredit) }}</dd></div>
+                            <div class="flex justify-between text-emerald-600"><dt>Trừ hàng đổi trả</dt><dd class="tabular-nums" data-testid="exchange-credit">−{{ formatMoney(exchangeCredit) }}</dd></div>
                             <div class="flex justify-between font-semibold"><dt>Còn phải trả</dt><dd class="tabular-nums">{{ formatMoney(total - exchangeCredit) }}</dd></div>
                         </template>
                     </dl>
@@ -469,7 +476,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
                     </div>
 
                     <p v-if="error && error.field('stock')" class="text-sm text-destructive" data-testid="stock-error">{{ error.field('stock') }}</p>
-                    <Button type="submit" class="w-full" :loading="saving" :disabled="!lines.length || !form.channel_id" data-testid="submit-order">{{ editId ? 'Lưu thay đổi' : 'Tạo đơn' }} <kbd class="ml-1 text-[10px] opacity-70">F1</kbd></Button>
+                    <Button type="submit" size="lg" class="w-full" :loading="saving" :disabled="!lines.length || !form.channel_id" data-testid="submit-order">{{ editId ? 'Lưu thay đổi' : 'Tạo đơn' }} <kbd class="ml-1 text-[10px] opacity-70">F1</kbd></Button>
                 </div>
             </Card>
         </div>

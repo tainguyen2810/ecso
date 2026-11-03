@@ -37,6 +37,8 @@ Chốt ngày 03/11/2026 cùng màn Tổng quan mới (tham khảo bố cục T�
 | `charts/StackedBarChart` | Cột chồng theo ngày, mỗi chuỗi một màu; có chú thích, trục tiền rút gọn ("10 tr"), tooltip số chính xác. |
 | `charts/DonutChart` | Tỷ trọng (doanh thu theo sàn) kèm chú thích %. |
 | `MarketplaceLogo` | Logo sàn (`public/images/marketplaces/<sàn>.webp`: shopee, tiktok, lazada, tiki); kênh riêng hiện icon cửa hàng. Dùng ở mọi chỗ hiện tên sàn/gian hàng. |
+| `Alert` | Hộp thông báo trong trang (tone `blue` thông tin, `amber` cần chú ý, `red` lỗi/thiếu hàng), icon bên trái. Thay cho các khung `border-warning/...` viết tay. |
+| `Tabs` (tenant/components) | `variant="underline"` cho tab trạng thái của trang danh sách (gạch chân xanh, số đếm trong pill); mặc định là tab dạng nút. |
 | `Badge` | Trạng thái (tone `success`, `warning`, `danger`, `muted`, `default`). |
 | `EmptyState` | Khối chưa có dữ liệu, kèm hành động tiếp theo. |
 
@@ -45,6 +47,12 @@ Mẫu hay dùng (viết trực tiếp bằng Tailwind, không cần component ri
 - **Hộp thông tin tô nhạt** (Thông tin kho): `rounded-lg px-4 py-3` + `toneClasses[tone].soft`, số dùng `toneClasses[tone].value`, mũi tên `ChevronRight` bên phải.
 - **Danh sách xếp hạng** (Top sản phẩm): số thứ tự trong vòng tròn `size-6`, top 3 `bg-blue-100 text-blue-600`, còn lại `bg-slate-100 text-slate-500`.
 - **Dòng thời gian** (Đơn hàng gần đây): chấm `bg-blue-400 ring-4 ring-blue-50`, đường nối nét đứt `border-blue-200`.
+
+## Trang danh sách và chi tiết (mẫu: Đơn hàng)
+
+- **Danh sách:** dải hàng đợi (`OrderPipeline`: icon tròn + số + tiền, ô đang lọc viền xanh) → Card gồm tab gạch chân, hàng bộ lọc, "Lọc nhanh" dạng chip (chọn = `bg-blue-50 text-blue-700`), thanh thao tác hàng loạt `bg-blue-50` dính trên cùng, bảng header `bg-slate-50` chữ 11px in hoa. Dòng: logo sàn + mã đơn màu primary đậm + dòng phụ xám; tiền in đậm; hạn giao quá hạn/sắp hạn là pill đỏ/vàng.
+- **Chi tiết:** khung đầu trang (logo, mã, trạng thái, tag, nút phụ dạng `outline sm`) kèm thanh tiến trình bước (xong = xanh đặc, bước hiện tại = viền xanh + vòng sáng, dừng = đỏ). Cột phải 340px: thẻ thao tác chính đặt đầu, nút bước tiếp theo `size=lg`, nút hủy chữ đỏ. Tổng tiền nổi bật `text-lg font-bold text-blue-600`. Lịch sử dùng dòng thời gian.
+- **Form:** các Card `caps`, cột phải dính (`lg:sticky`) chứa tóm tắt + nút lưu `size=lg`; lựa chọn dạng thẻ radio (chọn = `border-blue-300 bg-blue-50/70`); phím tắt hiển thị bằng `kbd` ở đầu trang.
 
 ## Bố cục
 
