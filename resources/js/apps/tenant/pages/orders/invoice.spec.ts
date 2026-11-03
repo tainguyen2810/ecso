@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { invoiceHtml } from './invoice';
+import { invoiceHtml, invoicesHtml } from './invoice';
 import { actionLabels, manualActionOrder, paymentMethods, paymentStatus } from './labels';
 import type { OrderDetail } from '@/shared/types';
 
@@ -48,6 +48,14 @@ describe('sales invoice', () => {
         expect(html).toContain('Chị &lt;Lan&gt;');
         expect(html).toContain('A&amp;B');
         expect(html).toContain('size: A5');
+    });
+
+    it('prints several receipts in one document, one per page', () => {
+        const html = invoicesHtml([order(), order({ external_order_id: 'SO-000013' })], 'Shop');
+        expect(html.match(/<html/g)).toHaveLength(1);
+        expect(html.match(/page-break-after/g)).toHaveLength(2);
+        expect(html).toContain('SO-000012');
+        expect(html).toContain('SO-000013');
     });
 
     it('labels every manual action, payment method and payment status', () => {

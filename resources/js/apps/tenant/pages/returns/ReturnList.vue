@@ -25,7 +25,7 @@ const type = ref('');
 const q = ref('');
 const page = ref(1);
 
-const tabs = computed(() => [{ value: 'all', label: 'Tất cả' }, ...['received', 'in_transit', 'requested', 'approved', 'inspected', 'closed', 'rejected'].map((s) => ({ value: s, label: returnStatus[s]!.label }))]);
+const tabs = computed(() => [{ value: 'all', label: 'Tất cả' }, { value: 'pending_receipt', label: 'Chưa nhận hàng' }, ...['received', 'in_transit', 'requested', 'approved', 'inspected', 'closed', 'rejected'].map((s) => ({ value: s, label: returnStatus[s]!.label }))]);
 
 async function load() {
     loading.value = true;
@@ -72,6 +72,7 @@ watch([status, type], () => ((page.value = 1), load()));
                         <th class="px-4 py-2.5 font-medium">Số phiếu</th>
                         <th class="px-4 py-2.5 font-medium">Đơn hàng</th>
                         <th class="px-4 py-2.5 font-medium">Loại</th>
+                        <th class="px-4 py-2.5 font-medium">Lý do</th>
                         <th class="px-4 py-2.5 text-right font-medium">Số dòng</th>
                         <th class="px-4 py-2.5 text-right font-medium">Hoàn tiền</th>
                         <th class="px-4 py-2.5 font-medium">Trạng thái</th>
@@ -84,6 +85,7 @@ watch([status, type], () => ((page.value = 1), load()));
                         <td class="px-4 py-3 font-mono text-xs font-medium">{{ r.number }}</td>
                         <td class="px-4 py-3"><span class="font-mono text-xs">{{ r.order?.external_order_id }}</span> <span class="text-xs text-muted-foreground">· {{ marketplaceNames[r.order?.marketplace ?? ''] }}</span></td>
                         <td class="px-4 py-3">{{ returnTypes[r.type] }}</td>
+                        <td class="max-w-56 truncate px-4 py-3 text-muted-foreground" :title="r.reason ?? ''">{{ r.reason ?? '—' }}</td>
                         <td class="px-4 py-3 text-right tabular-nums">{{ r.lines_count }}</td>
                         <td class="px-4 py-3 text-right tabular-nums">{{ formatMoney(r.refund_amount) }}</td>
                         <td class="px-4 py-3"><Badge :tone="returnStatus[r.status]?.tone">{{ returnStatus[r.status]?.label }}</Badge></td>
