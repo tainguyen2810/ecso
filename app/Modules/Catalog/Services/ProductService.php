@@ -36,10 +36,12 @@ class ProductService
                 if ($product->isCombo()) {
                     $this->syncComponents($variant, $data['components'] ?? []);
                 }
-                if ((int) ($input['opening_qty'] ?? 0) > 0) {
+                if ((int) ($input['opening_qty'] ?? 0) > 0 && empty($input['conversion'])) {
                     $opening[] = ['variant_id' => $variant->id, 'quantity' => (int) $input['opening_qty'], 'unit_cost' => (string) ($input['opening_cost'] ?? 0)];
                 }
             }
+
+            $this->syncConversions($product, $data['variants']);
 
             if ($opening !== [] && $openingWarehouse !== null) {
                 $this->documents->receive($openingWarehouse, $opening, 'Tồn đầu khi tạo sản phẩm', StockReceipt::SOURCE_OPENING);
@@ -90,6 +92,8 @@ class ProductService
                     }
                 }
 
+                $this->syncConversions($product, $data['variants']);
+
                 foreach ($existing->whereNotIn('id', $kept) as $removed) {
                     $this->deleteVariant($removed);
                 }
@@ -106,7 +110,8 @@ class ProductService
     public function delete(Product $product): void
     {
         DB::transaction(function () use ($product) {
-            foreach ($product->variants()->get() as $variant) {
+            // Pack sizes first: their base SKU is only free to delete once they are gone.
+            foreach ($product->variants()->withCount('components')->get()->sortByDesc('components_count') as $variant) {
                 $this->deleteVariant($variant);
             }
             $product->delete();
@@ -161,6 +166,38 @@ class ProductService
             $combo->components()->create($c);
         }
         $this->audit->record('product.combo_components', $combo->product, ['sku' => $combo->sku, 'components' => count($components)]);
+    }
+
+    /**
+     * Pack sizes (đơn vị quy đổi) of a standard product: a SKU such as "Thùng 24 chai" is stored as a one-component
+     * combo of the base SKU, so it holds, ships and publishes stock in base units. Inputs refer to the base by SKU
+     * (it may be new in the same request). A variant sent without conversion stops being a pack.
+     *
+     * @param  array<int, array<string, mixed>>  $inputs
+     */
+    private function syncConversions(Product $product, array $inputs): void
+    {
+        if ($product->isCombo()) {
+            return;
+        }
+        $bySku = $product->variants()->with('components')->get()->keyBy(fn (ProductVariant $v) => mb_strtolower($v->sku));
+
+        foreach ($inputs as $input) {
+            $variant = $bySku->get(mb_strtolower(ProductVariant::normalizeSku((string) $input['sku'])));
+            if ($variant === null) {
+                continue;
+            }
+            $conversion = $input['conversion'] ?? null;
+            if ($conversion) {
+                $base = $bySku->get(mb_strtolower(trim((string) $conversion['base_sku'])));
+                $current = $variant->components->first();
+                if ($variant->components->count() !== 1 || $current->component_variant_id !== $base->id || $current->quantity !== (int) $conversion['quantity']) {
+                    $this->syncComponents($variant, [['component_variant_id' => $base->id, 'quantity' => (int) $conversion['quantity']]]);
+                }
+            } elseif ($variant->components->isNotEmpty()) {
+                $this->syncComponents($variant, []);
+            }
+        }
     }
 
     private function deleteVariant(ProductVariant $variant): void

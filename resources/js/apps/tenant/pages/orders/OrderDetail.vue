@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import { AlertTriangle, ArrowLeft, Ban, Banknote, Link2, Pencil, Printer, ReceiptText, RefreshCw, Undo2 } from 'lucide-vue-next';
+import { AlertTriangle, ArrowLeft, Ban, Banknote, Check, Copy, Link2, Pencil, Printer, ReceiptText, RefreshCw, Undo2, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
@@ -13,12 +13,13 @@ import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
-import { formatDateTime, formatMoney } from '@/shared/lib/utils';
+import { cn, formatDateTime, formatMoney } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { actionLabels, capabilityLabels, deadlineLabel, historySource, manualActionOrder, mappingStatus, marketplaceNames, orderStatus, paymentMethods, paymentStatus, returnStatus, returnTypes } from './labels';
 import { printInvoice } from './invoice';
 import { downloadPackingSlips } from './packingSlip';
+import { orderWorkflow } from './workflow';
 import type { OrderDetail, Ref } from '@/shared/types';
 
 const route = useRoute();
@@ -110,6 +111,7 @@ async function voidPayment(id: string) {
         toast.error((e as ApiError).message);
     }
 }
+const workflow = computed(() => (order.value ? orderWorkflow(order.value) : []));
 const totalQty = computed(() => order.value?.items.reduce((s, i) => s + i.quantity, 0) ?? 0);
 
 async function act(action: string, params: Record<string, unknown> = {}) {
@@ -221,7 +223,26 @@ async function createReturn() {
             <Button v-if="isManual && order.editable && tenant.can('orders.create')" variant="outline" data-testid="edit-order" @click="$router.push(`/orders/${order.id}/edit`)"><Pencil /> Sửa đơn</Button>
             <Button v-if="isManual" variant="outline" data-testid="print-invoice" @click="printInvoice(order, tenant.current?.name ?? '')"><ReceiptText /> In hóa đơn</Button>
             <Button v-if="tenant.can('orders.print')" variant="outline" :loading="busy === 'print'" @click="print"><Printer /> In phiếu</Button>
+            <Button v-if="tenant.can('orders.create')" variant="outline" data-testid="copy-order" @click="$router.push({ path: '/orders/new', query: { copy: order.id } })"><Copy /> Sao chép</Button>
         </PageHeader>
+
+        <ol class="mb-4 grid grid-cols-5 rounded-lg border bg-card px-2 py-3 text-center text-xs" data-testid="order-workflow">
+            <li v-for="(s, idx) in workflow" :key="idx" class="relative flex flex-col items-center gap-1 px-1">
+                <span v-if="idx > 0" :class="cn('absolute right-1/2 top-3 h-0.5 w-full -translate-y-1/2', s.state === 'todo' ? 'bg-border' : s.state === 'stopped' ? 'bg-destructive/50' : 'bg-primary')" />
+                <span
+                    :class="cn(
+                        'relative z-10 flex size-6 items-center justify-center rounded-full border-2 bg-card text-[11px] font-semibold',
+                        s.state === 'done' && 'border-primary bg-primary text-primary-foreground',
+                        s.state === 'stopped' && 'border-destructive bg-destructive text-white',
+                        s.state === 'todo' && 'border-border text-muted-foreground',
+                    )"
+                >
+                    <Check v-if="s.state === 'done'" class="size-3.5" /><X v-else-if="s.state === 'stopped'" class="size-3.5" /><template v-else>{{ idx + 1 }}</template>
+                </span>
+                <span :class="cn('font-medium', s.state === 'todo' && 'text-muted-foreground', s.state === 'stopped' && 'text-destructive')">{{ s.label }}</span>
+                <span class="text-[11px] text-muted-foreground">{{ s.at ? formatDateTime(s.at) : '' }}</span>
+            </li>
+        </ol>
 
         <div v-if="order.sync_warning" class="mb-4 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-4 py-3 text-sm" data-testid="sync-warning">
             <AlertTriangle class="mt-0.5 size-4 shrink-0" /> {{ order.sync_warning }}
@@ -380,6 +401,23 @@ async function createReturn() {
                             </div>
                         </li>
                     </ul>
+                </Card>
+
+                <Card v-if="order.customer && order.customer_stats" title="Khách hàng" data-testid="customer-stats">
+                    <div class="px-5 pt-3 text-sm">
+                        <RouterLink :to="`/customers/${order.customer.id}`" class="font-medium text-primary hover:underline">{{ order.customer.name }}</RouterLink>
+                        <span class="ml-1 font-mono text-xs text-muted-foreground">{{ order.customer.code }}</span>
+                    </div>
+                    <dl class="grid grid-cols-2 gap-y-1 px-5 py-3 text-sm">
+                        <dt class="text-muted-foreground">Công nợ</dt>
+                        <dd :class="cn('text-right tabular-nums', Number(order.customer_stats.debt) > 0 && 'font-medium text-destructive')">{{ formatMoney(order.customer_stats.debt) }}</dd>
+                        <dt class="text-muted-foreground">Tổng chi tiêu ({{ order.customer_stats.orders_count }} đơn)</dt>
+                        <dd class="text-right tabular-nums">{{ formatMoney(order.customer_stats.total_spent) }}</dd>
+                        <dt class="text-muted-foreground">Phiếu trả hàng</dt>
+                        <dd class="text-right tabular-nums">{{ order.customer_stats.returns_count }}</dd>
+                        <dt class="text-muted-foreground">Giao thất bại</dt>
+                        <dd :class="cn('text-right tabular-nums', order.customer_stats.failed_deliveries > 0 && 'font-medium text-destructive')">{{ order.customer_stats.failed_deliveries }}</dd>
+                    </dl>
                 </Card>
 
                 <Card title="Giao hàng">

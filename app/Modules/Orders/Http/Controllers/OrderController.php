@@ -14,17 +14,23 @@ use App\Modules\Orders\Http\Resources\ReturnResource;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
 use App\Modules\Orders\Models\OrderNote;
+use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Orders\Models\OrderStatusHistory;
 use App\Modules\Orders\Services\OrderActions;
+use App\Modules\Orders\Services\OrderExporter;
 use App\Modules\Orders\Services\OrderQuery;
 use App\Modules\Orders\Services\OrderSync;
 use App\Modules\Sales\Http\Resources\PaymentResource;
+use App\Modules\Sales\Models\Customer;
+use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Sales\Services\ManualOrderService;
+use App\Modules\Sales\Services\PaymentService;
 use App\Modules\Tenancy\Models\TenantUser;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class OrderController extends Controller
 {
@@ -44,6 +50,22 @@ class OrderController extends Controller
             ->paginate((int) ($filters['per_page'] ?? 30));
 
         return OrderResource::collection($page)->additional(['meta' => ['counts' => $orders->tabCounts($filters, $request->user()->id)]])->response();
+    }
+
+    /** "Orders to handle" strip above the order list. */
+    public function pipeline(OrderQuery $orders): JsonResponse
+    {
+        $this->authorize('viewAny', Order::class);
+
+        return response()->json(['data' => $orders->pipeline()]);
+    }
+
+    /** XLSX of the orders matching the list filters (all tabs and pages, up to OrderExporter::MAX_ROWS). */
+    public function export(Request $request, OrderExporter $exporter): StreamedResponse
+    {
+        $this->authorize('viewAny', Order::class);
+
+        return $exporter->stream($this->filters($request), $request->user()->id);
     }
 
     public function show(Order $order, ReservationLedger $ledger, ConnectorRegistry $connectors): JsonResponse
@@ -95,6 +117,7 @@ class OrderController extends Controller
             'editable' => $order->isManual() && in_array($order->status, ManualOrderService::EDITABLE, true),
             'payments' => PaymentResource::collection($order->payments),
             'created_by' => $order->creator?->name,
+            'customer_stats' => $order->customer_id ? $this->customerStats($order) : null,
             'capabilities' => $capabilities,
         ]])->response();
     }
@@ -107,15 +130,21 @@ class OrderController extends Controller
         return new OrderResource($actions->perform($order, $action, $params)->load(['account', 'channel', 'assignee']));
     }
 
-    public function bulk(Request $request, OrderActions $actions): JsonResponse
+    public function bulk(Request $request, OrderActions $actions, PaymentService $payments): JsonResponse
     {
         $data = $request->validate([
             'ids' => ['required', 'array', 'min:1', 'max:200'],
             'ids.*' => ['string'],
-            'action' => ['required', Rule::in(['confirm', 'pack', 'handover', 'assign'])],
+            'action' => ['required', Rule::in(['confirm', 'pack', 'handover', 'cancel', 'pay', 'assign'])],
             'user_id' => ['nullable', 'string'],
+            'reason' => ['nullable', 'string', 'max:255'],
+            'method' => [Rule::requiredIf($request->input('action') === 'pay'), Rule::in(OrderPayment::METHODS)],
         ]);
-        $this->authorize($data['action'] === 'assign' ? 'assign' : 'update', Order::class);
+        $this->authorize(match ($data['action']) {
+            'assign' => 'assign',
+            'pay' => 'pay',
+            default => 'update',
+        }, Order::class);
         $orders = Order::query()->with(['account', 'channel'])->whereIn('ulid', $data['ids'])->get();
 
         if ($data['action'] === 'assign') {
@@ -127,7 +156,11 @@ class OrderController extends Controller
             return response()->json(['data' => $orders->map(fn ($o) => ['id' => $o->ulid, 'ok' => true, 'message' => null])]);
         }
 
-        return response()->json(['data' => $actions->bulk($orders, $data['action'])]);
+        if ($data['action'] === 'pay') {
+            return response()->json(['data' => $this->payInFull($orders, $data['method'], $payments)]);
+        }
+
+        return response()->json(['data' => $actions->bulk($orders, $data['action'], ['reason' => $data['reason'] ?? null])]);
     }
 
     public function assign(Request $request, Order $order, OrderActions $actions): OrderResource
@@ -226,6 +259,57 @@ class OrderController extends Controller
         return response()->json(['data' => $members->filter(fn (TenantUser $m) => $m->user !== null)->map(fn ($m) => ['id' => $m->user->ulid, 'name' => $m->user->name])->values()]);
     }
 
+    /**
+     * "Thanh toán nhanh": collects what is still due on each manual order in one payment. One failure does not stop
+     * the others.
+     *
+     * @param  iterable<Order>  $orders
+     * @return array<int, array{id: string, ok: bool, message: string|null}>
+     */
+    private function payInFull(iterable $orders, string $method, PaymentService $payments): array
+    {
+        $results = [];
+        foreach ($orders as $order) {
+            $due = $order->balanceDue();
+            if (! $order->isManual() || $order->status === OrderStatus::CANCELLED || bccomp($due, '0', 2) <= 0) {
+                $results[] = ['id' => $order->ulid, 'ok' => false, 'message' => match (true) {
+                    ! $order->isManual() => 'Đơn sàn do sàn thu tiền.',
+                    $order->status === OrderStatus::CANCELLED => 'Đơn đã hủy.',
+                    default => 'Đơn đã thu đủ tiền.',
+                }];
+
+                continue;
+            }
+            try {
+                $payments->record($order, ['method' => $method, 'amount' => $due, 'note' => 'Thanh toán nhanh']);
+                $results[] = ['id' => $order->ulid, 'ok' => true, 'message' => null];
+            } catch (ValidationException $e) {
+                $results[] = ['id' => $order->ulid, 'ok' => false, 'message' => collect($e->errors())->flatten()->first()];
+            }
+        }
+
+        return $results;
+    }
+
+    /**
+     * Buyer summary shown beside the order: what they bought, still owe, returned and refused.
+     *
+     * @return array<string, mixed>
+     */
+    private function customerStats(Order $order): array
+    {
+        $customer = Customer::query()->withStats()->whereKey($order->customer_id)->first();
+        $orderIds = Order::query()->where('customer_id', $order->customer_id)->select('id');
+
+        return [
+            'orders_count' => (int) ($customer->orders_count ?? 0),
+            'total_spent' => bcadd((string) ($customer->total_spent ?? 0), '0', 2),
+            'debt' => bcadd((string) ($customer->debt ?? 0), '0', 2),
+            'returns_count' => OrderReturn::query()->whereIn('order_id', $orderIds)->where('type', OrderReturn::TYPE_RETURN)->count(),
+            'failed_deliveries' => Order::query()->where('customer_id', $order->customer_id)->where('status', OrderStatus::FAILED_DELIVERY)->count(),
+        ];
+    }
+
     private function member(?string $ulid): ?User
     {
         if ($ulid === null) {
@@ -259,7 +343,7 @@ class OrderController extends Controller
             'sku' => ['nullable', 'string'],
             'assignee' => ['nullable', 'string'],
             'flags' => ['nullable', 'array'],
-            'flags.*' => [Rule::in(['shortage', 'unmapped', 'overdue', 'due_soon', 'warning', 'not_printed'])],
+            'flags.*' => [Rule::in(['shortage', 'unmapped', 'overdue', 'due_soon', 'warning', 'not_printed', 'payment_due'])],
             'sort' => ['nullable', Rule::in(['newest', 'oldest', 'ship_by'])],
             'per_page' => ['nullable', 'integer', 'min:10', 'max:100'],
         ]);

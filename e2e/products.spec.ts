@@ -123,3 +123,57 @@ test('combo: create from components, stock follows components', async ({ page })
     await page.goto('/products?type=combo');
     await expect(page.getByTestId('product-table')).toContainText(`Combo áo + quần ${suffix}`);
 });
+
+test('pack size: sell by the case, stock in bottles', async ({ page }) => {
+    await login(page, 'owner@demo.test');
+    await page.goto('/products/new');
+    const suffix = Date.now().toString().slice(-5);
+    await page.getByTestId('product-name').fill(`Bia lon 330ml ${suffix}`);
+    await page.getByTestId('product-unit').fill('Lon');
+    await page.getByTestId('sku-0').fill(`BIA${suffix}`);
+    await page.getByLabel('Giá bán lẻ').first().fill('15000');
+    await page.getByTestId('opening-qty-0').fill('100');
+    await page.getByTestId('opening-cost-0').fill('11000');
+    await page.getByTestId('add-pack').click();
+    await page.getByTestId('pack-name-1').fill('Thùng 24 lon');
+    await page.getByTestId('pack-qty-1').fill('24');
+    await page.getByTestId('pack-sku-1').fill(`BIA${suffix}-T24`);
+    await page.getByLabel('Giá bán lẻ đơn vị quy đổi').fill('340000');
+    await shot(page, '11-pack-form');
+    await page.getByTestId('save-product').click();
+
+    await expect(page).toHaveURL(/\/products\/[0-9A-Z]{26}$/);
+    await expect(page.getByTestId('pack-conversion')).toContainText(`24 × BIA${suffix}`);
+    // 100 cans make 4 full cases.
+    await expect(page.getByTestId('stock-by-warehouse')).toContainText(`BIA${suffix}-T24`);
+    await expect(page.getByText('Tồn thực tế', { exact: true }).first().locator('..')).toContainText('100');
+    await shot(page, '12-pack-detail');
+});
+
+test('bin location, max stock, labels from a receipt, saved filter and columns', async ({ page }) => {
+    await login(page, 'owner@demo.test');
+    await page.goto('/products');
+    await page.getByTestId('product-table').getByRole('link', { name: 'Quần jean slim fit' }).click();
+    await page.getByTestId('locate-QJS-XANH-DAM-29-MAIN').click();
+    await page.getByTestId('bin-location').fill('A-03-2');
+    await page.getByTestId('max-stock').fill('5');
+    await shot(page, '13-bin-location');
+    await page.getByTestId('save-location').click();
+    await expect(page.getByTestId('locate-QJS-XANH-DAM-29-MAIN')).toContainText('A-03-2');
+
+    await page.goto('/inventory/receipts');
+    await page.getByTestId('document-table').locator('tbody tr').first().click();
+    await page.getByTestId('print-receipt-labels').click();
+    await expect(page.getByTestId('label-table')).toBeVisible();
+    await expect(page.getByTestId('label-qty-0')).not.toHaveValue('1');
+
+    await page.goto('/products?type=combo');
+    page.once('dialog', (d) => d.accept('Combo đang bán'));
+    await page.getByTestId('save-view').click();
+    await expect(page.getByTestId('saved-views')).toContainText('Combo đang bán');
+    await page.getByTestId('columns-button').click();
+    await page.getByTestId('columns-menu').getByLabel('Ngày tạo').uncheck();
+    await expect(page.getByTestId('product-table').locator('th', { hasText: 'Ngày tạo' })).toHaveCount(0);
+    await shot(page, '14-saved-filters');
+    await page.getByTestId('columns-menu').getByLabel('Ngày tạo').check();
+});

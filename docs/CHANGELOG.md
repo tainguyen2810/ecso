@@ -12,6 +12,21 @@
 - Nhập/xuất Excel khách hàng: tiêu đề tiếng Việt, file mẫu, khớp theo mã khách rồi số điện thoại, kiểm tra toàn bộ trước khi ghi. File xuất nhập lại được.
 - Trang chi tiết: tab Đơn hàng / Công nợ (sổ nợ có số dư chạy) / Thu-hoàn tiền / Địa chỉ giao hàng (nhiều địa chỉ) / Ghi chú theo thời gian; thẻ điều khoản của nhóm.
 
+### Phase 17 — Màn hình đơn hàng (2026-11-03)
+- Dải "Đơn cần xử lý" (số đơn, tổng tiền theo hàng đợi), bấm để lọc.
+- Xem nhanh đơn ngay trong danh sách; bộ lọc theo ngày, thanh toán, trạng thái, khách, sản phẩm.
+- Hàng loạt: thanh toán nhanh, hủy đơn kèm lý do, in hóa đơn nhiều đơn. Xuất Excel theo bộ lọc.
+- Chi tiết đơn: thanh tiến trình, sao chép đơn, tóm tắt khách hàng. Tạo đơn: phím tắt F1/F3/F4/F6/F7.
+- Trả hàng: tab "Chưa nhận hàng", cột lý do.
+
+### Phase 16 — Vị trí lưu kho, tồn tối đa, in tem từ phiếu nhập, lưu bộ lọc (2026-11-03)
+- Vị trí lưu kho và tồn tối đa theo kho × SKU; gợi ý nhập hàng không vượt tồn tối đa.
+- In tem mã vạch thẳng từ phiếu nhập kho và đơn nhập hàng.
+- Danh sách sản phẩm: lưu bộ lọc, chọn cột hiển thị.
+
+### Phase 15 — Đơn vị quy đổi (2026-11-03)
+- SKU quy đổi (thùng, hộp, lốc) = N × SKU đơn vị gốc trong cùng sản phẩm; tồn giữ ở đơn vị gốc; bán, giá vốn, hàng hoàn, đồng bộ sàn tính theo đơn vị gốc.
+
 ### Phase 14 — Combo sản phẩm (2026-11-03)
 - Loại sản phẩm Combo: một SKU gồm nhiều SKU thành phần, không có tồn riêng; tồn = số combo ghép được, theo kho.
 - Đơn hàng, POS, hàng hoàn và đồng bộ tồn lên sàn xử lý combo trên SKU thành phần; giá vốn combo = tổng giá vốn thành phần.

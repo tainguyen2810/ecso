@@ -56,13 +56,22 @@ ${order.buyer_note ? `<hr><p>Ghi chú: ${esc(order.buyer_note)}</p>` : ''}
 </body></html>`;
 }
 
-export function printInvoice(order: OrderDetail, shopName: string, size: InvoiceSize = 'k80'): void {
+/** Several receipts in one print job, one per page. */
+export function invoicesHtml(orders: OrderDetail[], shopName: string, size: InvoiceSize = 'k80'): string {
+    const pages = orders.map((o) => invoiceHtml(o, shopName, size));
+    const body = (html: string) => html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('</body>'));
+    const head = pages[0]!.slice(0, pages[0]!.indexOf('<body>') + 6);
+
+    return `${head}${pages.map((p) => `<section style="page-break-after: always">${body(p)}</section>`).join('')}</body></html>`;
+}
+
+export function printInvoice(order: OrderDetail | OrderDetail[], shopName: string, size: InvoiceSize = 'k80'): void {
     const frame = document.createElement('iframe');
     frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
     document.body.appendChild(frame);
     const doc = frame.contentDocument!;
     doc.open();
-    doc.write(invoiceHtml(order, shopName, size));
+    doc.write(Array.isArray(order) ? invoicesHtml(order, shopName, size) : invoiceHtml(order, shopName, size));
     doc.close();
     setTimeout(() => {
         frame.contentWindow!.focus();

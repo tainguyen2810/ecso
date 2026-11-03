@@ -22,6 +22,7 @@ class StockBalance extends Model
             'on_hand' => 'integer',
             'reserved' => 'integer',
             'safety_stock' => 'integer',
+            'max_stock' => 'integer',
             'version' => 'integer',
         ];
     }

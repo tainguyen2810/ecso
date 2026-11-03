@@ -19,13 +19,16 @@ class ReturnController extends Controller
     {
         $this->authorize('viewAny', OrderReturn::class);
         $filters = $request->validate([
-            'status' => ['nullable', Rule::in(array_keys(OrderReturn::FLOW))],
+            // pending_receipt: goods expected back but not received yet (the "Chưa nhận hàng" tab).
+            'status' => ['nullable', Rule::in([...array_keys(OrderReturn::FLOW), 'pending_receipt'])],
             'type' => ['nullable', Rule::in(OrderReturn::TYPES)],
             'q' => ['nullable', 'string', 'max:64'],
         ]);
 
         return ReturnResource::collection(OrderReturn::query()->with(['order', 'warehouse'])->withCount('lines')
-            ->when($filters['status'] ?? null, fn ($q, $s) => $q->where('status', $s))
+            ->when($filters['status'] ?? null, fn ($q, $s) => $s === 'pending_receipt'
+                ? $q->where('type', '!=', OrderReturn::TYPE_REFUND_ONLY)->whereIn('status', [OrderReturn::REQUESTED, OrderReturn::APPROVED, OrderReturn::IN_TRANSIT])
+                : $q->where('status', $s))
             ->when($filters['type'] ?? null, fn ($q, $t) => $q->where('type', $t))
             ->when($filters['q'] ?? null, fn ($q, $term) => $q->where(fn ($w) => $w->where('number', 'like', "%{$term}%")
                 ->orWhereHas('order', fn ($o) => $o->where('external_order_id', 'like', "%{$term}%"))))
