@@ -25,7 +25,7 @@ class PurchaseService
     public function __construct(private readonly InventoryDocumentService $documents, private readonly AuditLogger $audit) {}
 
     /**
-     * @param  array{supplier: Supplier, warehouse: Warehouse, lines: array<int, array{variant_id: int, quantity: int, unit_cost: string|int|float}>, expected_at?: string|null, note?: string|null, place?: bool}  $data
+     * @param  array{supplier: Supplier, warehouse: Warehouse, lines: array<int, array{variant_id: int, quantity: int, unit_cost: string|int|float, tax_rate?: string|int|float|null}>, expected_at?: string|null, note?: string|null, place?: bool, extra_cost?: string|int|float|null, extra_cost_note?: string|null, extra_cost_to_supplier?: bool, vat_in_cost?: bool}  $data
      */
     public function create(array $data): PurchaseOrder
     {
@@ -38,6 +38,7 @@ class PurchaseService
                 'status' => PurchaseOrder::DRAFT,
                 'expected_at' => $data['expected_at'] ?? null,
                 'note' => $data['note'] ?? null,
+                ...$this->costHeader($data),
             ]);
             $po->forceFill(['number' => DocumentNumber::next('PO'), 'created_by' => Auth::id()])->save();
             $this->replaceLines($po, $data['lines']);
@@ -54,7 +55,7 @@ class PurchaseService
     /**
      * Header and lines can change until the first goods arrive.
      *
-     * @param  array{supplier?: Supplier, warehouse?: Warehouse, lines?: array<int, array{variant_id: int, quantity: int, unit_cost: string|int|float}>, expected_at?: string|null, note?: string|null}  $data
+     * @param  array{supplier?: Supplier, warehouse?: Warehouse, lines?: array<int, array{variant_id: int, quantity: int, unit_cost: string|int|float, tax_rate?: string|int|float|null}>, expected_at?: string|null, note?: string|null, extra_cost?: string|int|float|null, extra_cost_note?: string|null, extra_cost_to_supplier?: bool, vat_in_cost?: bool}  $data
      */
     public function update(PurchaseOrder $po, array $data): PurchaseOrder
     {
@@ -71,9 +72,12 @@ class PurchaseService
                 $po->warehouse_id = $data['warehouse']->id;
             }
             $po->fill(array_intersect_key($data, array_flip(['expected_at', 'note'])));
+            $po->fill(array_intersect_key($this->costHeader($data), $data));
             $po->save();
             if (isset($data['lines'])) {
                 $this->replaceLines($po, $data['lines']);
+            } else {
+                $this->recomputeTotals($po);
             }
             $this->audit->record('purchase.updated', $po, ['number' => $po->number]);
 
@@ -112,6 +116,8 @@ class PurchaseService
             $poLines = $po->lines()->lockForUpdate()->get()->keyBy('product_variant_id');
             $receiptLines = [];
             $value = '0';
+            $tax = '0';
+            $extra = '0';
 
             foreach ($lines as $i => $line) {
                 $poLine = $poLines->get($line['variant_id']);
@@ -124,9 +130,16 @@ class PurchaseService
                 if ($line['quantity'] > $poLine->remaining()) {
                     throw ValidationException::withMessages(["lines.{$i}.quantity" => "Chỉ còn {$poLine->remaining()} chưa nhận."]);
                 }
+                $qty = (string) $line['quantity'];
                 $cost = bcadd((string) ($line['unit_cost'] ?? $poLine->unit_cost), '0', 4);
-                $receiptLines[] = ['variant_id' => $poLine->product_variant_id, 'quantity' => $line['quantity'], 'unit_cost' => $cost];
-                $value = bcadd($value, bcmul($cost, (string) $line['quantity'], 4), 4);
+                $unitTax = bcdiv(bcmul($cost, (string) $poLine->tax_rate, 6), '100', 4);
+                $unitExtra = $this->extraCostPerUnit($po, $poLine, $poLines);
+                $landed = bcadd(bcadd($cost, $po->vat_in_cost ? $unitTax : '0', 4), $unitExtra, 4);
+                $receiptLines[] = ['variant_id' => $poLine->product_variant_id, 'quantity' => $line['quantity'], 'unit_cost' => $landed];
+
+                $value = bcadd($value, bcmul(bcadd($cost, $unitTax, 4), $qty, 4), 4);
+                $tax = bcadd($tax, bcmul($unitTax, $qty, 4), 4);
+                $extra = bcadd($extra, bcmul($unitExtra, $qty, 4), 4);
                 $poLine->increment('received_qty', $line['quantity']);
             }
 
@@ -138,13 +151,18 @@ class PurchaseService
             $receipt = $this->documents->receive($warehouse, $receiptLines, $note ?? "Nhận hàng {$po->number}", StockReceipt::SOURCE_PURCHASE, $po->id);
 
             $complete = $poLines->every(fn (PurchaseOrderLine $l) => $l->remaining() === 0);
+            if ($po->extra_cost_to_supplier) {
+                $value = bcadd($value, $extra, 4);
+            }
             $po->forceFill([
                 'received_value' => bcadd((string) $po->received_value, $value, 2),
+                'received_tax' => bcadd((string) $po->received_tax, $tax, 2),
+                'received_extra_cost' => bcadd((string) $po->received_extra_cost, $extra, 2),
                 'status' => $complete ? PurchaseOrder::RECEIVED : PurchaseOrder::PARTIAL,
                 'ordered_at' => $po->ordered_at ?? now(),
                 'received_at' => now(),
             ])->save();
-            $this->audit->record('purchase.received', $po, ['number' => $po->number, 'receipt' => $receipt->number, 'value' => $value]);
+            $this->audit->record('purchase.received', $po, ['number' => $po->number, 'receipt' => $receipt->number, 'value' => bcadd($value, '0', 2), 'tax' => bcadd($tax, '0', 2), 'extra_cost' => bcadd($extra, '0', 2)]);
 
             return $receipt;
         });
@@ -194,7 +212,7 @@ class PurchaseService
     }
 
     /**
-     * @param  array<int, array{variant_id: int, quantity: int, unit_cost: string|int|float}>  $lines
+     * @param  array<int, array{variant_id: int, quantity: int, unit_cost: string|int|float, tax_rate?: string|int|float|null}>  $lines
      */
     private function replaceLines(PurchaseOrder $po, array $lines): void
     {
@@ -202,20 +220,73 @@ class PurchaseService
             throw ValidationException::withMessages(['lines' => 'Đơn nhập cần ít nhất một sản phẩm.']);
         }
         $po->lines()->delete();
-        $total = '0';
         $merged = [];
         foreach ($lines as $line) {
             $key = $line['variant_id'];
-            $cost = bcadd((string) $line['unit_cost'], '0', 4);
             if (isset($merged[$key])) {
                 $merged[$key]['quantity'] += $line['quantity'];
             } else {
-                $merged[$key] = ['product_variant_id' => $key, 'quantity' => $line['quantity'], 'unit_cost' => $cost];
+                $merged[$key] = [
+                    'product_variant_id' => $key,
+                    'quantity' => $line['quantity'],
+                    'unit_cost' => bcadd((string) $line['unit_cost'], '0', 4),
+                    'tax_rate' => bcadd((string) ($line['tax_rate'] ?? 0), '0', 2),
+                ];
             }
-            $total = bcadd($total, bcmul($cost, (string) $line['quantity'], 4), 4);
         }
         $po->lines()->createMany(array_values($merged));
-        $po->forceFill(['total' => bcadd($total, '0', 2)])->save();
+        $this->recomputeTotals($po);
+    }
+
+    /** Goods + VAT, plus the purchase costs when they are on the supplier's invoice. */
+    private function recomputeTotals(PurchaseOrder $po): void
+    {
+        $subtotal = '0';
+        $tax = '0';
+        foreach ($po->lines()->get() as $line) {
+            $goods = bcmul((string) $line->unit_cost, (string) $line->quantity, 4);
+            $subtotal = bcadd($subtotal, $goods, 4);
+            $tax = bcadd($tax, bcdiv(bcmul($goods, (string) $line->tax_rate, 6), '100', 4), 4);
+        }
+        $total = bcadd($subtotal, $tax, 4);
+        if ($po->extra_cost_to_supplier) {
+            $total = bcadd($total, (string) $po->extra_cost, 4);
+        }
+        $po->forceFill(['subtotal' => bcadd($subtotal, '0', 2), 'tax_amount' => bcadd($tax, '0', 2), 'total' => bcadd($total, '0', 2)])->save();
+    }
+
+    /**
+     * Purchase costs are spread over the ordered goods by value (by quantity when everything is free), so each unit
+     * received carries its share whatever the delivery it arrives in.
+     *
+     * @param  Collection<int, PurchaseOrderLine>  $lines
+     */
+    public function extraCostPerUnit(PurchaseOrder $po, PurchaseOrderLine $line, Collection $lines): string
+    {
+        if (bccomp((string) $po->extra_cost, '0', 2) <= 0) {
+            return '0';
+        }
+        $orderedValue = $lines->reduce(fn (string $sum, PurchaseOrderLine $l) => bcadd($sum, bcmul((string) $l->unit_cost, (string) $l->quantity, 4), 4), '0');
+        if (bccomp($orderedValue, '0', 4) > 0) {
+            return bcdiv(bcmul((string) $po->extra_cost, (string) $line->unit_cost, 8), $orderedValue, 4);
+        }
+        $units = (string) $lines->sum('quantity');
+
+        return $units === '0' ? '0' : bcdiv((string) $po->extra_cost, $units, 4);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{extra_cost: string, extra_cost_note: string|null, extra_cost_to_supplier: bool, vat_in_cost: bool}
+     */
+    private function costHeader(array $data): array
+    {
+        return [
+            'extra_cost' => bcadd((string) ($data['extra_cost'] ?? 0), '0', 2),
+            'extra_cost_note' => $data['extra_cost_note'] ?? null,
+            'extra_cost_to_supplier' => (bool) ($data['extra_cost_to_supplier'] ?? false),
+            'vat_in_cost' => (bool) ($data['vat_in_cost'] ?? false),
+        ];
     }
 
     private function assertSupplier(Supplier $supplier): void

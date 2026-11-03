@@ -138,8 +138,9 @@ class DemoSeeder extends Seeder
         $partial = $purchases->create(['supplier' => $anPhat, 'warehouse' => $warehouse, 'lines' => [$line(2, 50), $line(3, 20)], 'place' => true, 'expected_at' => now()->addDays(3)->toDateString()]);
         $purchases->receive($partial, [['variant_id' => $variants[2]->id, 'quantity' => 25]]);
 
-        // Ordered, nothing arrived yet; and a draft.
-        $purchases->create(['supplier' => $minhLong, 'warehouse' => $warehouse, 'lines' => [$line(1, 20), $line(4, 15)], 'place' => true, 'expected_at' => now()->addDays(7)->toDateString()]);
+        // Ordered with 10 % VAT and freight paid to a carrier, nothing arrived yet; and a draft.
+        $purchases->create(['supplier' => $minhLong, 'warehouse' => $warehouse, 'lines' => [[...$line(1, 20), 'tax_rate' => 10], [...$line(4, 15), 'tax_rate' => 10]], 'place' => true,
+            'expected_at' => now()->addDays(7)->toDateString(), 'extra_cost' => 150000, 'extra_cost_note' => 'Xe tải Minh Long → kho']);
         $purchases->create(['supplier' => $anPhat, 'warehouse' => $warehouse, 'lines' => [$line(3, 10)], 'note' => 'Chờ báo giá']);
     }
 

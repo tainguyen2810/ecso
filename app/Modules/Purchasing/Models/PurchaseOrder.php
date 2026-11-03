@@ -17,6 +17,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $ordered_at
  * @property Carbon|null $received_at
  * @property Carbon|null $closed_at
+ * @property bool $extra_cost_to_supplier
+ * @property bool $vat_in_cost
  */
 class PurchaseOrder extends Model
 {
@@ -51,6 +53,13 @@ class PurchaseOrder extends Model
             'received_at' => 'datetime',
             'closed_at' => 'datetime',
             'total' => 'decimal:2',
+            'subtotal' => 'decimal:2',
+            'tax_amount' => 'decimal:2',
+            'extra_cost' => 'decimal:2',
+            'extra_cost_to_supplier' => 'boolean',
+            'vat_in_cost' => 'boolean',
+            'received_tax' => 'decimal:2',
+            'received_extra_cost' => 'decimal:2',
             'received_value' => 'decimal:2',
             'returned_value' => 'decimal:2',
             'paid_amount' => 'decimal:2',

@@ -21,7 +21,7 @@ class SupplierReturn extends Model
 
     protected function casts(): array
     {
-        return ['total' => 'decimal:2'];
+        return ['total' => 'decimal:2', 'tax_amount' => 'decimal:2'];
     }
 
     /** @return BelongsTo<Supplier, $this> */

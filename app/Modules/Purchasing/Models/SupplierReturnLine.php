@@ -15,7 +15,7 @@ class SupplierReturnLine extends Model
 
     protected function casts(): array
     {
-        return ['quantity' => 'integer', 'unit_cost' => 'decimal:4'];
+        return ['quantity' => 'integer', 'unit_cost' => 'decimal:4', 'tax_rate' => 'decimal:2'];
     }
 
     /** @return BelongsTo<ProductVariant, $this> */

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import { ArrowLeft, Ban, CircleCheck, PackageCheck, Pencil, Send, Tags, Undo2, Wallet } from 'lucide-vue-next';
+import { ArrowLeft, Ban, CircleCheck, PackageCheck, Pencil, Printer, Send, Tags, Undo2, Wallet } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import SupplierPaymentDialog from './SupplierPaymentDialog.vue';
 import Badge from '@/shared/ui/Badge.vue';
@@ -17,6 +17,7 @@ import { formatDate, formatDateTime, formatMoney, formatNumber } from '@/shared/
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { owed, poStatus, supplierPaymentMethods } from './labels';
+import { printPurchaseOrder } from './printOrder';
 import type { PurchaseOrderData } from '@/shared/types';
 
 const route = useRoute();
@@ -69,7 +70,13 @@ function openReceive() {
     receiveCost.value = Object.fromEntries((po.value?.lines ?? []).map((l) => [l.variant!.id, String(Math.round(Number(l.unit_cost)))]));
     receiveOpen.value = true;
 }
-const receiveTotal = computed(() => (po.value?.lines ?? []).reduce((t, l) => t + (Number(receiveQty.value[l.variant!.id]) || 0) * (Number(receiveCost.value[l.variant!.id]) || 0), 0));
+// Goods + VAT of this delivery (what it adds to the supplier debt, before any freight on the supplier invoice).
+const receiveTotal = computed(() =>
+    (po.value?.lines ?? []).reduce((t, l) => t + (Number(receiveQty.value[l.variant!.id]) || 0) * (Number(receiveCost.value[l.variant!.id]) || 0) * (1 + Number(l.tax_rate) / 100), 0),
+);
+function print() {
+    if (po.value) printPurchaseOrder(po.value, { name: tenant.current?.name ?? '' });
+}
 async function receive() {
     busy.value = true;
     receiveError.value = null;
@@ -142,6 +149,7 @@ async function voidPayment(id: string) {
             >
                 <Button variant="outline" data-testid="po-labels"><Tags /> In tem hàng đã nhận</Button>
             </RouterLink>
+            <Button variant="outline" data-testid="po-print" @click="print"><Printer /> In phiếu đặt hàng</Button>
             <Button v-if="po.status === 'draft' && tenant.can('purchasing.manage')" :loading="busy" @click="act('place')"><Send /> Đặt hàng</Button>
             <Button v-if="isOpen && (tenant.can('purchasing.manage') || tenant.can('inventory.receive'))" data-testid="po-receive" @click="openReceive"><PackageCheck /> Nhận hàng</Button>
             <Button v-if="tenant.can('purchasing.payment') && po.status !== 'cancelled' && due > 0" variant="outline" data-testid="po-pay" @click="payOpen = true"><Wallet /> Chi tiền</Button>
@@ -163,7 +171,7 @@ async function voidPayment(id: string) {
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                            <tr><th class="px-4 py-2 font-medium">SKU</th><th class="px-4 py-2 text-right font-medium">Đặt</th><th class="px-4 py-2 text-right font-medium">Đã nhận</th><th class="px-4 py-2 text-right font-medium">Đã trả</th><th class="px-4 py-2 text-right font-medium">Còn chờ</th><th class="px-4 py-2 text-right font-medium">Đơn giá</th></tr>
+                            <tr><th class="px-4 py-2 font-medium">SKU</th><th class="px-4 py-2 text-right font-medium">Đặt</th><th class="px-4 py-2 text-right font-medium">Đã nhận</th><th class="px-4 py-2 text-right font-medium">Đã trả</th><th class="px-4 py-2 text-right font-medium">Còn chờ</th><th class="px-4 py-2 text-right font-medium">Đơn giá</th><th class="px-4 py-2 text-right font-medium">VAT</th><th class="px-4 py-2 text-right font-medium" title="Giá vốn mỗi đơn vị khi nhập kho theo giá đặt">Giá vốn</th></tr>
                         </thead>
                         <tbody class="divide-y">
                             <tr v-for="l in po.lines" :key="l.variant?.id">
@@ -173,10 +181,23 @@ async function voidPayment(id: string) {
                                 <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ l.returned_qty ? formatNumber(l.returned_qty) : '—' }}</td>
                                 <td class="px-4 py-2.5 text-right tabular-nums" :class="l.remaining > 0 && isOpen && 'font-medium text-[oklch(0.5_0.13_70)]'">{{ l.remaining ? formatNumber(l.remaining) : '—' }}</td>
                                 <td class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(l.unit_cost) }}</td>
+                                <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ Number(l.tax_rate) }}%</td>
+                                <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ formatMoney(l.landed_unit_cost) }}</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
+                <dl class="grid grid-cols-[1fr_auto] gap-x-6 gap-y-1 border-t px-5 py-3 text-sm sm:ml-auto sm:w-96" data-testid="po-cost-summary">
+                    <dt class="text-muted-foreground">Tiền hàng</dt><dd class="text-right tabular-nums">{{ formatMoney(po.subtotal) }}</dd>
+                    <dt class="text-muted-foreground">Thuế GTGT{{ po.vat_in_cost ? ' (tính vào giá vốn)' : ' (được khấu trừ)' }}</dt><dd class="text-right tabular-nums">{{ formatMoney(po.tax_amount) }}</dd>
+                    <template v-if="Number(po.extra_cost)">
+                        <dt class="text-muted-foreground">Chi phí nhập{{ po.extra_cost_note ? ` · ${po.extra_cost_note}` : '' }} ({{ po.extra_cost_to_supplier ? 'trả NCC' : 'trả bên khác' }})</dt><dd class="text-right tabular-nums">{{ formatMoney(po.extra_cost) }}</dd>
+                    </template>
+                    <dt class="font-medium">Phải trả NCC</dt><dd class="text-right font-semibold tabular-nums">{{ formatMoney(po.total) }}</dd>
+                    <template v-if="Number(po.received_tax) || Number(po.received_extra_cost)">
+                        <dt class="pt-1 text-xs text-muted-foreground">Đã nhận: VAT đầu vào / chi phí đã phân bổ</dt><dd class="pt-1 text-right text-xs tabular-nums text-muted-foreground">{{ formatMoney(po.received_tax) }} / {{ formatMoney(po.received_extra_cost) }}</dd>
+                    </template>
+                </dl>
                 <p v-if="po.note" class="border-t px-5 py-3 text-sm text-muted-foreground">Ghi chú: {{ po.note }}</p>
             </Card>
             <div class="space-y-4">
@@ -223,7 +244,7 @@ async function voidPayment(id: string) {
                     </tbody>
                 </table>
                 <FormField label="Ghi chú phiếu nhập"><Input v-model="receiveNote" placeholder="Số hóa đơn NCC, người giao…" /></FormField>
-                <p class="text-right text-sm">Giá trị đợt này: <span class="font-semibold tabular-nums">{{ formatMoney(receiveTotal) }}</span></p>
+                <p class="text-right text-sm">Giá trị đợt này (gồm VAT): <span class="font-semibold tabular-nums">{{ formatMoney(receiveTotal) }}</span></p>
                 <p v-if="receiveError && (receiveError.field('lines') || !receiveError.body.errors)" class="text-sm text-destructive">{{ receiveError.field('lines') ?? receiveError.message }}</p>
             </form>
             <template #footer>

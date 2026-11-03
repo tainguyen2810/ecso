@@ -73,3 +73,50 @@ test('purchasing: return to supplier and reorder suggestions', async ({ page }) 
     await page.waitForLoadState('networkidle');
     await shot(page, '08-reorder-suggestions');
 });
+
+test('purchasing: VAT, purchase costs in the landed cost, printed order', async ({ page }) => {
+    const dir = 'docs/screenshots/purchase-costs';
+    await login(page, 'owner@demo.test');
+    await page.goto('/purchasing/new');
+    await page.getByTestId('po-supplier').selectOption({ label: 'NCC-000002 · Công ty TNHH Phụ Kiện An Phát' });
+    await page.getByLabel('VAT mặc định cho dòng mới').selectOption('10');
+    for (const sku of ['ATC-TRANG-M', 'QKK-REU-30']) {
+        await page.getByTestId('sku-picker').fill(sku);
+        await page.getByTestId('sku-picker').press('Enter');
+    }
+    await page.getByTestId('po-qty-0').fill('10');
+    await page.getByTestId('po-cost-0').fill('100000');
+    await page.getByTestId('po-qty-1').fill('20');
+    await page.getByTestId('po-cost-1').fill('50000');
+    await page.getByTestId('po-vat-1').selectOption('8');
+    await page.getByTestId('po-extra-cost').fill('200000');
+    await expect(page.getByTestId('po-tax')).toContainText('180.000');
+    await expect(page.getByTestId('po-total')).toContainText('2.180.000');
+    await expect(page.getByTestId('po-landed-0')).toHaveText('110.000');
+    await page.evaluate(() => document.querySelectorAll<HTMLElement>('[role="status"]').forEach((t) => t.click()));
+    await baseShot(page, '01-po-form-vat-costs', dir);
+    await page.getByTestId('po-place').click();
+    await expect(page.getByTestId('po-status')).toHaveText('Đã đặt hàng');
+    await expect(page.getByTestId('po-cost-summary')).toContainText('2.180.000');
+
+    await baseShot(page, '02-po-detail-vat-costs', dir);
+
+    // The printed order: grab the print frame before it is removed and render it on its own page.
+    await page.getByTestId('po-print').click();
+    await expect.poll(async () => (await Promise.all(page.frames().map((f) => f.content().catch(() => '')))).some((c) => c.includes('ĐƠN ĐẶT HÀNG')), { timeout: 3000 }).toBeTruthy();
+    const printed = (await Promise.all(page.frames().map((f) => f.content().catch(() => '')))).find((c) => c.includes('ĐƠN ĐẶT HÀNG'))!;
+    expect(printed).toContain('An Phát');
+    const sheet = await page.context().newPage();
+    await sheet.setViewportSize({ width: 794, height: 1123 });
+    await sheet.setContent(printed);
+    await sheet.screenshot({ path: `${dir}/04-printed-purchase-order.png`, fullPage: true });
+    await sheet.close();
+
+    await page.getByTestId('po-receive').click();
+    await page.getByTestId('rcv-save').click();
+    await expect(page.getByTestId('po-status')).toHaveText('Đã nhận đủ');
+    await expect(page.getByTestId('po-due')).toContainText('2.180.000');
+    await expect(page.getByTestId('po-cost-summary')).toContainText('200.000');
+    await page.evaluate(() => document.querySelectorAll<HTMLElement>('[role="status"]').forEach((t) => t.click()));
+    await baseShot(page, '03-po-received-landed-cost', dir);
+});
