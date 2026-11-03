@@ -175,7 +175,7 @@ class OrderController extends Controller
         return response()->json(['data' => $orders->map(fn (Order $o) => [
             'id' => $o->ulid,
             'external_order_id' => $o->external_order_id,
-            'shop' => $o->account?->shop_name ?? $o->channel?->name,
+            'shop' => $o->account->shop_name ?? $o->channel?->name,
             'marketplace' => $o->marketplace,
             'placed_at' => $o->placed_at?->toIso8601String(),
             'ship_by_at' => $o->ship_by_at?->toIso8601String(),

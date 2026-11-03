@@ -269,7 +269,7 @@ class ManualOrderService
 
         foreach (['shipping_fee', 'discount'] as $field) {
             if (array_key_exists($field, $data)) {
-                $order->{$field} = bcadd((string) ($data[$field] ?? 0), '0', 2);
+                $order->forceFill([$field => bcadd((string) ($data[$field] ?? 0), '0', 2)]);
             }
         }
         foreach (['note' => 'buyer_note', 'carrier' => 'shipping_carrier', 'tracking_number' => 'tracking_number', 'ship_by_at' => 'ship_by_at'] as $input => $column) {
