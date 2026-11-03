@@ -26,6 +26,8 @@ use App\Modules\Purchasing\Services\PurchaseService;
 use App\Modules\Purchasing\Services\SupplierPaymentService;
 use App\Modules\Purchasing\Services\SupplierReturnService;
 use App\Modules\Purchasing\Services\SupplierService;
+use App\Modules\Sales\Models\CustomerGroup;
+use App\Modules\Sales\Models\CustomerNote;
 use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Sales\Services\CustomerService;
 use App\Modules\Sales\Services\ManualOrderService;
@@ -151,13 +153,19 @@ class DemoSeeder extends Seeder
         $facebook = SalesChannel::query()->create(['name' => 'Fanpage Cửa hàng Mẫu', 'type' => 'facebook', 'is_active' => true]);
         $zalo = SalesChannel::query()->create(['name' => 'Zalo OA', 'type' => 'zalo', 'is_active' => true]);
 
+        $vip = CustomerGroup::query()->create(['code' => 'VIP', 'name' => 'Khách VIP', 'description' => 'Mua trên 5 triệu/năm', 'price_tier' => 'retail', 'discount_percent' => 5, 'payment_method' => 'bank_transfer']);
+        $wholesale = CustomerGroup::query()->create(['code' => 'SI', 'name' => 'Khách sỉ', 'description' => 'Đại lý, cửa hàng lấy sỉ', 'price_tier' => 'wholesale', 'discount_percent' => 0, 'payment_method' => 'bank_transfer']);
+        CustomerGroup::query()->create(['code' => 'LE', 'name' => 'Khách lẻ', 'price_tier' => 'retail', 'discount_percent' => 0]);
+
         $people = collect([
-            ['name' => 'Lê Thị Hoa', 'phone' => '0912345678', 'address' => '12 Nguyễn Trãi, Quận 1, TP.HCM', 'group' => 'VIP'],
-            ['name' => 'Phạm Minh Tuấn', 'phone' => '0987654321', 'address' => '45 Lý Thường Kiệt, Hà Nội', 'group' => 'Sỉ'],
-            ['name' => 'Đỗ Thu Trang', 'phone' => '0909111222', 'address' => '8 Trần Phú, Đà Nẵng'],
-            ['name' => 'Võ Quốc Bảo', 'phone' => '0933444555', 'address' => '102 Hai Bà Trưng, Quận 3, TP.HCM', 'group' => 'VIP'],
-            ['name' => 'Ngô Thanh Hà', 'phone' => '0977888999', 'address' => '5 Lê Duẩn, Huế'],
+            ['name' => 'Lê Thị Hoa', 'phone' => '0912345678', 'address' => '12 Nguyễn Trãi, Quận 1, TP.HCM', 'group_id' => $vip->ulid, 'birthday' => now()->subYears(32)->format('Y-m-').'14', 'gender' => 'female', 'tags' => ['Zalo', 'Khách quen']],
+            ['name' => 'Phạm Minh Tuấn', 'phone' => '0987654321', 'address' => '45 Lý Thường Kiệt, Hà Nội', 'group_id' => $wholesale->ulid, 'gender' => 'male', 'tax_code' => '0109876543', 'tags' => ['Đại lý']],
+            ['name' => 'Đỗ Thu Trang', 'phone' => '0909111222', 'address' => '8 Trần Phú, Đà Nẵng', 'birthday' => '1995-02-20', 'gender' => 'female'],
+            ['name' => 'Võ Quốc Bảo', 'phone' => '0933444555', 'address' => '102 Hai Bà Trưng, Quận 3, TP.HCM', 'group_id' => $vip->ulid, 'gender' => 'male', 'tags' => ['Khách quen']],
+            ['name' => 'Ngô Thanh Hà', 'phone' => '0977888999', 'address' => '5 Lê Duẩn, Huế', 'status' => 'inactive'],
         ])->map(fn ($p) => $customers->create($p));
+        $people[1]->addresses()->create(['label' => 'Kho Long Biên', 'recipient' => 'Anh Tuấn', 'phone' => '0987654321', 'address' => '22 Ngọc Lâm, Long Biên, Hà Nội']);
+        (new CustomerNote(['body' => 'Hẹn thanh toán phần còn lại vào cuối tháng.']))->forceFill(['customer_id' => $people[1]->id, 'created_by' => Auth::id()])->save();
 
         $variants = ProductVariant::query()->whereIn('id', DB::table('stock_balances')->where('tenant_id', app(TenantContext::class)->id())->whereRaw('on_hand - reserved > 30')->pluck('product_variant_id'))->orderBy('id')->limit(6)->get();
         if ($variants->count() < 3) {

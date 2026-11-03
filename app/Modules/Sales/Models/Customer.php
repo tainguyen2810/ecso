@@ -2,6 +2,7 @@
 
 namespace App\Modules\Sales\Models;
 
+use App\Modules\Identity\Models\User;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Sales\Support\PhoneNumber;
@@ -9,7 +10,9 @@ use App\Modules\Tenancy\Concerns\BelongsToTenant;
 use App\Shared\Concerns\HasPublicUlid;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
 /**
  * A buyer of the seller's own channels. Phone and address are encrypted at rest; the phone is found through a
@@ -19,18 +22,26 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property-read int|string|null $total_spent
  * @property-read int|string|null $debt
  * @property-read string|null $last_order_at
+ * @property list<string>|null $tags
+ * @property Carbon|null $birthday
  */
 class Customer extends Model
 {
     use BelongsToTenant, HasPublicUlid;
 
-    protected $fillable = ['name', 'email', 'address', 'group', 'note'];
+    public const STATUSES = ['active', 'inactive'];
 
-    protected $hidden = ['id', 'tenant_id', 'phone_hash', 'created_by'];
+    public const GENDERS = ['male', 'female', 'other'];
+
+    protected $attributes = ['status' => 'active'];
+
+    protected $fillable = ['name', 'email', 'address', 'note', 'birthday', 'gender', 'tax_code', 'tags', 'status'];
+
+    protected $hidden = ['id', 'tenant_id', 'phone_hash', 'created_by', 'customer_group_id', 'assigned_user_id'];
 
     protected function casts(): array
     {
-        return ['phone' => 'encrypted', 'address' => 'encrypted'];
+        return ['phone' => 'encrypted', 'address' => 'encrypted', 'birthday' => 'date', 'tags' => 'array'];
     }
 
     public function setPhone(?string $phone): void
@@ -59,6 +70,30 @@ class Customer extends Model
             ->selectSub($base('COALESCE(SUM(total), 0)'), 'total_spent')
             ->selectSub($base('COALESCE(SUM(GREATEST(total - paid_amount, 0)), 0)'), 'debt')
             ->selectSub(Order::query()->selectRaw('MAX(placed_at)')->whereColumn('orders.customer_id', 'customers.id'), 'last_order_at');
+    }
+
+    /** @return BelongsTo<CustomerGroup, $this> */
+    public function customerGroup(): BelongsTo
+    {
+        return $this->belongsTo(CustomerGroup::class, 'customer_group_id');
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function assignee(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_user_id');
+    }
+
+    /** @return HasMany<CustomerAddress, $this> */
+    public function addresses(): HasMany
+    {
+        return $this->hasMany(CustomerAddress::class);
+    }
+
+    /** @return HasMany<CustomerNote, $this> */
+    public function notes(): HasMany
+    {
+        return $this->hasMany(CustomerNote::class);
     }
 
     /** @return HasMany<Order, $this> */

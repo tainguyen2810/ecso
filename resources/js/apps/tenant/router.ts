@@ -48,6 +48,7 @@ const routes: RouteRecordRaw[] = [
             { path: 'orders/new', name: 'order-new', component: () => import('./pages/orders/OrderForm.vue'), meta: { permission: 'orders.create', nav: 'orders' } },
             { path: 'orders/:id/edit', name: 'order-edit', component: () => import('./pages/orders/OrderForm.vue'), meta: { permission: 'orders.create', nav: 'orders' } },
             { path: 'customers', name: 'customers', component: () => import('./pages/customers/CustomerList.vue'), meta: { permission: 'customers.view', nav: 'customers' } },
+            { path: 'customers/groups', name: 'customer-groups', component: () => import('./pages/customers/CustomerGroups.vue'), meta: { permission: 'customers.view', nav: 'customers' } },
             { path: 'customers/:id', name: 'customer-show', component: () => import('./pages/customers/CustomerDetail.vue'), meta: { permission: 'customers.view', nav: 'customers' } },
             { path: 'pos', name: 'pos', component: () => import('./pages/sales/Pos.vue'), meta: { permission: 'orders.create', nav: 'pos' } },
             { path: 'sales-channels', name: 'sales-channels', component: () => import('./pages/sales/SalesChannels.vue'), meta: { permission: 'orders.view', nav: 'sales-channels' } },

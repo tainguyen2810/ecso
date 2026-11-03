@@ -235,12 +235,11 @@ it('refuses manual actions on marketplace orders and payments on them', function
 it('manages customers and sales channels', function () {
     [$tenant, $owner] = tenantWithOwner();
 
-    $c = actingInTenant($owner, $tenant)->postJson('/api/v1/customers', ['name' => 'Trần B', 'phone' => '0987 654 321', 'group' => 'VIP'])->assertCreated()->json('data');
+    $c = actingInTenant($owner, $tenant)->postJson('/api/v1/customers', ['name' => 'Trần B', 'phone' => '0987 654 321'])->assertCreated()->json('data');
     expect($c['code'])->toBe('KH-000001')->and($c['phone'])->toBe('0987654321');
     actingInTenant($owner, $tenant)->postJson('/api/v1/customers', ['name' => 'Trùng', 'phone' => '84987654321'])->assertUnprocessable()->assertJsonValidationErrors('phone');
     actingInTenant($owner, $tenant)->postJson('/api/v1/customers', ['name' => 'Sai', 'phone' => '12'])->assertUnprocessable()->assertJsonValidationErrors('phone');
     actingInTenant($owner, $tenant)->getJson('/api/v1/customers?q=4321')->assertJsonCount(1, 'data');
-    actingInTenant($owner, $tenant)->getJson('/api/v1/customers/groups')->assertJsonPath('data', ['VIP']);
     actingInTenant($owner, $tenant)->deleteJson("/api/v1/customers/{$c['id']}")->assertNoContent();
 
     $ch = actingInTenant($owner, $tenant)->postJson('/api/v1/sales-channels', ['name' => 'Fanpage', 'type' => 'facebook', 'warehouse_id' => defaultWarehouse($tenant)->ulid])
