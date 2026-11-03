@@ -7,6 +7,7 @@ import Pagination from '../../components/Pagination.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
 import Tabs from '../../components/Tabs.vue';
 import Badge from '@/shared/ui/Badge.vue';
+import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
@@ -497,7 +498,7 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                             <td class="py-3" @click.stop><input type="checkbox" :checked="selected.has(o.id)" :aria-label="`Chọn đơn ${o.external_order_id}`" @change="toggle(o.id)" /></td>
                             <td class="px-2 py-3">
                                 <div class="font-mono text-xs font-medium">{{ o.external_order_id }}</div>
-                                <div class="mt-0.5 text-xs text-muted-foreground">{{ marketplaceNames[o.marketplace] ?? o.marketplace }} · {{ o.shop?.name ?? o.channel?.name }}</div>
+                                <div class="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground"><MarketplaceLogo :marketplace="o.marketplace" :name="marketplaceNames[o.marketplace]" size="sm" class="size-4" />{{ marketplaceNames[o.marketplace] ?? o.marketplace }} · {{ o.shop?.name ?? o.channel?.name }}</div>
                                 <div v-if="o.customer" class="text-xs">{{ o.customer.name }}</div>
                                 <div class="text-xs text-muted-foreground">{{ formatDateTime(o.placed_at) }}</div>
                                 <div v-if="o.tags?.length" class="mt-1 flex flex-wrap gap-1"><span v-for="t in o.tags" :key="t" class="rounded-full bg-primary/10 px-1.5 text-[11px] text-primary">{{ t }}</span></div>

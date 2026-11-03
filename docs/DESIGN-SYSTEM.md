@@ -36,6 +36,7 @@ Chốt ngày 03/11/2026 cùng màn Tổng quan mới (tham khảo bố cục T�
 | `IconBubble` | Icon trong vòng tròn nền nhạt theo tone (hàng đợi, ô chỉ số). |
 | `charts/StackedBarChart` | Cột chồng theo ngày, mỗi chuỗi một màu; có chú thích, trục tiền rút gọn ("10 tr"), tooltip số chính xác. |
 | `charts/DonutChart` | Tỷ trọng (doanh thu theo sàn) kèm chú thích %. |
+| `MarketplaceLogo` | Logo sàn (`public/images/marketplaces/<sàn>.webp`: shopee, tiktok, lazada, tiki); kênh riêng hiện icon cửa hàng. Dùng ở mọi chỗ hiện tên sàn/gian hàng. |
 | `Badge` | Trạng thái (tone `success`, `warning`, `danger`, `muted`, `default`). |
 | `EmptyState` | Khối chưa có dữ liệu, kèm hành động tiếp theo. |
 

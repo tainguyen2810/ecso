@@ -24,6 +24,7 @@ import Badge from '@/shared/ui/Badge.vue';
 import Card from '@/shared/ui/Card.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import IconBubble from '@/shared/ui/IconBubble.vue';
+import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
 import StatTile from '@/shared/ui/StatTile.vue';
 import DonutChart from '@/shared/ui/charts/DonutChart.vue';
 import StackedBarChart from '@/shared/ui/charts/StackedBarChart.vue';
@@ -225,7 +226,7 @@ const steps = computed(() => [
                 <template #actions><RouterLink to="/marketplaces" class="text-xs text-primary hover:underline">Quản lý</RouterLink></template>
                 <ul v-if="accounts.length" class="divide-y text-sm">
                     <li v-for="a in accounts" :key="a.id" class="flex items-center gap-3 px-5 py-2.5">
-                        <span class="grid size-7 shrink-0 place-items-center rounded-md text-xs font-bold text-white" :style="{ background: channelColor(a.marketplace) }">{{ (marketplaceNames[a.marketplace] ?? a.marketplace).charAt(0) }}</span>
+                        <MarketplaceLogo :marketplace="a.marketplace" :name="a.marketplace_name" />
                         <span class="min-w-0 flex-1 truncate">{{ a.shop_name }}</span>
                         <Badge :tone="accountTone(a)">{{ accountLabel(a) }}</Badge>
                     </li>
@@ -238,6 +239,7 @@ const steps = computed(() => [
                 <ol class="relative px-5 py-4 text-[13px] before:absolute before:bottom-6 before:left-[23px] before:top-6 before:border-l before:border-dashed before:border-blue-200" data-testid="recent-orders">
                     <li v-for="o in orders.recent" :key="o.id" class="relative pb-3.5 pl-6 last:pb-0">
                         <i class="absolute left-0 top-1.5 size-2 rounded-full bg-blue-400 ring-4 ring-blue-50" />
+                        <MarketplaceLogo :marketplace="o.marketplace" :name="marketplaceNames[o.marketplace]" size="sm" class="mr-1.5 inline-block align-[-5px]" />
                         <RouterLink :to="`/orders/${o.id}`" class="font-mono text-xs font-medium text-primary hover:underline">{{ o.external_order_id }}</RouterLink>
                         <span class="text-xs text-muted-foreground"> · {{ marketplaceNames[o.marketplace] ?? o.marketplace }}</span>
                         <div class="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
