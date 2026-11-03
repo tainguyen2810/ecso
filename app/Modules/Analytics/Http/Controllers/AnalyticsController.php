@@ -45,12 +45,12 @@ class AnalyticsController extends Controller
         return response()->json(['data' => $report->slowMovers((int) ($data['days'] ?? 30), (int) ($data['max_units'] ?? 0))]);
     }
 
-    /** Sales and gross profit across all channels, by day, channel or staff. */
+    /** Sales and gross profit across all channels, by day, channel, staff, customer or warehouse. */
     public function sales(Request $request, TenantContext $context, BusinessReports $reports): JsonResponse
     {
         abort_unless($context->can('reports.view'), 403);
         [$from, $to] = $this->range($request);
-        $by = $request->validate(['by' => ['nullable', Rule::in(['day', 'channel', 'staff'])]])['by'] ?? 'day';
+        $by = $request->validate(['by' => ['nullable', Rule::in(['day', 'channel', 'staff', 'customer', 'warehouse'])]])['by'] ?? 'day';
 
         return response()->json(['data' => $reports->sales($from, $to, $by)]);
     }

@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Day-to-day business reports across every sales channel (marketplace shops and the seller's own channels):
- * sales and gross profit by day / channel / staff, the stock in-out-balance ledger, and the cashbook.
+ * sales and gross profit by day / channel / staff / customer / warehouse, the stock in-out-balance ledger, and the cashbook.
  * Read-only; stock figures come straight from the immutable movement ledger.
  */
 class BusinessReports
@@ -67,6 +67,16 @@ class BusinessReports
                 ->leftJoin('users', 'users.id', '=', 'orders.created_by')
                 ->groupBy('orders.created_by', 'users.name')
                 ->selectRaw("COALESCE(users.name, CASE WHEN MAX(orders.marketplace_account_id) IS NULL THEN 'Không rõ' ELSE 'Đơn từ sàn' END) as label, NULL as kind, {$metrics}")
+                ->orderByDesc('revenue')->get(),
+            'customer' => (clone $base)
+                ->leftJoin('customers', 'customers.id', '=', 'orders.customer_id')
+                ->groupBy('orders.customer_id', 'customers.name', 'customers.code')
+                ->selectRaw("COALESCE(customers.name, 'Khách lẻ / khách sàn') as label, customers.code as kind, {$metrics}")
+                ->orderByDesc('revenue')->get(),
+            'warehouse' => (clone $base)
+                ->leftJoin('warehouses', 'warehouses.id', '=', 'orders.warehouse_id')
+                ->groupBy('orders.warehouse_id', 'warehouses.name')
+                ->selectRaw("COALESCE(warehouses.name, 'Chưa gán kho') as label, NULL as kind, {$metrics}")
                 ->orderByDesc('revenue')->get(),
             default => (clone $base)
                 ->groupByRaw('DATE(orders.placed_at)')
