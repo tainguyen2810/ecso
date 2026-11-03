@@ -27,6 +27,9 @@ class OrderPayment extends Model
 
     public const METHODS = ['cash', 'bank_transfer', 'card', 'ewallet', 'cod', 'other'];
 
+    /** Set-off between a return and its exchange order (ExchangeService); never chosen by hand. */
+    public const EXCHANGE = 'exchange';
+
     protected $guarded = ['id', 'ulid', 'tenant_id'];
 
     protected $hidden = ['id', 'tenant_id', 'order_id', 'customer_id', 'created_by', 'voided_by'];

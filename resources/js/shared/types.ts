@@ -211,6 +211,8 @@ export interface OrderSummary {
     carrier: string | null;
     tracking_number: string | null;
     buyer_note: string | null;
+    tags?: string[];
+    deliver_on?: string | null;
     placed_at: string | null;
     paid_at: string | null;
     ship_by_at: string | null;
@@ -251,6 +253,7 @@ export interface OrderDetail extends OrderSummary {
     editable: boolean;
     payments: OrderPaymentData[];
     created_by: string | null;
+    exchanged_from?: { id: string; number: string; credit: string; order: { id: string; external_order_id: string } }[];
     customer_stats: { orders_count: number; total_spent: string; debt: string; returns_count: number; failed_deliveries: number } | null;
 }
 
@@ -356,6 +359,9 @@ export interface OrderReturnData {
     status: string;
     reason: string | null;
     refund_amount: string | null;
+    exchange_credit?: string;
+    exchange_order?: { id: string; external_order_id: string; total: string } | null;
+    goods_value?: string;
     note: string | null;
     expects_goods: boolean;
     next: string[];

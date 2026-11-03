@@ -64,6 +64,15 @@ class OrderQuery
             $variantId = ProductVariant::query()->where('ulid', $sku)->value('id') ?? 0;
             $query->whereHas('items', fn ($i) => $i->where('product_variant_id', $variantId));
         }
+        if ($tag = $filters['tag'] ?? null) {
+            $query->whereJsonContains('tags', $tag);
+        }
+        if ($from = $filters['deliver_from'] ?? null) {
+            $query->whereDate('deliver_on', '>=', $from);
+        }
+        if ($to = $filters['deliver_to'] ?? null) {
+            $query->whereDate('deliver_on', '<=', $to);
+        }
         if ($assignee = $filters['assignee'] ?? null) {
             match ($assignee) {
                 'me' => $query->where('assigned_to', $userId),

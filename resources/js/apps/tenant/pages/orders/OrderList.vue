@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { AlertTriangle, Ban, Banknote, ChevronDown, ChevronRight, Clock, Download, Filter, PackageX, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingCart, Unlink, UserPlus, X } from 'lucide-vue-next';
+import { AlertTriangle, Ban, Banknote, Bookmark, ChevronDown, ChevronRight, Clock, Columns3, Download, Filter, PackageX, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingCart, Unlink, UserPlus, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
@@ -40,6 +40,7 @@ const loadError = ref<string | null>(null);
 const accounts = ref<MarketplaceAccountData[]>([]);
 const channels = ref<SalesChannel[]>([]);
 const assignees = ref<Ref[]>([]);
+const tags = ref<string[]>([]);
 const pipeline = ref<InstanceType<typeof OrderPipeline> | null>(null);
 
 const str = (key: string) => (route.query[key] as string) ?? '';
@@ -56,6 +57,9 @@ const filters = reactive({
     to: str('to'),
     customer: str('customer'),
     sku: str('sku'),
+    tag: str('tag'),
+    deliver_from: str('deliver_from'),
+    deliver_to: str('deliver_to'),
     flags: route.query.flags ? String(route.query.flags).split(',') : ([] as string[]),
     sort: str('sort') || 'newest',
     page: Number(route.query.page ?? 1),
@@ -86,7 +90,7 @@ const activeQueue = computed(() => {
     return ['to_confirm', 'to_pack', 'to_handover', 'shipping'].includes(filters.tab) && !filters.flags.length ? filters.tab : null;
 });
 
-const advancedCount = computed(() => [filters.status, filters.payment_status, filters.from || filters.to, filters.customer, filters.sku].filter(Boolean).length);
+const advancedCount = computed(() => [filters.status, filters.payment_status, filters.from || filters.to, filters.customer, filters.sku, filters.tag, filters.deliver_from || filters.deliver_to].filter(Boolean).length);
 
 function query() {
     return {
@@ -102,6 +106,9 @@ function query() {
         to: filters.to || undefined,
         customer: filters.customer || undefined,
         sku: filters.sku || undefined,
+        tag: filters.tag || undefined,
+        deliver_from: filters.deliver_from || undefined,
+        deliver_to: filters.deliver_to || undefined,
         flags: filters.flags.length ? filters.flags : undefined,
         sort: filters.sort === 'newest' ? undefined : filters.sort,
         page: filters.page > 1 ? filters.page : undefined,
@@ -139,7 +146,8 @@ function refresh() {
 
 onMounted(async () => {
     load();
-    const [a, m, c] = await Promise.allSettled([api.get('/marketplace-accounts'), api.get('/orders/assignees'), api.get('/sales-channels')]);
+    const [a, m, c, t] = await Promise.allSettled([api.get('/marketplace-accounts'), api.get('/orders/assignees'), api.get('/sales-channels'), api.get('/orders/tags')]);
+    if (t.status === 'fulfilled') tags.value = t.value.data.data;
     if (a.status === 'fulfilled') accounts.value = a.value.data.data;
     if (c.status === 'fulfilled') channels.value = c.value.data.data;
     if (m.status === 'fulfilled') assignees.value = m.value.data.data;
@@ -151,7 +159,7 @@ watch(() => filters.q, () => {
     searchTimer = setTimeout(() => ((filters.page = 1), load()), 300);
 });
 watch(
-    () => [filters.tab, filters.account, filters.source, filters.channel, filters.assignee, filters.status, filters.payment_status, filters.from, filters.to, filters.customer, filters.sku, filters.sort, filters.flags.join()],
+    () => [filters.tab, filters.account, filters.source, filters.channel, filters.assignee, filters.status, filters.payment_status, filters.from, filters.to, filters.customer, filters.sku, filters.tag, filters.deliver_from, filters.deliver_to, filters.sort, filters.flags.join()],
     () => ((filters.page = 1), (selected.value = new Set()), (expanded.value = new Set()), load()),
 );
 
@@ -166,8 +174,55 @@ function selectQueue(key: string) {
 }
 
 function clearAdvanced() {
-    Object.assign(filters, { status: '', payment_status: '', from: '', to: '', customer: '', sku: '' });
+    Object.assign(filters, { status: '', payment_status: '', from: '', to: '', customer: '', sku: '', tag: '', deliver_from: '', deliver_to: '' });
 }
+
+// Saved filters and visible columns, kept in this browser per business (same as the product list).
+type ViewFilters = Omit<typeof filters, 'page'> & { customerLabel?: string; skuLabel?: string };
+const storageKey = (name: string) => `ecso.orders.${name}.${tenant.current?.id ?? 'default'}`;
+function readStore<T>(name: string, fallback: T): T {
+    try {
+        return JSON.parse(localStorage.getItem(storageKey(name)) ?? 'null') ?? fallback;
+    } catch {
+        return fallback;
+    }
+}
+function writeStore(name: string, value: unknown) {
+    try {
+        localStorage.setItem(storageKey(name), JSON.stringify(value));
+    } catch {
+        // Private mode: keep for this visit only.
+    }
+}
+const savedViews = ref<{ name: string; filters: ViewFilters }[]>(readStore('views', []));
+function saveView() {
+    const name = window.prompt('Tên bộ lọc', '')?.trim();
+    if (!name) return;
+    const { page: _page, ...current } = filters;
+    const view = { ...current, flags: [...current.flags], customerLabel: customerLabel.value, skuLabel: skuLabel.value };
+    savedViews.value = [...savedViews.value.filter((v) => v.name !== name), { name, filters: view }];
+    writeStore('views', savedViews.value);
+    toast.success(`Đã lưu bộ lọc "${name}"`);
+}
+function applyView(view: { filters: ViewFilters }) {
+    const { customerLabel: c, skuLabel: s, ...rest } = view.filters;
+    customerLabel.value = c ?? '';
+    skuLabel.value = s ?? '';
+    Object.assign(filters, { ...rest, flags: [...(rest.flags ?? [])] });
+    moreFilters.value = advancedCount.value > 0;
+}
+function removeView(name: string) {
+    savedViews.value = savedViews.value.filter((v) => v.name !== name);
+    writeStore('views', savedViews.value);
+}
+const hasFilters = computed(() => filters.tab !== 'all' || !!filters.q || !!filters.source || !!filters.channel || !!filters.account || !!filters.assignee || filters.flags.length > 0 || advancedCount.value > 0);
+
+const columnLabels = { products: 'Sản phẩm', total: 'Tổng tiền', status: 'Trạng thái', deadline: 'Hạn giao / hẹn giao', assignee: 'Người xử lý' } as const;
+type ColumnKey = keyof typeof columnLabels;
+const columns = ref<Record<ColumnKey, boolean>>({ products: true, total: true, status: true, deadline: true, assignee: true, ...readStore('columns', {}) });
+watch(columns, (v) => writeStore('columns', v), { deep: true });
+const columnsOpen = ref(false);
+const columnCount = computed(() => 3 + Object.values(columns.value).filter(Boolean).length);
 
 // Customer filter: a small search box over /customers.
 const customerQuery = ref('');
@@ -315,6 +370,15 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                 <Button variant="outline" :class="cn(moreFilters && 'bg-muted')" data-testid="more-filters" @click="moreFilters = !moreFilters">
                     <Filter /> Bộ lọc khác <span v-if="advancedCount" class="rounded-full bg-primary px-1.5 text-xs text-primary-foreground">{{ advancedCount }}</span>
                 </Button>
+                <div class="relative">
+                    <Button variant="outline" data-testid="columns-button" @click="columnsOpen = !columnsOpen"><Columns3 /> Cột</Button>
+                    <div v-if="columnsOpen" class="absolute right-0 top-11 z-20 w-56 rounded-md border bg-card p-2 text-sm shadow-lg" data-testid="columns-menu">
+                        <label v-for="(label, key) in columnLabels" :key="key" class="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-muted">
+                            <input v-model="columns[key]" type="checkbox" /> {{ label }}
+                        </label>
+                    </div>
+                </div>
+                <Button v-if="hasFilters" variant="outline" data-testid="save-view" @click="saveView"><Bookmark /> Lưu bộ lọc</Button>
             </div>
 
             <div v-if="moreFilters" class="grid gap-3 rounded-md border bg-muted/20 p-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="advanced-filters">
@@ -343,6 +407,19 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                     <span class="mb-1.5 block text-sm font-medium">Có sản phẩm</span>
                     <SkuPicker placeholder="Tìm SKU, tên sản phẩm hoặc quét mã vạch…" @pick="pickSku" />
                 </div>
+                <FormField label="Tag" for="f-tag">
+                    <Select id="f-tag" v-model="filters.tag" :options="[{ value: '', label: tags.length ? 'Mọi tag' : 'Chưa có tag nào' }, ...tags.map((t) => ({ value: t, label: t }))]" data-testid="filter-tag" />
+                </FormField>
+                <FormField label="Hẹn giao từ" for="f-deliver-from"><Input id="f-deliver-from" v-model="filters.deliver_from" type="date" /></FormField>
+                <FormField label="đến ngày" for="f-deliver-to"><Input id="f-deliver-to" v-model="filters.deliver_to" type="date" /></FormField>
+            </div>
+
+            <div v-if="savedViews.length" class="flex flex-wrap items-center gap-2 text-xs" data-testid="saved-views">
+                <span class="text-muted-foreground">Bộ lọc đã lưu:</span>
+                <span v-for="v in savedViews" :key="v.name" class="inline-flex items-center gap-1 rounded-full border bg-card pl-2.5 pr-1">
+                    <button type="button" class="py-0.5 hover:text-primary" @click="applyView(v)">{{ v.name }}</button>
+                    <button type="button" class="rounded-full p-0.5 text-muted-foreground hover:bg-muted" :aria-label="`Xóa bộ lọc ${v.name}`" @click="removeView(v.name)"><X class="size-3" /></button>
+                </span>
             </div>
 
             <div class="flex flex-wrap items-center gap-1.5">
@@ -363,6 +440,8 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                     <span v-if="filters.status" class="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs">{{ orderStatus[filters.status]?.label }}<button type="button" aria-label="Bỏ lọc trạng thái" @click="filters.status = ''"><X class="size-3" /></button></span>
                     <span v-if="filters.customer" class="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs">Khách: {{ customerLabel || '…' }}<button type="button" aria-label="Bỏ lọc khách" @click="filters.customer = ''"><X class="size-3" /></button></span>
                     <span v-if="filters.sku" class="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs">SKU: {{ skuLabel || '…' }}<button type="button" aria-label="Bỏ lọc sản phẩm" @click="filters.sku = ''"><X class="size-3" /></button></span>
+                    <span v-if="filters.tag" class="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs">Tag: {{ filters.tag }}<button type="button" aria-label="Bỏ lọc tag" @click="filters.tag = ''"><X class="size-3" /></button></span>
+                    <span v-if="filters.deliver_from || filters.deliver_to" class="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs">Hẹn giao {{ filters.deliver_from ? formatDate(filters.deliver_from) : '…' }} – {{ filters.deliver_to ? formatDate(filters.deliver_to) : '…' }}<button type="button" aria-label="Bỏ lọc ngày hẹn giao" @click="(filters.deliver_from = ''), (filters.deliver_to = '')"><X class="size-3" /></button></span>
                     <button type="button" class="text-xs text-muted-foreground hover:underline" @click="clearAdvanced">Xóa bộ lọc</button>
                 </template>
             </div>
@@ -400,11 +479,11 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                         <th class="w-8 py-2.5 pl-3" />
                         <th class="w-8 py-2.5"><input type="checkbox" :checked="allSelected" aria-label="Chọn tất cả" @change="toggleAll" /></th>
                         <th class="px-2 py-2.5 font-medium">Đơn hàng</th>
-                        <th class="px-4 py-2.5 font-medium">Sản phẩm</th>
-                        <th class="px-4 py-2.5 text-right font-medium">Tổng tiền</th>
-                        <th class="px-4 py-2.5 font-medium">Trạng thái</th>
-                        <th class="px-4 py-2.5 font-medium">Hạn giao</th>
-                        <th class="px-4 py-2.5 font-medium">Xử lý</th>
+                        <th v-if="columns.products" class="px-4 py-2.5 font-medium">Sản phẩm</th>
+                        <th v-if="columns.total" class="px-4 py-2.5 text-right font-medium">Tổng tiền</th>
+                        <th v-if="columns.status" class="px-4 py-2.5 font-medium">Trạng thái</th>
+                        <th v-if="columns.deadline" class="px-4 py-2.5 font-medium">Hạn giao</th>
+                        <th v-if="columns.assignee" class="px-4 py-2.5 font-medium">Xử lý</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y">
@@ -421,8 +500,9 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                                 <div class="mt-0.5 text-xs text-muted-foreground">{{ marketplaceNames[o.marketplace] ?? o.marketplace }} · {{ o.shop?.name ?? o.channel?.name }}</div>
                                 <div v-if="o.customer" class="text-xs">{{ o.customer.name }}</div>
                                 <div class="text-xs text-muted-foreground">{{ formatDateTime(o.placed_at) }}</div>
+                                <div v-if="o.tags?.length" class="mt-1 flex flex-wrap gap-1"><span v-for="t in o.tags" :key="t" class="rounded-full bg-primary/10 px-1.5 text-[11px] text-primary">{{ t }}</span></div>
                             </td>
-                            <td class="max-w-80 px-4 py-3">
+                            <td v-if="columns.products" class="max-w-80 px-4 py-3">
                                 <div v-for="(i, idx) in o.items_preview" :key="idx" class="truncate text-xs">
                                     <span class="font-medium tabular-nums">{{ i.quantity }}×</span> {{ i.name }}<span v-if="i.variant_name" class="text-muted-foreground"> · {{ i.variant_name }}</span>
                                 </div>
@@ -434,21 +514,22 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                                     <Badge v-if="o.flags.printed" tone="muted"><Printer class="mr-1 size-3" />Đã in</Badge>
                                 </div>
                             </td>
-                            <td class="px-4 py-3 text-right tabular-nums">
+                            <td v-if="columns.total" class="px-4 py-3 text-right tabular-nums">
                                 {{ formatMoney(o.total) }}
                                 <div v-if="o.payment_status && o.status !== 'CANCELLED'" class="text-xs" :class="o.payment_status === 'paid' ? 'text-success' : 'text-destructive'">{{ paymentStatus[o.payment_status]?.label }}</div>
                                 <div v-if="o.is_cod" class="text-xs text-muted-foreground">COD</div>
                             </td>
-                            <td class="px-4 py-3"><Badge :tone="orderStatus[o.status]?.tone">{{ orderStatus[o.status]?.label ?? o.status }}</Badge></td>
-                            <td class="px-4 py-3 text-xs">
+                            <td v-if="columns.status" class="px-4 py-3"><Badge :tone="orderStatus[o.status]?.tone">{{ orderStatus[o.status]?.label ?? o.status }}</Badge></td>
+                            <td v-if="columns.deadline" class="px-4 py-3 text-xs">
                                 <span v-if="o.flags.overdue" class="inline-flex items-center gap-1 font-medium text-destructive"><Clock class="size-3" />{{ deadlineLabel(o.ship_by_at) }}</span>
                                 <span v-else-if="o.flags.due_soon" class="inline-flex items-center gap-1 font-medium text-[oklch(0.5_0.13_70)]"><Clock class="size-3" />{{ deadlineLabel(o.ship_by_at) }}</span>
                                 <span v-else class="text-muted-foreground">{{ formatDateTime(o.ship_by_at) }}</span>
+                                <div v-if="o.deliver_on" class="mt-0.5 text-foreground" data-testid="row-deliver-on">Hẹn {{ formatDate(o.deliver_on) }}</div>
                             </td>
-                            <td class="px-4 py-3 text-xs text-muted-foreground">{{ o.assignee?.name ?? '—' }}</td>
+                            <td v-if="columns.assignee" class="px-4 py-3 text-xs text-muted-foreground">{{ o.assignee?.name ?? '—' }}</td>
                         </tr>
                         <tr v-if="expanded.has(o.id)">
-                            <td colspan="8" class="p-0"><OrderQuickView :id="o.id" /></td>
+                            <td :colspan="columnCount" class="p-0"><OrderQuickView :id="o.id" /></td>
                         </tr>
                     </template>
                 </tbody>

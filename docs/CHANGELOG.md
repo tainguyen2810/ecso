@@ -18,6 +18,11 @@
 - Trang `/pos/shifts`: lịch sử ca. Thu ngân xem ca của mình; quyền mới `orders.shifts` (Quản lý vận hành, Kế toán) xem mọi ca và đóng hộ ca bị quên.
 - Nộp/rút tiền két là chuyển tiền nội bộ, không ghi vào sổ quỹ.
 
+### Phase 19 — Tag đơn, ngày hẹn giao, đổi hàng (2026-11-03)
+- Tag và ngày hẹn giao trên mọi đơn (cả đơn sàn), lọc theo tag / ngày hẹn giao, có trong file Excel.
+- Đổi hàng: tạo đơn đổi từ phiếu trả, giá trị hàng trả được bù trừ vào đơn mới (hai bút toán "Bù trừ đổi hàng", không tính là tiền mặt, không vào sổ quỹ và báo cáo thanh toán).
+- Danh sách đơn: lưu bộ lọc, chọn cột hiển thị.
+
 ### Phase 18 — Thu chi: phiếu thu, phiếu chi, sổ quỹ (2026-11-03)
 - Menu Thu chi (`/cash`): phiếu thu/chi lập tay (PT-/PC-), đối tượng khách hàng, NCC, nhân viên, đơn vị vận chuyển, khác; hủy có lý do; in phiếu A5 có số tiền bằng chữ.
 - Danh sách chung phiếu lập tay và phiếu tự động (thu đơn, hoàn tiền, trả NCC), lọc theo ngày, loại, đối tượng, hình thức, trạng thái; xuất CSV.

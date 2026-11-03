@@ -70,6 +70,9 @@ export const paymentMethods: Record<string, string> = {
     other: 'Khác',
 };
 
+/** Payment methods as shown on payment rows (includes the exchange set-off, which is never picked by hand). */
+export const paymentMethodNames: Record<string, string> = { ...paymentMethods, exchange: 'Bù trừ đổi hàng' };
+
 export const paymentStatus: Record<string, { label: string; tone: Tone }> = {
     unpaid: { label: 'Chưa thanh toán', tone: 'danger' },
     partial: { label: 'Thanh toán một phần', tone: 'warning' },

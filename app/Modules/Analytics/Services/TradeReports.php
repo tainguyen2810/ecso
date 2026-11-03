@@ -4,6 +4,7 @@ namespace App\Modules\Analytics\Services;
 
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\OrderReturn;
+use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Tenancy\Support\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
@@ -133,6 +134,7 @@ class TradeReports
         $base = DB::table('order_payments as op')
             ->where('op.tenant_id', $this->tenant())
             ->whereNull('op.voided_at')
+            ->where('op.method', '!=', OrderPayment::EXCHANGE) // exchange set-offs move no money
             ->whereBetween('op.paid_at', [$from, $to]);
         $metrics = "COUNT(*) as entries, SUM(CASE WHEN op.kind = 'refund' THEN 0 ELSE op.amount END) as received, SUM(CASE WHEN op.kind = 'refund' THEN op.amount ELSE 0 END) as refunded";
 
