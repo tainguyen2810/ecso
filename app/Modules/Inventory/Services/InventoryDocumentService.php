@@ -4,6 +4,7 @@ namespace App\Modules\Inventory\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Inventory\Exceptions\InvalidStockOperation;
+use App\Modules\Inventory\Models\CostAdjustment;
 use App\Modules\Inventory\Models\InventoryAdjustment;
 use App\Modules\Inventory\Models\StockMovement;
 use App\Modules\Inventory\Models\StockReceipt;
@@ -105,6 +106,41 @@ class InventoryDocumentService
     public function cancelAdjustment(InventoryAdjustment $adjustment): InventoryAdjustment
     {
         return $this->closeAdjustment($adjustment, InventoryAdjustment::CANCELLED, null, 'inventory.adjustment.cancelled');
+    }
+
+    /**
+     * Cost adjustment (CAD): sets the average cost of each SKU now and keeps the old cost on the line.
+     * Stock quantities do not change; the next receipt averages from the new cost.
+     *
+     * @param  array<int, array{variant_id: int, new_cost: string|float|int}>  $lines
+     */
+    public function createCostAdjustment(array $lines, ?string $note = null): CostAdjustment
+    {
+        if ($lines === []) {
+            throw new InvalidStockOperation('Phiếu phải có ít nhất một dòng.');
+        }
+        $costs = [];
+        foreach ($lines as $line) {
+            if (isset($costs[$line['variant_id']])) {
+                throw new InvalidStockOperation('Mỗi SKU chỉ được xuất hiện một lần trong phiếu.');
+            }
+            $costs[$line['variant_id']] = $line['new_cost'];
+        }
+
+        return DB::transaction(function () use ($costs, $note) {
+            $adjustment = new CostAdjustment(['note' => $note]);
+            $adjustment->forceFill(['number' => DocumentNumber::next('CAD'), 'created_by' => Auth::id()])->save();
+
+            $changes = $this->inventory->setCosts($costs);
+            foreach (array_keys($costs) as $variantId) {
+                $c = $changes[$variantId];
+                $adjustment->lines()->create(['product_variant_id' => $variantId, 'old_cost' => $c['old'], 'new_cost' => $c['new'], 'on_hand' => $c['on_hand']]);
+            }
+
+            $this->audit->record('inventory.cost_adjusted', $adjustment, ['number' => $adjustment->number, 'lines' => count($costs)]);
+
+            return $adjustment;
+        });
     }
 
     /**

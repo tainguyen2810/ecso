@@ -14,6 +14,7 @@ use App\Modules\Inventory\Console\LowStockDigestCommand;
 use App\Modules\Inventory\Console\VerifyInventoryCommand;
 use App\Modules\Inventory\Events\AvailableStockChanged;
 use App\Modules\Inventory\Listeners\CreateDefaultWarehouse;
+use App\Modules\Inventory\Models\CostAdjustment;
 use App\Modules\Inventory\Models\InventoryAdjustment;
 use App\Modules\Inventory\Models\StockBalance;
 use App\Modules\Inventory\Models\StockReceipt;
@@ -86,7 +87,7 @@ class ModuleServiceProvider extends ServiceProvider
             Gate::policy($model, ProductPolicy::class);
         }
         Gate::policy(Warehouse::class, WarehousePolicy::class);
-        foreach ([StockBalance::class, StockReceipt::class, InventoryAdjustment::class, StockTransfer::class] as $model) {
+        foreach ([StockBalance::class, StockReceipt::class, InventoryAdjustment::class, StockTransfer::class, CostAdjustment::class] as $model) {
             Gate::policy($model, InventoryPolicy::class);
         }
 

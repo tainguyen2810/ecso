@@ -13,6 +13,7 @@ const links = computed(() =>
         { to: '/inventory/adjustments', label: 'Điều chỉnh', match: ['inventory-adjustments'] },
         { to: '/inventory/stocktake', label: 'Kiểm kho', match: ['stocktake'] },
         { to: '/inventory/transfers', label: 'Chuyển kho', match: ['inventory-transfers'] },
+        { to: '/inventory/cost-adjustments', label: 'Điều chỉnh giá vốn', match: ['cost-adjustments'] },
         { to: '/inventory/warehouses', label: 'Danh sách kho', match: ['warehouses'] },
     ].filter(() => tenant.can('inventory.view')),
 );

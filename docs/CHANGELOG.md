@@ -9,6 +9,7 @@
 - Trường mới: đơn vị tính, tags, thuế GTGT, giá bán buôn; có trong import/export.
 - Tồn kho ban đầu ngay khi tạo sản phẩm (phiếu nhập tồn đầu kỳ).
 - In tem mã vạch EAN-13 / Code 128 ra PDF: tem cuộn 50×30, 40×30, 35×22 mm và A4 65 tem.
+- Phiếu điều chỉnh giá vốn (CAD) trong Kho hàng, lưu giá cũ và chênh lệch giá trị tồn.
 - Trang Danh mục và thương hiệu; danh sách sản phẩm có lọc theo thương hiệu, tag, ngày tạo, sắp xếp, in tem và xóa hàng loạt.
 
 ### Phase 12 — Kiểm kho, xuất hủy, cảnh báo tồn thấp, báo cáo (2026-11-03)

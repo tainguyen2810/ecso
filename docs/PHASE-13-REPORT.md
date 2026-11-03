@@ -15,7 +15,10 @@
 - **Danh mục và thương hiệu** (`/products/taxonomy`): thêm, đổi tên, xóa, danh mục cha–con dạng cây, số sản phẩm và link lọc danh sách.
 - **Danh sách sản phẩm**: bộ lọc khác (thương hiệu, tag, ngày tạo), sắp xếp (mới/cũ, tên, tồn khả dụng), bộ lọc lưu trên URL, cột ngày tạo, thao tác hàng loạt "In tem mã vạch" và "Xóa" (sản phẩm còn tồn được giữ lại và báo lý do).
 
+- **Phiếu điều chỉnh giá vốn** (`/inventory/cost-adjustments`, số phiếu CAD-): chọn SKU, nhập giá vốn mới, áp dụng ngay; lưu giá cũ, tồn lúc điều chỉnh và chênh lệch giá trị tồn; ghi nhật ký. Chỉ người có `inventory.adjust.approve` được tạo. Giá vốn vẫn chỉ được ghi trong `InventoryService` (`setCosts`, khóa SKU như phiếu nhập).
+
 ## API mới
+- `GET/POST /inventory/cost-adjustments`, `GET /inventory/cost-adjustments/{id}`
 - `GET /inventory/products/{product}/stock`, `GET /inventory/products/{product}/movements`
 - `POST /products/bulk-delete`, `GET /products/tags`
 - `GET /products`: thêm `tag`, `created_from`, `created_to`, `sort`
@@ -23,12 +26,13 @@
 - `POST /products`: thêm `unit`, `tags`, `vat_rate`, `variants.*.wholesale_price`, `opening_warehouse_id`, `variants.*.opening_qty`, `variants.*.opening_cost`
 
 ## Test
+- Pest `tests/Feature/Inventory/CostAdjustmentTest.php`: 2 test (giá cũ/mới, nhập sau tính bình quân từ giá mới, phân quyền, chặn SKU doanh nghiệp khác).
 - Pest `tests/Feature/Catalog/ProductDetailsTest.php`: 7 test (trường mới, tồn ban đầu, kiểm tra kho và chặn khi sửa, bộ lọc và sắp xếp, xóa hàng loạt và phân quyền, tồn theo kho có hàng đang về và cách ly doanh nghiệp, lấy SKU để in tem).
 - Vitest `labels.spec.ts`: 9 test (EAN-13, Code 128, bố cục tem cuộn và A4).
-- Playwright `e2e/products.spec.ts`: 4 kịch bản, ảnh ở `docs/screenshots/phase-13/`.
+- Playwright `e2e/products.spec.ts`: 5 kịch bản, ảnh ở `docs/screenshots/phase-13/`.
 - Chạy trên máy Windows: Catalog, Inventory và test mới đều đạt; Vitest 45/45; vue-tsc, Pint, PHPStan sạch; Playwright products + inventory 9/9. 5 test Arch/Platform lỗi do môi trường Windows (đường dẫn `\`, thiếu `pcntl`), không liên quan thay đổi này; CI Linux sẽ chạy đủ.
 
 ## Chưa làm
 - Combo sản phẩm và đơn vị quy đổi (thùng/hộp/cái): cần thay đổi lõi tồn kho, đơn sàn và đồng bộ tồn, chờ quyết định.
-- Phiếu điều chỉnh giá vốn: làm ở PR riêng.
+
 - Nhãn vị trí lưu kho (bin), tồn tối đa theo kho.

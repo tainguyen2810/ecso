@@ -52,7 +52,8 @@ test('list filters, bulk actions and label printing', async ({ page }) => {
     await page.goto('/products');
     await page.getByTestId('more-filters').click();
     await page.getByLabel('Tag', { exact: true }).selectOption('Đồ uống');
-    await expect(page.getByTestId('product-table').locator('tbody > tr')).toHaveCount(1);
+    await expect(page.getByTestId('product-table')).toContainText('Nước suối');
+    await expect(page.getByTestId('product-table')).not.toContainText('Quần jean');
     await expect(page).toHaveURL(/tag=/);
     await shot(page, '04-product-filters');
     await page.getByRole('button', { name: 'Xóa bộ lọc' }).click();
@@ -78,4 +79,19 @@ test('categories and brands', async ({ page }) => {
     await page.getByTestId('categories-form').getByRole('button', { name: 'Thêm' }).click();
     await expect(page.getByTestId('categories-list')).toContainText(name);
     await shot(page, '06-taxonomy');
+});
+
+test('cost adjustment', async ({ page }) => {
+    await login(page, 'owner@demo.test');
+    await page.goto('/inventory/cost-adjustments');
+    await page.getByTestId('new-cost-adjustment').click();
+    await page.getByPlaceholder('Quét hoặc tìm SKU cần điều chỉnh').fill('ATC-TRANG-M');
+    await page.getByPlaceholder('Quét hoặc tìm SKU cần điều chỉnh').press('Enter');
+    await page.getByTestId('new-cost-0').fill('61000');
+    await page.getByLabel('Ghi chú').fill('NCC chiết khấu sau khi nhập');
+    await shot(page, '07-cost-adjustment-form');
+    await page.getByTestId('submit-cost-adjustment').click();
+    await expect(page.getByText(/Đã tạo phiếu CAD-/)).toBeVisible();
+    await expect(page.getByTestId('cost-adjustment-table')).toContainText('61.000');
+    await shot(page, '08-cost-adjustments');
 });

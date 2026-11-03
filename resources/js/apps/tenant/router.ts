@@ -37,6 +37,7 @@ const routes: RouteRecordRaw[] = [
             { path: 'inventory', name: 'inventory', component: () => import('./pages/inventory/StockList.vue'), meta: { permission: 'inventory.view', nav: 'inventory' } },
             { path: 'inventory/sku/:id', name: 'inventory-card', component: () => import('./pages/inventory/StockCard.vue'), meta: { permission: 'inventory.view', nav: 'inventory' } },
             { path: 'inventory/stocktake', name: 'stocktake', component: () => import('./pages/inventory/Stocktake.vue'), meta: { permission: 'inventory.adjust', nav: 'inventory' } },
+            { path: 'inventory/cost-adjustments', name: 'cost-adjustments', component: () => import('./pages/inventory/CostAdjustments.vue'), meta: { permission: 'inventory.view', nav: 'inventory' } },
             { path: 'inventory/warehouses', name: 'warehouses', component: () => import('./pages/inventory/Warehouses.vue'), meta: { permission: 'inventory.view', nav: 'inventory' } },
             ...(['receipts', 'adjustments', 'transfers'] as const).flatMap((kind) => [
                 { path: `inventory/${kind}`, name: `inventory-${kind}`, component: () => import('./pages/inventory/DocumentList.vue'), meta: { permission: 'inventory.view', nav: 'inventory', kind } },

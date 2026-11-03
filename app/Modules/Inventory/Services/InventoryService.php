@@ -281,6 +281,39 @@ class InventoryService
         return $reservation->refresh();
     }
 
+    /**
+     * Sets the weighted average cost of SKUs directly (cost adjustment document). Variants are locked in id order,
+     * like receipts, so a receipt running at the same time cannot average against a stale cost. Must run inside
+     * the caller's transaction.
+     *
+     * @param  array<int, string|float|int>  $costs  [variant id => new cost]
+     * @return array<int, array{old: string, new: string, on_hand: int}> [variant id => before/after]
+     */
+    public function setCosts(array $costs): array
+    {
+        if (DB::transactionLevel() === 0) {
+            throw new InvalidStockOperation('setCosts must run inside a transaction.');
+        }
+        ksort($costs);
+        $tenantId = $this->context->id();
+        $variants = ProductVariant::query()->withTrashed()->where('tenant_id', $tenantId)
+            ->whereIn('id', array_keys($costs))->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+
+        $result = [];
+        foreach ($costs as $variantId => $cost) {
+            $variant = $variants->get($variantId) ?? throw new InvalidStockOperation('SKU không thuộc doanh nghiệp.');
+            $new = $this->money($cost);
+            $result[$variantId] = [
+                'old' => $this->money($variant->cost_price ?? '0'),
+                'new' => $new,
+                'on_hand' => (int) StockBalance::query()->where('product_variant_id', $variantId)->sum('on_hand'),
+            ];
+            $variant->forceFill(['cost_price' => $new])->saveQuietly();
+        }
+
+        return $result;
+    }
+
     public function setSafetyStock(Warehouse $warehouse, ProductVariant $variant, int $safetyStock): StockBalance
     {
         if ($safetyStock < 0) {

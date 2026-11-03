@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Inventory\Http\Controllers\AdjustmentController;
+use App\Modules\Inventory\Http\Controllers\CostAdjustmentController;
 use App\Modules\Inventory\Http\Controllers\ReceiptController;
 use App\Modules\Inventory\Http\Controllers\StockController;
 use App\Modules\Inventory\Http\Controllers\TransferController;
@@ -29,6 +30,10 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
         Route::post('adjustments/{adjustment}/approve', [AdjustmentController::class, 'approve']);
         Route::post('adjustments/{adjustment}/reject', [AdjustmentController::class, 'reject']);
         Route::post('adjustments/{adjustment}/cancel', [AdjustmentController::class, 'cancel']);
+
+        Route::get('cost-adjustments', [CostAdjustmentController::class, 'index']);
+        Route::post('cost-adjustments', [CostAdjustmentController::class, 'store']);
+        Route::get('cost-adjustments/{costAdjustment}', [CostAdjustmentController::class, 'show']);
 
         Route::get('transfers', [TransferController::class, 'index']);
         Route::post('transfers', [TransferController::class, 'store']);
