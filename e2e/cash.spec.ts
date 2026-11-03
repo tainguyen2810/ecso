@@ -29,19 +29,18 @@ test('payment voucher, customer debt receipt, void and print, cashbook', async (
     await page.getByTestId('v-save').click();
     await expect(page.getByTestId('voucher-table')).toContainText('PC-000001');
 
-    // A receipt from a customer on credit: collects their unpaid orders, oldest first.
+    // A receipt from a customer on credit shows how it would collect their unpaid orders, oldest first. Not saved:
+    // later specs rely on the demo customer's debt (saving is covered by CashVoucherTest).
     await page.getByTestId('new-receipt').click();
     await page.getByTestId('party-kind-customer').click();
     await page.getByTestId('v-party').fill('Tuấn');
     await page.getByTestId('v-party-results').getByRole('button').first().click();
     await expect(page.getByTestId('v-debt-mode')).toBeChecked();
-    await expect(page.getByTestId('v-debt-all')).toBeVisible();
-    // Collect part of it: later specs (customers, sales) still need this customer to owe money.
-    await page.getByTestId('v-amount').fill('200000');
+    await page.getByTestId('v-debt-all').click();
+    await expect(page.getByTestId('v-debt')).toContainText('SO-');
     await shot(page, '03-customer-debt-receipt');
-    await page.getByTestId('v-save').click();
-    await page.getByTestId('voucher-direction').getByRole('button', { name: 'Phiếu thu' }).click();
-    await expect(page.getByTestId('voucher-table')).toContainText('Phạm Minh Tuấn');
+    await page.getByRole('dialog').getByRole('button', { name: 'Hủy' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
 
     // Detail, then void the rent voucher with a reason.
     await page.getByTestId('voucher-direction').getByRole('button', { name: 'Phiếu chi' }).click();
