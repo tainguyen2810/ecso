@@ -40,6 +40,7 @@ test('low-stock alert, stocktake and write-off', async ({ page }) => {
 test('reports: sales and profit, stock ledger, cashbook', async ({ page }) => {
     await login(page, 'owner@demo.test');
     await page.getByRole('link', { name: 'Báo cáo' }).first().click();
+    await page.getByTestId('report-group-sales').getByRole('link', { name: 'Doanh thu & lợi nhuận theo ngày' }).click();
     await expect(page.getByTestId('sales-kpis')).toBeVisible();
     await page.getByRole('button', { name: '7 ngày' }).click();
     await expect(page.getByTestId('sales-table').locator('tbody tr')).toHaveCount(7);
@@ -56,4 +57,54 @@ test('reports: sales and profit, stock ledger, cashbook', async ({ page }) => {
     await page.getByRole('link', { name: 'Sổ quỹ' }).click();
     await expect(page.getByTestId('cashbook-table')).toContainText('Chi trả nhà cung cấp');
     await shot(page, '07-cashbook');
+});
+
+test('report centre: every group opens its detail reports on the same period', async ({ page }) => {
+    const dir = 'docs/screenshots/reports-centre';
+    const snap = async (name: string) => {
+        await page.evaluate(() => document.querySelectorAll<HTMLElement>('[role="status"]').forEach((t) => t.click()));
+        await baseShot(page, name, dir);
+    };
+    await login(page, 'owner@demo.test');
+    await page.goto('/reports');
+    for (const group of ['sales', 'returns', 'customers', 'finance', 'purchases', 'stock']) {
+        await expect(page.getByTestId(`report-group-${group}`)).toBeVisible();
+    }
+    await page.getByRole('button', { name: '30 ngày' }).click();
+    await expect(page).toHaveURL(/from=/);
+    await snap('01-report-centre');
+
+    // The period chosen on the centre carries over to the detail report.
+    const from = new URL(page.url()).searchParams.get('from');
+    await page.getByTestId('report-group-sales').getByRole('link', { name: 'Theo sản phẩm' }).click();
+    await expect(page).toHaveURL(new RegExp(`from=${from}`));
+    await expect(page.getByTestId('report-table')).toBeVisible();
+    await snap('02-sales-by-product');
+    await page.getByPlaceholder('Tìm SKU, tên sản phẩm').fill('ATC');
+    await expect(page.getByTestId('report-table').locator('tbody tr').first()).toContainText('ATC');
+
+    await page.getByTestId('back-to-reports').click();
+    await page.getByRole('link', { name: 'Báo cáo lãi lỗ' }).click();
+    await expect(page.getByTestId('pl-profit')).toBeVisible();
+    await snap('03-profit-loss');
+
+    await page.goto('/reports/sales?by=customer');
+    await expect(page.getByTestId('sales-table')).toBeVisible();
+    await snap('04-sales-by-customer');
+
+    for (const [report, name, query] of [
+        ['stock-on-hand', '05-stock-on-hand', ''],
+        ['low-stock', '06-low-stock', ''],
+        ['purchases', '07-purchases-by-supplier', '?by=supplier'],
+        ['payables', '08-supplier-debts', ''],
+        ['payments', '09-payments-by-method', '?by=method'],
+        ['customers', '10-customers', ''],
+        ['returns', '11-returns', '?by=product'],
+    ] as const) {
+        await page.goto(`/reports/view/${report}${query}`);
+        await expect(page.getByTestId('export-csv')).toBeVisible();
+        await expect(page.locator('.animate-pulse')).toHaveCount(0);
+        await snap(name);
+    }
+    await expect(page.getByTestId('tab-product')).toHaveAttribute('aria-selected', 'true');
 });

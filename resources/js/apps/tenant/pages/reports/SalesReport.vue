@@ -11,7 +11,8 @@ import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { cn, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { channelTypes, marketplaceNames } from '../orders/labels';
-import { downloadCsv, presetRange, toCsv } from './range';
+import { downloadCsv, toCsv } from './range';
+import { useReportQuery } from './useReportQuery';
 
 interface Row {
     label: string;
@@ -31,8 +32,11 @@ interface SalesData {
     excluded: { orders: number; revenue: number };
 }
 
-const range = ref(presetRange('month'));
-const by = ref<'day' | 'channel' | 'staff'>('day');
+const { range, param } = useReportQuery();
+type By = 'day' | 'channel' | 'staff' | 'customer' | 'warehouse';
+const TABS: Record<By, string> = { day: 'Theo ngày', channel: 'Theo kênh', staff: 'Theo nhân viên', customer: 'Theo khách hàng', warehouse: 'Theo kho' };
+const byParam = param('by', 'day');
+const by = computed<By>({ get: () => (byParam.value in TABS ? (byParam.value as By) : 'day'), set: (v) => (byParam.value = v) });
 const data = ref<SalesData | null>(null);
 const error = ref<string | null>(null);
 const loading = ref(false);
@@ -49,10 +53,10 @@ async function load() {
     }
 }
 onMounted(load);
-watch([range, by], load, { deep: true });
+watch(() => [range.value.from, range.value.to, by.value], load);
 
 const maxRevenue = computed(() => Math.max(1, ...(data.value?.rows.map((r) => r.revenue) ?? [1])));
-const firstColumn = computed(() => ({ day: 'Ngày', channel: 'Kênh bán', staff: 'Nhân viên' })[by.value]);
+const firstColumn = computed(() => ({ day: 'Ngày', channel: 'Kênh bán', staff: 'Nhân viên', customer: 'Khách hàng', warehouse: 'Kho' })[by.value]);
 
 function label(r: Row): string {
     if (by.value === 'day') {
@@ -79,8 +83,8 @@ function exportCsv() {
 </script>
 
 <template>
-    <PageHeader title="Báo cáo" description="Doanh thu, giá vốn và lợi nhuận gộp trên mọi kênh bán: sàn và kênh riêng.">
-        <RangePicker v-model:from="range.from" v-model:to="range.to" />
+    <PageHeader title="Bán hàng & lợi nhuận" description="Doanh thu, giá vốn và lợi nhuận gộp trên mọi kênh bán: sàn và kênh riêng.">
+        <RangePicker :from="range.from" :to="range.to" @update:from="(v) => (range = { ...range, from: v })" @update:to="(v) => (range = { ...range, to: v })" />
     </PageHeader>
     <ReportsNav />
 
@@ -104,7 +108,7 @@ function exportCsv() {
         <Card>
             <div class="flex flex-wrap items-center gap-2 border-b p-3">
                 <div class="flex overflow-hidden rounded-md border text-sm" role="tablist">
-                    <button v-for="(l, k) in { day: 'Theo ngày', channel: 'Theo kênh', staff: 'Theo nhân viên' }" :key="k" type="button" :class="cn('border-r px-3 py-1.5 last:border-r-0', by === k ? 'bg-primary text-primary-foreground' : 'hover:bg-muted')" :data-testid="`sales-by-${k}`" @click="by = k">{{ l }}</button>
+                    <button v-for="(l, k) in TABS" :key="k" type="button" :class="cn('border-r px-3 py-1.5 last:border-r-0', by === k ? 'bg-primary text-primary-foreground' : 'hover:bg-muted')" :data-testid="`sales-by-${k}`" @click="by = k">{{ l }}</button>
                 </div>
                 <Button variant="outline" size="sm" class="ml-auto" @click="exportCsv"><Download /> Xuất CSV</Button>
             </div>

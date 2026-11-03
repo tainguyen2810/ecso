@@ -121,8 +121,12 @@ class LedgerReports
             ->where('o.tenant_id', $this->tenant())->whereBetween('o.placed_at', [$from, $to])->where('o.status', '!=', OrderStatus::CANCELLED)
             ->selectRaw('COALESCE(SUM(i.cost_snapshot * i.quantity), 0) as cogs, COALESCE(SUM(CASE WHEN i.cost_snapshot IS NULL AND o.status IN (\''.implode("','", OrderStatus::SHIPPED).'\') THEN 1 ELSE 0 END), 0) as missing')
             ->first();
-        $returns = (float) DB::table('order_returns')->where('tenant_id', $this->tenant())->where('status', '!=', OrderReturn::REJECTED)
-            ->whereBetween('created_at', [$from, $to])->sum('refund_amount');
+        // Marketplace returns often carry no refund amount: count the goods value of their lines instead.
+        $lineValue = DB::table('order_return_lines as l')->join('order_items as i', 'i.id', '=', 'l.order_item_id')
+            ->groupBy('l.order_return_id')->selectRaw('l.order_return_id, SUM(l.quantity * i.unit_price) as value');
+        $returns = (float) DB::table('order_returns as r')->leftJoinSub($lineValue, 'lv', 'lv.order_return_id', '=', 'r.id')
+            ->where('r.tenant_id', $this->tenant())->where('r.status', '!=', OrderReturn::REJECTED)->whereBetween('r.created_at', [$from, $to])
+            ->selectRaw('COALESCE(SUM(COALESCE(r.refund_amount, lv.value, 0)), 0) as v')->value('v');
 
         $value = fn (array $types, ?string $extra = null) => (float) DB::table('stock_movements as m')->join('product_variants as v', 'v.id', '=', 'm.product_variant_id')
             ->where('m.tenant_id', $this->tenant())->whereBetween('m.created_at', [$from, $to])->whereIn('m.type', $types)
@@ -150,7 +154,8 @@ class LedgerReports
         $p['stock_loss'] = $p['write_off'] + $p['stocktake'];
         $p['profit'] = $p['gross_profit'] - $p['stock_loss'];
 
-        return [...array_map(fn ($v) => round($v, 2), $p), 'missing_cost_lines' => (int) $cost->missing];
+        // + 0.0 turns a negated zero (-0) into 0 so it never shows as "-0 đ".
+        return [...array_map(fn ($v) => round($v, 2) + 0.0, $p), 'missing_cost_lines' => (int) $cost->missing];
     }
 
     private function tenant(): int
