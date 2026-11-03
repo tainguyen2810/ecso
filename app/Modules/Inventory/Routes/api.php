@@ -15,6 +15,8 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
         Route::get('summary', [StockController::class, 'summary']);
         Route::get('low-stock', [StockController::class, 'lowStock']);
         Route::get('variants/{variant}/card', [StockController::class, 'card']);
+        Route::get('products/{product}/stock', [StockController::class, 'productStock']);
+        Route::get('products/{product}/movements', [StockController::class, 'productMovements']);
         Route::put('variants/{variant}/safety-stock', [StockController::class, 'safetyStock']);
 
         Route::get('receipts', [ReceiptController::class, 'index']);

@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { ChevronDown, ChevronRight, Download, FileSpreadsheet, Package, Plus, Search, Upload } from 'lucide-vue-next';
+import { useRoute, useRouter } from 'vue-router';
+import { ChevronDown, ChevronRight, Download, FileSpreadsheet, Package, Plus, Search, SlidersHorizontal, Upload, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import Tabs from '../../components/Tabs.vue';
 import ImportDialog from './ImportDialog.vue';
+import ProductsNav from './ProductsNav.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -14,21 +16,42 @@ import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError, downloadFile } from '@/shared/lib/api';
-import { cn, formatMoney, formatNumber } from '@/shared/lib/utils';
+import { cn, formatDate, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
 import type { Product, Ref } from '@/shared/types';
 
 const tenant = useTenantStore();
 const toast = useToast();
+const route = useRoute();
+const router = useRouter();
 const canManage = computed(() => tenant.can('products.manage'));
 
 const products = ref<Product[]>([]);
 const categories = ref<Ref[]>([]);
+const brands = ref<Ref[]>([]);
+const tags = ref<string[]>([]);
 const meta = ref({ current_page: 1, last_page: 1, total: 0 });
 const loading = ref(true);
 const loadError = ref<string | null>(null);
-const filters = reactive({ q: '', status: 'active', category: '', page: 1 });
+const q = (key: string) => (typeof route.query[key] === 'string' ? (route.query[key] as string) : '');
+// Filters live in the URL so a filtered list can be bookmarked or shared (links from categories, tags).
+const filters = reactive({
+    q: q('q'),
+    status: q('status') || 'active',
+    category: q('category'),
+    brand: q('brand'),
+    tag: q('tag'),
+    created_from: q('created_from'),
+    created_to: q('created_to'),
+    sort: q('sort') || 'newest',
+    page: 1,
+});
+const moreFilters = ref(!!(filters.brand || filters.tag || filters.created_from || filters.created_to));
+const activeExtra = computed(() => [filters.brand, filters.tag, filters.created_from, filters.created_to].filter(Boolean).length);
+function clearExtra() {
+    Object.assign(filters, { brand: '', tag: '', created_from: '', created_to: '' });
+}
 const expanded = ref<Set<string>>(new Set());
 const selected = ref<Set<string>>(new Set());
 const importOpen = ref(false);
@@ -52,8 +75,11 @@ async function load() {
     loading.value = true;
     loadError.value = null;
     try {
+        const { page, ...rest } = filters;
+        const query = Object.fromEntries(Object.entries(rest).filter(([k, v]) => v && !(k === 'status' && v === 'active') && !(k === 'sort' && v === 'newest')));
+        router.replace({ query });
         const { data } = await api.get('/products', {
-            params: { q: filters.q || undefined, status: filters.status === 'all' ? undefined : filters.status, category: filters.category || undefined, page: filters.page },
+            params: { ...query, status: filters.status === 'all' ? undefined : filters.status, sort: filters.sort, page },
         });
         products.value = data.data;
         meta.value = data.meta;
@@ -66,7 +92,10 @@ async function load() {
 }
 
 onMounted(async () => {
-    categories.value = (await api.get('/categories')).data.data;
+    const [c, b, t] = await Promise.all([api.get('/categories'), api.get('/brands'), api.get('/products/tags')]);
+    categories.value = c.data.data;
+    brands.value = b.data.data;
+    tags.value = t.data.data;
     await load();
 });
 
@@ -75,7 +104,10 @@ watch(() => filters.q, () => {
     clearTimeout(timer);
     timer = setTimeout(() => ((filters.page = 1), load()), 250);
 });
-watch(() => [filters.status, filters.category], () => ((filters.page = 1), load()));
+watch(
+    () => [filters.status, filters.category, filters.brand, filters.tag, filters.created_from, filters.created_to, filters.sort],
+    () => ((filters.page = 1), load()),
+);
 
 function toggle(set: Set<string>, id: string) {
     set.has(id) ? set.delete(id) : set.add(id);
@@ -98,6 +130,22 @@ async function bulkStatus(status: string) {
     }
 }
 
+async function bulkDelete() {
+    if (!window.confirm(`Xóa ${selected.value.size} sản phẩm đã chọn? Sản phẩm còn tồn kho sẽ được giữ lại.`)) return;
+    try {
+        const { data } = await api.post('/products/bulk-delete', { ids: [...selected.value] });
+        if (data.deleted) toast.success(`Đã xóa ${data.deleted} sản phẩm`);
+        if (data.skipped.length) toast.error(`${data.skipped.length} sản phẩm không xóa được: ${data.skipped[0].message}`);
+        await load();
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    }
+}
+
+function printSelected() {
+    router.push({ path: '/products/labels', query: { products: [...selected.value].join(',') } });
+}
+
 const allSelected = computed(() => products.value.length > 0 && products.value.every((p) => selected.value.has(p.id)));
 function toggleAll() {
     selected.value = allSelected.value ? new Set() : new Set(products.value.map((p) => p.id));
@@ -110,6 +158,7 @@ function toggleAll() {
         <Button v-if="canManage" variant="outline" data-testid="import-button" @click="importOpen = true"><Upload /> Import</Button>
         <RouterLink v-if="canManage" to="/products/new"><Button data-testid="new-product"><Plus /> Thêm sản phẩm</Button></RouterLink>
     </PageHeader>
+    <ProductsNav />
 
     <Card>
         <div class="flex flex-wrap items-center gap-3 border-b px-4 py-3">
@@ -117,7 +166,22 @@ function toggleAll() {
                 <Search class="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
                 <Input v-model="filters.q" data-testid="product-search" placeholder="Tên sản phẩm, SKU hoặc mã vạch" class="pl-8" />
             </div>
-            <Select v-model="filters.category" :options="[{ value: '', label: 'Mọi danh mục' }, ...categories.map((c) => ({ value: c.id, label: c.name }))]" class="w-full sm:w-48" />
+            <Select v-model="filters.category" :options="[{ value: '', label: 'Mọi danh mục' }, ...categories.map((c) => ({ value: c.id, label: c.name }))]" class="w-full sm:w-48" aria-label="Danh mục" />
+            <Button variant="outline" size="sm" data-testid="more-filters" :class="cn(moreFilters && 'bg-muted')" @click="moreFilters = !moreFilters">
+                <SlidersHorizontal /> Bộ lọc khác<span v-if="activeExtra" class="rounded-full bg-primary px-1.5 text-xs text-primary-foreground">{{ activeExtra }}</span>
+            </Button>
+            <Select
+                v-model="filters.sort"
+                class="w-full sm:w-44"
+                aria-label="Sắp xếp"
+                :options="[
+                    { value: 'newest', label: 'Mới tạo trước' },
+                    { value: 'oldest', label: 'Cũ trước' },
+                    { value: 'name', label: 'Tên A → Z' },
+                    { value: 'available', label: 'Tồn khả dụng tăng dần' },
+                    { value: '-available', label: 'Tồn khả dụng giảm dần' },
+                ]"
+            />
             <Tabs
                 v-model="filters.status"
                 class="ml-auto"
@@ -129,12 +193,33 @@ function toggleAll() {
                 ]"
             />
         </div>
+        <div v-if="moreFilters" class="flex flex-wrap items-end gap-3 border-b bg-muted/30 px-4 py-3 text-sm" data-testid="extra-filters">
+            <label class="grid gap-1">
+                <span class="text-xs text-muted-foreground">Thương hiệu</span>
+                <Select v-model="filters.brand" class="w-44" aria-label="Thương hiệu" :options="[{ value: '', label: 'Mọi thương hiệu' }, ...brands.map((b) => ({ value: b.id, label: b.name }))]" />
+            </label>
+            <label class="grid gap-1">
+                <span class="text-xs text-muted-foreground">Tag</span>
+                <Select v-model="filters.tag" class="w-40" aria-label="Tag" :options="[{ value: '', label: 'Mọi tag' }, ...tags.map((t) => ({ value: t, label: t }))]" />
+            </label>
+            <label class="grid gap-1">
+                <span class="text-xs text-muted-foreground">Tạo từ ngày</span>
+                <Input v-model="filters.created_from" type="date" class="w-40" aria-label="Tạo từ ngày" />
+            </label>
+            <label class="grid gap-1">
+                <span class="text-xs text-muted-foreground">Đến ngày</span>
+                <Input v-model="filters.created_to" type="date" class="w-40" aria-label="Tạo đến ngày" />
+            </label>
+            <Button v-if="activeExtra" variant="ghost" size="sm" @click="clearExtra"><X /> Xóa bộ lọc</Button>
+        </div>
 
-        <div v-if="selected.size" class="flex items-center gap-3 border-b bg-secondary/60 px-4 py-2 text-sm">
+        <div v-if="selected.size" class="flex flex-wrap items-center gap-3 border-b bg-secondary/60 px-4 py-2 text-sm">
             <span class="font-medium">Đã chọn {{ selected.size }}</span>
             <Button size="sm" variant="outline" @click="bulkStatus('active')">Đang bán</Button>
             <Button size="sm" variant="outline" @click="bulkStatus('inactive')">Ngừng bán</Button>
             <Button size="sm" variant="outline" @click="bulkStatus('archived')">Lưu trữ</Button>
+            <Button size="sm" variant="outline" data-testid="bulk-print" @click="printSelected">In tem mã vạch</Button>
+            <Button size="sm" variant="outline" class="text-destructive" data-testid="bulk-delete" @click="bulkDelete">Xóa</Button>
             <button class="ml-auto text-xs text-muted-foreground hover:text-foreground" @click="selected = new Set()">Bỏ chọn</button>
         </div>
 
@@ -158,10 +243,11 @@ function toggleAll() {
                         <th v-if="canManage" class="w-10 px-4 py-2.5"><input type="checkbox" :checked="allSelected" aria-label="Chọn tất cả" @change="toggleAll" /></th>
                         <th class="px-4 py-2.5 font-medium">Sản phẩm</th>
                         <th class="px-4 py-2.5 font-medium">Danh mục / Thương hiệu</th>
-                        <th class="px-4 py-2.5 text-right font-medium">Giá tham khảo</th>
+                        <th class="px-4 py-2.5 text-right font-medium">Giá bán lẻ</th>
                         <th class="px-4 py-2.5 text-right font-medium">Tồn thực tế</th>
                         <th class="px-4 py-2.5 text-right font-medium">Khả dụng</th>
                         <th class="px-4 py-2.5 font-medium">Trạng thái</th>
+                        <th class="px-4 py-2.5 font-medium">Ngày tạo</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y">
@@ -190,15 +276,17 @@ function toggleAll() {
                             <td class="px-4 py-3 text-right tabular-nums">{{ formatNumber(p.stock?.on_hand ?? 0) }}</td>
                             <td :class="cn('px-4 py-3 text-right font-medium tabular-nums', (p.stock?.available ?? 0) <= 0 && 'text-destructive')">{{ formatNumber(p.stock?.available ?? 0) }}</td>
                             <td class="px-4 py-3"><Badge :tone="statusTone[p.status]">{{ statusLabels[p.status] }}</Badge></td>
+                            <td class="whitespace-nowrap px-4 py-3 text-muted-foreground">{{ formatDate(p.created_at) }}</td>
                         </tr>
                         <tr v-if="expanded.has(p.id)" class="bg-muted/20">
-                            <td :colspan="canManage ? 7 : 6" class="px-4 py-2">
+                            <td :colspan="canManage ? 8 : 7" class="px-4 py-2">
                                 <table class="ml-12 w-[calc(100%-3rem)] text-xs">
                                     <tr v-for="v in p.variants" :key="v.id" class="border-b border-dashed last:border-0">
                                         <td class="py-1.5 pr-4 font-mono font-medium">{{ v.sku }}</td>
                                         <td class="py-1.5 pr-4">{{ v.name ?? '—' }}</td>
                                         <td class="py-1.5 pr-4 font-mono text-muted-foreground">{{ v.barcode ?? '' }}</td>
                                         <td class="py-1.5 pr-4 text-right tabular-nums">{{ formatMoney(v.ref_price) }}</td>
+                                        <td class="py-1.5 pr-4 text-right tabular-nums text-muted-foreground">{{ Number(v.wholesale_price) ? `Buôn ${formatMoney(v.wholesale_price)}` : '' }}</td>
                                         <td class="py-1.5 text-right"><RouterLink :to="`/inventory/sku/${v.id}`" class="text-primary hover:underline">Thẻ kho</RouterLink></td>
                                     </tr>
                                 </table>

@@ -12,7 +12,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ProductExporter
 {
-    public const COLUMNS = ['product_key', 'product_name', 'sku', 'variant_name', 'barcode', 'category', 'brand', 'ref_price', 'weight_gram', 'status', 'cost_price', 'on_hand', 'reserved', 'available'];
+    public const COLUMNS = ['product_key', 'product_name', 'sku', 'variant_name', 'barcode', 'category', 'brand', 'ref_price', 'weight_gram', 'status', 'cost_price', 'on_hand', 'reserved', 'available', 'wholesale_price', 'unit'];
 
     public function stream(string $format): StreamedResponse
     {
@@ -56,6 +56,7 @@ class ProductExporter
                         (string) $v->product->category?->name, (string) $v->product->brand?->name,
                         (string) $v->ref_price, (string) $v->weight_gram, $v->status, (string) $v->cost_price,
                         (int) $v->on_hand, (int) $v->reserved, (int) $v->on_hand - (int) $v->reserved,
+                        (string) $v->wholesale_price, (string) $v->product->unit,
                     ]));
                 }
             });

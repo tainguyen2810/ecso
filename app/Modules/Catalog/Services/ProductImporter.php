@@ -27,7 +27,7 @@ use OpenSpout\Reader\XLSX\Reader as XlsxReader;
  */
 class ProductImporter
 {
-    public const COLUMNS = ['product_key', 'product_name', 'sku', 'variant_name', 'barcode', 'category', 'brand', 'ref_price', 'weight_gram', 'status', 'opening_qty', 'opening_cost'];
+    public const COLUMNS = ['product_key', 'product_name', 'sku', 'variant_name', 'barcode', 'category', 'brand', 'ref_price', 'weight_gram', 'status', 'opening_qty', 'opening_cost', 'wholesale_price', 'unit'];
 
     public const MAX_ROWS = 20000;
 
@@ -124,6 +124,7 @@ class ProductImporter
                     'name' => $row['variant_name'] ?: null,
                     'barcode' => $row['barcode'] ?: null,
                     'ref_price' => $row['ref_price'] !== '' ? $row['ref_price'] : null,
+                    'wholesale_price' => $row['wholesale_price'] !== '' ? $row['wholesale_price'] : null,
                     'weight_gram' => $row['weight_gram'] !== '' ? (int) $row['weight_gram'] : null,
                     'status' => $row['status'] ?: null,
                 ], fn ($v) => $v !== null);
@@ -132,7 +133,7 @@ class ProductImporter
                 if ($match) {
                     ProductVariant::query()->withTrashed()->whereKey($match->id)->update($variantData);
                     Product::query()->withTrashed()->whereKey($match->product_id)->update(array_filter([
-                        'name' => $row['product_name'], 'category_id' => $categoryId, 'brand_id' => $brandId,
+                        'name' => $row['product_name'], 'category_id' => $categoryId, 'brand_id' => $brandId, 'unit' => $row['unit'] ?: null,
                     ]));
 
                     continue;
@@ -141,7 +142,7 @@ class ProductImporter
                 $key = $row['product_key'] !== '' ? mb_strtolower($row['product_key']) : null;
                 $product = $key !== null ? ($productsByKey[$key] ?? null) : null;
                 if ($product === null) {
-                    $product = Product::create(['name' => $row['product_name'], 'category_id' => $categoryId, 'brand_id' => $brandId, 'status' => Product::STATUS_ACTIVE]);
+                    $product = Product::create(['name' => $row['product_name'], 'category_id' => $categoryId, 'brand_id' => $brandId, 'unit' => $row['unit'] ?: null, 'status' => Product::STATUS_ACTIVE]);
                     $productCount++;
                     if ($key !== null) {
                         $productsByKey[$key] = $product;
@@ -200,6 +201,9 @@ class ProductImporter
             if ($row['product_name'] === '' && ! $match) {
                 $add($line, 'Thiếu tên sản phẩm.');
             }
+            if (mb_strlen($row['unit']) > 30) {
+                $add($line, 'Đơn vị tính tối đa 30 ký tự.');
+            }
             if (mb_strlen($row['product_name']) > 255) {
                 $add($line, 'Tên sản phẩm quá dài.');
             }
@@ -214,7 +218,7 @@ class ProductImporter
                 $barcodesInFile[$b] = $line;
             }
 
-            foreach (['ref_price', 'opening_cost'] as $money) {
+            foreach (['ref_price', 'wholesale_price', 'opening_cost'] as $money) {
                 if ($row[$money] !== '' && (! is_numeric($row[$money]) || (float) $row[$money] < 0)) {
                     $add($line, "{$money} phải là số không âm.");
                 }

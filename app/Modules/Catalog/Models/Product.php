@@ -25,7 +25,17 @@ class Product extends Model
 
     public const STATUSES = [self::STATUS_ACTIVE, self::STATUS_INACTIVE, self::STATUS_ARCHIVED];
 
-    protected $fillable = ['name', 'category_id', 'brand_id', 'description', 'status'];
+    public const FIELDS = ['name', 'category_id', 'brand_id', 'description', 'unit', 'tags', 'vat_rate', 'status'];
+
+    protected $fillable = self::FIELDS;
+
+    protected function casts(): array
+    {
+        return [
+            'tags' => 'array',
+            'vat_rate' => 'decimal:2',
+        ];
+    }
 
     /** @return BelongsTo<Category, $this> */
     public function category(): BelongsTo

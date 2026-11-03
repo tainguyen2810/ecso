@@ -24,6 +24,14 @@ class ProductRequest extends FormRequest
             'status' => ['sometimes', Rule::in(Product::STATUSES)],
             'category_id' => ['nullable', 'string'],
             'brand_id' => ['nullable', 'string'],
+            'unit' => ['nullable', 'string', 'max:30'],
+            'tags' => ['nullable', 'array', 'max:20'],
+            'tags.*' => ['string', 'max:40'],
+            'vat_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            // Opening stock, only when creating: one opening receipt in this warehouse.
+            'opening_warehouse_id' => $creating ? ['nullable', 'string', 'required_with:variants.*.opening_qty'] : ['prohibited'],
+            'variants.*.opening_qty' => $creating ? ['nullable', 'integer', 'min:0', 'max:1000000'] : ['prohibited'],
+            'variants.*.opening_cost' => $creating ? ['nullable', 'numeric', 'min:0', 'max:9999999999'] : ['prohibited'],
             'variants' => [$creating ? 'required' : 'sometimes', 'array', 'min:1', 'max:200'],
             'variants.*.id' => ['sometimes', 'string'],
             'variants.*.sku' => ['required', 'string', 'max:64', 'regex:'.self::SKU_REGEX, 'distinct:ignore_case'],
@@ -32,6 +40,7 @@ class ProductRequest extends FormRequest
             'variants.*.options' => ['nullable', 'array', 'max:5'],
             'variants.*.options.*' => ['string', 'max:100'],
             'variants.*.ref_price' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
+            'variants.*.wholesale_price' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             'variants.*.weight_gram' => ['nullable', 'integer', 'min:0', 'max:1000000'],
             'variants.*.status' => ['sometimes', Rule::in(['active', 'inactive'])],
         ];
@@ -93,6 +102,14 @@ class ProductRequest extends FormRequest
     public function payload(): array
     {
         $data = $this->validated();
+
+        if (array_key_exists('tags', $data)) {
+            $tags = collect($data['tags'] ?? [])->map(fn ($t) => trim($t))->filter()->unique(fn ($t) => mb_strtolower($t))->values()->all();
+            $data['tags'] = $tags ?: null;
+        }
+        if (array_key_exists('unit', $data)) {
+            $data['unit'] = trim((string) $data['unit']) ?: null;
+        }
 
         foreach (['category_id' => Category::class, 'brand_id' => Brand::class] as $key => $model) {
             if (array_key_exists($key, $data)) {

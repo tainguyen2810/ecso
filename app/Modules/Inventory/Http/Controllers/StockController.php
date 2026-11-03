@@ -15,6 +15,7 @@ use App\Modules\Inventory\Models\StockTransfer;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Services\InventoryService;
 use App\Modules\Inventory\Services\LowStockQuery;
+use App\Modules\Purchasing\Services\OnOrderQuery;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -165,6 +166,69 @@ class StockController extends Controller
             'balances' => $balances,
             'reservations' => StockReservation::query()->where('product_variant_id', $variant->id)->where('status', StockReservation::ACTIVE)->count(),
             'data' => MovementResource::collection($movements->getCollection()),
+            'meta' => ['current_page' => $movements->currentPage(), 'last_page' => $movements->lastPage(), 'total' => $movements->total()],
+        ]);
+    }
+
+    /**
+     * Stock of every SKU of one product in every active warehouse (product page): on hand, held, available,
+     * safety stock and goods still on order from suppliers.
+     */
+    public function productStock(Product $product, OnOrderQuery $onOrder): JsonResponse
+    {
+        $this->authorize('viewAny', StockBalance::class);
+
+        $variants = $product->variants()->get();
+        $warehouses = Warehouse::query()->where('status', Warehouse::STATUS_ACTIVE)->orderByDesc('is_default')->orderBy('name')->get();
+        $balances = StockBalance::query()->whereIn('product_variant_id', $variants->pluck('id'))->get()
+            ->groupBy('product_variant_id');
+        $incoming = $onOrder->byVariantAndWarehouse($variants->pluck('id')->all());
+
+        $rows = [];
+        foreach ($variants as $variant) {
+            $byWarehouse = ($balances->get($variant->id) ?? collect())->keyBy('warehouse_id');
+            foreach ($warehouses as $warehouse) {
+                $b = $byWarehouse->get($warehouse->id);
+                $rows[] = [
+                    'variant' => ['id' => $variant->ulid, 'sku' => $variant->sku, 'name' => $variant->name],
+                    'warehouse' => ['id' => $warehouse->ulid, 'code' => $warehouse->code, 'name' => $warehouse->name],
+                    'on_hand' => (int) ($b->on_hand ?? 0),
+                    'reserved' => (int) ($b->reserved ?? 0),
+                    'available' => $b ? $b->available() : 0,
+                    'safety_stock' => (int) ($b->safety_stock ?? 0),
+                    'incoming' => $incoming[$variant->id][$warehouse->id] ?? 0,
+                    'cost_price' => $variant->cost_price,
+                ];
+            }
+        }
+
+        return response()->json([
+            'data' => $rows,
+            'warehouses' => $warehouses->map(fn (Warehouse $w) => ['id' => $w->ulid, 'name' => $w->name]),
+        ]);
+    }
+
+    /** Ledger rows of all SKUs of one product, newest first (product page, "lịch sử kho"). */
+    public function productMovements(Request $request, Product $product): JsonResponse
+    {
+        $this->authorize('viewAny', StockBalance::class);
+        $filters = $request->validate(['warehouse' => ['nullable', 'string']]);
+        $warehouse = $this->warehouse($filters['warehouse'] ?? null);
+
+        $movements = StockMovement::query()->with(['warehouse', 'actor:id,name', 'variant:id,ulid,sku,name'])
+            ->whereIn('product_variant_id', $product->variants()->withTrashed()->select('id'))
+            ->where('type', '!=', 'MARKER')
+            ->when($warehouse, fn ($q) => $q->where('warehouse_id', $warehouse->id))
+            ->orderByDesc('id')
+            ->paginate(20);
+
+        $this->attachReferenceNumbers($movements->getCollection());
+
+        return response()->json([
+            'data' => $movements->getCollection()->map(fn (StockMovement $m) => [
+                ...(new MovementResource($m))->resolve(),
+                'variant' => ['id' => $m->variant->ulid, 'sku' => $m->variant->sku, 'name' => $m->variant->name],
+            ]),
             'meta' => ['current_page' => $movements->currentPage(), 'last_page' => $movements->lastPage(), 'total' => $movements->total()],
         ]);
     }

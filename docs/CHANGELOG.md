@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Phase 13 — Hoàn thiện module Sản phẩm (2026-11-03)
+- Trang chi tiết sản phẩm: tồn theo từng kho (gồm hàng đang về), lịch sử kho, giá bán lẻ/buôn/giá vốn; nút Sao chép, In tem, Sửa.
+- Trường mới: đơn vị tính, tags, thuế GTGT, giá bán buôn; có trong import/export.
+- Tồn kho ban đầu ngay khi tạo sản phẩm (phiếu nhập tồn đầu kỳ).
+- In tem mã vạch EAN-13 / Code 128 ra PDF: tem cuộn 50×30, 40×30, 35×22 mm và A4 65 tem.
+- Trang Danh mục và thương hiệu; danh sách sản phẩm có lọc theo thương hiệu, tag, ngày tạo, sắp xếp, in tem và xóa hàng loạt.
+
 ### Phase 12 — Kiểm kho, xuất hủy, cảnh báo tồn thấp, báo cáo (2026-11-03)
 - Kiểm kho (`/inventory/stocktake`): tải toàn bộ SKU của kho, quét mã vạch (mỗi lần +1) hoặc nhập số đếm, lọc chưa đếm / có chênh lệch, lưu tạm trên máy, tùy chọn coi SKU chưa đếm là 0. Tạo phiếu kiểm kê (điều chỉnh theo số đếm) để duyệt như quy trình cũ.
 - Xuất hủy: nút "Xuất hủy" mở phiếu điều chỉnh lý do Hàng hỏng, nhập số lượng hủy; tồn giảm khi duyệt. Báo cáo tách riêng "Hủy / mất".
