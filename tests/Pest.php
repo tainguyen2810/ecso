@@ -12,6 +12,7 @@ use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Services\AccountService;
 use App\Modules\Marketplace\Services\ListingService;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Models\TenantUser;
 use App\Modules\Tenancy\Services\TenantService;
@@ -20,6 +21,7 @@ use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Testing\TestResponse;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -138,4 +140,19 @@ function stockIn(Tenant $tenant, ProductVariant $variant, int $quantity, ?Wareho
     TenantContext::run($tenant, fn () => app(InventoryService::class)->receive(
         $warehouse ?? defaultWarehouse($tenant), [['variant_id' => $variant->id, 'quantity' => $quantity, 'unit_cost' => 50000]], 'stock-in-'.Str::uuid()
     ));
+}
+
+/** The shop-counter channel every business starts with. */
+function defaultChannel($tenant): SalesChannel
+{
+    return SalesChannel::withoutGlobalScopes()->where('tenant_id', $tenant->id)->firstOrFail();
+}
+
+function createSalesOrder($user, $tenant, array $lines, array $extra = []): TestResponse
+{
+    return actingInTenant($user, $tenant)->postJson('/api/v1/sales-orders', [
+        'channel_id' => defaultChannel($tenant)->ulid,
+        'lines' => array_map(fn ($l) => ['variant_id' => $l[0]->ulid, 'quantity' => $l[1], 'unit_price' => $l[2] ?? 100000], $lines),
+        ...$extra,
+    ]);
 }

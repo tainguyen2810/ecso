@@ -50,6 +50,7 @@ const routes: RouteRecordRaw[] = [
             { path: 'customers', name: 'customers', component: () => import('./pages/customers/CustomerList.vue'), meta: { permission: 'customers.view', nav: 'customers' } },
             { path: 'customers/groups', name: 'customer-groups', component: () => import('./pages/customers/CustomerGroups.vue'), meta: { permission: 'customers.view', nav: 'customers' } },
             { path: 'customers/:id', name: 'customer-show', component: () => import('./pages/customers/CustomerDetail.vue'), meta: { permission: 'customers.view', nav: 'customers' } },
+            { path: 'pos/shifts', name: 'pos-shifts', component: () => import('./pages/sales/Shifts.vue'), meta: { anyPermission: ['orders.create', 'orders.shifts'], nav: 'pos' } },
             { path: 'pos', name: 'pos', component: () => import('./pages/sales/Pos.vue'), meta: { permission: 'orders.create', nav: 'pos' } },
             { path: 'sales-channels', name: 'sales-channels', component: () => import('./pages/sales/SalesChannels.vue'), meta: { permission: 'orders.view', nav: 'sales-channels' } },
             { path: 'orders/:id', name: 'order-show', component: () => import('./pages/orders/OrderDetail.vue'), meta: { permission: 'orders.view', nav: 'orders' } },
@@ -104,6 +105,8 @@ router.beforeEach(async (to) => {
         }
         const permission = to.meta.permission as string | undefined;
         if (permission && !tenant.can(permission)) return { name: 'forbidden' };
+        const anyPermission = to.meta.anyPermission as string[] | undefined;
+        if (anyPermission && !anyPermission.some((p) => tenant.can(p))) return { name: 'forbidden' };
     }
     return true;
 });

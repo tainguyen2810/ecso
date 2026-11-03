@@ -47,8 +47,10 @@ use App\Modules\Purchasing\Models\SupplierPayment;
 use App\Modules\Purchasing\Models\SupplierReturn;
 use App\Modules\Purchasing\Policies\PurchasingPolicy;
 use App\Modules\Sales\Listeners\CreateDefaultSalesChannel;
+use App\Modules\Sales\Models\CashShift;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\SalesChannel;
+use App\Modules\Sales\Policies\CashShiftPolicy;
 use App\Modules\Sales\Policies\CustomerPolicy;
 use App\Modules\Sales\Policies\SalesChannelPolicy;
 use App\Modules\Tenancy\Events\TenantCreated;
@@ -97,6 +99,7 @@ class ModuleServiceProvider extends ServiceProvider
         Gate::policy(OrderReturn::class, ReturnPolicy::class);
         Gate::policy(Customer::class, CustomerPolicy::class);
         Gate::policy(SalesChannel::class, SalesChannelPolicy::class);
+        Gate::policy(CashShift::class, CashShiftPolicy::class);
         foreach ([Supplier::class, PurchaseOrder::class, SupplierReturn::class, SupplierPayment::class] as $model) {
             Gate::policy($model, PurchasingPolicy::class);
         }

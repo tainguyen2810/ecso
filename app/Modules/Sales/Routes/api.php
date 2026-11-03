@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Sales\Http\Controllers\CashShiftController;
 use App\Modules\Sales\Http\Controllers\CustomerController;
 use App\Modules\Sales\Http\Controllers\CustomerGroupController;
 use App\Modules\Sales\Http\Controllers\CustomerProfileController;
@@ -29,6 +30,12 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::delete('customers/{customer}/notes/{note}', [CustomerProfileController::class, 'destroyNote']);
 
     Route::get('pos/summary', [PosController::class, 'summary']);
+    Route::get('pos/shifts/current', [CashShiftController::class, 'current']);
+    Route::get('pos/shifts', [CashShiftController::class, 'index']);
+    Route::post('pos/shifts', [CashShiftController::class, 'store'])->middleware('throttle:30,1');
+    Route::get('pos/shifts/{shift}', [CashShiftController::class, 'show']);
+    Route::post('pos/shifts/{shift}/movements', [CashShiftController::class, 'move']);
+    Route::post('pos/shifts/{shift}/close', [CashShiftController::class, 'close']);
 
     Route::post('sales-orders', [SalesOrderController::class, 'store'])->middleware('throttle:120,1');
     Route::put('sales-orders/{order}', [SalesOrderController::class, 'update']);

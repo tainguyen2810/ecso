@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Banknote, CreditCard, Minus, Plus, Printer, QrCode, Trash2, UserRound, Wallet, X } from 'lucide-vue-next';
+import { Banknote, Clock, CreditCard, History, Minus, Plus, Printer, QrCode, Trash2, UserRound, Wallet, X } from 'lucide-vue-next';
+import { RouterLink } from 'vue-router';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
@@ -13,7 +14,8 @@ import { useTenantStore } from '@/shared/stores/tenant';
 import { paymentMethods } from '../orders/labels';
 import { printInvoice } from '../orders/invoice';
 import { addToCart, cartTotals, emptyCart, quickCash, type Cart } from './pos';
-import type { Customer, OrderDetail, SalesChannel, Variant, Warehouse } from '@/shared/types';
+import ShiftPanel from './ShiftPanel.vue';
+import type { CashShift, Customer, OrderDetail, SalesChannel, Variant, Warehouse } from '@/shared/types';
 
 const STORAGE_KEY = 'ecso.pos.carts';
 const toast = useToast();
@@ -36,8 +38,11 @@ const customerResults = ref<Customer[]>([]);
 const paying = ref(false);
 const error = ref<string | null>(null);
 const autoPrint = ref(true);
-const summaryOpen = ref(false);
-const summary = ref<{ orders: number; revenue: string; cancelled: number; by_method: Record<string, string>; collected: string } | null>(null);
+const shift = ref<CashShift | null>(null);
+const closedShift = ref<CashShift | null>(null);
+const suggestedOpening = ref('0');
+const shiftOpen = ref(false);
+const shiftLoaded = ref(false);
 
 const methodIcons = { cash: Banknote, bank_transfer: QrCode, card: CreditCard, ewallet: Wallet } as const;
 
@@ -63,7 +68,8 @@ onMounted(async () => {
     const pos = channels.value.find((ch) => ch.type === 'pos') ?? channels.value[0];
     channelId.value = pos?.id ?? '';
     warehouseId.value = pos?.warehouse?.id ?? warehouses.value.find((x) => x.is_default)?.id ?? warehouses.value[0]?.id ?? '';
-    await runSearch();
+    await Promise.all([runSearch(), loadShift()]);
+    if (!shift.value) shiftOpen.value = true;
     window.addEventListener('keydown', onKey);
     focusSearch();
 });
@@ -152,6 +158,12 @@ const shortfall = computed(() => Math.max(0, totals.value.total - received.value
 
 async function pay() {
     if (!cart.value.lines.length || paying.value) return;
+    if (shiftLoaded.value && !shift.value) {
+        error.value = 'Chưa mở ca. Mở ca và đếm tiền đầu ca trước khi bán.';
+        closedShift.value = null;
+        shiftOpen.value = true;
+        return;
+    }
     if (shortfall.value > 0 && !cart.value.customer) {
         error.value = 'Khách lẻ phải thanh toán đủ. Chọn khách hàng để ghi nợ phần còn lại.';
         return;
@@ -190,10 +202,33 @@ function collectFirst(err: ApiError): string | null {
     return errors ? (Object.values(errors)[0]?.[0] ?? null) : null;
 }
 
-async function openSummary() {
-    const { data } = await api.get('/pos/summary');
-    summary.value = data.data;
-    summaryOpen.value = true;
+async function loadShift() {
+    const { data } = await api.get('/pos/shifts/current', { params: { warehouse: warehouseId.value || undefined } });
+    shift.value = data.data;
+    suggestedOpening.value = data.meta.suggested_opening;
+    shiftLoaded.value = true;
+}
+
+async function openShiftDialog() {
+    closedShift.value = null;
+    if (shift.value) await loadShift(); // fresh figures
+    shiftOpen.value = true;
+}
+
+async function onShiftChanged(s: CashShift) {
+    if (s.status === 'closed') {
+        closedShift.value = s;
+        shift.value = null;
+        const { data } = await api.get('/pos/shifts/current', { params: { warehouse: warehouseId.value || undefined } });
+        suggestedOpening.value = data.meta.suggested_opening;
+    } else {
+        const justOpened = !shift.value;
+        shift.value = s;
+        if (justOpened) {
+            shiftOpen.value = false;
+            focusSearch();
+        }
+    }
 }
 
 const stockOf = (variantId: string) => results.value.find((v) => v.id === variantId)?.stock?.available;
@@ -208,7 +243,8 @@ const quick = computed(() => quickCash(totals.value.total));
                 <Input ref="searchInput" v-model="search" class="min-w-64 flex-1 text-base" placeholder="Quét mã vạch hoặc tìm sản phẩm (F2)…" data-testid="pos-search" @keydown.enter.prevent="onSearchEnter" />
                 <Select v-model="channelId" class="w-48" :options="channels.map((c) => ({ value: c.id, label: c.name }))" aria-label="Kênh bán" />
                 <Select v-model="warehouseId" class="w-40" :options="warehouses.filter((w) => w.status === 'active').map((w) => ({ value: w.id, label: w.name }))" aria-label="Kho" />
-                <Button variant="outline" data-testid="pos-summary" @click="openSummary">Tổng kết ca</Button>
+                <Button :variant="shift ? 'outline' : 'default'" data-testid="pos-shift" @click="openShiftDialog"><Clock /> {{ shift ? `Ca ${shift.number}` : 'Mở ca' }}</Button>
+                <RouterLink to="/pos/shifts" class="inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground hover:bg-muted" title="Lịch sử ca" data-testid="pos-shift-history"><History class="size-4" /></RouterLink>
             </div>
             <div class="grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3 xl:grid-cols-4" data-testid="pos-products">
                 <button
@@ -324,16 +360,8 @@ const quick = computed(() => quickCash(totals.value.total));
         </Card>
     </div>
 
-    <Dialog v-model:open="summaryOpen" title="Tổng kết ca hôm nay" description="Đơn bạn đã tạo và tiền bạn đã thu từ 0 giờ hôm nay. Dùng để đếm và bàn giao két tiền mặt.">
-        <dl v-if="summary" class="grid grid-cols-2 gap-y-2 text-sm" data-testid="pos-summary-body">
-            <dt class="text-muted-foreground">Số đơn</dt><dd class="text-right tabular-nums">{{ summary.orders }} <span v-if="summary.cancelled" class="text-xs text-muted-foreground">(hủy {{ summary.cancelled }})</span></dd>
-            <dt class="text-muted-foreground">Doanh số</dt><dd class="text-right tabular-nums">{{ formatMoney(summary.revenue) }}</dd>
-            <template v-for="(amount, method) in summary.by_method" :key="method">
-                <template v-if="Number(amount) !== 0"><dt class="text-muted-foreground">{{ paymentMethods[method] }}</dt><dd class="text-right tabular-nums">{{ formatMoney(amount) }}</dd></template>
-            </template>
-            <dt class="border-t pt-2 font-medium">Tổng đã thu</dt><dd class="border-t pt-2 text-right font-semibold tabular-nums">{{ formatMoney(summary.collected) }}</dd>
-            <dt class="font-medium">Tiền mặt trong két</dt><dd class="text-right font-semibold tabular-nums text-primary">{{ formatMoney(summary.by_method.cash) }}</dd>
-        </dl>
-        <template #footer><Button @click="summaryOpen = false">Đóng</Button></template>
+    <Dialog v-model:open="shiftOpen" :title="closedShift ? `Đã đóng ca ${closedShift.number}` : shift ? 'Ca bán hàng' : 'Mở ca bán hàng'" size="lg">
+        <ShiftPanel :shift="closedShift ?? shift" :warehouse-id="warehouseId" :suggested-opening="suggestedOpening" @changed="onShiftChanged" />
+        <template v-if="closedShift" #footer><Button variant="outline" @click="closedShift = null">Mở ca mới</Button><Button @click="shiftOpen = false">Xong</Button></template>
     </Dialog>
 </template>

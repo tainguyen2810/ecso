@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Ca bán hàng và két tiền (2026-11-03)
+- Bán tại quầy yêu cầu mở ca: thu ngân đếm tiền đầu ca (gợi ý bằng số tiền ca trước để lại két). Mỗi thu ngân chỉ có một ca đang mở.
+- Trong ca: nộp tiền vào két (tiền lẻ) và rút tiền ra (nộp két sắt, ngân hàng), không rút quá số tiền mặt đang có.
+- Đóng ca: đếm theo mệnh giá hoặc nhập tổng, so với tiền mặt hệ thống (đầu ca + thu tiền mặt − hoàn tiền mặt + nộp − rút), bắt buộc ghi lý do khi lệch, ghi số nộp về và số để lại két. Số liệu được chốt khi đóng ca. In biên bản bàn giao ca K80.
+- Trang `/pos/shifts`: lịch sử ca. Thu ngân xem ca của mình; quyền mới `orders.shifts` (Quản lý vận hành, Kế toán) xem mọi ca và đóng hộ ca bị quên.
+- Nộp/rút tiền két là chuyển tiền nội bộ, không ghi vào sổ quỹ.
+
 ### Trung tâm báo cáo (2026-11-03)
 - `/reports` thành trang tổng hợp: 6 nhóm (Bán hàng, Trả hàng, Khách hàng, Tài chính, Nhập hàng, Kho hàng), mỗi nhóm có số chính của kỳ và danh sách báo cáo chi tiết. Nhóm chỉ hiện với người có quyền tương ứng.
 - Báo cáo mới: bán hàng theo sản phẩm / khách hàng / kho; trả hàng theo đơn và theo sản phẩm; thanh toán của khách theo phương thức / nhân viên / ngày; nhập hàng theo nhà cung cấp / sản phẩm / ngày; khách mua hàng (khách mới, quay lại); tồn kho tại một ngày bất kỳ theo từng kho; hàng dưới định mức (kèm số bán 30 ngày, số ngày còn đủ bán); hàng vượt tồn tối đa (số dư, giá trị dư); công nợ khách hàng; công nợ nhà cung cấp.
