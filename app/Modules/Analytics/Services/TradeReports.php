@@ -225,12 +225,13 @@ class TradeReports
         $placed = fn (): Builder => DB::table('orders as o')->where('o.tenant_id', $this->tenant())->whereBetween('o.placed_at', [$from, $to])->whereNotIn('o.status', self::EXCLUDED);
 
         $rows = $placed()->join('customers as c', 'c.id', '=', 'o.customer_id')
+            ->leftJoin('customer_groups as g', 'g.id', '=', 'c.customer_group_id')
             ->joinSub($first, 'f', 'f.customer_id', '=', 'o.customer_id')
-            ->groupBy('o.customer_id', 'c.ulid', 'c.code', 'c.name', 'c.group', 'f.first_at', 'f.last_at', 'f.lifetime_orders')
-            ->selectRaw('c.ulid, c.code, c.name, c.group, f.first_at, f.last_at, f.lifetime_orders, COUNT(*) as orders, SUM(o.total) as revenue')
+            ->groupBy('o.customer_id', 'c.ulid', 'c.code', 'c.name', 'g.name', 'f.first_at', 'f.last_at', 'f.lifetime_orders')
+            ->selectRaw('c.ulid, c.code, c.name, g.name as group_name, f.first_at, f.last_at, f.lifetime_orders, COUNT(*) as orders, SUM(o.total) as revenue')
             ->orderByDesc('revenue')->limit(500)->get()
             ->map(fn ($r) => [
-                'customer' => ['id' => $r->ulid, 'code' => $r->code, 'name' => $r->name, 'group' => $r->group],
+                'customer' => ['id' => $r->ulid, 'code' => $r->code, 'name' => $r->name, 'group' => $r->group_name],
                 'orders' => (int) $r->orders,
                 'revenue' => round((float) $r->revenue, 2),
                 'average' => $r->orders ? round((float) $r->revenue / (int) $r->orders, 2) : 0,
