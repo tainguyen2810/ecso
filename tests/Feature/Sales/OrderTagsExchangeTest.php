@@ -65,6 +65,10 @@ it('sets the returned goods off against an exchange order', function () {
     // Cash of the shift: 280.000 + 50.000, the set-off is not cash.
     actingInTenant($owner, $tenant)->getJson('/api/v1/pos/summary')->assertOk()->assertJsonPath('data.by_method.cash', '330000.00');
 
+    // The set-off cannot be voided on one side only.
+    $setOff = collect(actingInTenant($owner, $tenant)->getJson("/api/v1/orders/{$exchange}")->json('data.payments'))->firstWhere('method', OrderPayment::EXCHANGE);
+    actingInTenant($owner, $tenant)->postJson("/api/v1/payments/{$setOff['id']}/void", ['reason' => 'x'])->assertUnprocessable();
+
     // A return is used once.
     createSalesOrder($owner, $tenant, [[$other, 1, 100000]], ['customer' => $buyer, 'exchange_return_id' => $return])
         ->assertUnprocessable()->assertJsonValidationErrors('exchange_return_id');

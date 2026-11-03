@@ -426,7 +426,7 @@ async function createReturn() {
                             </div>
                             <div class="flex items-center gap-1">
                                 <span class="tabular-nums" :class="p.kind === 'refund' ? 'text-destructive' : ''">{{ p.kind === 'refund' ? '−' : '' }}{{ formatMoney(p.amount) }}</span>
-                                <Button v-if="!p.voided_at && tenant.can('orders.payment')" variant="ghost" size="icon" class="size-7" title="Hủy phiếu (nhập nhầm)" @click="voidPayment(p.id)"><Ban class="size-3.5" /></Button>
+                                <Button v-if="!p.voided_at && p.method !== 'exchange' && tenant.can('orders.payment')" variant="ghost" size="icon" class="size-7" title="Hủy phiếu (nhập nhầm)" @click="voidPayment(p.id)"><Ban class="size-3.5" /></Button>
                             </div>
                         </li>
                     </ul>

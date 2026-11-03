@@ -25,6 +25,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $delivered_at
  * @property Carbon|null $cancelled_at
  * @property Carbon|null $packing_slip_printed_at
+ * @property Carbon|null $deliver_on
+ * @property array<int, string>|null $tags
  */
 class Order extends Model
 {

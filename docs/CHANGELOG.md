@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Phase 18 — Tag đơn, ngày hẹn giao, đổi hàng (2026-11-03)
+- Tag và ngày hẹn giao trên mọi đơn (cả đơn sàn), lọc theo tag / ngày hẹn giao, có trong file Excel.
+- Đổi hàng: tạo đơn đổi từ phiếu trả, giá trị hàng trả được bù trừ vào đơn mới (hai bút toán "Bù trừ đổi hàng", không tính là tiền mặt).
+- Danh sách đơn: lưu bộ lọc, chọn cột hiển thị.
+
 ### Trung tâm báo cáo (2026-11-03)
 - `/reports` thành trang tổng hợp: 6 nhóm (Bán hàng, Trả hàng, Khách hàng, Tài chính, Nhập hàng, Kho hàng), mỗi nhóm có số chính của kỳ và danh sách báo cáo chi tiết. Nhóm chỉ hiện với người có quyền tương ứng.
 - Báo cáo mới: bán hàng theo sản phẩm / khách hàng / kho; trả hàng theo đơn và theo sản phẩm; thanh toán của khách theo phương thức / nhân viên / ngày; nhập hàng theo nhà cung cấp / sản phẩm / ngày; khách mua hàng (khách mới, quay lại); tồn kho tại một ngày bất kỳ theo từng kho; hàng dưới định mức (kèm số bán 30 ngày, số ngày còn đủ bán); hàng vượt tồn tối đa (số dư, giá trị dư); công nợ khách hàng; công nợ nhà cung cấp.
