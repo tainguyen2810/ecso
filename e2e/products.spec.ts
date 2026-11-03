@@ -95,3 +95,31 @@ test('cost adjustment', async ({ page }) => {
     await expect(page.getByTestId('cost-adjustment-table')).toContainText('61.000');
     await shot(page, '08-cost-adjustments');
 });
+
+test('combo: create from components, stock follows components', async ({ page }) => {
+    await login(page, 'owner@demo.test');
+    await page.goto('/products');
+    await page.getByTestId('new-combo').click();
+    await expect(page.getByTestId('type-combo')).toHaveAttribute('aria-checked', 'true');
+    const suffix = Date.now().toString().slice(-5);
+    await page.getByTestId('product-name').fill(`Combo áo + quần ${suffix}`);
+    const picker = page.getByTestId('combo-components').getByPlaceholder('Tìm hoặc quét SKU thành phần');
+    await picker.fill('ATC-TRANG-M');
+    await picker.press('Enter');
+    await picker.fill('QJS-XANH-DAM-29');
+    await picker.press('Enter');
+    await page.getByTestId('component-qty-0').fill('2');
+    await page.getByTestId('sku-0').fill(`CB${suffix}`);
+    await page.getByLabel('Giá bán lẻ').first().fill('699000');
+    await shot(page, '09-combo-form');
+    await page.getByTestId('save-product').click();
+
+    await expect(page).toHaveURL(/\/products\/[0-9A-Z]{26}$/);
+    await expect(page.getByTestId('combo-components')).toContainText('ATC-TRANG-M');
+    // Combos per warehouse = min(shirts / 2, jeans / 1).
+    await expect(page.getByTestId('stock-by-warehouse')).toContainText('Kho chính');
+    await shot(page, '10-combo-detail');
+
+    await page.goto('/products?type=combo');
+    await expect(page.getByTestId('product-table')).toContainText(`Combo áo + quần ${suffix}`);
+});

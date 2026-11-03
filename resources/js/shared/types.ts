@@ -74,6 +74,7 @@ export interface Variant {
     options: Record<string, string>;
     ref_price: string | number | null;
     wholesale_price?: string | number | null;
+    components?: { variant: { id: string; sku: string; name: string }; quantity: number }[];
     cost_price?: string;
     weight_gram: number | null;
     status?: string;
@@ -91,6 +92,7 @@ export interface Product {
     id: string;
     name: string;
     description: string | null;
+    type?: 'standard' | 'combo';
     unit?: string | null;
     tags?: string[];
     vat_rate?: string | null;

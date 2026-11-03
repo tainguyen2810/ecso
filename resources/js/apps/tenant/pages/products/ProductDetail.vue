@@ -125,7 +125,7 @@ async function remove() {
     <ErrorState v-if="loadError" :message="loadError" />
     <div v-else-if="!product" class="space-y-3"><Skeleton class="h-10 w-80" /><Skeleton class="h-72" /></div>
     <template v-else>
-        <PageHeader :title="product.name">
+        <PageHeader :title="product.name" :description="product.type === 'combo' ? 'Combo: không có tồn riêng, số lượng bán được tính từ tồn các SKU thành phần.' : undefined">
             <Button v-if="canManage" variant="ghost" class="text-destructive" @click="remove"><Trash2 /> Xóa</Button>
             <RouterLink :to="{ path: '/products/labels', query: { products: product.id } }"><Button variant="outline" data-testid="print-labels"><Tags /> In tem</Button></RouterLink>
             <RouterLink v-if="canManage" :to="{ path: '/products/new', query: { copy: product.id } }"><Button variant="outline" data-testid="copy-product"><Copy /> Sao chép</Button></RouterLink>
@@ -169,7 +169,28 @@ async function remove() {
             </Card>
         </div>
 
-        <Card title="Biến thể và giá" :description="`${product.variants?.length ?? 0} SKU`" class="mt-5">
+        <Card v-if="product.type === 'combo'" title="Thành phần combo" class="mt-5">
+            <table class="w-full text-sm" data-testid="combo-components">
+                <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                        <th class="px-4 py-2.5 font-medium">SKU thành phần</th>
+                        <th class="px-4 py-2.5 font-medium">Sản phẩm</th>
+                        <th class="px-4 py-2.5 text-right font-medium">Số lượng / combo</th>
+                        <th class="px-4 py-2.5" />
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    <tr v-for="c in product.variants?.[0]?.components ?? []" :key="c.variant.id">
+                        <td class="px-4 py-2.5 font-mono text-xs font-medium">{{ c.variant.sku }}</td>
+                        <td class="px-4 py-2.5">{{ c.variant.name }}</td>
+                        <td class="px-4 py-2.5 text-right tabular-nums">{{ formatNumber(c.quantity) }}</td>
+                        <td class="px-4 py-2.5 text-right"><RouterLink v-if="canStock" :to="`/inventory/sku/${c.variant.id}`" class="text-xs text-primary hover:underline">Thẻ kho</RouterLink></td>
+                    </tr>
+                </tbody>
+            </table>
+        </Card>
+
+        <Card :title="product.type === 'combo' ? 'SKU và giá combo' : 'Biến thể và giá'" :description="`${product.variants?.length ?? 0} SKU`" class="mt-5">
             <div class="overflow-x-auto">
                 <table class="w-full text-sm" data-testid="variant-prices">
                     <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">

@@ -6,6 +6,7 @@ use App\Modules\Tenancy\Concerns\BelongsToTenant;
 use App\Shared\Concerns\HasPublicUlid;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -37,6 +38,16 @@ class ProductVariant extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    /**
+     * Components when this SKU is a combo.
+     *
+     * @return HasMany<ProductComponent, $this>
+     */
+    public function components(): HasMany
+    {
+        return $this->hasMany(ProductComponent::class)->orderBy('component_variant_id');
     }
 
     public function displayName(): string

@@ -170,7 +170,7 @@ function toggle(id: string) {
 
     <Dialog v-model:open="open" title="Tạo phiếu điều chỉnh giá vốn" description="Giá vốn mới áp dụng ngay khi tạo phiếu." size="xl">
         <div class="space-y-4">
-            <SkuPicker placeholder="Quét hoặc tìm SKU cần điều chỉnh" :exclude="rows.map((r) => r.variant.id!)" @pick="add" />
+            <SkuPicker stocked placeholder="Quét hoặc tìm SKU cần điều chỉnh" :exclude="rows.map((r) => r.variant.id!)" @pick="add" />
             <p v-if="error?.field('lines')" class="text-sm text-destructive">{{ error.field('lines') }}</p>
             <table v-if="rows.length" class="w-full text-sm" data-testid="cost-lines">
                 <thead class="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">

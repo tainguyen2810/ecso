@@ -25,7 +25,17 @@ class Product extends Model
 
     public const STATUSES = [self::STATUS_ACTIVE, self::STATUS_INACTIVE, self::STATUS_ARCHIVED];
 
+    public const TYPE_STANDARD = 'standard';
+
+    /** One SKU with no stock of its own: stock is held and shipped on its components (ProductComponent). */
+    public const TYPE_COMBO = 'combo';
+
     public const FIELDS = ['name', 'category_id', 'brand_id', 'description', 'unit', 'tags', 'vat_rate', 'status'];
+
+    public function isCombo(): bool
+    {
+        return $this->type === self::TYPE_COMBO;
+    }
 
     protected $fillable = self::FIELDS;
 

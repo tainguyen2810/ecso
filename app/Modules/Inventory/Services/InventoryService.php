@@ -2,6 +2,7 @@
 
 namespace App\Modules\Inventory\Services;
 
+use App\Modules\Catalog\Models\Product;
 use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Inventory\Events\AvailableStockChanged;
 use App\Modules\Inventory\Exceptions\InsufficientStock;
@@ -185,8 +186,10 @@ class InventoryService
      * Holds stock for a reference (an order item from Phase 3). Idempotent per (reference, warehouse) and per key.
      * When stock is short the reservation holds what is available and records the rest as shortage:
      * the order already exists on the marketplace, so it must not be rejected, but nothing is held beyond available.
+     * A combo line holds one reservation per component: $bundleVariantId is the combo SKU and $bundleQuantity the
+     * component quantity per combo (ReservationLedger reads the line back in combo units).
      */
-    public function reserve(Warehouse $warehouse, ProductVariant $variant, int $quantity, string $referenceType, int $referenceId, string $key, bool $allowShortage = true): StockReservation
+    public function reserve(Warehouse $warehouse, ProductVariant $variant, int $quantity, string $referenceType, int $referenceId, string $key, bool $allowShortage = true, ?int $bundleVariantId = null, ?int $bundleQuantity = null): StockReservation
     {
         if ($quantity <= 0) {
             throw new InvalidStockOperation('Số lượng giữ phải lớn hơn 0.');
@@ -194,15 +197,17 @@ class InventoryService
 
         // Absence is checked with a plain read and only an existing row is locked (by primary key): a locking read
         // of a missing row takes a gap lock, and concurrent inserts into the same gap deadlock (tests/Concurrency).
-        // The unique key on (reference, warehouse) still prevents a second reservation.
-        $find = function (bool $lock = false) use ($referenceType, $referenceId, $warehouse) {
+        // The unique key on (reference, warehouse, SKU) still prevents a second reservation.
+        $find = function (bool $lock = false) use ($referenceType, $referenceId, $warehouse, $variant, $bundleVariantId) {
             $id = StockReservation::query()->where('reference_type', $referenceType)->where('reference_id', $referenceId)
-                ->where('warehouse_id', $warehouse->id)->value('id');
+                ->where('warehouse_id', $warehouse->id)
+                ->when($bundleVariantId !== null, fn ($q) => $q->where('product_variant_id', $variant->id))
+                ->value('id');
 
             return $id ? StockReservation::query()->whereKey($id)->when($lock, fn ($q) => $q->lockForUpdate())->first() : null;
         };
 
-        $result = $this->run($key, $warehouse, [$variant->id], function (array $balances) use ($warehouse, $variant, $quantity, $referenceType, $referenceId, $key, $allowShortage, $find) {
+        $result = $this->run($key, $warehouse, [$variant->id], function (array $balances) use ($warehouse, $variant, $quantity, $referenceType, $referenceId, $key, $allowShortage, $find, $bundleVariantId, $bundleQuantity) {
             $existing = $find(true);
             if ($existing && $existing->status !== StockReservation::RELEASED) {
                 return $existing;
@@ -219,6 +224,8 @@ class InventoryService
             $reservation->forceFill([
                 'warehouse_id' => $warehouse->id,
                 'product_variant_id' => $variant->id,
+                'bundle_variant_id' => $bundleVariantId,
+                'bundle_quantity' => $bundleQuantity,
                 'reference_type' => $referenceType,
                 'reference_id' => $referenceId,
                 'quantity' => $reservable,
@@ -295,6 +302,7 @@ class InventoryService
             throw new InvalidStockOperation('setCosts must run inside a transaction.');
         }
         ksort($costs);
+        $this->assertNotCombo(array_keys($costs));
         $tenantId = $this->context->id();
         $variants = ProductVariant::query()->withTrashed()->where('tenant_id', $tenantId)
             ->whereIn('id', array_keys($costs))->orderBy('id')->lockForUpdate()->get()->keyBy('id');
@@ -379,6 +387,7 @@ class InventoryService
         $variantIds = array_values(array_unique(array_map('intval', $variantIds)));
         sort($variantIds);
         $this->assertBelongsToTenant($warehouse, $variantIds);
+        $this->assertNotCombo($variantIds);
         $this->ensureBalances($warehouse, $variantIds);
 
         $markerKey ??= "{$key}#0";
@@ -521,6 +530,21 @@ class InventoryService
         ])->save();
 
         return $movement;
+    }
+
+    /**
+     * A combo SKU has no stock of its own: receipts, counts, transfers and holds go to its components.
+     *
+     * @param  array<int, int>  $variantIds
+     */
+    private function assertNotCombo(array $variantIds): void
+    {
+        $combo = ProductVariant::query()->withTrashed()->whereIn('product_variants.id', $variantIds)
+            ->whereHas('product', fn ($q) => $q->withTrashed()->where('type', Product::TYPE_COMBO))->value('sku');
+
+        if ($combo !== null) {
+            throw new InvalidStockOperation("SKU {$combo} là combo, không có tồn riêng: thao tác trên các SKU thành phần.");
+        }
     }
 
     /**

@@ -4,6 +4,7 @@ namespace App\Modules\Catalog\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Catalog\Models\Product;
+use App\Modules\Catalog\Models\ProductComponent;
 use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Inventory\Models\StockReceipt;
 use App\Modules\Inventory\Models\Warehouse;
@@ -27,10 +28,14 @@ class ProductService
     {
         return DB::transaction(function () use ($data, $openingWarehouse) {
             $product = Product::create(collect($data)->only(Product::FIELDS)->all());
+            $product->forceFill(['type' => $data['type'] ?? Product::TYPE_STANDARD])->save();
             $opening = [];
 
             foreach ($data['variants'] as $input) {
                 $variant = $product->variants()->create($this->variantAttributes($input));
+                if ($product->isCombo()) {
+                    $this->syncComponents($variant, $data['components'] ?? []);
+                }
                 if ((int) ($input['opening_qty'] ?? 0) > 0) {
                     $opening[] = ['variant_id' => $variant->id, 'quantity' => (int) $input['opening_qty'], 'unit_cost' => (string) ($input['opening_cost'] ?? 0)];
                 }
@@ -56,6 +61,10 @@ class ProductService
     {
         return DB::transaction(function () use ($product, $data) {
             $product->fill(collect($data)->only(Product::FIELDS)->all())->save();
+
+            if ($product->isCombo() && array_key_exists('components', $data)) {
+                $this->syncComponents($product->variants()->firstOrFail(), $data['components']);
+            }
 
             if (array_key_exists('variants', $data)) {
                 $existing = $product->variants()->get()->keyBy('ulid');
@@ -139,8 +148,29 @@ class ProductService
         return ['deleted' => $deleted, 'skipped' => $skipped];
     }
 
+    /**
+     * Replaces a combo's components. Orders already holding stock keep their reservations (each one records the
+     * quantity per combo it was made with); new orders use the new recipe.
+     *
+     * @param  array<int, array{component_variant_id: int, quantity: int}>  $components
+     */
+    private function syncComponents(ProductVariant $combo, array $components): void
+    {
+        $combo->components()->delete();
+        foreach ($components as $c) {
+            $combo->components()->create($c);
+        }
+        $this->audit->record('product.combo_components', $combo->product, ['sku' => $combo->sku, 'components' => count($components)]);
+    }
+
     private function deleteVariant(ProductVariant $variant): void
     {
+        $usedIn = ProductComponent::query()->with('combo')->where('component_variant_id', $variant->id)
+            ->whereIn('product_variant_id', ProductVariant::query()->select('id'))->first();
+        if ($usedIn) {
+            throw ValidationException::withMessages(['variants' => "SKU {$variant->sku} đang là thành phần của combo {$usedIn->combo->sku}, không thể xóa."]);
+        }
+
         $hasStock = DB::table('stock_balances')
             ->where('tenant_id', $variant->tenant_id)
             ->where('product_variant_id', $variant->id)

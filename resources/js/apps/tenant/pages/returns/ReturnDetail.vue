@@ -46,8 +46,9 @@ async function load() {
     }
 }
 onMounted(async () => {
-    await load();
-    warehouses.value = (await api.get('/warehouses')).data.data.filter((w: Warehouse) => w.status === 'active');
+    // Both at once: the inspect form needs the warehouse list before it can be submitted.
+    const [, list] = await Promise.all([load(), api.get('/warehouses')]);
+    warehouses.value = list.data.data.filter((w: Warehouse) => w.status === 'active');
     inspect.value.warehouse_id = warehouses.value.find((w) => w.is_default)?.id ?? warehouses.value[0]?.id ?? '';
 });
 
@@ -144,7 +145,7 @@ async function submitInspect() {
                         <p class="text-xs text-muted-foreground sm:col-span-2">Bán được + Hỏng phải bằng Nhận. Hàng hỏng không cộng kho.</p>
                         <p v-if="inspectError" class="text-sm text-destructive sm:col-span-2">{{ inspectError }}</p>
                         <div class="sm:col-span-2">
-                            <Button :loading="busy === 'inspect'" :disabled="Object.keys(inspect.lines).some((id) => lineInvalid(Number(id)))" data-testid="submit-inspect" @click="submitInspect"><ClipboardCheck /> Xác nhận kiểm hàng</Button>
+                            <Button :loading="busy === 'inspect'" :disabled="!inspect.warehouse_id || Object.keys(inspect.lines).some((id) => lineInvalid(Number(id)))" data-testid="submit-inspect" @click="submitInspect"><ClipboardCheck /> Xác nhận kiểm hàng</Button>
                         </div>
                     </div>
                 </Card>
