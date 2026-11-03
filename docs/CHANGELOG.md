@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Phase 10 — Bán tại quầy (POS) (2026-11-03)
+- Màn hình `/pos` (phím tắt `g b`): lưới sản phẩm có tồn khả dụng theo kho, quét mã vạch (Enter thêm ngay, quét lại tăng số lượng), sửa giá và số lượng, giảm giá đơn.
+- Nhiều đơn chờ song song (giữ trên trình duyệt khi tải lại trang), chọn khách để ghi nợ, khách lẻ bắt buộc trả đủ (kiểm ở cả máy chủ).
+- Thanh toán tiền mặt / chuyển khoản / thẻ / ví, gợi ý mệnh giá, tính tiền thừa, phím F2 (tìm) và F9 (thanh toán), tự in hóa đơn K80.
+- Tổng kết ca: số đơn, doanh số, tiền thu theo hình thức (đã trừ hoàn tiền), tiền mặt trong két. API `GET /pos/summary`.
+
 ### Phase 9 — Bán hàng kênh riêng và khách hàng (2026-11-03)
 - Kênh bán riêng (quầy, cửa hàng, Facebook, Zalo, website, điện thoại): trang Thiết lập → Kênh bán riêng, mỗi kênh một kho xuất mặc định. Mỗi doanh nghiệp có sẵn kênh "Bán tại cửa hàng".
 - Tạo đơn bán tay (`/orders/new`): quét mã vạch/tìm SKU, giá và giảm giá từng dòng, phí giao, giảm giá đơn, chọn khách cũ hoặc thêm khách mới (nhận ra số điện thoại đã có), chọn trạng thái khi lưu (chờ xác nhận / đã xác nhận / hoàn tất ngay), thu tiền ngay.

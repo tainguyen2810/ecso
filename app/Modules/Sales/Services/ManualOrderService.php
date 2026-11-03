@@ -97,6 +97,12 @@ class ManualOrderService
                 $this->moveTo($order, $target);
             }
 
+            // A walk-in buyer who takes the goods must pay in full: there is nobody to record the debt against.
+            $paying = collect($data['payments'] ?? [])->reduce(fn (string $sum, $p) => bcadd($sum, (string) $p['amount'], 2), '0');
+            if ($target === OrderStatus::COMPLETED && $customer === null && bccomp($paying, (string) $order->total, 2) < 0) {
+                throw ValidationException::withMessages(['payments' => 'Khách lẻ phải thanh toán đủ. Chọn khách hàng để ghi nợ.']);
+            }
+
             foreach ($data['payments'] ?? [] as $payment) {
                 if ((float) $payment['amount'] > 0) {
                     $this->payments->record($order, $payment);

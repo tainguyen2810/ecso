@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Sales\Http\Controllers\CustomerController;
+use App\Modules\Sales\Http\Controllers\PosController;
 use App\Modules\Sales\Http\Controllers\SalesChannelController;
 use App\Modules\Sales\Http\Controllers\SalesOrderController;
 use App\Modules\Sales\Services\ManualOrderService;
@@ -11,6 +12,8 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
 
     Route::get('customers/groups', [CustomerController::class, 'groups']);
     Route::apiResource('customers', CustomerController::class);
+
+    Route::get('pos/summary', [PosController::class, 'summary']);
 
     Route::post('sales-orders', [SalesOrderController::class, 'store'])->middleware('throttle:120,1');
     Route::put('sales-orders/{order}', [SalesOrderController::class, 'update']);

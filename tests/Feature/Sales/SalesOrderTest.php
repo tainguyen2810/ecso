@@ -181,7 +181,7 @@ it('returns goods of a manual order through the normal return flow', function ()
     [$tenant, $owner] = tenantWithOwner();
     $variant = makeVariant($tenant);
     stockIn($tenant, $variant, 5);
-    $order = createSalesOrder($owner, $tenant, [[$variant, 2]], ['stage' => 'completed'])->json('data');
+    $order = createSalesOrder($owner, $tenant, [[$variant, 2]], ['stage' => 'completed', 'payments' => [['method' => 'cash', 'amount' => 200000]]])->json('data');
     $itemId = actingInTenant($owner, $tenant)->getJson("/api/v1/orders/{$order['id']}")->json('data.items.0.id');
 
     $return = actingInTenant($owner, $tenant)->postJson("/api/v1/orders/{$order['id']}/returns", ['type' => 'return', 'lines' => [['order_item_id' => $itemId, 'quantity' => 1]]])->assertCreated()->json('data');
@@ -252,4 +252,38 @@ it('manages customers and sales channels', function () {
     actingInTenant($owner, $tenant)->postJson('/api/v1/sales-orders', ['channel_id' => $ch['id'], 'lines' => [['variant_id' => $variant->ulid, 'quantity' => 1]]])
         ->assertUnprocessable()->assertJsonValidationErrors('channel_id');
     actingInTenant($owner, $tenant)->deleteJson('/api/v1/sales-channels/'.defaultChannel($tenant)->ulid)->assertNoContent();
+});
+
+it('requires walk-in counter sales to be paid in full, but lets a known customer owe', function () {
+    [$tenant, $owner] = tenantWithOwner();
+    $variant = makeVariant($tenant);
+    stockIn($tenant, $variant, 5);
+
+    createSalesOrder($owner, $tenant, [[$variant, 1, 100000]], ['stage' => 'completed', 'payments' => [['method' => 'cash', 'amount' => 50000]]])
+        ->assertUnprocessable()->assertJsonValidationErrors('payments');
+    expect(balanceOf(defaultWarehouse($tenant), $variant)->on_hand)->toBe(5);
+
+    createSalesOrder($owner, $tenant, [[$variant, 1, 100000]], ['stage' => 'completed', 'customer' => ['name' => 'Khách quen', 'phone' => '0911000111'], 'payments' => [['method' => 'cash', 'amount' => 50000]]])
+        ->assertCreated()->assertJsonPath('data.payment_status', 'partial');
+});
+
+it('sums the cashier shift by payment method, refunds subtracted', function () {
+    [$tenant, $owner] = tenantWithOwner();
+    $variant = makeVariant($tenant);
+    stockIn($tenant, $variant, 10);
+    $cashier = addMember($tenant, Role::ORDER_STAFF);
+
+    createSalesOrder($cashier, $tenant, [[$variant, 2, 100000]], ['stage' => 'completed', 'payments' => [['method' => 'cash', 'amount' => 200000]]])->assertCreated();
+    $id = createSalesOrder($cashier, $tenant, [[$variant, 1, 150000]], ['stage' => 'completed', 'payments' => [['method' => 'bank_transfer', 'amount' => 150000]]])->json('data.id');
+    actingInTenant($cashier, $tenant)->postJson("/api/v1/orders/{$id}/payments", ['kind' => 'refund', 'method' => 'cash', 'amount' => 20000])->assertCreated();
+    createSalesOrder($owner, $tenant, [[$variant, 1, 999000]], ['stage' => 'completed', 'payments' => [['method' => 'cash', 'amount' => 999000]]])->assertCreated();
+
+    actingInTenant($cashier, $tenant)->getJson('/api/v1/pos/summary')->assertOk()
+        ->assertJsonPath('data.orders', 2)
+        ->assertJsonPath('data.revenue', '350000.00')
+        ->assertJsonPath('data.by_method.cash', '180000.00')
+        ->assertJsonPath('data.by_method.bank_transfer', '150000.00')
+        ->assertJsonPath('data.collected', '330000.00');
+
+    actingInTenant(addMember($tenant, Role::VIEWER), $tenant)->getJson('/api/v1/pos/summary')->assertForbidden();
 });

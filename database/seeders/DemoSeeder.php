@@ -123,8 +123,9 @@ class DemoSeeder extends Seeder
 
         // Counter sales, paid at once.
         foreach ([[0, 1], [1, 2], [2, 1]] as $k => [$i, $qty]) {
-            $order = $orders->create(['channel_id' => $pos->ulid, 'stage' => 'completed', 'customer_id' => $k === 0 ? $people[3]->ulid : null, 'lines' => [$line($i, $qty)]]);
-            $payments->record($order, ['method' => $k === 1 ? 'bank_transfer' : 'cash', 'amount' => $order->total]);
+            $price = (string) $variants[$i % $variants->count()]->ref_price;
+            $orders->create(['channel_id' => $pos->ulid, 'stage' => 'completed', 'customer_id' => $k === 0 ? $people[3]->ulid : null, 'lines' => [$line($i, $qty)],
+                'payments' => [['method' => $k === 1 ? 'bank_transfer' : 'cash', 'amount' => bcmul($price, (string) $qty, 2)]]]);
         }
         // Online orders waiting to be processed.
         $orders->create(['channel_id' => $facebook->ulid, 'customer_id' => $people[0]->ulid, 'shipping_fee' => 30000, 'is_cod' => true, 'carrier' => 'GHN', 'lines' => [$line(0, 2), $line(3, 1)], 'note' => 'Gọi trước khi giao']);
