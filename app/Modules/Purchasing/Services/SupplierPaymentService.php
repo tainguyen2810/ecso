@@ -31,7 +31,8 @@ class SupplierPaymentService
             }
             if ($po) {
                 $po = PurchaseOrder::query()->lockForUpdate()->findOrFail($po->id);
-                $due = $po->balanceDue();
+                // An order not yet (fully) received can be paid up to its total: a prepayment to the supplier.
+                $due = $po->status === PurchaseOrder::CANCELLED ? $po->balanceDue() : $this->payable($po);
                 if (bccomp($amount, $due, 2) > 0) {
                     throw ValidationException::withMessages(['amount' => 'Số tiền vượt quá còn nợ của đơn ('.number_format((float) $due, 0, ',', '.').' ₫).']);
                 }
@@ -71,6 +72,15 @@ class SupplierPaymentService
 
             return $payment;
         });
+    }
+
+    private function payable(PurchaseOrder $po): string
+    {
+        $value = bccomp((string) $po->received_value, (string) $po->total, 2) >= 0 || in_array($po->status, [PurchaseOrder::RECEIVED, PurchaseOrder::CLOSED], true)
+            ? (string) $po->received_value
+            : (string) $po->total;
+
+        return bcsub(bcsub($value, (string) $po->returned_value, 2), (string) $po->paid_amount, 2);
     }
 
     private function recompute(PurchaseOrder $po): void

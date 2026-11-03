@@ -4,7 +4,6 @@ import { useRoute } from 'vue-router';
 import { Download, Printer, Tags, Trash2 } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
-import ProductsNav from './ProductsNav.vue';
 import { barcodeSvg } from './barcode';
 import { expandLabels, labelCode, labelLayouts, printLabels, type LabelItem, type LabelLayoutKey, type LabelOptions } from './labels';
 import Button from '@/shared/ui/Button.vue';
@@ -114,7 +113,6 @@ async function print(mode: 'open' | 'download') {
         <Button variant="outline" :disabled="!total || busy" @click="print('open')"><Printer /> Mở để in</Button>
         <Button :disabled="!total" :loading="busy" data-testid="download-labels" @click="print('download')"><Download /> Tải PDF ({{ formatNumber(total) }} tem)</Button>
     </PageHeader>
-    <ProductsNav />
 
     <div class="grid gap-5 lg:grid-cols-3">
         <Card title="SKU cần in" class="lg:col-span-2" description="Quét mã vạch hoặc tìm theo SKU, tên sản phẩm. Quét lại cùng SKU để tăng số tem.">

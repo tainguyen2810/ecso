@@ -14,6 +14,8 @@ use Illuminate\Support\Carbon;
 
 /**
  * @property Carbon|null $expected_at
+ * @property Carbon|null $invoice_date
+ * @property array<int, string>|null $tags
  * @property Carbon|null $ordered_at
  * @property Carbon|null $received_at
  * @property Carbon|null $closed_at
@@ -49,6 +51,9 @@ class PurchaseOrder extends Model
     {
         return [
             'expected_at' => 'date',
+            'invoice_date' => 'date',
+            'tags' => 'array',
+            'discount' => 'decimal:2',
             'ordered_at' => 'datetime',
             'received_at' => 'datetime',
             'closed_at' => 'datetime',

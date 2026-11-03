@@ -14,7 +14,9 @@ test('low-stock alert, stocktake and write-off', async ({ page }) => {
     await expect(page.getByTestId('low-stock')).toBeVisible();
     await shot(page, '01-dashboard-low-stock');
 
+    // Kiểm hàng like Sapo: a sheet saved while counting, then Cân bằng kho.
     await page.goto('/inventory/stocktake');
+    await page.getByTestId('new-stocktake').click();
     await expect(page.getByTestId('stocktake-table')).toBeVisible();
     for (let i = 0; i < 3; i++) {
         await page.getByTestId('stocktake-scan').fill('ATC-TRANG-M');
@@ -25,11 +27,17 @@ test('low-stock alert, stocktake and write-off', async ({ page }) => {
     await page.getByTestId('count-ATC-TRANG-M').fill('66');
     await page.getByTestId('count-ATC-DEN-L').fill('68');
     await expect(page.getByTestId('stocktake-progress')).toContainText('2 /');
+    await page.getByTestId('reason-ATC-TRANG-M').selectOption('lost');
+    await page.getByTestId('note-ATC-TRANG-M').fill('Thiếu 1 áo trên kệ');
+    await page.getByTestId('stocktake-save').click();
+    await expect(page).toHaveURL(/\/inventory\/stocktake\/[0-9A-Za-z]{26}$/); // the saved sheet's own URL, not /new
+    // The saved sheet reopens with its counts; stock is untouched until it is balanced.
+    await page.reload();
+    await expect(page.getByTestId('count-ATC-TRANG-M')).toHaveValue('66');
     await shot(page, '02-stocktake');
     await page.getByTestId('stocktake-submit').click();
-    await expect(page.getByTestId('document-status')).toHaveText('Chờ duyệt');
-    await page.getByTestId('approve').click();
     await expect(page.getByTestId('document-status')).toHaveText('Đã duyệt');
+    await expect(page.getByTestId('detail-lines')).toContainText('Thiếu 1 áo trên kệ');
     await shot(page, '03-stocktake-approved');
 
     await page.goto('/inventory/adjustments');

@@ -58,7 +58,8 @@ class SupplierReturnService
                     if ($line['quantity'] > $returnable) {
                         throw ValidationException::withMessages(["lines.{$i}.quantity" => "Chỉ trả được tối đa {$returnable}."]);
                     }
-                    $cost ??= $poLine->unit_cost;
+                    // At the ordered price net of its share of the order discount, as it was owed.
+                    $cost ??= bcsub((string) $poLine->unit_cost, app(PurchaseService::class)->discountPerUnit($po, $poLine, $poLines), 4);
                     $rate = (string) $poLine->tax_rate;
                     $poLine->increment('returned_qty', $line['quantity']);
                 }

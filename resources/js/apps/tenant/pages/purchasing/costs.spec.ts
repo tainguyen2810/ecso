@@ -19,6 +19,17 @@ describe('purchaseCosts', () => {
         expect(r.landed).toEqual([32500]);
     });
 
+    it('takes the order discount off the total and the landed cost by value', () => {
+        const r = purchaseCosts(
+            [
+                { quantity: 10, unit_cost: 100000, tax_rate: 0 },
+                { quantity: 20, unit_cost: 50000, tax_rate: 0 },
+            ],
+            { discount: 100000, extra_cost: 0, extra_cost_to_supplier: false, vat_in_cost: false },
+        );
+        expect(r).toMatchObject({ total: 1900000, discount: 100000, landed: [95000, 47500] });
+    });
+
     it('spreads costs by quantity when the goods are free', () => {
         expect(purchaseCosts([{ quantity: 4, unit_cost: 0, tax_rate: 0 }], { extra_cost: 2000, extra_cost_to_supplier: false, vat_in_cost: false }).landed).toEqual([500]);
     });

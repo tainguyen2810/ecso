@@ -23,11 +23,21 @@ class AdjustmentController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $this->authorize('viewAny', InventoryAdjustment::class);
-        $status = $request->validate(['status' => ['nullable', Rule::in([InventoryAdjustment::PENDING, InventoryAdjustment::APPROVED, InventoryAdjustment::REJECTED, InventoryAdjustment::CANCELLED])]])['status'] ?? null;
+        $filters = $request->validate([
+            'status' => ['nullable', Rule::in([InventoryAdjustment::DRAFT, InventoryAdjustment::PENDING, InventoryAdjustment::APPROVED, InventoryAdjustment::REJECTED, InventoryAdjustment::CANCELLED])],
+            'reason' => ['nullable', Rule::in(InventoryAdjustment::REASONS)],
+            'warehouse' => ['nullable', 'string'],
+            'q' => ['nullable', 'string', 'max:100'],
+        ]);
 
         return DocumentResource::collection(
             InventoryAdjustment::query()->with(['warehouse', 'creator:id,name', 'decider:id,name'])->withCount('lines')
-                ->when($status, fn ($q) => $q->where('status', $status))
+                ->when($filters['status'] ?? null, fn ($q, $s) => $q->where('status', $s))
+                // Drafts are someone's counting in progress: listed only where asked for (the stocktake list).
+                ->when(! isset($filters['status']) && ! isset($filters['reason']), fn ($q) => $q->where('status', '!=', InventoryAdjustment::DRAFT))
+                ->when($filters['reason'] ?? null, fn ($q, $r) => $q->where('reason', $r))
+                ->when($filters['warehouse'] ?? null, fn ($q, $w) => $q->whereHas('warehouse', fn ($h) => $h->where('ulid', $w)))
+                ->when($filters['q'] ?? null, fn ($q, $t) => $q->where(fn ($w) => $w->where('number', 'like', "%{$t}%")->orWhere('note', 'like', "%{$t}%")))
                 ->orderByDesc('id')->paginate(20)
         );
     }
@@ -39,12 +49,57 @@ class AdjustmentController extends Controller
             'warehouse_id' => ['required', 'string'],
             'reason' => ['required', Rule::in(InventoryAdjustment::REASONS)],
             'note' => ['nullable', 'string', 'max:1000'],
+            'draft' => ['boolean'],
+            ...$this->adjustmentLineRules(),
+        ]);
+        $this->assertLines($data['lines']);
+
+        $adjustment = $this->documents->createAdjustment($this->findWarehouse($data['warehouse_id']), $this->resolveLines($data['lines']), $data['reason'], $data['note'] ?? null, $request->boolean('draft'));
+
+        return (new DocumentResource($adjustment->load(self::RELATIONS)))->response()->setStatusCode(201);
+    }
+
+    /** Saves the counts of a draft stocktake again. */
+    public function update(Request $request, InventoryAdjustment $adjustment): DocumentResource
+    {
+        $this->authorize('cancel', $adjustment); // its creator, or an approver
+        $data = $request->validate(['note' => ['nullable', 'string', 'max:1000'], ...$this->adjustmentLineRules()]);
+        $this->assertLines($data['lines']);
+
+        return new DocumentResource($this->documents->updateDraft($adjustment, $this->resolveLines($data['lines']), $data['note'] ?? null)->load(self::RELATIONS));
+    }
+
+    /**
+     * "Cân bằng kho": the draft is finished. Approvers apply it at once (stock becomes the count); others send it for
+     * approval.
+     */
+    public function balance(Request $request, InventoryAdjustment $adjustment): DocumentResource
+    {
+        $this->authorize('cancel', $adjustment);
+        $adjustment = $this->documents->submitDraft($adjustment);
+        if ($request->user()->can('approve', $adjustment)) {
+            $adjustment = $this->documents->approveAdjustment($adjustment);
+        }
+
+        return new DocumentResource($adjustment->load(self::RELATIONS));
+    }
+
+    /** @return array<string, array<int, mixed>> */
+    private function adjustmentLineRules(): array
+    {
+        return [
             ...$this->lineRules(),
             'lines.*.mode' => ['required', Rule::in(['delta', 'count'])],
             'lines.*.quantity' => ['required', 'integer', 'between:-1000000,1000000'],
-        ]);
+            'lines.*.reason' => ['nullable', Rule::in(InventoryAdjustment::REASONS)],
+            'lines.*.note' => ['nullable', 'string', 'max:255'],
+        ];
+    }
 
-        foreach ($data['lines'] as $i => $line) {
+    /** @param  array<int, array{mode: string, quantity: int}>  $lines */
+    private function assertLines(array $lines): void
+    {
+        foreach ($lines as $i => $line) {
             if ($line['mode'] === 'count' && $line['quantity'] < 0) {
                 abort(422, 'Dòng '.($i + 1).': số lượng kiểm kê không được âm.');
             }
@@ -52,10 +107,6 @@ class AdjustmentController extends Controller
                 abort(422, 'Dòng '.($i + 1).': chênh lệch phải khác 0.');
             }
         }
-
-        $adjustment = $this->documents->createAdjustment($this->findWarehouse($data['warehouse_id']), $this->resolveLines($data['lines']), $data['reason'], $data['note'] ?? null);
-
-        return (new DocumentResource($adjustment->load(self::RELATIONS)))->response()->setStatusCode(201);
     }
 
     public function show(InventoryAdjustment $adjustment): DocumentResource

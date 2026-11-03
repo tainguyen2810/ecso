@@ -7,6 +7,7 @@ const tones = {
     warning: 'bg-warning/15 text-amber-600',
     danger: 'bg-destructive/10 text-destructive',
     muted: 'bg-muted text-muted-foreground',
+    info: 'bg-blue-50 text-blue-600',
 } as const;
 
 withDefaults(defineProps<{ tone?: keyof typeof tones }>(), { tone: 'default' });

@@ -17,6 +17,9 @@ class InventoryAdjustment extends Model
 {
     use BelongsToTenant, HasPublicUlid;
 
+    /** A stocktake being counted: saved, editable, no effect on stock (Sapo "Đang kiểm"). */
+    public const DRAFT = 'draft';
+
     public const PENDING = 'pending';
 
     public const APPROVED = 'approved';
@@ -56,6 +59,11 @@ class InventoryAdjustment extends Model
     public function decider(): BelongsTo
     {
         return $this->belongsTo(User::class, 'decided_by');
+    }
+
+    public function isDraft(): bool
+    {
+        return $this->status === self::DRAFT;
     }
 
     public function isPending(): bool

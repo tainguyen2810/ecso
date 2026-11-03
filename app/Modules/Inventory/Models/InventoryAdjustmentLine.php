@@ -15,7 +15,7 @@ class InventoryAdjustmentLine extends Model
 
     public $timestamps = false;
 
-    protected $fillable = ['product_variant_id', 'mode', 'quantity'];
+    protected $fillable = ['product_variant_id', 'mode', 'quantity', 'reason', 'note'];
 
     protected function casts(): array
     {

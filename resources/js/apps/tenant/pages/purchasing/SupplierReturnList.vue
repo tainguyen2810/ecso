@@ -3,7 +3,6 @@ import { onMounted, ref } from 'vue';
 import { Undo2 } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
-import PurchasingNav from './PurchasingNav.vue';
 import Card from '@/shared/ui/Card.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
@@ -36,7 +35,6 @@ onMounted(load);
 
 <template>
     <PageHeader title="Trả hàng nhà cung cấp" description="Nhà cung cấp, đơn nhập hàng, nhận hàng nhiều đợt, trả hàng và công nợ nhà cung cấp." />
-    <PurchasingNav />
     <Card>
         <div v-if="loading && !rows.length" class="space-y-3 p-4"><Skeleton v-for="i in 4" :key="i" class="h-10" /></div>
         <ErrorState v-else-if="loadError" :message="loadError" @retry="load" />

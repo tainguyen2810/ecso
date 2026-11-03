@@ -43,24 +43,85 @@ class InventoryDocumentService
     }
 
     /**
-     * @param  array<int, array{variant_id: int, mode: string, quantity: int}>  $lines
+     * A draft (stocktake still being counted) is saved without asking for approval and can be edited until it is
+     * submitted.
+     *
+     * @param  array<int, array{variant_id: int, mode: string, quantity: int, reason?: string|null, note?: string|null}>  $lines
      */
-    public function createAdjustment(Warehouse $warehouse, array $lines, string $reason, ?string $note = null): InventoryAdjustment
+    public function createAdjustment(Warehouse $warehouse, array $lines, string $reason, ?string $note = null, bool $draft = false): InventoryAdjustment
     {
         $this->assertActive($warehouse);
 
-        return DB::transaction(function () use ($warehouse, $lines, $reason, $note) {
+        return DB::transaction(function () use ($warehouse, $lines, $reason, $note, $draft) {
             $adjustment = new InventoryAdjustment(['warehouse_id' => $warehouse->id, 'reason' => $reason, 'note' => $note]);
             $adjustment->forceFill([
                 'number' => DocumentNumber::next('ADJ'),
-                'status' => InventoryAdjustment::PENDING,
+                'status' => $draft ? InventoryAdjustment::DRAFT : InventoryAdjustment::PENDING,
                 'created_by' => Auth::id(),
             ])->save();
-            $adjustment->lines()->createMany(array_map(fn ($l) => ['product_variant_id' => $l['variant_id'], 'mode' => $l['mode'], 'quantity' => $l['quantity']], $lines));
-            $this->audit->record('inventory.adjustment.created', $adjustment, ['number' => $adjustment->number, 'reason' => $reason]);
+            $adjustment->lines()->createMany($this->adjustmentRows($lines));
+            $this->audit->record($draft ? 'inventory.adjustment.drafted' : 'inventory.adjustment.created', $adjustment, ['number' => $adjustment->number, 'reason' => $reason]);
 
             return $adjustment;
         });
+    }
+
+    /**
+     * Saves the counts of a draft stocktake again (the whole list replaces the previous one).
+     *
+     * @param  array<int, array{variant_id: int, mode: string, quantity: int, reason?: string|null, note?: string|null}>  $lines
+     */
+    public function updateDraft(InventoryAdjustment $adjustment, array $lines, ?string $note = null): InventoryAdjustment
+    {
+        return DB::transaction(function () use ($adjustment, $lines, $note) {
+            $locked = $this->lockDraft($adjustment);
+            $locked->forceFill(['note' => $note])->save();
+            $locked->lines()->delete();
+            $locked->lines()->createMany($this->adjustmentRows($lines));
+            $this->audit->record('inventory.adjustment.draft_saved', $locked, ['number' => $locked->number, 'lines' => count($lines)]);
+
+            return $locked;
+        });
+    }
+
+    /** Counting is finished: the draft waits for approval like any adjustment. */
+    public function submitDraft(InventoryAdjustment $adjustment): InventoryAdjustment
+    {
+        return DB::transaction(function () use ($adjustment) {
+            $locked = $this->lockDraft($adjustment);
+            if (! $locked->lines()->exists()) {
+                throw new InvalidStockOperation('Phiếu kiểm chưa có sản phẩm nào được kiểm.');
+            }
+            $locked->forceFill(['status' => InventoryAdjustment::PENDING])->save();
+            $this->audit->record('inventory.adjustment.created', $locked, ['number' => $locked->number, 'reason' => $locked->reason]);
+
+            return $locked;
+        });
+    }
+
+    /**
+     * @param  array<int, array{variant_id: int, mode: string, quantity: int, reason?: string|null, note?: string|null}>  $lines
+     * @return array<int, array<string, mixed>>
+     */
+    private function adjustmentRows(array $lines): array
+    {
+        return array_map(fn ($l) => [
+            'product_variant_id' => $l['variant_id'],
+            'mode' => $l['mode'],
+            'quantity' => $l['quantity'],
+            'reason' => $l['reason'] ?? null,
+            'note' => $l['note'] ?? null,
+        ], $lines);
+    }
+
+    private function lockDraft(InventoryAdjustment $adjustment): InventoryAdjustment
+    {
+        $locked = InventoryAdjustment::query()->whereKey($adjustment->id)->lockForUpdate()->firstOrFail();
+        if (! $locked->isDraft()) {
+            throw new InvalidStockOperation('Phiếu kiểm đã gửi duyệt hoặc đã cân bằng, không sửa được nữa.');
+        }
+
+        return $locked;
     }
 
     public function approveAdjustment(InventoryAdjustment $adjustment, ?string $note = null): InventoryAdjustment
@@ -105,7 +166,7 @@ class InventoryDocumentService
 
     public function cancelAdjustment(InventoryAdjustment $adjustment): InventoryAdjustment
     {
-        return $this->closeAdjustment($adjustment, InventoryAdjustment::CANCELLED, null, 'inventory.adjustment.cancelled');
+        return $this->closeAdjustment($adjustment, InventoryAdjustment::CANCELLED, null, 'inventory.adjustment.cancelled', allowDraft: true);
     }
 
     /**
@@ -216,10 +277,10 @@ class InventoryDocumentService
         });
     }
 
-    private function closeAdjustment(InventoryAdjustment $adjustment, string $status, ?string $note, string $action): InventoryAdjustment
+    private function closeAdjustment(InventoryAdjustment $adjustment, string $status, ?string $note, string $action, bool $allowDraft = false): InventoryAdjustment
     {
-        return DB::transaction(function () use ($adjustment, $status, $note, $action) {
-            $locked = $this->lockPending($adjustment);
+        return DB::transaction(function () use ($adjustment, $status, $note, $action, $allowDraft) {
+            $locked = $allowDraft && $adjustment->isDraft() ? $this->lockDraft($adjustment) : $this->lockPending($adjustment);
             $locked->forceFill(['status' => $status, 'decided_by' => Auth::id(), 'decided_at' => now(), 'decision_note' => $note])->save();
             $this->audit->record($action, $locked, ['number' => $locked->number]);
 

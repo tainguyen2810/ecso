@@ -28,6 +28,8 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
         Route::get('adjustments', [AdjustmentController::class, 'index']);
         Route::post('adjustments', [AdjustmentController::class, 'store']);
         Route::get('adjustments/{adjustment}', [AdjustmentController::class, 'show']);
+        Route::put('adjustments/{adjustment}', [AdjustmentController::class, 'update']);
+        Route::post('adjustments/{adjustment}/balance', [AdjustmentController::class, 'balance']);
         Route::post('adjustments/{adjustment}/approve', [AdjustmentController::class, 'approve']);
         Route::post('adjustments/{adjustment}/reject', [AdjustmentController::class, 'reject']);
         Route::post('adjustments/{adjustment}/cancel', [AdjustmentController::class, 'cancel']);

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { ArrowRight, ClipboardCheck, FileText, Plus, Trash2 } from 'lucide-vue-next';
+import { ArrowLeftRight, ArrowRight, Boxes, ClipboardCheck, ClipboardList, FileText, PackagePlus, Plus, Trash2, Warehouse as WarehouseIcon } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
-import InventoryNav from './InventoryNav.vue';
+import HeaderLink from '../../components/HeaderLink.vue';
 import Pagination from '../../components/Pagination.vue';
 import Tabs from '../../components/Tabs.vue';
 import Badge from '@/shared/ui/Badge.vue';
@@ -61,19 +61,25 @@ watch(kindKey, () => ((status.value = 'all'), (page.value = 1), load()));
 </script>
 
 <template>
-    <PageHeader :title="({ receipts: 'Nhập kho', adjustments: 'Điều chỉnh tồn', transfers: 'Chuyển hàng' } as const)[kindKey]" description="Chứng từ kho: mọi thay đổi tồn đều có phiếu và được ghi vào sổ kho.">
+    <PageHeader :title="({ receipts: 'Nhập kho', adjustments: 'Điều chỉnh tồn', transfers: 'Chuyển hàng' } as const)[kindKey]" :description="descriptions[kindKey]">
+        <template #links>
+            <HeaderLink :icon="Boxes" to="/inventory">Quản lý kho</HeaderLink>
+            <HeaderLink v-if="kindKey !== 'receipts'" :icon="PackagePlus" to="/inventory/receipts">Nhập kho</HeaderLink>
+            <HeaderLink v-if="kindKey !== 'adjustments'" :icon="ClipboardList" to="/inventory/adjustments">Điều chỉnh tồn</HeaderLink>
+            <HeaderLink v-if="kindKey !== 'transfers'" :icon="ArrowLeftRight" to="/inventory/transfers">Chuyển hàng</HeaderLink>
+            <HeaderLink :icon="WarehouseIcon" to="/inventory/warehouses">Danh sách kho</HeaderLink>
+        </template>
         <template v-if="kindKey === 'adjustments' && tenant.can(kind.permission)">
-            <RouterLink to="/inventory/stocktake"><Button variant="outline" data-testid="open-stocktake"><ClipboardCheck /> Kiểm kho</Button></RouterLink>
+            <RouterLink to="/inventory/stocktake"><Button variant="outline" data-testid="open-stocktake"><ClipboardCheck /> Kiểm hàng</Button></RouterLink>
             <RouterLink :to="{ path: '/inventory/adjustments/new', query: { reason: 'damaged' } }"><Button variant="outline" data-testid="new-write-off"><Trash2 /> Xuất hủy</Button></RouterLink>
         </template>
         <RouterLink v-if="tenant.can(kind.permission)" :to="`/inventory/${kindKey}/new`"><Button data-testid="new-document"><Plus /> {{ kind.create }}</Button></RouterLink>
     </PageHeader>
-    <InventoryNav />
 
-    <Card :title="kind.title" :description="descriptions[kindKey]">
-        <template v-if="statusTabs.length" #actions>
-            <Tabs v-model="status" :tabs="statusTabs.map((s) => ({ value: s, label: s === 'all' ? 'Tất cả' : documentStatus[s]!.label }))" />
-        </template>
+    <Card>
+        <div v-if="statusTabs.length" class="border-b px-3">
+            <Tabs v-model="status" variant="underline" :tabs="statusTabs.map((s) => ({ value: s, label: s === 'all' ? `Tất cả ${kind.title.toLowerCase()}` : documentStatus[s]!.label }))" />
+        </div>
 
         <div v-if="loading && !docs.length" class="space-y-3 p-4"><Skeleton v-for="i in 5" :key="i" class="h-10" /></div>
         <ErrorState v-else-if="loadError" :message="loadError" @retry="load" />
@@ -98,7 +104,7 @@ watch(kindKey, () => ((status.value = 'all'), (page.value = 1), load()));
                 </thead>
                 <tbody class="divide-y">
                     <tr v-for="d in docs" :key="d.id" class="cursor-pointer hover:bg-muted/30" @click="$router.push(`/inventory/${kindKey}/${d.id}`)">
-                        <td class="px-4 py-3 font-mono text-xs font-medium">{{ d.number }}</td>
+                        <td class="px-4 py-3 font-medium text-primary">{{ d.number }}</td>
                         <td class="px-4 py-3">
                             <template v-if="d.kind === 'transfer'">{{ d.from_warehouse?.code }} → {{ d.to_warehouse?.code }}</template>
                             <template v-else>{{ d.warehouse?.code }} · {{ d.warehouse?.name }}</template>

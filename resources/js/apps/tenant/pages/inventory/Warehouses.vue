@@ -2,7 +2,6 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { Pencil, Plus, Star, Warehouse as WarehouseIcon } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
-import InventoryNav from './InventoryNav.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -92,7 +91,6 @@ async function update(w: Warehouse, payload: Record<string, unknown>, message: s
     <PageHeader title="Danh sách kho" description="Danh sách kho vật lý. Mỗi SKU có tồn riêng theo từng kho.">
         <Button v-if="canManage" :disabled="atLimit" data-testid="new-warehouse" @click="openCreate"><Plus /> Thêm kho</Button>
     </PageHeader>
-    <InventoryNav />
 
     <div v-if="atLimit && canManage" class="mb-4 rounded-lg border border-amber-200 bg-amber-50/70 px-4 py-3 text-sm">
         Gói hiện tại cho phép tối đa <b>{{ limit }}</b> kho. <RouterLink to="/subscription" class="font-medium text-primary hover:underline">Xem gói dịch vụ</RouterLink> để thêm kho.

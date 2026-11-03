@@ -341,3 +341,49 @@ it('isolates inventory between tenants', function () {
     expect(balanceOf($otherWarehouse, $otherVariant)->on_hand)->toBe(9);
     expect(app(StockVerifier::class)->verify($otherTenant->id))->toBe([]);
 });
+
+it('keeps a stocktake as a draft while counting, then balances it (Sapo Kiểm hàng)', function () {
+    receiveVia($this, $this->owner, $this->tenant, $this->warehouse, $this->variant, 10);
+    $staff = addMember($this->tenant, Role::WAREHOUSE_STAFF);
+
+    // Staff counts and saves twice; stock does not move and the draft is not in the approval queue.
+    $id = actingInTenant($staff, $this->tenant)->postJson('/api/v1/inventory/adjustments', [
+        'warehouse_id' => $this->warehouse->ulid, 'reason' => 'stocktake', 'draft' => true,
+        'lines' => [['variant_id' => $this->variant->ulid, 'mode' => 'count', 'quantity' => 9]],
+    ])->assertCreated()->assertJsonPath('data.status', 'draft')->json('data.id');
+    actingInTenant($staff, $this->tenant)->putJson("/api/v1/inventory/adjustments/{$id}", [
+        'note' => 'Kệ A',
+        'lines' => [['variant_id' => $this->variant->ulid, 'mode' => 'count', 'quantity' => 8, 'reason' => 'damaged', 'note' => 'Vỡ hộp 2 cái']],
+    ])->assertOk()->assertJsonPath('data.lines.0.quantity', 8)->assertJsonPath('data.lines.0.reason', 'damaged')->assertJsonPath('data.lines.0.line_note', 'Vỡ hộp 2 cái');
+    expect(balanceOf($this->warehouse, $this->variant)->on_hand)->toBe(10);
+    actingInTenant($this->owner, $this->tenant)->getJson('/api/v1/inventory/adjustments')->assertJsonCount(0, 'data');
+    actingInTenant($this->owner, $this->tenant)->getJson('/api/v1/inventory/adjustments?reason=stocktake&status=draft')->assertJsonCount(1, 'data');
+
+    // Another member cannot touch someone's draft.
+    $other = addMember($this->tenant, Role::WAREHOUSE_STAFF);
+    actingInTenant($other, $this->tenant)->putJson("/api/v1/inventory/adjustments/{$id}", ['lines' => [['variant_id' => $this->variant->ulid, 'mode' => 'count', 'quantity' => 1]]])->assertForbidden();
+
+    // Staff cannot approve: Cân bằng kho sends it for approval.
+    actingInTenant($staff, $this->tenant)->postJson("/api/v1/inventory/adjustments/{$id}/balance")->assertOk()->assertJsonPath('data.status', 'pending');
+    expect(balanceOf($this->warehouse, $this->variant)->on_hand)->toBe(10);
+    actingInTenant($staff, $this->tenant)->putJson("/api/v1/inventory/adjustments/{$id}", ['lines' => [['variant_id' => $this->variant->ulid, 'mode' => 'count', 'quantity' => 1]]])
+        ->assertUnprocessable();
+    actingInTenant($this->owner, $this->tenant)->postJson("/api/v1/inventory/adjustments/{$id}/approve")->assertOk()->assertJsonPath('data.status', 'approved');
+    expect(balanceOf($this->warehouse, $this->variant)->on_hand)->toBe(8);
+
+    // An approver balances a draft in one step.
+    $own = actingInTenant($this->owner, $this->tenant)->postJson('/api/v1/inventory/adjustments', [
+        'warehouse_id' => $this->warehouse->ulid, 'reason' => 'stocktake', 'draft' => true,
+        'lines' => [['variant_id' => $this->variant->ulid, 'mode' => 'count', 'quantity' => 7, 'reason' => 'lost']],
+    ])->json('data.id');
+    actingInTenant($this->owner, $this->tenant)->postJson("/api/v1/inventory/adjustments/{$own}/balance")->assertOk()->assertJsonPath('data.status', 'approved')->assertJsonPath('data.lines.0.applied_delta', -1);
+    expect(balanceOf($this->warehouse, $this->variant)->on_hand)->toBe(7);
+
+    // A draft can be thrown away.
+    $drop = actingInTenant($this->owner, $this->tenant)->postJson('/api/v1/inventory/adjustments', [
+        'warehouse_id' => $this->warehouse->ulid, 'reason' => 'stocktake', 'draft' => true,
+        'lines' => [['variant_id' => $this->variant->ulid, 'mode' => 'count', 'quantity' => 1]],
+    ])->json('data.id');
+    actingInTenant($this->owner, $this->tenant)->postJson("/api/v1/inventory/adjustments/{$drop}/cancel")->assertOk()->assertJsonPath('data.status', 'cancelled');
+    expect(balanceOf($this->warehouse, $this->variant)->on_hand)->toBe(7);
+});
