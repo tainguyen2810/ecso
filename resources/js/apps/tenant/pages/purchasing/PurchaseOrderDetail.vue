@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import { ArrowLeft, Ban, CircleCheck, PackageCheck, Pencil, Send, Undo2, Wallet } from 'lucide-vue-next';
+import { ArrowLeft, Ban, CircleCheck, PackageCheck, Pencil, Send, Tags, Undo2, Wallet } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import SupplierPaymentDialog from './SupplierPaymentDialog.vue';
 import Badge from '@/shared/ui/Badge.vue';
@@ -136,6 +136,12 @@ async function voidPayment(id: string) {
         <RouterLink to="/purchasing" class="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft class="size-4" /> Đơn nhập hàng</RouterLink>
         <PageHeader :title="po.number" :description="`${po.supplier?.name} → ${po.warehouse?.name}${po.expected_at ? ' · dự kiến về ' + formatDate(po.expected_at) : ''}`">
             <Badge :tone="poStatus[po.status]?.tone" class="self-center" data-testid="po-status">{{ poStatus[po.status]?.label }}</Badge>
+            <RouterLink
+                v-if="(po.lines ?? []).some((l) => l.variant && l.received_qty > 0)"
+                :to="{ path: '/products/labels', query: { lines: (po.lines ?? []).filter((l) => l.variant && l.received_qty > 0).map((l) => `${l.variant!.id}:${l.received_qty}`).join(',') } }"
+            >
+                <Button variant="outline" data-testid="po-labels"><Tags /> In tem hàng đã nhận</Button>
+            </RouterLink>
             <Button v-if="po.status === 'draft' && tenant.can('purchasing.manage')" :loading="busy" @click="act('place')"><Send /> Đặt hàng</Button>
             <Button v-if="isOpen && (tenant.can('purchasing.manage') || tenant.can('inventory.receive'))" data-testid="po-receive" @click="openReceive"><PackageCheck /> Nhận hàng</Button>
             <Button v-if="tenant.can('purchasing.payment') && po.status !== 'cancelled' && due > 0" variant="outline" data-testid="po-pay" @click="payOpen = true"><Wallet /> Chi tiền</Button>

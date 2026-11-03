@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, Copy, Package, Pencil, Tags, Trash2 } from 'lucide-vue-next';
+import { ArrowLeft, Copy, MapPin, Package, Pencil, Tags, Trash2 } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import Tabs from '../../components/Tabs.vue';
 import { movementLabels, referenceLabels } from '../inventory/labels';
 import Badge from '@/shared/ui/Badge.vue';
+import Dialog from '@/shared/ui/Dialog.vue';
+import FormField from '@/shared/ui/FormField.vue';
+import Input from '@/shared/ui/Input.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
@@ -25,6 +28,8 @@ interface StockRow {
     reserved: number;
     available: number;
     safety_stock: number;
+    max_stock?: number | null;
+    bin_location?: string | null;
     incoming: number;
     cost_price: string;
 }
@@ -48,6 +53,36 @@ const toast = useToast();
 const tenant = useTenantStore();
 const canManage = computed(() => tenant.can('products.manage'));
 const canStock = computed(() => tenant.can('inventory.view'));
+const canLocate = computed(() => tenant.can('inventory.adjust'));
+const canSetMax = computed(() => tenant.can('inventory.adjust.approve'));
+
+// Bin location and maximum stock of one SKU in one warehouse.
+const locating = ref<StockRow | null>(null);
+const locationForm = ref({ bin_location: '', max_stock: '' });
+const savingLocation = ref(false);
+function openLocation(r: StockRow) {
+    locating.value = r;
+    locationForm.value = { bin_location: r.bin_location ?? '', max_stock: r.max_stock === null || r.max_stock === undefined ? '' : String(r.max_stock) };
+}
+async function saveLocation() {
+    const r = locating.value;
+    if (!r) return;
+    savingLocation.value = true;
+    try {
+        const { data } = await api.put(`/inventory/variants/${r.variant.id}/location`, {
+            warehouse: r.warehouse.id,
+            bin_location: locationForm.value.bin_location || null,
+            ...(canSetMax.value ? { max_stock: locationForm.value.max_stock === '' ? null : Number(locationForm.value.max_stock) } : {}),
+        });
+        Object.assign(r, data.data);
+        locating.value = null;
+        toast.success('Đã lưu vị trí lưu kho');
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    } finally {
+        savingLocation.value = false;
+    }
+}
 const id = computed(() => route.params.id as string);
 
 const product = ref<Product | null>(null);
@@ -245,6 +280,8 @@ async function remove() {
                             <th class="px-4 py-2.5 text-right font-medium">Có thể bán</th>
                             <th class="px-4 py-2.5 text-right font-medium">Hàng đang về</th>
                             <th class="px-4 py-2.5 text-right font-medium">Tồn an toàn</th>
+                            <th class="px-4 py-2.5 text-right font-medium">Tồn tối đa</th>
+                            <th class="px-4 py-2.5 font-medium">Vị trí</th>
                             <th class="px-4 py-2.5 text-right font-medium">Giá vốn BQ</th>
                         </tr>
                     </thead>
@@ -257,9 +294,25 @@ async function remove() {
                             <td :class="cn('px-4 py-2.5 text-right font-medium tabular-nums', r.available <= 0 && 'text-destructive', r.available > 0 && r.available <= r.safety_stock && 'text-[oklch(0.5_0.13_70)]')">{{ formatNumber(r.available) }}</td>
                             <td class="px-4 py-2.5 text-right tabular-nums">{{ r.incoming ? formatNumber(r.incoming) : '—' }}</td>
                             <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ r.safety_stock ? formatNumber(r.safety_stock) : '—' }}</td>
+                            <td :class="cn('px-4 py-2.5 text-right tabular-nums text-muted-foreground', r.max_stock != null && r.on_hand > r.max_stock && 'font-medium text-[oklch(0.5_0.13_70)]')" :title="r.max_stock != null && r.on_hand > r.max_stock ? 'Tồn vượt mức tối đa' : undefined">
+                                {{ r.max_stock != null ? formatNumber(r.max_stock) : '—' }}
+                            </td>
+                            <td class="px-4 py-2.5">
+                                <button
+                                    v-if="canLocate && !packIds.has(r.variant.id) && product.type !== 'combo'"
+                                    type="button"
+                                    class="inline-flex items-center gap-1 rounded px-1 text-xs hover:bg-muted"
+                                    :data-testid="`locate-${r.variant.sku}-${r.warehouse.code}`"
+                                    @click="openLocation(r)"
+                                >
+                                    <MapPin class="size-3.5 text-muted-foreground" />
+                                    <span :class="r.bin_location ? 'font-mono' : 'text-muted-foreground'">{{ r.bin_location || 'Đặt vị trí' }}</span>
+                                </button>
+                                <span v-else class="font-mono text-xs">{{ r.bin_location || '—' }}</span>
+                            </td>
                             <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ Number(r.cost_price) ? formatMoney(r.cost_price) : '—' }}</td>
                         </tr>
-                        <tr v-if="!visibleStock.length"><td colspan="8" class="px-4 py-8 text-center text-muted-foreground">Chưa có kho đang hoạt động.</td></tr>
+                        <tr v-if="!visibleStock.length"><td colspan="10" class="px-4 py-8 text-center text-muted-foreground">Chưa có kho đang hoạt động.</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -303,5 +356,21 @@ async function remove() {
                 <Pagination :page="movementMeta.current_page" :last-page="movementMeta.last_page" :total="movementMeta.total" @go="loadMovements" />
             </template>
         </Card>
+
+        <Dialog :open="!!locating" title="Vị trí lưu kho" :description="locating ? `${locating.variant.sku} · ${locating.warehouse.name}` : undefined" @update:open="(v: boolean) => !v && (locating = null)">
+            <div class="space-y-4">
+                <FormField label="Vị trí (kệ, ngăn, ô)" for="bin">
+                    <Input id="bin" v-model="locationForm.bin_location" maxlength="50" placeholder="Ví dụ: A-03-2" data-testid="bin-location" />
+                </FormField>
+                <FormField label="Tồn tối đa" for="max-stock">
+                    <Input id="max-stock" v-model="locationForm.max_stock" type="number" min="0" :disabled="!canSetMax" placeholder="Không giới hạn" data-testid="max-stock" />
+                    <p class="mt-1 text-xs text-muted-foreground">{{ canSetMax ? 'Gợi ý nhập hàng không vượt mức này; tồn vượt sẽ được tô màu.' : 'Chỉ quản lý được đặt tồn tối đa.' }}</p>
+                </FormField>
+            </div>
+            <template #footer>
+                <Button variant="outline" @click="locating = null">Hủy</Button>
+                <Button :loading="savingLocation" data-testid="save-location" @click="saveLocation">Lưu</Button>
+            </template>
+        </Dialog>
     </template>
 </template>

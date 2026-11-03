@@ -46,7 +46,7 @@ class ReorderSuggestions
 
         $balances = DB::table('stock_balances')
             ->where('tenant_id', $tenant)->where('warehouse_id', $warehouseId)
-            ->get(['product_variant_id', 'on_hand', 'reserved', 'safety_stock'])
+            ->get(['product_variant_id', 'on_hand', 'reserved', 'safety_stock', 'max_stock'])
             ->keyBy('product_variant_id');
 
         $candidates = collect($sold->keys())->merge($balances->filter(fn ($b) => $b->safety_stock > 0)->keys())->unique()->values();
@@ -81,6 +81,10 @@ class ReorderSuggestions
             $safety = $b ? (int) $b->safety_stock : 0;
             $pending = (int) ($onOrder[$v->id] ?? 0);
             $suggested = (int) ceil($daily * $coverDays) + $safety - $available - $pending;
+            // Never suggest more than the warehouse should hold.
+            if ($b && $b->max_stock !== null) {
+                $suggested = min($suggested, (int) $b->max_stock - $available - $pending);
+            }
             if ($suggested <= 0) {
                 continue;
             }

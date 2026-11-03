@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import { ArrowLeft, Check, PackageCheck, Send, X } from 'lucide-vue-next';
+import { ArrowLeft, Check, PackageCheck, Send, Tags, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
@@ -86,6 +86,9 @@ const steps = computed(() => {
     <template v-else>
         <PageHeader :title="`${kind.title} ${doc.number}`" :description="doc.note ?? undefined">
             <Badge v-if="doc.status" :tone="documentStatus[doc.status]?.tone" class="px-3 py-1 text-sm" data-testid="document-status">{{ documentStatus[doc.status]?.label }}</Badge>
+            <RouterLink v-if="doc.kind === 'receipt'" :to="{ path: '/products/labels', query: { lines: (doc.lines ?? []).map((l) => `${l.variant.id}:${l.quantity}`).join(',') } }">
+                <Button variant="outline" data-testid="print-receipt-labels"><Tags /> In tem hàng nhập</Button>
+            </RouterLink>
             <template v-if="isPending">
                 <Button v-if="tenant.can('inventory.adjust.approve') || isMine" variant="ghost" :loading="busy === 'cancel'" @click="act('cancel', {}, 'Đã hủy phiếu')">Hủy phiếu</Button>
                 <Button v-if="tenant.can('inventory.adjust.approve')" variant="outline" @click="rejectOpen = true"><X /> Từ chối</Button>

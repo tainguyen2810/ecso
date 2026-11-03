@@ -71,13 +71,15 @@ function add(v: Variant) {
 
 onMounted(async () => {
     const list = (key: string) => String(route.query[key] ?? '').split(',').filter(Boolean);
-    const ids = list('variants');
+    // ?lines=variant:qty,… (from a stock receipt or purchase order): one label per unit received.
+    const perLine = new Map(list('lines').map((l) => l.split(':')).map(([id, q]) => [id!, Math.max(0, Math.floor(Number(q) || 0))]));
+    const ids = [...list('variants'), ...perLine.keys()];
     const products = list('products');
     if (!ids.length && !products.length) return;
     try {
         const { data } = await api.get('/variants', { params: { ids: ids.length ? ids : undefined, products: products.length ? products : undefined } });
         const qty = Math.max(1, Number(route.query.qty ?? 1) || 1);
-        rows.value = (data.data as Variant[]).map((v) => toRow(v, qty));
+        rows.value = (data.data as Variant[]).map((v) => toRow(v, perLine.get(v.id!) ?? qty));
     } catch (e) {
         toast.error((e as ApiError).message);
     }
