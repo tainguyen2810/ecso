@@ -14,6 +14,7 @@ use App\Modules\Inventory\Models\StockReservation;
 use App\Modules\Inventory\Models\StockTransfer;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Services\InventoryService;
+use App\Modules\Inventory\Services\LowStockQuery;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -80,6 +81,15 @@ class StockController extends Controller
             'data' => $data,
             'meta' => ['current_page' => $rows->currentPage(), 'last_page' => $rows->lastPage(), 'total' => $rows->total(), 'per_page' => $rows->perPage()],
         ]);
+    }
+
+    /** SKUs at or below their safety stock, most urgent first (dashboard alert). */
+    public function lowStock(TenantContext $context, LowStockQuery $query): JsonResponse
+    {
+        $this->authorize('viewAny', StockBalance::class);
+        $items = $query->forTenant($context->id(), 200);
+
+        return response()->json(['data' => array_slice($items, 0, 10), 'meta' => ['total' => count($items)]]);
     }
 
     public function summary(Request $request, TenantContext $context): JsonResponse

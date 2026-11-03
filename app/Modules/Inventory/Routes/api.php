@@ -13,6 +13,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::prefix('inventory')->group(function () {
         Route::get('stock', [StockController::class, 'index']);
         Route::get('summary', [StockController::class, 'summary']);
+        Route::get('low-stock', [StockController::class, 'lowStock']);
         Route::get('variants/{variant}/card', [StockController::class, 'card']);
         Route::put('variants/{variant}/safety-stock', [StockController::class, 'safetyStock']);
 

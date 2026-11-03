@@ -29,7 +29,9 @@ const kindKey = computed(() => route.meta.kind as DocumentKindKey);
 const kind = computed(() => documentKinds[kindKey.value]);
 
 const warehouses = ref<Warehouse[]>([]);
-const form = reactive({ warehouse_id: '', to_warehouse_id: '', reason: 'stocktake', note: '' });
+// "Xuất hủy" opens the adjustment form with a write-off reason and quantities entered as decreases.
+const writeOff = ['damaged', 'lost'].includes(String(route.query.reason ?? ''));
+const form = reactive({ warehouse_id: '', to_warehouse_id: '', reason: writeOff ? String(route.query.reason) : 'stocktake', note: '' });
 const lines = ref<Line[]>([]);
 const saving = ref(false);
 const error = ref<ApiError | null>(null);
@@ -55,7 +57,7 @@ function add(variant: Variant) {
         variant,
         quantity: kindKey.value === 'adjustments' ? '' : '1',
         unit_cost: variant.cost_price && Number(variant.cost_price) > 0 ? String(Math.round(Number(variant.cost_price))) : '',
-        mode: 'count',
+        mode: writeOff ? 'delta' : 'count',
     });
 }
 
@@ -74,7 +76,7 @@ async function submit() {
     try {
         const payloadLines = lines.value.map((l) => ({
             variant_id: l.variant.id,
-            quantity: Number(l.quantity),
+            quantity: writeOff && l.mode === 'delta' ? -Math.abs(Number(l.quantity)) : Number(l.quantity),
             ...(kindKey.value === 'receipts' ? { unit_cost: Number(l.unit_cost || 0) } : {}),
             ...(kindKey.value === 'adjustments' ? { mode: l.mode } : {}),
         }));
@@ -102,7 +104,7 @@ const hints: Record<DocumentKindKey, string> = {
 
 <template>
     <RouterLink :to="`/inventory/${kindKey}`" class="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft class="size-4" /> {{ kind.title }}</RouterLink>
-    <PageHeader :title="kind.create" :description="hints[kindKey]" />
+    <PageHeader :title="writeOff ? 'Phiếu xuất hủy' : kind.create" :description="writeOff ? 'Ghi giảm hàng hỏng, hết hạn hoặc thất lạc. Nhập số lượng hủy; tồn chỉ giảm khi phiếu được duyệt.' : hints[kindKey]" />
 
     <form class="grid gap-5 lg:grid-cols-3" @submit.prevent="submit">
         <Card class="lg:col-span-2" title="Hàng hóa" :description="kindKey === 'adjustments' ? 'Kiểm kê: nhập số đếm thực tế. Chênh lệch: nhập số tăng (+) hoặc giảm (−).' : 'Quét mã vạch hoặc tìm SKU để thêm dòng.'">
@@ -158,7 +160,8 @@ const hints: Record<DocumentKindKey, string> = {
                             </td>
                             <td v-if="kindKey === 'receipts'" class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney((Number(l.quantity) || 0) * (Number(l.unit_cost) || 0)) }}</td>
                             <td v-if="kindKey === 'adjustments'" class="px-4 py-2.5 text-right tabular-nums">
-                                <template v-if="l.mode === 'delta'">{{ l.quantity ? (Number(l.quantity) > 0 ? '+' : '') + l.quantity : '—' }}</template>
+                                <template v-if="l.mode === 'delta' && writeOff">{{ l.quantity ? '−' + Math.abs(Number(l.quantity)) : '—' }}</template>
+                                <template v-else-if="l.mode === 'delta'">{{ l.quantity ? (Number(l.quantity) > 0 ? '+' : '') + l.quantity : '—' }}</template>
                                 <template v-else-if="countDelta(l) !== null">
                                     <span :class="cn(countDelta(l)! > 0 && 'text-success', countDelta(l)! < 0 && 'text-destructive')">{{ countDelta(l)! > 0 ? '+' : '' }}{{ countDelta(l) }}</span>
                                     <p class="text-[11px] text-muted-foreground">tính lại khi duyệt</p>

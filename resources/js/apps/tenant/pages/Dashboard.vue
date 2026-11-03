@@ -18,7 +18,9 @@ const tenant = useTenantStore();
 const stock = ref<{ low_stock: number; out_of_stock: number } | null>(null);
 const orders = ref<{ today_orders: number; today_ordered_revenue: string; to_process: number; overdue: number; shortage: number; recent: OrderSummary[] } | null>(null);
 const accountsCount = ref<number | null>(null);
+const lowStock = ref<{ items: { variant_id: string; sku: string; name: string; warehouse: string; available: number; safety_stock: number }[]; total: number } | null>(null);
 onMounted(async () => {
+    if (tenant.can('inventory.view')) api.get('/inventory/low-stock').then(({ data }) => (lowStock.value = { items: data.data, total: data.meta.total })).catch(() => {});
     if (tenant.can('inventory.view')) api.get('/inventory/summary').then(({ data }) => (stock.value = data.data)).catch(() => {});
     if (tenant.can('orders.view')) api.get('/orders/summary').then(({ data }) => (orders.value = data.data)).catch(() => {});
     if (tenant.can('marketplace.view')) api.get('/marketplace-accounts').then(({ data }) => (accountsCount.value = data.data.filter((a: { status: string }) => a.status === 'connected').length)).catch(() => {});
@@ -100,6 +102,18 @@ const steps = computed(() => [
                 <RouterLink v-if="tenant.can('marketplace.view')" to="/marketplaces" class="text-sm text-primary hover:underline">Kết nối sàn</RouterLink>
             </EmptyState>
         </Card>
+        <div class="space-y-6">
+        <Card v-if="lowStock && lowStock.total" title="Cần nhập thêm" :description="`${formatNumber(lowStock.total)} SKU bằng hoặc dưới tồn an toàn`" data-testid="low-stock">
+            <template v-if="tenant.can('purchasing.view')" #actions><RouterLink to="/purchasing/reorder" class="text-sm text-primary hover:underline">Gợi ý nhập</RouterLink></template>
+            <ul class="divide-y text-sm">
+                <li v-for="i in lowStock.items.slice(0, 6)" :key="i.variant_id + i.warehouse">
+                    <RouterLink :to="`/inventory/sku/${i.variant_id}`" class="flex items-center gap-3 px-5 py-2.5 hover:bg-muted/30">
+                        <div class="min-w-0 flex-1"><div class="font-mono text-xs font-medium">{{ i.sku }}</div><div class="truncate text-xs text-muted-foreground">{{ i.name }} · {{ i.warehouse }}</div></div>
+                        <span class="whitespace-nowrap tabular-nums" :class="i.available <= 0 ? 'font-medium text-destructive' : 'text-[oklch(0.5_0.13_70)]'">{{ formatNumber(i.available) }} / {{ formatNumber(i.safety_stock) }}</span>
+                    </RouterLink>
+                </li>
+            </ul>
+        </Card>
         <Card title="Bắt đầu" description="Các bước thiết lập cửa hàng">
             <ul class="divide-y">
                 <li v-for="s in steps" :key="s.label" class="flex items-center gap-3 px-5 py-3 text-sm">
@@ -113,5 +127,6 @@ const steps = computed(() => [
                 <Users class="size-3.5" /> Mẹo: gõ <kbd class="rounded border bg-muted px-1">g</kbd> rồi <kbd class="rounded border bg-muted px-1">m</kbd> để mở Nhân viên.
             </div>
         </Card>
+        </div>
     </div>
 </template>

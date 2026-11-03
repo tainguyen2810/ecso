@@ -127,6 +127,10 @@ class DemoSeeder extends Seeder
         app(SupplierReturnService::class)->create($minhLong, $warehouse, [['variant_id' => $variants[0]->id, 'quantity' => 2]], $done->fresh(), 'Lỗi đường may');
         app(SupplierPaymentService::class)->record($minhLong, ['method' => 'bank_transfer', 'amount' => 1000000, 'reference' => 'UNC 26110301'], $done->fresh());
 
+        // A damaged item written off (approved), shown as "Hủy / mất" in the stock report.
+        $writeOff = app(InventoryDocumentService::class)->createAdjustment($warehouse, [['variant_id' => $variants[1]->id, 'mode' => 'delta', 'quantity' => -1]], 'damaged', 'Ố màu, không bán được');
+        app(InventoryDocumentService::class)->approveAdjustment($writeOff, 'Đã kiểm tra');
+
         // Half arrived; the rest is still expected.
         $partial = $purchases->create(['supplier' => $anPhat, 'warehouse' => $warehouse, 'lines' => [$line(2, 50), $line(3, 20)], 'place' => true, 'expected_at' => now()->addDays(3)->toDateString()]);
         $purchases->receive($partial, [['variant_id' => $variants[2]->id, 'quantity' => 25]]);

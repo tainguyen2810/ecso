@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { ArrowRight, FileText, Plus } from 'lucide-vue-next';
+import { ArrowRight, ClipboardCheck, FileText, Plus, Trash2 } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import InventoryNav from './InventoryNav.vue';
 import Pagination from '../../components/Pagination.vue';
@@ -62,6 +62,10 @@ watch(kindKey, () => ((status.value = 'all'), (page.value = 1), load()));
 
 <template>
     <PageHeader title="Kho hàng" description="Chứng từ kho: mọi thay đổi tồn đều có phiếu và được ghi vào sổ kho.">
+        <template v-if="kindKey === 'adjustments' && tenant.can(kind.permission)">
+            <RouterLink to="/inventory/stocktake"><Button variant="outline" data-testid="open-stocktake"><ClipboardCheck /> Kiểm kho</Button></RouterLink>
+            <RouterLink :to="{ path: '/inventory/adjustments/new', query: { reason: 'damaged' } }"><Button variant="outline" data-testid="new-write-off"><Trash2 /> Xuất hủy</Button></RouterLink>
+        </template>
         <RouterLink v-if="tenant.can(kind.permission)" :to="`/inventory/${kindKey}/new`"><Button data-testid="new-document"><Plus /> {{ kind.create }}</Button></RouterLink>
     </PageHeader>
     <InventoryNav />

@@ -30,7 +30,7 @@ test('tenant upgrades by bank transfer, admin confirms, plan and entitlements ch
     await shot(tenantPage, '03-invoice-bank-transfer');
 
     // Advanced reports are not in Starter.
-    await tenantPage.goto('/reports');
+    await tenantPage.goto('/reports/products');
     await expect(tenantPage.getByText('Cần gói có Báo cáo nâng cao')).toBeVisible();
 
     // Super admin confirms the transfer seen on the bank statement.
@@ -53,7 +53,7 @@ test('tenant upgrades by bank transfer, admin confirms, plan and entitlements ch
     await expect(tenantPage.getByTestId('open-invoice')).toHaveCount(0);
     await expect(tenantPage.getByTestId('invoices')).toContainText('Đã thanh toán');
 
-    await tenantPage.goto('/reports');
+    await tenantPage.goto('/reports/products');
     await expect(tenantPage.getByTestId('slow-movers')).not.toContainText('Cần gói có Báo cáo nâng cao');
     await shot(tenantPage, '06-reports');
 });

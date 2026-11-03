@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Phase 12 — Kiểm kho, xuất hủy, cảnh báo tồn thấp, báo cáo (2026-11-03)
+- Kiểm kho (`/inventory/stocktake`): tải toàn bộ SKU của kho, quét mã vạch (mỗi lần +1) hoặc nhập số đếm, lọc chưa đếm / có chênh lệch, lưu tạm trên máy, tùy chọn coi SKU chưa đếm là 0. Tạo phiếu kiểm kê (điều chỉnh theo số đếm) để duyệt như quy trình cũ.
+- Xuất hủy: nút "Xuất hủy" mở phiếu điều chỉnh lý do Hàng hỏng, nhập số lượng hủy; tồn giảm khi duyệt. Báo cáo tách riêng "Hủy / mất".
+- Cảnh báo tồn thấp: thẻ "Cần nhập thêm" trên Tổng quan (SKU ≤ tồn an toàn) và email hằng ngày 07:30 cho người có quyền mua hàng (`ecso:inventory:low-stock-digest`). API `GET /inventory/low-stock`.
+- Báo cáo (`/reports`): Bán hàng & lợi nhuận theo ngày / kênh (sàn và kênh riêng) / nhân viên, gồm giá vốn, lợi nhuận gộp, biên; Xuất nhập tồn theo SKU (tồn đầu, nhập mua, khách hoàn, chuyển, điều chỉnh, xuất bán, trả NCC, hủy, tồn cuối, giá trị); Sổ quỹ (thu khách, hoàn tiền, chi NCC, tồn quỹ, lọc theo hình thức). Xuất CSV. Báo cáo bán chạy/bán chậm chuyển sang `/reports/products`.
+- Trang Tài chính: phần "theo gian hàng" có thêm kênh bán riêng.
+
 ### Phase 11 — Mua hàng / nhập hàng (2026-11-03)
 - Nhà cung cấp (`/purchasing/suppliers`, phím tắt `g n`): danh bạ, ngừng giao dịch thay vì xóa khi đã có giao dịch, tổng nhập, đã trả, còn nợ (hoặc trả trước).
 - Đơn nhập hàng: nháp → đã đặt → nhận một phần → đã nhận đủ, hoặc đóng sớm / hủy. Sửa được đến khi hàng về.

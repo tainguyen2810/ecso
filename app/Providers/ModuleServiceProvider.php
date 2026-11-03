@@ -10,6 +10,7 @@ use App\Modules\Catalog\Models\Category;
 use App\Modules\Catalog\Models\Product;
 use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Catalog\Policies\ProductPolicy;
+use App\Modules\Inventory\Console\LowStockDigestCommand;
 use App\Modules\Inventory\Console\VerifyInventoryCommand;
 use App\Modules\Inventory\Events\AvailableStockChanged;
 use App\Modules\Inventory\Listeners\CreateDefaultWarehouse;
@@ -116,7 +117,7 @@ class ModuleServiceProvider extends ServiceProvider
         $this->configureAuthLinks();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, PushDueInventoryCommand::class, ReconcileOrdersCommand::class, BillingSweepCommand::class, MonitorCommand::class]);
+            $this->commands([CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, LowStockDigestCommand::class, PushDueInventoryCommand::class, ReconcileOrdersCommand::class, BillingSweepCommand::class, MonitorCommand::class]);
         }
     }
 
