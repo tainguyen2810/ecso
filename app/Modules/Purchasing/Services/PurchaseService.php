@@ -25,7 +25,7 @@ class PurchaseService
     public function __construct(private readonly InventoryDocumentService $documents, private readonly AuditLogger $audit) {}
 
     /**
-     * @param  array{supplier: Supplier, warehouse: Warehouse, lines: array<int, array{variant_id: int, quantity: int, unit_cost: string|int|float, tax_rate?: string|int|float|null}>, expected_at?: string|null, note?: string|null, place?: bool, extra_cost?: string|int|float|null, extra_cost_note?: string|null, extra_cost_to_supplier?: bool, vat_in_cost?: bool}  $data
+     * @param  array{supplier: Supplier, warehouse: Warehouse, lines: array<int, array{variant_id: int, quantity: int, unit_cost: string|int|float, tax_rate?: string|int|float|null}>, expected_at?: string|null, note?: string|null, invoice_date?: string|null, reference?: string|null, tags?: array<int, string>|null, place?: bool, discount?: string|int|float|null, extra_cost?: string|int|float|null, extra_cost_note?: string|null, extra_cost_to_supplier?: bool, vat_in_cost?: bool}  $data
      */
     public function create(array $data): PurchaseOrder
     {
@@ -38,6 +38,9 @@ class PurchaseService
                 'status' => PurchaseOrder::DRAFT,
                 'expected_at' => $data['expected_at'] ?? null,
                 'note' => $data['note'] ?? null,
+                'invoice_date' => $data['invoice_date'] ?? null,
+                'reference' => $data['reference'] ?? null,
+                'tags' => $data['tags'] ?? null,
                 ...$this->costHeader($data),
             ]);
             $po->forceFill(['number' => DocumentNumber::next('PO'), 'created_by' => Auth::id()])->save();
@@ -55,7 +58,7 @@ class PurchaseService
     /**
      * Header and lines can change until the first goods arrive.
      *
-     * @param  array{supplier?: Supplier, warehouse?: Warehouse, lines?: array<int, array{variant_id: int, quantity: int, unit_cost: string|int|float, tax_rate?: string|int|float|null}>, expected_at?: string|null, note?: string|null, extra_cost?: string|int|float|null, extra_cost_note?: string|null, extra_cost_to_supplier?: bool, vat_in_cost?: bool}  $data
+     * @param  array{supplier?: Supplier, warehouse?: Warehouse, lines?: array<int, array{variant_id: int, quantity: int, unit_cost: string|int|float, tax_rate?: string|int|float|null}>, expected_at?: string|null, note?: string|null, invoice_date?: string|null, reference?: string|null, tags?: array<int, string>|null, discount?: string|int|float|null, extra_cost?: string|int|float|null, extra_cost_note?: string|null, extra_cost_to_supplier?: bool, vat_in_cost?: bool}  $data
      */
     public function update(PurchaseOrder $po, array $data): PurchaseOrder
     {
@@ -71,7 +74,7 @@ class PurchaseService
             if (isset($data['warehouse'])) {
                 $po->warehouse_id = $data['warehouse']->id;
             }
-            $po->fill(array_intersect_key($data, array_flip(['expected_at', 'note'])));
+            $po->fill(array_intersect_key($data, array_flip(['expected_at', 'note', 'invoice_date', 'reference', 'tags'])));
             $po->fill(array_intersect_key($this->costHeader($data), $data));
             $po->save();
             if (isset($data['lines'])) {
@@ -134,10 +137,11 @@ class PurchaseService
                 $cost = bcadd((string) ($line['unit_cost'] ?? $poLine->unit_cost), '0', 4);
                 $unitTax = bcdiv(bcmul($cost, (string) $poLine->tax_rate, 6), '100', 4);
                 $unitExtra = $this->extraCostPerUnit($po, $poLine, $poLines);
-                $landed = bcadd(bcadd($cost, $po->vat_in_cost ? $unitTax : '0', 4), $unitExtra, 4);
+                $unitDiscount = $this->discountPerUnit($po, $poLine, $poLines);
+                $landed = $this->atLeastZero(bcsub(bcadd(bcadd($cost, $po->vat_in_cost ? $unitTax : '0', 4), $unitExtra, 4), $unitDiscount, 4));
                 $receiptLines[] = ['variant_id' => $poLine->product_variant_id, 'quantity' => $line['quantity'], 'unit_cost' => $landed];
 
-                $value = bcadd($value, bcmul(bcadd($cost, $unitTax, 4), $qty, 4), 4);
+                $value = bcadd($value, bcmul(bcsub(bcadd($cost, $unitTax, 4), $unitDiscount, 4), $qty, 4), 4);
                 $tax = bcadd($tax, bcmul($unitTax, $qty, 4), 4);
                 $extra = bcadd($extra, bcmul($unitExtra, $qty, 4), 4);
                 $poLine->increment('received_qty', $line['quantity']);
@@ -248,7 +252,10 @@ class PurchaseService
             $subtotal = bcadd($subtotal, $goods, 4);
             $tax = bcadd($tax, bcdiv(bcmul($goods, (string) $line->tax_rate, 6), '100', 4), 4);
         }
-        $total = bcadd($subtotal, $tax, 4);
+        $total = bcsub(bcadd($subtotal, $tax, 4), (string) $po->discount, 4);
+        if (bccomp($total, '0', 4) < 0) {
+            throw ValidationException::withMessages(['discount' => 'Chiết khấu không được lớn hơn tiền hàng.']);
+        }
         if ($po->extra_cost_to_supplier) {
             $total = bcadd($total, (string) $po->extra_cost, 4);
         }
@@ -276,12 +283,33 @@ class PurchaseService
     }
 
     /**
+     * The order discount is spread over the ordered goods by value, like the purchase costs.
+     *
+     * @param  Collection<int, PurchaseOrderLine>  $lines
+     */
+    public function discountPerUnit(PurchaseOrder $po, PurchaseOrderLine $line, Collection $lines): string
+    {
+        if (bccomp((string) $po->discount, '0', 2) <= 0) {
+            return '0';
+        }
+        $orderedValue = $lines->reduce(fn (string $sum, PurchaseOrderLine $l) => bcadd($sum, bcmul((string) $l->unit_cost, (string) $l->quantity, 4), 4), '0');
+
+        return bccomp($orderedValue, '0', 4) > 0 ? bcdiv(bcmul((string) $po->discount, (string) $line->unit_cost, 8), $orderedValue, 4) : '0';
+    }
+
+    private function atLeastZero(string $amount): string
+    {
+        return bccomp($amount, '0', 4) < 0 ? '0' : $amount;
+    }
+
+    /**
      * @param  array<string, mixed>  $data
-     * @return array{extra_cost: string, extra_cost_note: string|null, extra_cost_to_supplier: bool, vat_in_cost: bool}
+     * @return array{discount: string, extra_cost: string, extra_cost_note: string|null, extra_cost_to_supplier: bool, vat_in_cost: bool}
      */
     private function costHeader(array $data): array
     {
         return [
+            'discount' => bcadd((string) ($data['discount'] ?? 0), '0', 2),
             'extra_cost' => bcadd((string) ($data['extra_cost'] ?? 0), '0', 2),
             'extra_cost_note' => $data['extra_cost_note'] ?? null,
             'extra_cost_to_supplier' => (bool) ($data['extra_cost_to_supplier'] ?? false),

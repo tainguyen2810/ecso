@@ -8,12 +8,14 @@ use App\Modules\Purchasing\Http\Resources\SupplierPaymentResource;
 use App\Modules\Purchasing\Http\Resources\SupplierResource;
 use App\Modules\Purchasing\Http\Resources\SupplierReturnResource;
 use App\Modules\Purchasing\Models\Supplier;
+use App\Modules\Purchasing\Services\SupplierExporter;
 use App\Modules\Purchasing\Services\SupplierService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Validation\Rule;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SupplierController extends Controller
 {
@@ -46,6 +48,13 @@ class SupplierController extends Controller
         };
 
         return SupplierResource::collection($query->paginate((int) ($filters['per_page'] ?? 30)));
+    }
+
+    public function export(SupplierExporter $exporter): StreamedResponse
+    {
+        $this->authorize('viewAny', Supplier::class);
+
+        return $exporter->stream();
     }
 
     public function show(Supplier $supplier): JsonResponse

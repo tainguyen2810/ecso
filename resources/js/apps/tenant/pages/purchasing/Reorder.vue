@@ -3,7 +3,6 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ShoppingBasket, Sparkles } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
-import PurchasingNav from './PurchasingNav.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
@@ -66,7 +65,6 @@ async function createOrder() {
     <PageHeader title="Gợi ý nhập hàng" description="Nhà cung cấp, đơn nhập hàng, nhận hàng nhiều đợt, trả hàng và công nợ nhà cung cấp.">
         <Button v-if="tenant.can('purchasing.manage')" :disabled="!selected.length" data-testid="reorder-create" @click="createOrder"><ShoppingBasket /> Tạo đơn nhập ({{ selected.length }})</Button>
     </PageHeader>
-    <PurchasingNav />
     <Card>
         <div class="flex flex-wrap items-center gap-3 border-b p-4 text-sm">
             <Sparkles class="size-4 text-primary" />

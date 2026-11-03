@@ -8,6 +8,8 @@ export interface CostLine {
 }
 
 export interface CostOptions {
+    /** Order discount (Sapo F6): lowers what is owed and, spread by value, the landed cost. */
+    discount?: number | string;
     extra_cost: number | string;
     extra_cost_to_supplier: boolean;
     vat_in_cost: boolean;
@@ -15,23 +17,27 @@ export interface CostOptions {
 
 /**
  * Same arithmetic as PurchaseService on the server: VAT per line, purchase costs spread over the goods by value
- * (by quantity when everything is free), landed cost per unit = price (+ VAT when carried in cost) + cost share.
+ * (by quantity when everything is free), landed cost per unit = price (+ VAT when carried in cost) + cost share
+ * − discount share.
  */
 export function purchaseCosts(lines: CostLine[], opts: CostOptions) {
     const n = (v: number | string) => Number(v) || 0;
     const extra = n(opts.extra_cost);
+    const discount = n(opts.discount ?? 0);
     const subtotal = lines.reduce((s, l) => s + n(l.quantity) * n(l.unit_cost), 0);
     const units = lines.reduce((s, l) => s + n(l.quantity), 0);
     const tax = lines.reduce((s, l) => s + (n(l.quantity) * n(l.unit_cost) * n(l.tax_rate)) / 100, 0);
     const landed = lines.map((l) => {
         const share = extra <= 0 ? 0 : subtotal > 0 ? (extra * n(l.unit_cost)) / subtotal : units > 0 ? extra / units : 0;
-        return n(l.unit_cost) + (opts.vat_in_cost ? (n(l.unit_cost) * n(l.tax_rate)) / 100 : 0) + share;
+        const off = discount > 0 && subtotal > 0 ? (discount * n(l.unit_cost)) / subtotal : 0;
+        return Math.max(0, n(l.unit_cost) + (opts.vat_in_cost ? (n(l.unit_cost) * n(l.tax_rate)) / 100 : 0) + share - off);
     });
 
     return {
         subtotal: Math.round(subtotal),
         tax: Math.round(tax),
-        total: Math.round(subtotal + tax + (opts.extra_cost_to_supplier ? extra : 0)),
+        discount: Math.round(discount),
+        total: Math.round(subtotal + tax - discount + (opts.extra_cost_to_supplier ? extra : 0)),
         quantity: units,
         landed: landed.map((v) => Math.round(v)),
     };

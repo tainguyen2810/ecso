@@ -39,6 +39,7 @@ export const documentStatus: Record<string, { label: string; tone: 'success' | '
     rejected: { label: 'Từ chối', tone: 'danger' },
     cancelled: { label: 'Đã hủy', tone: 'muted' },
     draft: { label: 'Nháp', tone: 'muted' },
+    counting: { label: 'Đang kiểm', tone: 'warning' },
     in_transit: { label: 'Đang chuyển', tone: 'warning' },
     received: { label: 'Đã nhận', tone: 'success' },
 };

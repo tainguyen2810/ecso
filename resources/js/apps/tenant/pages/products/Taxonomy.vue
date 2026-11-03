@@ -2,7 +2,6 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { Check, Pencil, Plus, Trash2, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
-import ProductsNav from './ProductsNav.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
 import Input from '@/shared/ui/Input.vue';
@@ -108,7 +107,6 @@ async function remove(kind: Kind, item: Item) {
 
 <template>
     <PageHeader title="Danh mục và thương hiệu" description="Danh mục và thương hiệu dùng để phân nhóm, lọc và báo cáo sản phẩm." />
-    <ProductsNav />
 
     <div class="grid gap-5 lg:grid-cols-2">
         <Card v-for="kind in (['categories', 'brands'] as Kind[])" :key="kind" :title="labels[kind].title" :description="`${lists[kind].length} ${labels[kind].singular}`">

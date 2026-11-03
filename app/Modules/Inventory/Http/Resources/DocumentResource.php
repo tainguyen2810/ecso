@@ -39,6 +39,8 @@ class DocumentResource extends JsonResource
                 'mode' => $line->mode ?? null,
                 'on_hand_before' => $line->on_hand_before ?? null,
                 'applied_delta' => $line->applied_delta ?? null,
+                'reason' => $line->reason ?? null,
+                'line_note' => $line->note ?? null,
             ], fn ($v) => $v !== null))),
         ];
 

@@ -8,6 +8,11 @@ export interface CountRow {
 
 type Counts = Record<string, number | ''>;
 
+/** Why a counted line differs (Sapo: Lý do), with a free note. */
+export type LineNotes = Record<string, { reason?: string; note?: string }>;
+
+export const varianceReasons: Record<string, string> = { damaged: 'Hỏng', lost: 'Mất, thất lạc', found: 'Tìm thấy thêm', correction: 'Sửa sai sót', other: 'Khác' };
+
 /** Counted minus system quantity, or null when the SKU has not been counted. */
 export function variance(row: CountRow, counts: Counts): number | null {
     const c = counts[row.id];
@@ -25,12 +30,20 @@ export function applyScan(rows: CountRow[], counts: Counts, code: string): strin
 }
 
 /** Adjustment lines in count mode: every counted SKU, plus uncounted ones as 0 when the whole warehouse is counted. */
-export function stocktakeLines(rows: CountRow[], counts: Counts, zeroUncounted: boolean): { variant_id: string; mode: 'count'; quantity: number }[] {
+export function stocktakeLines(
+    rows: CountRow[],
+    counts: Counts,
+    zeroUncounted: boolean,
+    notes: LineNotes = {},
+): { variant_id: string; mode: 'count'; quantity: number; reason?: string; note?: string }[] {
+    // Reason and note only travel with a line that differs from the system.
+    const extra = (r: CountRow, qty: number) => (qty === r.on_hand ? {} : { ...(notes[r.id]?.reason ? { reason: notes[r.id]!.reason } : {}), ...(notes[r.id]?.note ? { note: notes[r.id]!.note } : {}) });
     return rows.flatMap((r) => {
         const c = counts[r.id];
         if (c === undefined || c === '') {
-            return zeroUncounted && r.on_hand !== 0 ? [{ variant_id: r.id, mode: 'count' as const, quantity: 0 }] : [];
+            return zeroUncounted && r.on_hand !== 0 ? [{ variant_id: r.id, mode: 'count' as const, quantity: 0, ...extra(r, 0) }] : [];
         }
-        return [{ variant_id: r.id, mode: 'count' as const, quantity: Math.max(0, Math.floor(Number(c))) }];
+        const qty = Math.max(0, Math.floor(Number(c)));
+        return [{ variant_id: r.id, mode: 'count' as const, quantity: qty, ...extra(r, qty) }];
     });
 }

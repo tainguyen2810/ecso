@@ -17,12 +17,14 @@ import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
 import { adjustmentReasons, documentKinds, documentStatus, type DocumentKindKey } from './labels';
 import type { InventoryDocument } from '@/shared/types';
+import { varianceReasons } from './stocktake';
 
 const route = useRoute();
 const tenant = useTenantStore();
 const toast = useToast();
 const kindKey = computed(() => route.meta.kind as DocumentKindKey);
 const kind = computed(() => documentKinds[kindKey.value]);
+const hasLineNotes = computed(() => (doc.value?.lines ?? []).some((l) => l.reason || l.line_note));
 
 const doc = ref<InventoryDocument | null>(null);
 const loadError = ref<string | null>(null);
@@ -114,6 +116,7 @@ const steps = computed(() => {
                                 <th v-if="doc.kind === 'receipt'" class="px-4 py-2.5 text-right font-medium">Thành tiền</th>
                                 <th v-if="doc.kind === 'adjustment'" class="px-4 py-2.5 text-right font-medium">Tồn trước</th>
                                 <th v-if="doc.kind === 'adjustment'" class="px-4 py-2.5 text-right font-medium">Đã áp dụng</th>
+                                <th v-if="hasLineNotes" class="px-4 py-2.5 font-medium">Lý do, ghi chú</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y">
@@ -130,6 +133,7 @@ const steps = computed(() => {
                                 <td v-if="doc.kind === 'adjustment'" :class="cn('px-4 py-2.5 text-right font-medium tabular-nums', (l.applied_delta ?? 0) > 0 && 'text-success', (l.applied_delta ?? 0) < 0 && 'text-destructive')">
                                     {{ l.applied_delta === undefined ? 'Chờ duyệt' : (l.applied_delta > 0 ? '+' : '') + l.applied_delta }}
                                 </td>
+                                <td v-if="hasLineNotes" class="px-4 py-2.5 text-xs text-muted-foreground">{{ [l.reason ? varianceReasons[l.reason] ?? l.reason : null, l.line_note].filter(Boolean).join(' · ') || '—' }}</td>
                             </tr>
                         </tbody>
                     </table>

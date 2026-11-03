@@ -31,6 +31,10 @@ class PurchaseOrderResource extends JsonResource
             ]),
             'warehouse' => $this->whenLoaded('warehouse', fn () => ['id' => $this->warehouse->ulid, 'code' => $this->warehouse->code, 'name' => $this->warehouse->name]),
             'expected_at' => $this->expected_at?->toDateString(),
+            'invoice_date' => $this->invoice_date?->toDateString(),
+            'reference' => $this->reference,
+            'tags' => $this->tags ?? [],
+            'discount' => $this->discount,
             'ordered_at' => $this->ordered_at?->toIso8601String(),
             'received_at' => $this->received_at?->toIso8601String(),
             'closed_at' => $this->closed_at?->toIso8601String(),
@@ -63,7 +67,7 @@ class PurchaseOrderResource extends JsonResource
                 'unit_cost' => $l->unit_cost,
                 'tax_rate' => $l->tax_rate,
                 // Cost per unit that goes into stock at the ordered price: + VAT when carried in cost + share of costs.
-                'landed_unit_cost' => bcadd(bcadd((string) $l->unit_cost, $this->vat_in_cost ? bcdiv(bcmul((string) $l->unit_cost, (string) $l->tax_rate, 6), '100', 4) : '0', 4), app(PurchaseService::class)->extraCostPerUnit($this->resource, $l, $this->lines), 2),
+                'landed_unit_cost' => bcsub(bcadd(bcadd((string) $l->unit_cost, $this->vat_in_cost ? bcdiv(bcmul((string) $l->unit_cost, (string) $l->tax_rate, 6), '100', 4) : '0', 4), app(PurchaseService::class)->extraCostPerUnit($this->resource, $l, $this->lines), 4), app(PurchaseService::class)->discountPerUnit($this->resource, $l, $this->lines), 2),
             ])),
             'receipts' => $this->whenLoaded('receipts', fn () => $this->receipts->map(fn ($r) => [
                 'id' => $r->ulid,

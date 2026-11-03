@@ -187,3 +187,17 @@ it('refuses to delete a supplier with history', function () {
     actingInTenant($owner, $tenant)->deleteJson("/api/v1/suppliers/{$supplier}")->assertUnprocessable();
     actingInTenant($owner, $tenant)->deleteJson("/api/v1/suppliers/{$unused}")->assertNoContent();
 });
+
+it('lists suppliers by Sapo tabs and exports them to Excel', function () {
+    [$tenant, $owner] = tenantWithOwner();
+    $active = actingInTenant($owner, $tenant)->postJson('/api/v1/suppliers', ['name' => 'Viễn Sơn', 'phone' => '0912345678'])->json('data.id');
+    $old = actingInTenant($owner, $tenant)->postJson('/api/v1/suppliers', ['name' => 'Hiển laptop'])->json('data.id');
+    actingInTenant($owner, $tenant)->putJson("/api/v1/suppliers/{$old}", ['is_active' => false])->assertOk();
+
+    actingInTenant($owner, $tenant)->getJson('/api/v1/suppliers?active=1')->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $active);
+    actingInTenant($owner, $tenant)->getJson('/api/v1/suppliers?active=0')->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $old);
+
+    $res = actingInTenant($owner, $tenant)->get('/api/v1/suppliers/export')->assertOk();
+    expect($res->headers->get('content-type'))->toContain('spreadsheetml')
+        ->and($res->streamedContent())->toStartWith('PK');
+});

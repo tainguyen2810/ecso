@@ -3,7 +3,6 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { ArrowLeft, Boxes, History, Lock, PackageCheck, Warehouse } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
-import InventoryNav from './InventoryNav.vue';
 import Pagination from '../../components/Pagination.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -68,7 +67,6 @@ function delta(n: number): string {
 <template>
     <RouterLink to="/inventory" class="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft class="size-4" /> Tồn kho</RouterLink>
     <PageHeader :title="variant ? `Thẻ kho · ${variant.sku}` : 'Thẻ kho'" :description="variant?.name" />
-    <InventoryNav />
 
     <ErrorState v-if="loadError && !variant" :message="loadError" @retry="load" />
     <template v-else>

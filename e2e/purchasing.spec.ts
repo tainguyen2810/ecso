@@ -61,7 +61,7 @@ test('purchasing: order, receive in parts, pay, supplier debt', async ({ page })
 test('purchasing: return to supplier and reorder suggestions', async ({ page }) => {
     await login(page, 'owner@demo.test');
     await page.goto('/purchasing?status=received');
-    await page.getByTestId('po-table').locator('tbody tr').first().click();
+    await page.getByTestId('po-table').locator('tbody tr').first().getByRole('link').first().click();
     await page.getByTestId('po-return').click();
     await page.getByTestId('ret-qty-0').fill('1');
     await page.getByTestId('ret-reason').fill('Sai màu');
@@ -120,4 +120,46 @@ test('purchasing: VAT, purchase costs in the landed cost, printed order', async 
     await expect(page.getByTestId('po-cost-summary')).toContainText('200.000');
     await page.evaluate(() => document.querySelectorAll<HTMLElement>('[role="status"]').forEach((t) => t.click()));
     await baseShot(page, '03-po-received-landed-cost', dir);
+});
+
+test('purchasing like Sapo: discount, invoice details, Tạo & nhập hàng with payment, Đặt hàng nhập list', async ({ page }) => {
+    const dir = 'docs/screenshots/purchase-sapo';
+    await login(page, 'owner@demo.test');
+    await page.goto('/purchasing/new');
+    await page.getByTestId('po-supplier').selectOption({ label: 'NCC-000001 · Xưởng May Minh Long' });
+    await expect(page.getByTestId('po-supplier-card')).toContainText('Công nợ');
+    await page.getByTestId('po-invoice-date').fill('2026-11-04');
+    await page.getByTestId('po-reference').fill('HĐ 0001254');
+    await page.getByTestId('sku-picker').fill('ATC-TRANG-M');
+    await page.getByTestId('sku-picker').press('Enter');
+    await page.getByTestId('po-qty-0').fill('10');
+    await page.getByTestId('po-cost-0').fill('60000');
+    await page.getByTestId('po-discount').fill('50000');
+    await expect(page.getByTestId('po-total')).toContainText('550.000');
+    await expect(page.getByTestId('po-landed-0')).toHaveText('55.000');
+    await page.getByTestId('po-pay-amount').fill('500000');
+    await expect(page.getByTestId('po-remaining')).toContainText('50.000');
+    await page.evaluate(() => document.querySelectorAll<HTMLElement>('[role="status"]').forEach((t) => t.click()));
+    await baseShot(page, '01-po-form', dir);
+    await page.getByTestId('po-create-receive').click();
+
+    await expect(page.getByTestId('po-status')).toHaveText('Đã nhận đủ');
+    await expect(page.getByTestId('po-steps')).toContainText('Hoàn thành');
+    await expect(page.getByTestId('po-due')).toContainText('50.000');
+    await expect(page.getByTestId('po-info')).toContainText('HĐ 0001254');
+    await page.evaluate(() => document.querySelectorAll<HTMLElement>('[role="status"]').forEach((t) => t.click()));
+    await baseShot(page, '02-po-detail', dir);
+
+    await page.goto('/purchasing');
+    await page.getByTestId('po-search').fill('0001254');
+    await expect(page.getByTestId('po-table').locator('tbody tr')).toHaveCount(1);
+    await page.getByTestId('po-search').fill('');
+    await baseShot(page, '03-po-list', dir);
+
+    await page.goto('/purchasing/orders');
+    await expect(page.getByRole('heading', { name: 'Đặt hàng nhập' })).toBeVisible();
+    await page.getByTestId('new-po').click();
+    await expect(page.getByTestId('po-create-receive')).toHaveCount(0);
+    await expect(page.getByTestId('po-place')).toContainText('Đặt hàng');
+    await baseShot(page, '04-ordering-form', dir);
 });

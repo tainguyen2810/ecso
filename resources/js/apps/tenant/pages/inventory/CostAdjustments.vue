@@ -4,7 +4,6 @@ import { ChevronDown, ChevronRight, Plus, Search, Trash2, Wallet } from 'lucide-
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
-import InventoryNav from './InventoryNav.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
@@ -108,7 +107,6 @@ function toggle(id: string) {
     <PageHeader title="Điều chỉnh giá vốn" description="Điều chỉnh giá vốn bình quân khi giá nhập ghi sai hoặc có chiết khấu sau. Số lượng tồn không đổi; lần nhập sau sẽ tính bình quân từ giá mới.">
         <Button v-if="canCreate" data-testid="new-cost-adjustment" @click="open = true"><Plus /> Tạo phiếu điều chỉnh giá vốn</Button>
     </PageHeader>
-    <InventoryNav />
 
     <Card>
         <div class="border-b px-4 py-3">

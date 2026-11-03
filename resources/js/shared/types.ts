@@ -161,6 +161,8 @@ export interface DocumentLine {
     mode?: 'delta' | 'count';
     on_hand_before?: number;
     applied_delta?: number;
+    reason?: string;
+    line_note?: string;
 }
 
 export interface InventoryDocument {
@@ -486,6 +488,10 @@ export interface PurchaseOrderData {
     supplier?: { id: string; code: string; name: string; contact_name?: string | null; phone?: string | null; email?: string | null; address?: string | null; tax_code?: string | null };
     warehouse?: { id: string; code: string; name: string };
     expected_at: string | null;
+    invoice_date?: string | null;
+    reference?: string | null;
+    tags?: string[];
+    discount?: string;
     ordered_at: string | null;
     received_at: string | null;
     closed_at: string | null;

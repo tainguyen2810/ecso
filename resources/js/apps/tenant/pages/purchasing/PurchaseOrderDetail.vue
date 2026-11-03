@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { useRoute } from 'vue-router';
-import { ArrowLeft, Ban, CircleCheck, PackageCheck, Pencil, Printer, Send, Tags, Undo2, Wallet } from 'lucide-vue-next';
+import { ArrowLeft, Ban, Check, CircleCheck, Copy, PackageCheck, Pencil, Printer, Send, Tags, Undo2, Wallet } from 'lucide-vue-next';
+import { useRoute, useRouter } from 'vue-router';
 import PageHeader from '../../PageHeader.vue';
 import SupplierPaymentDialog from './SupplierPaymentDialog.vue';
 import Badge from '@/shared/ui/Badge.vue';
@@ -16,7 +16,8 @@ import { api, ApiError } from '@/shared/lib/api';
 import { formatDate, formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
-import { owed, poStatus, supplierPaymentMethods } from './labels';
+import { owed, poStatus, receiveStatus, supplierPaymentMethods, tradeStatus } from './labels';
+import { REORDER_DRAFT_KEY, type ReorderDraft } from './reorder';
 import { printPurchaseOrder } from './printOrder';
 import type { PurchaseOrderData } from '@/shared/types';
 
@@ -43,6 +44,41 @@ onMounted(load);
 
 const isOpen = computed(() => po.value && ['draft', 'ordered', 'partial'].includes(po.value.status));
 const due = computed(() => (po.value ? owed(po.value) : 0));
+// Like Sapo the supplier can be paid before the goods arrive (prepayment), up to the order total.
+const payable = computed(() => {
+    if (!po.value || po.value.status === 'cancelled') return 0;
+    const done = ['received', 'closed'].includes(po.value.status) || Number(po.value.received_value) >= Number(po.value.total);
+    return (done ? Number(po.value.received_value) : Number(po.value.total)) - Number(po.value.returned_value) - Number(po.value.paid_amount);
+});
+
+/** Sapo's progress bar: Tạo đơn → Đặt hàng → Nhập hàng → Hoàn thành. */
+const steps = computed(() => {
+    const p = po.value!;
+    const done = ['received', 'closed'].includes(p.status);
+    return [
+        { label: 'Tạo đơn', at: p.created_at, reached: true },
+        { label: 'Đặt hàng', at: p.ordered_at, reached: !!p.ordered_at },
+        { label: p.status === 'partial' ? 'Nhập một phần' : 'Nhập hàng', at: p.received_at, reached: !!p.received_at },
+        { label: p.status === 'cancelled' ? 'Đã hủy' : 'Hoàn thành', at: p.closed_at ?? (done ? p.received_at : null), reached: done || p.status === 'cancelled' },
+    ];
+});
+
+const router = useRouter();
+/** "Sao chép": a new order with the same supplier, warehouse and lines (through the reorder hand-off). */
+function copyOrder() {
+    const p = po.value!;
+    const draft: ReorderDraft = {
+        warehouse_id: p.warehouse?.id ?? '',
+        supplier_id: p.supplier?.id ?? '',
+        lines: (p.lines ?? []).filter((l) => l.variant).map((l) => ({ id: l.variant!.id, sku: l.variant!.sku, name: l.variant!.name, stock: null, quantity: l.quantity, unit_cost: l.unit_cost })),
+    };
+    try {
+        sessionStorage.setItem(REORDER_DRAFT_KEY, JSON.stringify(draft));
+    } catch {
+        /* storage unavailable */
+    }
+    router.push({ path: '/purchasing/new', query: { from: 'reorder' } });
+}
 const returnable = computed(() => (po.value?.lines ?? []).filter((l) => l.received_qty - l.returned_qty > 0));
 
 async function act(action: 'place' | 'close' | 'cancel', reason?: string) {
@@ -140,42 +176,60 @@ async function voidPayment(id: string) {
     <div v-if="loading && !po" class="space-y-4"><Skeleton class="h-10 w-80" /><Skeleton class="h-64" /></div>
     <ErrorState v-else-if="loadError" :message="loadError" @retry="load" />
     <template v-else-if="po">
-        <RouterLink to="/purchasing" class="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft class="size-4" /> Đơn nhập hàng</RouterLink>
-        <PageHeader :title="po.number" :description="`${po.supplier?.name} → ${po.warehouse?.name}${po.expected_at ? ' · dự kiến về ' + formatDate(po.expected_at) : ''}`">
-            <Badge :tone="poStatus[po.status]?.tone" class="self-center" data-testid="po-status">{{ poStatus[po.status]?.label }}</Badge>
+        <RouterLink to="/purchasing" class="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft class="size-4" /> Nhập hàng</RouterLink>
+        <PageHeader :title="po.number" :description="`${po.supplier?.name} → ${po.warehouse?.name}${po.expected_at ? ' · hẹn giao ' + formatDate(po.expected_at) : ''}`">
+            <template #links>
+                <Badge :tone="tradeStatus(po.status).tone">{{ tradeStatus(po.status).label }}</Badge>
+                <Badge :tone="receiveStatus(po.status).tone">{{ receiveStatus(po.status).label }}</Badge>
+                <Badge :tone="poStatus[po.status]?.tone" data-testid="po-status">{{ poStatus[po.status]?.label }}</Badge>
+            </template>
+            <Button v-if="tenant.can('purchasing.manage')" variant="outline" data-testid="po-copy" @click="copyOrder"><Copy /> Sao chép</Button>
             <RouterLink
                 v-if="(po.lines ?? []).some((l) => l.variant && l.received_qty > 0)"
                 :to="{ path: '/products/labels', query: { lines: (po.lines ?? []).filter((l) => l.variant && l.received_qty > 0).map((l) => `${l.variant!.id}:${l.received_qty}`).join(',') } }"
             >
                 <Button variant="outline" data-testid="po-labels"><Tags /> In tem hàng đã nhận</Button>
             </RouterLink>
-            <Button variant="outline" data-testid="po-print" @click="print"><Printer /> In phiếu đặt hàng</Button>
+            <Button variant="outline" data-testid="po-print" @click="print"><Printer /> In đơn</Button>
             <Button v-if="po.status === 'draft' && tenant.can('purchasing.manage')" :loading="busy" @click="act('place')"><Send /> Đặt hàng</Button>
-            <Button v-if="isOpen && (tenant.can('purchasing.manage') || tenant.can('inventory.receive'))" data-testid="po-receive" @click="openReceive"><PackageCheck /> Nhận hàng</Button>
-            <Button v-if="tenant.can('purchasing.payment') && po.status !== 'cancelled' && due > 0" variant="outline" data-testid="po-pay" @click="payOpen = true"><Wallet /> Chi tiền</Button>
+            <Button v-if="isOpen && (tenant.can('purchasing.manage') || tenant.can('inventory.receive'))" data-testid="po-receive" @click="openReceive"><PackageCheck /> Nhập hàng</Button>
+            <Button v-if="tenant.can('purchasing.payment') && payable > 0" variant="outline" data-testid="po-pay" @click="payOpen = true"><Wallet /> Thanh toán</Button>
             <Button v-if="tenant.can('purchasing.manage') && returnable.length" variant="outline" data-testid="po-return" @click="openReturn"><Undo2 /> Trả hàng</Button>
             <Button v-if="po.editable && tenant.can('purchasing.manage')" variant="outline" @click="$router.push(`/purchasing/${po.id}/edit`)"><Pencil /> Sửa</Button>
             <Button v-if="po.status === 'partial' && tenant.can('purchasing.manage')" variant="ghost" :loading="busy" title="Không chờ phần còn lại" @click="act('close', 'Không chờ phần còn lại')"><CircleCheck /> Đóng đơn</Button>
             <Button v-if="['draft', 'ordered'].includes(po.status) && tenant.can('purchasing.manage')" variant="ghost" :loading="busy" @click="act('cancel')"><Ban /> Hủy</Button>
         </PageHeader>
 
+        <Card class="mb-4">
+            <ol class="flex items-start px-4 py-4 sm:px-10" data-testid="po-steps">
+                <li v-for="(s, i) in steps" :key="s.label" class="relative flex flex-1 flex-col items-center gap-1 text-center text-xs">
+                    <span v-if="i" :class="['absolute right-1/2 top-3.5 h-0.5 w-full', s.reached ? 'bg-primary' : 'bg-border']" />
+                    <span :class="['relative z-10 grid size-7 place-items-center rounded-full', s.reached ? (po.status === 'cancelled' && i === 3 ? 'bg-destructive text-white' : 'bg-primary text-primary-foreground') : 'border-2 bg-card text-muted-foreground']">
+                        <Check v-if="s.reached" class="size-4" /><template v-else>{{ i + 1 }}</template>
+                    </span>
+                    <span :class="['font-semibold', !s.reached && 'text-muted-foreground']">{{ s.label }}</span>
+                    <span class="text-muted-foreground">{{ s.at ? formatDateTime(s.at) : '' }}</span>
+                </li>
+            </ol>
+        </Card>
+
         <div class="mb-4 grid gap-4 sm:grid-cols-4">
             <Card><div class="p-4"><p class="text-xs text-muted-foreground">Giá trị đặt</p><p class="mt-1 text-xl font-semibold tabular-nums">{{ formatMoney(po.total) }}</p></div></Card>
             <Card><div class="p-4"><p class="text-xs text-muted-foreground">Đã nhận ({{ formatNumber(po.received_quantity) }}/{{ formatNumber(po.total_quantity) }})</p><p class="mt-1 text-xl font-semibold tabular-nums" data-testid="po-received-value">{{ formatMoney(po.received_value) }}</p></div></Card>
             <Card><div class="p-4"><p class="text-xs text-muted-foreground">Đã trả hàng / đã chi</p><p class="mt-1 text-xl font-semibold tabular-nums">{{ formatMoney(po.returned_value) }} / {{ formatMoney(po.paid_amount) }}</p></div></Card>
-            <Card><div class="p-4"><p class="text-xs text-muted-foreground">Còn nợ NCC</p><p class="mt-1 text-xl font-semibold tabular-nums" :class="due > 0 && 'text-destructive'" data-testid="po-due">{{ formatMoney(due) }}</p></div></Card>
+            <Card><div class="p-4"><p class="text-xs text-muted-foreground">Còn phải trả NCC</p><p class="mt-1 text-xl font-semibold tabular-nums" :class="due > 0 && 'text-destructive'" data-testid="po-due">{{ formatMoney(due) }}</p></div></Card>
         </div>
 
         <div class="grid gap-4 lg:grid-cols-3">
-            <Card title="Hàng đặt" class="lg:col-span-2">
+            <Card :caps="false" title="Thông tin sản phẩm" class="lg:col-span-2">
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                            <tr><th class="px-4 py-2 font-medium">SKU</th><th class="px-4 py-2 text-right font-medium">Đặt</th><th class="px-4 py-2 text-right font-medium">Đã nhận</th><th class="px-4 py-2 text-right font-medium">Đã trả</th><th class="px-4 py-2 text-right font-medium">Còn chờ</th><th class="px-4 py-2 text-right font-medium">Đơn giá</th><th class="px-4 py-2 text-right font-medium">VAT</th><th class="px-4 py-2 text-right font-medium" title="Giá vốn mỗi đơn vị khi nhập kho theo giá đặt">Giá vốn</th></tr>
+                            <tr><th class="px-4 py-2 font-medium">Sản phẩm</th><th class="px-4 py-2 text-right font-medium">Đặt</th><th class="px-4 py-2 text-right font-medium">Đã nhập</th><th class="px-4 py-2 text-right font-medium">Đã trả</th><th class="px-4 py-2 text-right font-medium">Còn chờ</th><th class="px-4 py-2 text-right font-medium">Đơn giá</th><th class="px-4 py-2 text-right font-medium">VAT</th><th class="px-4 py-2 text-right font-medium" title="Giá vốn mỗi đơn vị khi nhập kho theo giá đặt">Giá vốn</th></tr>
                         </thead>
                         <tbody class="divide-y">
                             <tr v-for="l in po.lines" :key="l.variant?.id">
-                                <td class="px-4 py-2.5"><p class="font-mono text-xs font-medium">{{ l.variant?.sku }}</p><p class="max-w-64 truncate text-xs text-muted-foreground">{{ l.variant?.name }}</p></td>
+                                <td class="px-4 py-2.5"><RouterLink v-if="l.variant" :to="`/inventory/sku/${l.variant.id}`" class="block max-w-64 truncate font-medium text-primary hover:underline">{{ l.variant.name }}</RouterLink><p class="font-mono text-xs text-muted-foreground">{{ l.variant?.sku }}</p></td>
                                 <td class="px-4 py-2.5 text-right tabular-nums">{{ formatNumber(l.quantity) }}</td>
                                 <td class="px-4 py-2.5 text-right tabular-nums" :class="l.received_qty >= l.quantity && 'text-success'">{{ formatNumber(l.received_qty) }}</td>
                                 <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ l.returned_qty ? formatNumber(l.returned_qty) : '—' }}</td>
@@ -190,6 +244,9 @@ async function voidPayment(id: string) {
                 <dl class="grid grid-cols-[1fr_auto] gap-x-6 gap-y-1 border-t px-5 py-3 text-sm sm:ml-auto sm:w-96" data-testid="po-cost-summary">
                     <dt class="text-muted-foreground">Tiền hàng</dt><dd class="text-right tabular-nums">{{ formatMoney(po.subtotal) }}</dd>
                     <dt class="text-muted-foreground">Thuế GTGT{{ po.vat_in_cost ? ' (tính vào giá vốn)' : ' (được khấu trừ)' }}</dt><dd class="text-right tabular-nums">{{ formatMoney(po.tax_amount) }}</dd>
+                    <template v-if="Number(po.discount)">
+                        <dt class="text-muted-foreground">Chiết khấu đơn</dt><dd class="text-right tabular-nums">−{{ formatMoney(po.discount) }}</dd>
+                    </template>
                     <template v-if="Number(po.extra_cost)">
                         <dt class="text-muted-foreground">Chi phí nhập{{ po.extra_cost_note ? ` · ${po.extra_cost_note}` : '' }} ({{ po.extra_cost_to_supplier ? 'trả NCC' : 'trả bên khác' }})</dt><dd class="text-right tabular-nums">{{ formatMoney(po.extra_cost) }}</dd>
                     </template>
@@ -201,23 +258,35 @@ async function voidPayment(id: string) {
                 <p v-if="po.note" class="border-t px-5 py-3 text-sm text-muted-foreground">Ghi chú: {{ po.note }}</p>
             </Card>
             <div class="space-y-4">
-                <Card title="Các đợt nhận hàng">
+                <Card :caps="false" title="Thông tin đơn">
+                    <dl class="grid grid-cols-[7rem_1fr] gap-y-1.5 px-5 py-4 text-sm" data-testid="po-info">
+                        <dt class="text-muted-foreground">Nhà cung cấp</dt>
+                        <dd><RouterLink v-if="po.supplier" :to="`/purchasing/suppliers/${po.supplier.id}`" class="text-primary hover:underline">{{ po.supplier.name }}</RouterLink><span v-if="po.supplier?.phone" class="text-muted-foreground"> · {{ po.supplier.phone }}</span></dd>
+                        <dt class="text-muted-foreground">Kho nhập</dt><dd>{{ po.warehouse?.name }}</dd>
+                        <dt class="text-muted-foreground">Nhân viên</dt><dd>{{ po.created_by ?? '—' }}</dd>
+                        <dt class="text-muted-foreground">Ngày hẹn giao</dt><dd>{{ po.expected_at ? formatDate(po.expected_at) : '—' }}</dd>
+                        <dt class="text-muted-foreground">Ngày hóa đơn</dt><dd>{{ po.invoice_date ? formatDate(po.invoice_date) : '—' }}</dd>
+                        <dt class="text-muted-foreground">Tham chiếu</dt><dd>{{ po.reference || '—' }}</dd>
+                        <template v-if="po.tags?.length"><dt class="text-muted-foreground">Tags</dt><dd class="flex flex-wrap gap-1"><Badge v-for="t in po.tags" :key="t">{{ t }}</Badge></dd></template>
+                    </dl>
+                </Card>
+                <Card :caps="false" title="Các lần nhập kho">
                     <ul v-if="po.receipts?.length" class="divide-y text-sm">
                         <li v-for="r in po.receipts" :key="r.id" class="flex items-center justify-between px-5 py-2.5">
                             <div><RouterLink :to="`/inventory/receipts/${r.id}`" class="font-mono text-xs font-medium hover:underline">{{ r.number }}</RouterLink><div class="text-xs text-muted-foreground">{{ formatDateTime(r.created_at) }} · {{ r.created_by }}</div></div>
                             <div class="text-right tabular-nums"><div>{{ formatNumber(r.total_quantity) }} sp</div><div class="text-xs text-muted-foreground">{{ formatMoney(r.total_value) }}</div></div>
                         </li>
                     </ul>
-                    <p v-else class="px-5 py-4 text-sm text-muted-foreground">Chưa nhận hàng.</p>
+                    <p v-else class="px-5 py-4 text-sm text-muted-foreground">Chưa nhập kho.</p>
                 </Card>
-                <Card title="Phiếu chi">
+                <Card :caps="false" title="Thanh toán">
                     <ul v-if="po.payments?.length" class="divide-y text-sm">
                         <li v-for="p in po.payments" :key="p.id" class="flex items-center justify-between gap-2 px-5 py-2.5" :class="p.voided_at && 'opacity-50'">
                             <div :class="p.voided_at && 'line-through'"><div>{{ supplierPaymentMethods[p.method] }}<span v-if="p.reference" class="text-muted-foreground"> · {{ p.reference }}</span></div><div class="text-xs text-muted-foreground">{{ formatDateTime(p.paid_at) }} · {{ p.created_by }}</div></div>
                             <div class="flex items-center gap-2"><span class="tabular-nums">{{ formatMoney(p.amount) }}</span><button v-if="!p.voided_at && tenant.can('purchasing.payment')" class="text-xs text-muted-foreground hover:text-destructive" @click="voidPayment(p.id)">Hủy</button></div>
                         </li>
                     </ul>
-                    <p v-else class="px-5 py-4 text-sm text-muted-foreground">Chưa chi tiền.</p>
+                    <p v-else class="px-5 py-4 text-sm text-muted-foreground">Chưa thanh toán cho nhà cung cấp.</p>
                 </Card>
                 <Card v-if="po.returns?.length" title="Trả hàng nhà cung cấp">
                     <ul class="divide-y text-sm">
@@ -230,7 +299,7 @@ async function voidPayment(id: string) {
             </div>
         </div>
 
-        <Dialog v-model:open="receiveOpen" title="Nhận hàng" description="Nhập số lượng thực nhận đợt này. Có thể nhận nhiều đợt. Tồn kho và giá vốn bình quân được cập nhật ngay.">
+        <Dialog v-model:open="receiveOpen" title="Nhập hàng" description="Nhập số lượng thực nhận đợt này. Có thể nhận nhiều đợt. Tồn kho và giá vốn bình quân được cập nhật ngay.">
             <form id="receive-form" class="space-y-3" @submit.prevent="receive">
                 <table class="w-full text-sm">
                     <thead class="text-left text-xs uppercase text-muted-foreground"><tr><th class="py-1 font-medium">SKU</th><th class="py-1 text-right font-medium">Còn chờ</th><th class="py-1 text-right font-medium">Nhận</th><th v-if="tenant.can('purchasing.manage')" class="py-1 text-right font-medium">Giá nhập</th></tr></thead>
@@ -274,6 +343,6 @@ async function voidPayment(id: string) {
             </template>
         </Dialog>
 
-        <SupplierPaymentDialog v-if="po.supplier" v-model:open="payOpen" :supplier-id="po.supplier.id" :order="{ id: po.id, number: po.number }" :suggested="due" @saved="load" />
+        <SupplierPaymentDialog v-if="po.supplier" v-model:open="payOpen" :supplier-id="po.supplier.id" :order="{ id: po.id, number: po.number }" :suggested="payable" @saved="load" />
     </template>
 </template>

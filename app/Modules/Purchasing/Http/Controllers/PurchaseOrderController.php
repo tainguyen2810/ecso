@@ -8,16 +8,21 @@ use App\Modules\Inventory\Http\Resources\DocumentResource;
 use App\Modules\Purchasing\Http\Resources\PurchaseOrderResource;
 use App\Modules\Purchasing\Models\PurchaseOrder;
 use App\Modules\Purchasing\Models\Supplier;
+use App\Modules\Purchasing\Models\SupplierPayment;
 use App\Modules\Purchasing\Services\PurchaseService;
+use App\Modules\Purchasing\Services\SupplierPaymentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class PurchaseOrderController extends Controller
 {
-    private const COST_FIELDS = ['extra_cost', 'extra_cost_note', 'extra_cost_to_supplier', 'vat_in_cost'];
+    private const COST_FIELDS = ['discount', 'extra_cost', 'extra_cost_note', 'extra_cost_to_supplier', 'vat_in_cost'];
+
+    private const HEADER_FIELDS = ['expected_at', 'note', 'invoice_date', 'reference', 'tags'];
 
     use ResolvesLines;
 
@@ -27,24 +32,43 @@ class PurchaseOrderController extends Controller
     {
         $this->authorize('viewAny', PurchaseOrder::class);
         $filters = $request->validate([
-            'status' => ['nullable', Rule::in([...PurchaseOrder::STATUSES, 'open', 'unpaid'])],
+            'status' => ['nullable', Rule::in([...PurchaseOrder::STATUSES, 'open', 'unpaid', 'trading', 'done', 'ordering'])],
             'supplier' => ['nullable', 'string'],
+            'warehouse' => ['nullable', 'string'],
+            'created_from' => ['nullable', 'date'],
+            'created_to' => ['nullable', 'date'],
             'q' => ['nullable', 'string', 'max:100'],
             'per_page' => ['nullable', 'integer', 'min:5', 'max:100'],
         ]);
 
-        $query = PurchaseOrder::query()->with(['supplier', 'warehouse', 'lines'])->orderByDesc('id');
+        $query = PurchaseOrder::query()->with(['supplier', 'warehouse', 'lines', 'creator'])->orderByDesc('id');
         match ($filters['status'] ?? null) {
             null => null,
             'open' => $query->whereIn('status', [PurchaseOrder::ORDERED, PurchaseOrder::PARTIAL]),
             'unpaid' => $query->where('status', '!=', PurchaseOrder::CANCELLED)->whereRaw('received_value - returned_value - paid_amount > 0'),
+            // Sapo's tabs: "Đang giao dịch" (goods or money still to come), "Hoàn thành"; "Đặt hàng nhập" = nothing received yet.
+            'trading' => $query->whereIn('status', PurchaseOrder::OPEN),
+            'done' => $query->whereIn('status', [PurchaseOrder::RECEIVED, PurchaseOrder::CLOSED]),
+            'ordering' => $query->whereIn('status', [PurchaseOrder::DRAFT, PurchaseOrder::ORDERED]),
             default => $query->where('status', $filters['status']),
         };
         if ($ulid = $filters['supplier'] ?? null) {
             $query->whereHas('supplier', fn ($s) => $s->where('ulid', $ulid));
         }
+        if ($ulid = $filters['warehouse'] ?? null) {
+            $query->whereHas('warehouse', fn ($s) => $s->where('ulid', $ulid));
+        }
+        if ($from = $filters['created_from'] ?? null) {
+            $query->where('created_at', '>=', $from);
+        }
+        if ($to = $filters['created_to'] ?? null) {
+            $query->where('created_at', '<', now()->parse($to)->addDay());
+        }
         if ($q = trim((string) ($filters['q'] ?? ''))) {
-            $query->where(fn ($w) => $w->where('number', 'like', "%{$q}%")->orWhereHas('supplier', fn ($s) => $s->where('name', 'like', "%{$q}%")));
+            $query->where(fn ($w) => $w->where('number', 'like', "%{$q}%")
+                ->orWhere('reference', 'like', "%{$q}%")
+                ->orWhereHas('supplier', fn ($s) => $s->where('name', 'like', "%{$q}%"))
+                ->orWhereHas('lines.variant', fn ($v) => $v->where('sku', 'like', "%{$q}%")));
         }
 
         return PurchaseOrderResource::collection($query->paginate((int) ($filters['per_page'] ?? 20)));
@@ -57,27 +81,48 @@ class PurchaseOrderController extends Controller
         return new PurchaseOrderResource($purchaseOrder->load(self::DETAIL));
     }
 
-    public function store(Request $request, PurchaseService $purchases): JsonResponse
+    /**
+     * Like Sapo: "Tạo & chưa nhập" places the order; "Tạo & nhập hàng" also receives everything at once. A payment
+     * to the supplier can be recorded in the same step.
+     */
+    public function store(Request $request, PurchaseService $purchases, SupplierPaymentService $payments): JsonResponse
     {
         $this->authorize('create', PurchaseOrder::class);
         $data = $request->validate([
             'supplier_id' => ['required', 'string'],
             'warehouse_id' => ['required', 'string'],
             'place' => ['boolean'],
+            'receive' => ['boolean'],
+            'payment' => ['nullable', 'array'],
+            'payment.amount' => ['required_with:payment', 'numeric', 'min:0', 'max:9999999999'],
+            'payment.method' => ['required_with:payment', Rule::in(SupplierPayment::METHODS)],
+            'payment.reference' => ['nullable', 'string', 'max:100'],
             ...$this->headerRules(),
             ...$this->lineRules(300),
             ...$this->costRules(),
         ]);
 
-        $po = $purchases->create([
-            'supplier' => $this->findSupplier($data['supplier_id']),
-            'warehouse' => $this->findWarehouse($data['warehouse_id']),
-            'lines' => $this->resolveLines($data['lines']),
-            'expected_at' => $data['expected_at'] ?? null,
-            'note' => $data['note'] ?? null,
-            'place' => $request->boolean('place'),
-            ...array_intersect_key($data, array_flip(self::COST_FIELDS)),
-        ]);
+        $supplier = $this->findSupplier($data['supplier_id']);
+        $po = DB::transaction(function () use ($request, $data, $supplier, $purchases, $payments) {
+            $po = $purchases->create([
+                'supplier' => $supplier,
+                'warehouse' => $this->findWarehouse($data['warehouse_id']),
+                'lines' => $this->resolveLines($data['lines']),
+                'place' => $request->boolean('place') || $request->boolean('receive'),
+                ...array_intersect_key($data, array_flip([...self::HEADER_FIELDS, ...self::COST_FIELDS])),
+            ]);
+            if ($request->boolean('receive')) {
+                $this->authorize('receive', $po);
+                $purchases->receive($po, $po->lines()->get()->map(fn ($l) => ['variant_id' => $l->product_variant_id, 'quantity' => $l->quantity])->all());
+                $po->refresh();
+            }
+            if (bccomp((string) ($data['payment']['amount'] ?? 0), '0', 2) > 0) {
+                $this->authorize('pay', Supplier::class);
+                $payments->record($supplier, ['method' => $data['payment']['method'], 'amount' => $data['payment']['amount'], 'reference' => $data['payment']['reference'] ?? null], $po);
+            }
+
+            return $po;
+        });
 
         return (new PurchaseOrderResource($po->fresh(self::DETAIL)))->response()->setStatusCode(201);
     }
@@ -94,7 +139,7 @@ class PurchaseOrderController extends Controller
             ...$this->costRules(),
         ]);
 
-        $payload = array_intersect_key($data, array_flip(['expected_at', 'note', ...self::COST_FIELDS]));
+        $payload = array_intersect_key($data, array_flip([...self::HEADER_FIELDS, ...self::COST_FIELDS]));
         if (isset($data['supplier_id'])) {
             $payload['supplier'] = $this->findSupplier($data['supplier_id']);
         }
@@ -157,6 +202,11 @@ class PurchaseOrderController extends Controller
         return [
             'expected_at' => ['nullable', 'date'],
             'note' => ['nullable', 'string', 'max:1000'],
+            'invoice_date' => ['nullable', 'date'],
+            'reference' => ['nullable', 'string', 'max:100'],
+            'tags' => ['nullable', 'array', 'max:10'],
+            'tags.*' => ['string', 'max:40'],
+            'discount' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             'extra_cost' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             'extra_cost_note' => ['nullable', 'string', 'max:255'],
             'extra_cost_to_supplier' => ['boolean'],

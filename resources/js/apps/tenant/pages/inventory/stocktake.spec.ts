@@ -25,4 +25,12 @@ describe('stocktake', () => {
             { variant_id: 'b', mode: 'count', quantity: 0 },
         ]);
     });
+    it('sends the reason and note only with lines that differ', () => {
+        const counts = { a: 4 as number | '', b: 2 as number | '' };
+        const notes = { a: { reason: 'damaged', note: 'Vỡ hộp' }, b: { reason: 'lost' } };
+        expect(stocktakeLines(rows, counts, false, notes)).toEqual([
+            { variant_id: 'a', mode: 'count', quantity: 4, reason: 'damaged', note: 'Vỡ hộp' },
+            { variant_id: 'b', mode: 'count', quantity: 2 },
+        ]);
+    });
 });
