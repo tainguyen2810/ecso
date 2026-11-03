@@ -58,7 +58,7 @@ test('inventory: stock list, stock card, receipt', async ({ page }) => {
     await expect(page.getByTestId('stock-table')).toBeVisible();
     await shot(page, '05-stock-list');
 
-    await page.getByTestId('stock-table').getByRole('link', { name: 'ATC-TRANG-M' }).click();
+    await page.getByTestId('stock-table').getByRole('row', { name: /ATC-TRANG-M/ }).getByRole('link').click();
     await expect(page.getByTestId('movement-table')).toBeVisible();
     await shot(page, '06-stock-card');
 

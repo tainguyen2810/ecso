@@ -121,7 +121,7 @@ function reset() {
 </script>
 
 <template>
-    <PageHeader title="Kho hàng" description="Kiểm kho: quét hoặc nhập số đếm thực tế, xem chênh lệch, rồi tạo phiếu kiểm kê để duyệt." />
+    <PageHeader title="Kiểm hàng" description="Kiểm kho: quét hoặc nhập số đếm thực tế, xem chênh lệch, rồi tạo phiếu kiểm kê để duyệt." />
     <InventoryNav />
     <div class="grid gap-5 lg:grid-cols-3">
         <Card class="lg:col-span-2">

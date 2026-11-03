@@ -89,7 +89,7 @@ async function update(w: Warehouse, payload: Record<string, unknown>, message: s
 </script>
 
 <template>
-    <PageHeader title="Kho hàng" description="Danh sách kho vật lý. Mỗi SKU có tồn riêng theo từng kho.">
+    <PageHeader title="Danh sách kho" description="Danh sách kho vật lý. Mỗi SKU có tồn riêng theo từng kho.">
         <Button v-if="canManage" :disabled="atLimit" data-testid="new-warehouse" @click="openCreate"><Plus /> Thêm kho</Button>
     </PageHeader>
     <InventoryNav />

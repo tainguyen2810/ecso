@@ -5,7 +5,7 @@ import { cn } from '@/shared/lib/utils';
 
 const route = useRoute();
 const links = [
-    { to: '/purchasing', label: 'Đơn nhập hàng', match: ['purchasing', 'purchase-new', 'purchase-edit', 'purchase-show'] },
+    { to: '/purchasing', label: 'Nhập hàng', match: ['purchasing', 'purchase-new', 'purchase-edit', 'purchase-show'] },
     { to: '/purchasing/suppliers', label: 'Nhà cung cấp', match: ['suppliers', 'supplier-show'] },
     { to: '/purchasing/returns', label: 'Trả hàng NCC', match: ['supplier-returns'] },
     { to: '/purchasing/reorder', label: 'Gợi ý nhập hàng', match: ['reorder'] },

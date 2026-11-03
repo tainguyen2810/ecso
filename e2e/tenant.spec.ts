@@ -63,9 +63,10 @@ test('owner works in the tenant dashboard', async ({ page }) => {
     await page.getByRole('link', { name: 'Cài đặt' }).click();
     await shot(page, '12-settings');
 
-    await page.getByRole('link', { name: 'Mua hàng' }).click();
-    // Purchasing used to be a placeholder; it is a real module since Phase 11.
-    await expect(page.getByRole('heading', { name: 'Mua hàng' })).toBeVisible();
+    // Purchasing sits in the Sản phẩm group, like Sapo.
+    await page.getByRole('link', { name: 'Sản phẩm' }).first().click();
+    await page.getByRole('link', { name: 'Nhập hàng', exact: true }).first().click();
+    await expect(page.getByRole('heading', { name: 'Nhập hàng' })).toBeVisible();
 
     // Keyboard shortcut g then m opens members.
     await page.keyboard.press('g');
@@ -76,7 +77,7 @@ test('owner works in the tenant dashboard', async ({ page }) => {
 test('warehouse staff only sees what their role allows', async ({ page }) => {
     await login(page, 'staff@demo.test');
     await expect(page.getByRole('heading', { name: /Xin chào/ })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Kho hàng' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Sản phẩm', exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Nhân viên' })).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Cài đặt' })).toHaveCount(0);
     await shot(page, '14-staff-dashboard');

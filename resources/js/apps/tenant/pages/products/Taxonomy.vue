@@ -107,7 +107,7 @@ async function remove(kind: Kind, item: Item) {
 </script>
 
 <template>
-    <PageHeader title="Sản phẩm" description="Danh mục và thương hiệu dùng để phân nhóm, lọc và báo cáo sản phẩm." />
+    <PageHeader title="Danh mục và thương hiệu" description="Danh mục và thương hiệu dùng để phân nhóm, lọc và báo cáo sản phẩm." />
     <ProductsNav />
 
     <div class="grid gap-5 lg:grid-cols-2">

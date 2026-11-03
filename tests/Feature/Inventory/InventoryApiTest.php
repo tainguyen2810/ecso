@@ -3,6 +3,8 @@
 use App\Modules\Access\Models\Role;
 use App\Modules\Billing\Models\Plan;
 use App\Modules\Billing\Models\Subscription;
+use App\Modules\Catalog\Models\Brand;
+use App\Modules\Catalog\Models\Category;
 use App\Modules\Inventory\Models\InventoryAdjustment;
 use App\Modules\Inventory\Models\StockTransfer;
 use App\Modules\Inventory\Models\Warehouse;
@@ -117,6 +119,28 @@ it('filters stock by state and supports safety stock', function () {
 
     actingInTenant($this->owner, $this->tenant)->getJson('/api/v1/inventory/summary')
         ->assertJsonPath('data.low_stock', 1)->assertJsonPath('data.out_of_stock', 1)->assertJsonPath('data.skus', 3);
+});
+
+it('filters the stock list by category and brand and shows prices like Sapo', function () {
+    makeVariant($this->tenant, 'KHAC-1', ['ref_price' => 1000]);
+    [$category, $brand] = TenantContext::run($this->tenant, function () {
+        $category = Category::create(['name' => 'Áo']);
+        $brand = Brand::create(['name' => 'ECSO']);
+        $this->variant->product->update(['category_id' => $category->id, 'brand_id' => $brand->id]);
+        $this->variant->update(['ref_price' => 250000, 'wholesale_price' => 200000]);
+
+        return [$category, $brand];
+    });
+
+    $skus = fn (string $query) => collect(actingInTenant($this->owner, $this->tenant)->getJson("/api/v1/inventory/stock?{$query}")->json('data'))->pluck('variant.sku')->all();
+    expect($skus("category={$category->ulid}"))->toBe(['AO-001'])
+        ->and($skus("brand={$brand->ulid}"))->toBe(['AO-001'])
+        ->and($skus(''))->toBe(['AO-001', 'KHAC-1']);
+
+    actingInTenant($this->owner, $this->tenant)->getJson('/api/v1/inventory/stock?q=AO-001')
+        ->assertJsonPath('data.0.ref_price', '250000.00')
+        ->assertJsonPath('data.0.wholesale_price', '200000.00')
+        ->assertJsonPath('data.0.product.image', null);
 });
 
 it('runs the adjustment approval workflow', function () {

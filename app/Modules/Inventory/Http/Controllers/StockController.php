@@ -39,6 +39,8 @@ class StockController extends Controller
             'warehouse' => ['nullable', 'string'],
             'q' => ['nullable', 'string', 'max:100'],
             'state' => ['nullable', Rule::in(['low', 'out', 'in', 'short'])],
+            'category' => ['nullable', 'string'],
+            'brand' => ['nullable', 'string'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:200'],
         ]);
         $warehouse = $this->warehouse($filters['warehouse'] ?? null);
@@ -51,7 +53,7 @@ class StockController extends Controller
         $available = 'COALESCE(s.on_hand, 0) - COALESCE(s.reserved, 0)';
 
         $rows = ProductVariant::query()
-            ->with('product:id,ulid,name')
+            ->with(['product:id,ulid,name', 'product.images'])
             ->whereHas('product', fn ($q) => $q->where('status', '!=', Product::STATUS_ARCHIVED)->where('type', '!=', Product::TYPE_COMBO))
             ->whereDoesntHave('components') // pack sizes have no stock of their own
             ->leftJoinSub($balances, 's', 's.product_variant_id', '=', 'product_variants.id')
@@ -62,6 +64,8 @@ class StockController extends Controller
             ->when($filters['q'] ?? null, fn (Builder $q, string $term) => $q->where(fn (Builder $w) => $w
                 ->where('sku', 'like', "%{$term}%")->orWhere('barcode', $term)
                 ->orWhereHas('product', fn ($p) => $p->where('name', 'like', "%{$term}%"))))
+            ->when($filters['category'] ?? null, fn (Builder $q, string $c) => $q->whereHas('product.category', fn ($w) => $w->where('ulid', $c)))
+            ->when($filters['brand'] ?? null, fn (Builder $q, string $b) => $q->whereHas('product.brand', fn ($w) => $w->where('ulid', $b)))
             ->when($filters['state'] ?? null, fn (Builder $q, string $state) => match ($state) {
                 'out' => $q->whereRaw("{$available} <= 0"),
                 'short' => $q->whereRaw("{$available} < 0"),
@@ -74,13 +78,16 @@ class StockController extends Controller
 
         $data = collect($rows->items())->map(fn (ProductVariant $v) => [
             'variant' => ['id' => $v->ulid, 'sku' => $v->sku, 'name' => $v->name, 'barcode' => $v->barcode],
-            'product' => ['id' => $v->product->ulid, 'name' => $v->product->name],
+            'product' => ['id' => $v->product->ulid, 'name' => $v->product->name, 'image' => $v->product->images->first()?->url()],
             'on_hand' => (int) $v->on_hand,
             'reserved' => (int) $v->reserved,
             'available' => (int) $v->on_hand - (int) $v->reserved,
             'safety_stock' => (int) $v->safety_stock,
             'sellable' => max(0, (int) $v->on_hand - (int) $v->reserved - (int) $v->safety_stock),
             'cost_price' => $v->cost_price,
+            'ref_price' => $v->ref_price,
+            'wholesale_price' => $v->wholesale_price,
+            'created_at' => $v->created_at?->toIso8601String(),
         ]);
 
         return response()->json([

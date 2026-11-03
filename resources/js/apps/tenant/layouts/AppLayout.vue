@@ -19,11 +19,18 @@ const toast = useToast();
 const switcherOpen = ref(false);
 const mobileOpen = ref(false);
 
+const canSee = (i: NavItem) => tenant.can(i.permission) || (i.anyPermission ?? []).some((p) => tenant.can(p));
 const visibleGroups = computed(() =>
     navGroups
         .map((g) => ({
             ...g,
-            items: g.items.filter((i) => tenant.can(i.permission)).map((i) => ({ ...i, children: i.children?.filter((c) => !c.permission || tenant.can(c.permission)) })),
+            items: g.items
+                .filter(canSee)
+                .map((i) => {
+                    const children = i.children?.filter((c) => !c.permission || tenant.can(c.permission));
+                    // A member who only sees part of a group lands on the first sub-page they may open.
+                    return { ...i, children, path: tenant.can(i.permission) ? i.path : (children?.[0]?.path ?? i.path) };
+                }),
         }))
         .filter((g) => g.items.length > 0),
 );

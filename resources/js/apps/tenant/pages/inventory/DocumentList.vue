@@ -61,7 +61,7 @@ watch(kindKey, () => ((status.value = 'all'), (page.value = 1), load()));
 </script>
 
 <template>
-    <PageHeader title="Kho hàng" description="Chứng từ kho: mọi thay đổi tồn đều có phiếu và được ghi vào sổ kho.">
+    <PageHeader :title="({ receipts: 'Nhập kho', adjustments: 'Điều chỉnh tồn', transfers: 'Chuyển hàng' } as const)[kindKey]" description="Chứng từ kho: mọi thay đổi tồn đều có phiếu và được ghi vào sổ kho.">
         <template v-if="kindKey === 'adjustments' && tenant.can(kind.permission)">
             <RouterLink to="/inventory/stocktake"><Button variant="outline" data-testid="open-stocktake"><ClipboardCheck /> Kiểm kho</Button></RouterLink>
             <RouterLink :to="{ path: '/inventory/adjustments/new', query: { reason: 'damaged' } }"><Button variant="outline" data-testid="new-write-off"><Trash2 /> Xuất hủy</Button></RouterLink>

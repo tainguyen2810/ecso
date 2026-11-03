@@ -11,7 +11,8 @@ test.describe.configure({ mode: 'serial' });
 
 test('purchasing: order, receive in parts, pay, supplier debt', async ({ page }) => {
     await login(page, 'owner@demo.test');
-    await page.getByRole('link', { name: 'Mua hàng' }).first().click();
+    await page.getByRole('link', { name: 'Sản phẩm' }).first().click();
+    await page.getByRole('link', { name: 'Nhập hàng', exact: true }).first().click();
     await expect(page.getByTestId('po-table').locator('tbody tr')).toHaveCount(4);
     await shot(page, '01-purchase-orders');
 
@@ -69,7 +70,7 @@ test('purchasing: return to supplier and reorder suggestions', async ({ page }) 
     await shot(page, '07-purchase-order-returned');
 
     await page.goto('/purchasing/reorder');
-    await expect(page.getByRole('heading', { name: 'Mua hàng' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Gợi ý nhập hàng' })).toBeVisible();
     await page.waitForLoadState('networkidle');
     await shot(page, '08-reorder-suggestions');
 });

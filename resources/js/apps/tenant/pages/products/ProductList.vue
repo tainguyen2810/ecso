@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Bookmark, ChevronDown, ChevronRight, Columns3, Download, FileSpreadsheet, Package, Plus, Search, SlidersHorizontal, Upload, X } from 'lucide-vue-next';
+import { Bookmark, Boxes, ChevronDown, ChevronRight, Columns3, Download, FileSpreadsheet, ImageIcon, Package, Plus, Printer, Search, SlidersHorizontal, Tags, Upload, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import Tabs from '../../components/Tabs.vue';
 import ImportDialog from './ImportDialog.vue';
-import ProductsNav from './ProductsNav.vue';
+import HeaderLink from '../../components/HeaderLink.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -48,10 +48,10 @@ const filters = reactive({
     sort: q('sort') || 'newest',
     page: 1,
 });
-const moreFilters = ref(!!(filters.type || filters.brand || filters.tag || filters.created_from || filters.created_to));
-const activeExtra = computed(() => [filters.type, filters.brand, filters.tag, filters.created_from, filters.created_to].filter(Boolean).length);
+const moreFilters = ref(!!(filters.type || filters.tag || filters.created_from || filters.created_to));
+const activeExtra = computed(() => [filters.type, filters.tag, filters.created_from, filters.created_to].filter(Boolean).length);
 function clearExtra() {
-    Object.assign(filters, { type: '', brand: '', tag: '', created_from: '', created_to: '' });
+    Object.assign(filters, { type: '', tag: '', created_from: '', created_to: '' });
 }
 const expanded = ref<Set<string>>(new Set());
 const selected = ref<Set<string>>(new Set());
@@ -184,12 +184,12 @@ function removeView(name: string) {
     savedViews.value = savedViews.value.filter((v) => v.name !== name);
     writeStore('views', savedViews.value);
 }
-const columnLabels = { category: 'Danh mục / Thương hiệu', price: 'Giá bán lẻ', on_hand: 'Tồn thực tế', available: 'Khả dụng', status: 'Trạng thái', created: 'Ngày tạo' } as const;
+const columnLabels = { category: 'Danh mục, thương hiệu', price: 'Giá bán lẻ', available: 'Có thể bán', on_hand: 'Tồn kho', status: 'Trạng thái', created: 'Ngày tạo' } as const;
 type ColumnKey = keyof typeof columnLabels;
 const columns = ref<Record<ColumnKey, boolean>>({ category: true, price: true, on_hand: true, available: true, status: true, created: true, ...readStore('columns', {}) });
 watch(columns, (v) => writeStore('columns', v), { deep: true });
 const columnsOpen = ref(false);
-const visibleCount = computed(() => Object.values(columns.value).filter(Boolean).length + 1 + (canManage.value ? 1 : 0));
+const visibleCount = computed(() => Object.values(columns.value).filter(Boolean).length + (columns.value.category ? 1 : 0) + 2 + (canManage.value ? 1 : 0));
 
 const allSelected = computed(() => products.value.length > 0 && products.value.every((p) => selected.value.has(p.id)));
 function toggleAll() {
@@ -198,21 +198,37 @@ function toggleAll() {
 </script>
 
 <template>
-    <PageHeader title="Sản phẩm" description="Sản phẩm, biến thể và SKU nội bộ. SKU là duy nhất trong doanh nghiệp.">
-        <Button variant="outline" :loading="exporting" @click="exportXlsx"><Download /> Xuất Excel</Button>
-        <Button v-if="canManage" variant="outline" data-testid="import-button" @click="importOpen = true"><Upload /> Import</Button>
-        <RouterLink v-if="canManage" :to="{ path: '/products/new', query: { type: 'combo' } }"><Button variant="outline" data-testid="new-combo"><Plus /> Thêm combo</Button></RouterLink>
+    <PageHeader title="Danh sách sản phẩm">
+        <template #links>
+            <HeaderLink :icon="Download" :disabled="exporting" @click="exportXlsx">Xuất file</HeaderLink>
+            <HeaderLink v-if="canManage" :icon="Upload" data-testid="import-button" @click="importOpen = true">Nhập file</HeaderLink>
+            <HeaderLink :icon="Tags" to="/products/taxonomy">Danh mục và thương hiệu</HeaderLink>
+            <HeaderLink v-if="canManage" :icon="Boxes" :to="{ path: '/products/new', query: { type: 'combo' } }" data-testid="new-combo">Thêm combo</HeaderLink>
+            <HeaderLink :icon="Printer" to="/products/labels">In tem mã vạch</HeaderLink>
+        </template>
         <RouterLink v-if="canManage" to="/products/new"><Button data-testid="new-product"><Plus /> Thêm sản phẩm</Button></RouterLink>
     </PageHeader>
-    <ProductsNav />
 
     <Card>
+        <div class="border-b px-3">
+            <Tabs
+                v-model="filters.status"
+                variant="underline"
+                :tabs="[
+                    { value: 'all', label: 'Tất cả sản phẩm' },
+                    { value: 'active', label: 'Đang bán' },
+                    { value: 'inactive', label: 'Ngừng bán' },
+                    { value: 'archived', label: 'Lưu trữ' },
+                ]"
+            />
+        </div>
         <div class="flex flex-wrap items-center gap-3 border-b px-4 py-3">
-            <div class="relative w-full sm:w-72">
+            <div class="relative w-full sm:min-w-64 sm:flex-1">
                 <Search class="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                <Input v-model="filters.q" data-testid="product-search" placeholder="Tên sản phẩm, SKU hoặc mã vạch" class="pl-8" />
+                <Input v-model="filters.q" data-testid="product-search" placeholder="Tìm kiếm theo mã sản phẩm, tên sản phẩm, barcode" class="pl-8" />
             </div>
-            <Select v-model="filters.category" :options="[{ value: '', label: 'Mọi danh mục' }, ...categories.map((c) => ({ value: c.id, label: c.name }))]" class="w-full sm:w-48" aria-label="Danh mục" />
+            <Select v-model="filters.category" :options="[{ value: '', label: 'Danh mục' }, ...categories.map((c) => ({ value: c.id, label: c.name }))]" class="w-full sm:w-44" aria-label="Danh mục" />
+            <Select v-model="filters.brand" class="w-full sm:w-44" aria-label="Thương hiệu" :options="[{ value: '', label: 'Thương hiệu' }, ...brands.map((b) => ({ value: b.id, label: b.name }))]" />
             <Button variant="outline" size="sm" data-testid="more-filters" :class="cn(moreFilters && 'bg-muted')" @click="moreFilters = !moreFilters">
                 <SlidersHorizontal /> Bộ lọc khác<span v-if="activeExtra" class="rounded-full bg-primary px-1.5 text-xs text-primary-foreground">{{ activeExtra }}</span>
             </Button>
@@ -236,17 +252,7 @@ function toggleAll() {
                     </label>
                 </div>
             </div>
-            <Button v-if="activeExtra || filters.q || filters.category || filters.status !== 'active'" variant="outline" size="sm" data-testid="save-view" @click="saveView"><Bookmark /> Lưu bộ lọc</Button>
-            <Tabs
-                v-model="filters.status"
-                class="ml-auto"
-                :tabs="[
-                    { value: 'active', label: 'Đang bán' },
-                    { value: 'inactive', label: 'Ngừng bán' },
-                    { value: 'archived', label: 'Lưu trữ' },
-                    { value: 'all', label: 'Tất cả' },
-                ]"
-            />
+            <Button v-if="activeExtra || filters.q || filters.category || filters.brand || filters.status !== 'active'" variant="outline" size="sm" data-testid="save-view" @click="saveView"><Bookmark /> Lưu bộ lọc</Button>
         </div>
         <div v-if="savedViews.length" class="flex flex-wrap items-center gap-2 border-b px-4 py-2 text-xs" data-testid="saved-views">
             <span class="text-muted-foreground">Bộ lọc đã lưu:</span>
@@ -259,10 +265,6 @@ function toggleAll() {
             <label class="grid gap-1">
                 <span class="text-xs text-muted-foreground">Loại</span>
                 <Select v-model="filters.type" class="w-40" aria-label="Loại sản phẩm" :options="[{ value: '', label: 'Mọi loại' }, { value: 'standard', label: 'Sản phẩm thường' }, { value: 'combo', label: 'Combo' }]" />
-            </label>
-            <label class="grid gap-1">
-                <span class="text-xs text-muted-foreground">Thương hiệu</span>
-                <Select v-model="filters.brand" class="w-44" aria-label="Thương hiệu" :options="[{ value: '', label: 'Mọi thương hiệu' }, ...brands.map((b) => ({ value: b.id, label: b.name }))]" />
             </label>
             <label class="grid gap-1">
                 <span class="text-xs text-muted-foreground">Tag</span>
@@ -307,29 +309,33 @@ function toggleAll() {
                 <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                     <tr>
                         <th v-if="canManage" class="w-10 px-4 py-2.5"><input type="checkbox" :checked="allSelected" aria-label="Chọn tất cả" @change="toggleAll" /></th>
+                        <th class="w-14 py-2.5 pl-4 font-medium">Ảnh</th>
                         <th class="px-4 py-2.5 font-medium">Sản phẩm</th>
-                        <th v-if="columns.category" class="px-4 py-2.5 font-medium">Danh mục / Thương hiệu</th>
+                        <th v-if="columns.category" class="px-4 py-2.5 font-medium">Danh mục</th>
+                        <th v-if="columns.category" class="px-4 py-2.5 font-medium">Thương hiệu</th>
                         <th v-if="columns.price" class="px-4 py-2.5 text-right font-medium">Giá bán lẻ</th>
-                        <th v-if="columns.on_hand" class="px-4 py-2.5 text-right font-medium">Tồn thực tế</th>
-                        <th v-if="columns.available" class="px-4 py-2.5 text-right font-medium">Khả dụng</th>
+                        <th v-if="columns.available" class="px-4 py-2.5 text-center font-medium">Có thể bán</th>
+                        <th v-if="columns.on_hand" class="px-4 py-2.5 text-center font-medium">Tồn kho</th>
                         <th v-if="columns.status" class="px-4 py-2.5 font-medium">Trạng thái</th>
-                        <th v-if="columns.created" class="px-4 py-2.5 font-medium">Ngày tạo</th>
+                        <th v-if="columns.created" class="px-4 py-2.5 font-medium">Ngày khởi tạo</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y">
                     <template v-for="p in products" :key="p.id">
                         <tr class="hover:bg-muted/30">
                             <td v-if="canManage" class="px-4 py-3"><input type="checkbox" :checked="selected.has(p.id)" :aria-label="`Chọn ${p.name}`" @change="toggle(selected, p.id)" /></td>
+                            <td class="py-3 pl-4">
+                                <img v-if="p.images?.length" :src="p.images[0]!.url" alt="" class="size-10 rounded border object-cover" />
+                                <span v-else class="flex size-10 items-center justify-center rounded border bg-muted/50 text-muted-foreground"><ImageIcon class="size-4" /></span>
+                            </td>
                             <td class="px-4 py-3">
-                                <div class="flex items-center gap-3">
+                                <div class="flex items-center gap-2">
                                     <button class="rounded p-0.5 text-muted-foreground hover:bg-muted" :aria-label="expanded.has(p.id) ? 'Thu gọn' : 'Xem biến thể'" @click="toggle(expanded, p.id)">
                                         <ChevronDown v-if="expanded.has(p.id)" class="size-4" />
                                         <ChevronRight v-else class="size-4" />
                                     </button>
-                                    <img v-if="p.images?.length" :src="p.images[0]!.url" alt="" class="size-10 rounded object-cover" />
-                                    <span v-else class="flex size-10 items-center justify-center rounded bg-muted text-muted-foreground"><Package class="size-4" /></span>
                                     <div class="min-w-0">
-                                        <RouterLink :to="`/products/${p.id}`" class="font-medium hover:text-primary hover:underline">{{ p.name }}</RouterLink>
+                                        <RouterLink :to="`/products/${p.id}`" class="font-medium text-primary hover:underline">{{ p.name }}</RouterLink>
                                         <Badge v-if="p.type === 'combo'" class="ml-1.5">Combo</Badge>
                                         <p class="truncate text-xs text-muted-foreground">
                                             {{ p.variants_count }} biến thể ·
@@ -338,10 +344,15 @@ function toggleAll() {
                                     </div>
                                 </div>
                             </td>
-                            <td v-if="columns.category" class="px-4 py-3 text-muted-foreground">{{ p.category?.name ?? '—' }}<span v-if="p.brand"> · {{ p.brand.name }}</span></td>
+                            <td v-if="columns.category" class="px-4 py-3">{{ p.category?.name ?? '—' }}</td>
+                            <td v-if="columns.category" class="px-4 py-3">{{ p.brand?.name ?? '—' }}</td>
                             <td v-if="columns.price" class="px-4 py-3 text-right tabular-nums">{{ priceRange(p) }}</td>
-                            <td v-if="columns.on_hand" class="px-4 py-3 text-right tabular-nums">{{ formatNumber(p.stock?.on_hand ?? 0) }}</td>
-                            <td v-if="columns.available" :class="cn('px-4 py-3 text-right font-medium tabular-nums', (p.stock?.available ?? 0) <= 0 && 'text-destructive')">{{ formatNumber(p.stock?.available ?? 0) }}</td>
+                            <td v-if="columns.available" :class="cn('px-4 py-3 text-center tabular-nums', (p.stock?.available ?? 0) <= 0 && 'text-destructive')">
+                                {{ formatNumber(p.stock?.available ?? 0) }}<span class="block text-[11px] text-muted-foreground">({{ p.variants_count }} phiên bản)</span>
+                            </td>
+                            <td v-if="columns.on_hand" class="px-4 py-3 text-center tabular-nums">
+                                {{ formatNumber(p.stock?.on_hand ?? 0) }}<span class="block text-[11px] text-muted-foreground">({{ p.variants_count }} phiên bản)</span>
+                            </td>
                             <td v-if="columns.status" class="px-4 py-3"><Badge :tone="statusTone[p.status]">{{ statusLabels[p.status] }}</Badge></td>
                             <td v-if="columns.created" class="whitespace-nowrap px-4 py-3 text-muted-foreground">{{ formatDate(p.created_at) }}</td>
                         </tr>
