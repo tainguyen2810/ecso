@@ -14,7 +14,9 @@ use Illuminate\Support\Facades\DB;
  *  - ordered / completed revenue are what buyers paid on the marketplace (not money received);
  *  - cost of goods comes from the stock ledger cost captured when goods left the warehouse;
  *  - marketplace fees and the actual payout need settlement data from the marketplace API, which no connector
- *    provides yet, so they are reported as UNKNOWN (null) instead of being estimated.
+ *    provides yet, so they are reported as UNKNOWN (null) instead of being estimated;
+ *  - other income and expenses are the receipt and payment vouchers whose type counts in profit and loss. They
+ *    belong to the whole business, so they are left out (null) when the report is filtered to one shop.
  */
 class FinanceReport
 {
@@ -66,6 +68,11 @@ class FinanceReport
             ->orderByDesc('revenue')->get();
 
         $completedGoods = (float) $completed->goods;
+        $grossProfit = round($completedGoods - $cogs - $refunds, 2);
+        $other = $accountId ? null : DB::table('cash_vouchers')
+            ->where('tenant_id', $this->tenantId())->whereNull('voided_at')->where('counts_in_pnl', true)->whereBetween('paid_at', [$from, $to])
+            ->selectRaw("COALESCE(SUM(CASE WHEN direction = 'receipt' THEN amount ELSE 0 END), 0) as income, COALESCE(SUM(CASE WHEN direction = 'payment' THEN amount ELSE 0 END), 0) as expenses")
+            ->first();
 
         return [
             'range' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
@@ -76,7 +83,10 @@ class FinanceReport
             'cogs' => $cogs,
             'cogs_missing_lines' => $missingCost,
             // Goods value of completed orders minus cost of goods minus refunds. Marketplace fees NOT deducted.
-            'estimated_gross_profit' => round($completedGoods - $cogs - $refunds, 2),
+            'estimated_gross_profit' => $grossProfit,
+            'other_income' => $other ? (float) $other->income : null,
+            'other_expenses' => $other ? (float) $other->expenses : null,
+            'estimated_profit' => $other ? round($grossProfit + (float) $other->income - (float) $other->expenses, 2) : null,
             'marketplace_fees' => null,
             'payout_received' => null,
             'unknown_reason' => 'Chưa có dữ liệu đối soát/settlement từ API sàn (connector chưa hỗ trợ).',

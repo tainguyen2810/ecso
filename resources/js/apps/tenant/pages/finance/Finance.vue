@@ -20,6 +20,9 @@ interface FinanceData {
     cogs: number;
     cogs_missing_lines: number;
     estimated_gross_profit: number;
+    other_income: number | null;
+    other_expenses: number | null;
+    estimated_profit: number | null;
     marketplace_fees: number | null;
     payout_received: number | null;
     unknown_reason: string;
@@ -106,6 +109,14 @@ function shortDay(day: string): string {
                 <p class="text-xs text-muted-foreground">Đơn hủy</p>
                 <p class="mt-2 text-xl font-semibold tabular-nums">{{ formatNumber(data.cancelled.orders) }}</p>
                 <p class="text-xs text-muted-foreground">{{ formatMoney(data.cancelled.revenue) }}</p>
+            </Card>
+            <Card v-if="data.estimated_profit !== null" class="p-4 sm:col-span-2" data-testid="other-pnl">
+                <p class="text-xs text-muted-foreground">Lợi nhuận sau thu chi khác</p>
+                <p class="mt-2 text-xl font-semibold tabular-nums">{{ formatMoney(data.estimated_profit) }}</p>
+                <p class="text-xs text-muted-foreground">
+                    Lãi gộp <span class="text-success">+{{ formatMoney(data.other_income) }}</span> thu khác <span class="text-destructive">−{{ formatMoney(data.other_expenses) }}</span> chi phí,
+                    từ <RouterLink to="/cash" class="text-primary hover:underline">phiếu thu chi</RouterLink> có tính KQKD
+                </p>
             </Card>
             <Card class="p-4" data-testid="fees-unknown">
                 <p class="flex items-center gap-1 text-xs text-muted-foreground">Phí sàn <HelpCircle class="size-3" :title="data.unknown_reason" /></p>

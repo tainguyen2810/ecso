@@ -17,8 +17,9 @@ class LedgerReports
     /**
      * Profit and loss for the range and for the period of the same length just before it. Revenue is goods sold on
      * orders placed in the period (cancelled ones excluded) less returns opened in the period; cost of goods is the
-     * ledger cost captured at shipping less the cost of goods put back on the shelf from returns. Marketplace fees
-     * and other income and expenses are not in the system yet, so they are not here.
+     * ledger cost captured at shipping less the cost of goods put back on the shelf from returns. Other income and
+     * expenses are the receipt and payment vouchers whose type counts in profit and loss. Marketplace fees are not in
+     * the system yet, so they are not here.
      *
      * @return array<string, mixed>
      */
@@ -44,7 +45,9 @@ class LedgerReports
             ['stock_loss', 'IV. Hao hụt kho (7 + 8)', 0, null],
             ['write_off', '7. Hàng hủy, mất', 1, 'stock'],
             ['stocktake', '8. Chênh lệch kiểm kê, điều chỉnh', 1, 'stock'],
-            ['profit', 'Lợi nhuận (III - IV)', 0, null],
+            ['other_income', 'V. Thu nhập khác (phiếu thu)', 0, 'cash'],
+            ['other_expenses', 'VI. Chi phí khác (phiếu chi)', 0, 'cash'],
+            ['profit', 'Lợi nhuận (III - IV + V - VI)', 0, null],
         ];
 
         return [
@@ -138,6 +141,10 @@ class LedgerReports
         $writeOff = -$value(BusinessReports::STOCK_COLUMNS['damage_out']) - $value(['ADJUSTMENT_OUT'], $writeOffReasons);
         $stocktake = -$value(['ADJUSTMENT_OUT'], "(m.reason IS NULL OR NOT {$writeOffReasons})") - $value(BusinessReports::STOCK_COLUMNS['adjust_in']);
 
+        $other = DB::table('cash_vouchers')->where('tenant_id', $this->tenant())->whereNull('voided_at')->where('counts_in_pnl', true)->whereBetween('paid_at', [$from, $to])
+            ->selectRaw("COALESCE(SUM(CASE WHEN direction = 'receipt' THEN amount ELSE 0 END), 0) as income, COALESCE(SUM(CASE WHEN direction = 'payment' THEN amount ELSE 0 END), 0) as expenses")
+            ->first();
+
         $p = [
             'goods' => (float) $orders->goods,
             'discount' => (float) $orders->discount,
@@ -147,12 +154,14 @@ class LedgerReports
             'cogs_back' => $cogsBack,
             'write_off' => $writeOff,
             'stocktake' => $stocktake,
+            'other_income' => (float) $other->income,
+            'other_expenses' => (float) $other->expenses,
         ];
         $p['revenue'] = $p['goods'] - $p['discount'] - $p['returns'] + $p['shipping'];
         $p['cogs'] = $p['cogs_out'] - $p['cogs_back'];
         $p['gross_profit'] = $p['revenue'] - $p['cogs'];
         $p['stock_loss'] = $p['write_off'] + $p['stocktake'];
-        $p['profit'] = $p['gross_profit'] - $p['stock_loss'];
+        $p['profit'] = $p['gross_profit'] - $p['stock_loss'] + $p['other_income'] - $p['other_expenses'];
 
         // + 0.0 turns a negated zero (-0) into 0 so it never shows as "-0 đ".
         return [...array_map(fn ($v) => round($v, 2) + 0.0, $p), 'missing_cost_lines' => (int) $cost->missing];
