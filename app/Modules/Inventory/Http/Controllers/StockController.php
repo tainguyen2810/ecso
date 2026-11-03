@@ -216,6 +216,8 @@ class StockController extends Controller
                     'reserved' => (int) ($b->reserved ?? 0),
                     'available' => $b ? $b->available() : 0,
                     'safety_stock' => (int) ($b->safety_stock ?? 0),
+                    'max_stock' => $b?->max_stock,
+                    'bin_location' => $b?->bin_location,
                     'incoming' => $incoming[$variant->id][$warehouse->id] ?? 0,
                     'cost_price' => $variant->cost_price,
                 ];
@@ -286,6 +288,23 @@ class StockController extends Controller
             ]),
             'meta' => ['current_page' => $movements->currentPage(), 'last_page' => $movements->lastPage(), 'total' => $movements->total()],
         ]);
+    }
+
+    /** Bin location (staff who adjust stock) and maximum stock (approvers: it drives purchasing). */
+    public function location(Request $request, ProductVariant $variant, InventoryService $inventory): JsonResponse
+    {
+        $this->authorize('adjust', StockBalance::class);
+        $data = $request->validate([
+            'warehouse' => ['required', 'string'],
+            'bin_location' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'max_stock' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:1000000'],
+        ]);
+        if (array_key_exists('max_stock', $data)) {
+            $this->authorize('configure', StockBalance::class);
+        }
+        $balance = $inventory->setLocation($this->warehouse($data['warehouse']), $variant, $data);
+
+        return response()->json(['data' => ['bin_location' => $balance->bin_location, 'max_stock' => $balance->max_stock]]);
     }
 
     public function safetyStock(Request $request, ProductVariant $variant, InventoryService $inventory): JsonResponse

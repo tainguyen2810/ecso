@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Phase 16 — Vị trí lưu kho, tồn tối đa, in tem từ phiếu nhập, lưu bộ lọc (2026-11-03)
+- Vị trí lưu kho và tồn tối đa theo kho × SKU; gợi ý nhập hàng không vượt tồn tối đa.
+- In tem mã vạch thẳng từ phiếu nhập kho và đơn nhập hàng.
+- Danh sách sản phẩm: lưu bộ lọc, chọn cột hiển thị.
+
 ### Phase 15 — Đơn vị quy đổi (2026-11-03)
 - SKU quy đổi (thùng, hộp, lốc) = N × SKU đơn vị gốc trong cùng sản phẩm; tồn giữ ở đơn vị gốc; bán, giá vốn, hàng hoàn, đồng bộ sàn tính theo đơn vị gốc.
 

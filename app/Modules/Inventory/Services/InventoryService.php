@@ -328,6 +328,7 @@ class InventoryService
             throw new InvalidStockOperation('Tồn an toàn không được âm.');
         }
 
+        $this->assertNotCombo([$variant->id]);
         $this->ensureBalances($warehouse, [$variant->id]);
 
         $changed = DB::transaction(function () use ($warehouse, $variant, $safetyStock) {
@@ -341,6 +342,32 @@ class InventoryService
         if ($changed) {
             AvailableStockChanged::dispatch($this->context->id(), [$variant->id]);
         }
+
+        return StockBalance::query()->where('warehouse_id', $warehouse->id)->where('product_variant_id', $variant->id)->firstOrFail();
+    }
+
+    /**
+     * Bin location and maximum stock of a SKU in a warehouse. Quantities are not touched, so no ledger row and no
+     * stock-changed event.
+     *
+     * @param  array{max_stock?: int|null, bin_location?: string|null}  $settings  only the given keys change
+     */
+    public function setLocation(Warehouse $warehouse, ProductVariant $variant, array $settings): StockBalance
+    {
+        if (isset($settings['max_stock']) && $settings['max_stock'] < 0) {
+            throw new InvalidStockOperation('Tồn tối đa không được âm.');
+        }
+        $this->assertNotCombo([$variant->id]);
+        $this->ensureBalances($warehouse, [$variant->id]);
+
+        DB::transaction(function () use ($warehouse, $variant, $settings) {
+            $balance = $this->lockBalance($warehouse->id, $variant->id);
+            $values = array_intersect_key($settings, array_flip(['max_stock', 'bin_location']));
+            if (array_key_exists('bin_location', $values)) {
+                $values['bin_location'] = trim((string) $values['bin_location']) ?: null;
+            }
+            $balance->forceFill($values + ['version' => $balance->version + 1])->save();
+        }, self::DEADLOCK_ATTEMPTS);
 
         return StockBalance::query()->where('warehouse_id', $warehouse->id)->where('product_variant_id', $variant->id)->firstOrFail();
     }
