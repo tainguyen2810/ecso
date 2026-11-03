@@ -143,6 +143,7 @@ const groups = computed<Group[]>(() => {
                 { label: 'Nhập hàng theo nhà cung cấp', to: detail('purchases', { by: 'supplier' }) },
                 { label: 'Nhập hàng theo sản phẩm', to: detail('purchases', { by: 'product' }) },
                 { label: 'Nhập hàng theo ngày', to: detail('purchases', { by: 'day' }) },
+                { label: 'Thanh toán nhập hàng', to: detail('supplier-payments', { by: 'method' }) },
                 { label: 'Công nợ nhà cung cấp', to: detail('payables', {}, false) },
             ],
         });
@@ -162,6 +163,7 @@ const groups = computed<Group[]>(() => {
             links: [
                 { label: 'Tồn kho tại ngày', to: detail('stock-on-hand', {}, false) },
                 { label: 'Xuất nhập tồn', to: { name: 'report-stock' } },
+                { label: 'Kiểm kê, xuất hủy, điều chỉnh', to: detail('adjustments', { by: 'document' }) },
                 { label: 'Hàng dưới định mức', to: detail('low-stock', {}, false) },
                 { label: 'Hàng vượt tồn tối đa', to: detail('over-stock', {}, false) },
                 { label: 'Thẻ kho từng SKU', to: { name: 'inventory' }, hint: 'Chọn SKU ở trang Tồn kho' },

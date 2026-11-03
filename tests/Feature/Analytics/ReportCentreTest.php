@@ -95,6 +95,11 @@ it('reports purchases, supplier debts, stock on any date and SKUs below safety s
     $api->getJson('/api/v1/reports/payables')->assertOk()
         ->assertJsonPath('data.totals.debt', 600000)->assertJsonPath('data.rows.0.supplier.name', 'Xưởng Minh Long');
 
+    $api->postJson("/api/v1/suppliers/{$supplier}/payments", ['method' => 'bank_transfer', 'amount' => 200000])->assertCreated();
+    expect($api->getJson('/api/v1/reports/supplier-payments')->assertOk()->json('data.rows.0'))->toMatchArray(['label' => 'bank_transfer', 'entries' => 1, 'paid' => 200000]);
+    expect($api->getJson('/api/v1/reports/supplier-payments?by=supplier')->json('data.rows.0'))->toMatchArray(['label' => 'Xưởng Minh Long', 'id' => $supplier]);
+    $api->getJson('/api/v1/reports/payables')->assertJsonPath('data.totals.debt', 400000);
+
     $today = $api->getJson('/api/v1/reports/stock-on-hand')->assertOk()->json('data');
     expect($today['totals'])->toMatchArray(['skus' => 1, 'quantity' => 10, 'value' => 600000])
         ->and($today['rows'][0]['by_warehouse'][defaultWarehouse($tenant)->ulid])->toBe(10)
@@ -111,10 +116,18 @@ it('reports purchases, supplier debts, stock on any date and SKUs below safety s
     $api->putJson("/api/v1/inventory/variants/{$variant->ulid}/location", ['warehouse' => defaultWarehouse($tenant)->ulid, 'max_stock' => 4])->assertOk();
     expect($api->getJson('/api/v1/reports/over-stock')->assertOk()->json('data.rows.0'))->toMatchArray(['on_hand' => 10, 'max_stock' => 4, 'excess' => 6, 'excess_value' => 360000]);
 
+    // Two damaged pieces written off.
+    $adjustment = $api->postJson('/api/v1/inventory/adjustments', ['warehouse_id' => defaultWarehouse($tenant)->ulid, 'reason' => 'damaged', 'lines' => [['variant_id' => $variant->ulid, 'mode' => 'delta', 'quantity' => -2]]])
+        ->assertCreated()->json('data.id');
+    $api->postJson("/api/v1/inventory/adjustments/{$adjustment}/approve")->assertOk();
+    expect($api->getJson('/api/v1/reports/adjustments?by=reason')->assertOk()->json('data.rows.0'))->toMatchArray(['label' => 'damaged', 'documents' => 1, 'increase' => 0, 'decrease' => 2, 'value' => -120000]);
+    expect($api->getJson('/api/v1/reports/adjustments')->json('data.rows.0.id'))->toBe($adjustment);
+    expect($api->getJson('/api/v1/reports/adjustments?by=product')->json('data.totals'))->toMatchArray(['documents' => 1, 'decrease' => 2]);
+
     $overview = $api->getJson('/api/v1/reports/overview')->assertOk()->json('data');
     expect($overview['purchases']['value'])->toEqual(600000)
-        ->and($overview['payable']['debt'])->toEqual(600000)
-        ->and($overview['stock']['value'])->toEqual(600000)
+        ->and($overview['payable']['debt'])->toEqual(400000)
+        ->and($overview['stock']['value'])->toEqual(480000)
         ->and($overview['stock']['low']['skus'])->toBe(1);
 });
 

@@ -173,6 +173,57 @@ class StockReports
         ];
     }
 
+    /**
+     * Approved stock adjustments (stocktakes, write-offs, corrections) decided in the range: what went up, what went
+     * down and its value at the current average cost, per document, per SKU or per reason.
+     *
+     * @return array<string, mixed>
+     */
+    public function adjustments(CarbonImmutable $from, CarbonImmutable $to, string $by = 'document', ?int $warehouseId = null): array
+    {
+        $base = DB::table('inventory_adjustment_lines as l')
+            ->join('inventory_adjustments as a', 'a.id', '=', 'l.inventory_adjustment_id')
+            ->join('product_variants as v', 'v.id', '=', 'l.product_variant_id')
+            ->where('a.tenant_id', $this->tenant())
+            ->where('a.status', 'approved')
+            ->whereBetween('a.decided_at', [$from, $to])
+            ->when($warehouseId, fn ($w) => $w->where('a.warehouse_id', $warehouseId));
+        $metrics = 'COUNT(DISTINCT a.id) as documents, SUM(CASE WHEN l.applied_delta > 0 THEN l.applied_delta ELSE 0 END) as increase, '
+            .'SUM(CASE WHEN l.applied_delta < 0 THEN -l.applied_delta ELSE 0 END) as decrease, SUM(COALESCE(l.applied_delta, 0) * v.cost_price) as value';
+
+        $rows = match ($by) {
+            'product' => (clone $base)->join('products as p', 'p.id', '=', 'v.product_id')
+                ->groupBy('l.product_variant_id', 'v.ulid', 'v.sku', 'v.name', 'p.name')
+                ->selectRaw("v.ulid as id, v.sku, TRIM(CONCAT(p.name, CASE WHEN v.name IS NULL OR v.name = '' THEN '' ELSE CONCAT(' - ', v.name) END)) as label, NULL as warehouse, NULL as decided_at, {$metrics}")
+                ->orderBy('value')->limit(2000)->get(),
+            'reason' => (clone $base)->groupBy('a.reason')
+                ->selectRaw("a.reason as label, NULL as id, NULL as sku, NULL as warehouse, NULL as decided_at, {$metrics}")->orderBy('value')->get(),
+            default => (clone $base)->join('warehouses as w', 'w.id', '=', 'a.warehouse_id')
+                ->groupBy('a.id', 'a.ulid', 'a.number', 'a.reason', 'a.decided_at', 'w.name')
+                ->selectRaw("a.ulid as id, a.number as label, a.reason as sku, w.name as warehouse, a.decided_at, {$metrics}")
+                ->orderByDesc('a.decided_at')->limit(2000)->get(),
+        };
+
+        $out = $rows->map(fn ($r) => [
+            'id' => $r->id,
+            'label' => (string) $r->label,
+            'sku' => $r->sku,
+            'warehouse' => $r->warehouse,
+            'decided_at' => $r->decided_at ? CarbonImmutable::parse($r->decided_at)->toIso8601String() : null,
+            'documents' => (int) $r->documents,
+            'increase' => (int) $r->increase,
+            'decrease' => (int) $r->decrease,
+            'value' => round((float) $r->value, 2) + 0.0,
+        ])->all();
+
+        $totals = ['documents' => (int) (clone $base)->distinct()->count('a.id')];
+        foreach (['increase', 'decrease', 'value'] as $k) {
+            $totals[$k] = round(array_sum(array_column($out, $k)), 2);
+        }
+
+        return ['range' => ['from' => $from->toDateString(), 'to' => $to->toDateString()], 'by' => $by, 'rows' => $out, 'totals' => $totals];
+    }
+
     /** Units shipped per SKU and warehouse in the last 30 days, as a subquery. */
     private function soldLast30Days(?int $warehouseId)
     {
