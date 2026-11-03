@@ -8,7 +8,9 @@ const route = useRoute();
 const tenant = useTenantStore();
 const links = computed(() =>
     [
-        { to: '/reports', label: 'Bán hàng & lợi nhuận', name: 'reports', show: true },
+        { to: '/reports', label: 'Tất cả báo cáo', name: 'reports', show: true },
+        { to: '/reports/sales', label: 'Bán hàng & lợi nhuận', name: 'report-sales', show: true },
+        { to: '/reports/profit-loss', label: 'Lãi lỗ', name: 'report-profit-loss', show: tenant.can('finance.view') },
         { to: '/reports/stock', label: 'Xuất nhập tồn', name: 'report-stock', show: tenant.can('inventory.view') },
         { to: '/reports/cashbook', label: 'Sổ quỹ', name: 'report-cashbook', show: tenant.can('finance.view') },
         { to: '/reports/products', label: 'Bán chạy / bán chậm', name: 'report-products', show: true },
