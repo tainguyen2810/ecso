@@ -29,6 +29,8 @@ interface VariantRow {
     cost_price?: string;
     opening_qty: string;
     opening_cost: string;
+    /** Pack size (đơn vị quy đổi): this SKU = quantity × base SKU. */
+    conversion?: { base_sku: string; quantity: number } | null;
     skuTaken?: string | null;
 }
 
@@ -78,6 +80,13 @@ function addComponent(v: Variant) {
 function setType(type: 'standard' | 'combo') {
     productType.value = type;
     if (type === 'combo') variants.value = [variants.value[0] ?? emptyRow()];
+}
+
+// Pack sizes are variants with a conversion, shown in their own card (indexes kept for server error keys).
+const packRows = computed(() => variants.value.map((v, i) => ({ v, i })).filter((r) => r.v.conversion));
+const baseOptions = computed(() => variants.value.filter((v) => !v.conversion && v.sku.trim()).map((v) => v.sku.trim()));
+function addPack() {
+    variants.value.push({ ...emptyRow(), conversion: { base_sku: baseOptions.value[0] ?? '', quantity: 2 } });
 }
 
 const showOpening = computed(() => isNew.value && canReceive.value && !isCombo.value);
@@ -143,6 +152,10 @@ onMounted(async () => {
             weight_gram: v.weight_gram ? String(v.weight_gram) : '',
             opening_qty: '',
             opening_cost: '',
+            conversion:
+                p.type !== 'combo' && v.components?.length === 1
+                    ? { base_sku: copying ? '' : v.components[0]!.variant.sku, quantity: v.components[0]!.quantity }
+                    : null,
         }));
     } catch (e) {
         loadError.value = (e as ApiError).message;
@@ -225,7 +238,8 @@ async function save(then: 'detail' | 'labels' = 'detail') {
                 ref_price: num(v.ref_price),
                 wholesale_price: num(v.wholesale_price),
                 weight_gram: num(v.weight_gram),
-                ...(isNew.value && Number(v.opening_qty) > 0 ? { opening_qty: Number(v.opening_qty), opening_cost: num(v.opening_cost) ?? 0 } : {}),
+                ...(isNew.value && !v.conversion && Number(v.opening_qty) > 0 ? { opening_qty: Number(v.opening_qty), opening_cost: num(v.opening_cost) ?? 0 } : {}),
+                ...(!isCombo.value && v.conversion ? { conversion: { base_sku: v.conversion.base_sku, quantity: Number(v.conversion.quantity) } } : {}),
             })),
         };
         const { data } = isNew.value ? await api.post('/products', payload) : await api.put(`/products/${productId.value}`, payload);
@@ -429,7 +443,7 @@ async function removeImage(id: number) {
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
-                                <tr v-for="(v, i) in variants" :key="v.id ?? `new-${i}`" class="align-top">
+                                <tr v-for="(v, i) in variants" v-show="!v.conversion" :key="v.id ?? `new-${i}`" class="align-top">
                                     <td class="px-3 py-2">
                                         <input
                                             v-model="v.sku"
@@ -464,6 +478,53 @@ async function removeImage(id: number) {
                     </div>
                 </Card>
 
+                <Card v-if="!isCombo" title="Đơn vị quy đổi" description="Bán theo thùng, hộp, lốc… Tồn vẫn tính theo đơn vị gốc: bán 1 thùng 24 chai sẽ trừ 24 chai." data-testid="pack-sizes">
+                    <template v-if="canManage" #actions>
+                        <Button variant="outline" size="sm" data-testid="add-pack" :disabled="!baseOptions.length" @click="addPack"><Plus /> Thêm đơn vị quy đổi</Button>
+                    </template>
+                    <p v-if="!packRows.length" class="px-5 py-5 text-sm text-muted-foreground">Chưa có đơn vị quy đổi.</p>
+                    <div v-else class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                                <tr>
+                                    <th class="px-3 py-2 font-medium">Tên đơn vị</th>
+                                    <th class="px-3 py-2 font-medium">Quy đổi</th>
+                                    <th class="px-3 py-2 font-medium">SKU *</th>
+                                    <th class="px-3 py-2 font-medium">Mã vạch</th>
+                                    <th class="px-3 py-2 text-right font-medium">Giá bán lẻ</th>
+                                    <th class="px-3 py-2 text-right font-medium">Giá bán buôn</th>
+                                    <th class="px-2 py-2" />
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                <tr v-for="{ v, i } in packRows" :key="v.id ?? `pack-${i}`" class="align-top">
+                                    <td class="px-3 py-2"><input v-model="v.name" :disabled="!canManage" placeholder="Thùng 24 chai" :data-testid="`pack-name-${i}`" class="h-8 w-32 rounded-md border border-input bg-card px-2" /></td>
+                                    <td class="px-3 py-2">
+                                        <div class="flex items-center gap-1 text-xs">
+                                            <input v-model.number="v.conversion!.quantity" type="number" min="2" :disabled="!canManage" aria-label="Số đơn vị gốc" :data-testid="`pack-qty-${i}`" class="h-8 w-16 rounded-md border border-input bg-card px-2 text-right tabular-nums" />
+                                            <span>×</span>
+                                            <select v-model="v.conversion!.base_sku" :disabled="!canManage" aria-label="SKU đơn vị gốc" class="h-8 rounded-md border border-input bg-card px-1 font-mono text-xs">
+                                                <option v-for="b in baseOptions" :key="b" :value="b">{{ b }}</option>
+                                            </select>
+                                        </div>
+                                        <p v-if="fieldError(i, 'conversion.base_sku') || fieldError(i, 'conversion.quantity')" class="mt-1 max-w-48 text-xs text-destructive">{{ fieldError(i, 'conversion.base_sku') ?? fieldError(i, 'conversion.quantity') }}</p>
+                                    </td>
+                                    <td class="px-3 py-2">
+                                        <input v-model="v.sku" required maxlength="64" :disabled="!canManage" :data-testid="`pack-sku-${i}`" :class="cn('h-8 w-36 rounded-md border border-input bg-card px-2 font-mono text-xs uppercase', (fieldError(i, 'sku') || v.skuTaken) && 'border-destructive')" @input="checkSku(v)" />
+                                        <p v-if="fieldError(i, 'sku') || v.skuTaken" class="mt-1 max-w-36 text-xs text-destructive">{{ fieldError(i, 'sku') ?? v.skuTaken }}</p>
+                                    </td>
+                                    <td class="px-3 py-2"><input v-model="v.barcode" maxlength="64" :disabled="!canManage" class="h-8 w-32 rounded-md border border-input bg-card px-2 font-mono text-xs" /></td>
+                                    <td class="px-3 py-2 text-right"><input v-model="v.ref_price" type="number" min="0" :disabled="!canManage" aria-label="Giá bán lẻ đơn vị quy đổi" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
+                                    <td class="px-3 py-2 text-right"><input v-model="v.wholesale_price" type="number" min="0" :disabled="!canManage" aria-label="Giá bán buôn đơn vị quy đổi" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
+                                    <td class="px-2 py-2 text-right">
+                                        <Button v-if="canManage" variant="ghost" size="icon" class="size-8" title="Xóa đơn vị quy đổi" @click="variants.splice(i, 1)"><Trash2 class="text-muted-foreground" /></Button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
+
                 <Card v-if="showOpening" title="Tồn kho ban đầu" description="Không bắt buộc. Ghi số lượng đang có và giá vốn để tạo một phiếu nhập tồn đầu kỳ cùng lúc với sản phẩm.">
                     <div class="flex flex-wrap items-end gap-3 border-b px-5 py-3">
                         <FormField label="Nhập vào kho" for="p-opening-wh" :error="error?.field('opening_warehouse_id')" class="w-56">
@@ -480,7 +541,7 @@ async function removeImage(id: number) {
                                 </tr>
                             </thead>
                             <tbody class="divide-y">
-                                <tr v-for="(v, i) in variants" :key="`opening-${i}`">
+                                <tr v-for="(v, i) in variants" v-show="!v.conversion" :key="`opening-${i}`">
                                     <td class="px-4 py-2"><span class="font-mono text-xs">{{ v.sku || '(chưa có SKU)' }}</span><span v-if="v.name" class="text-muted-foreground"> · {{ v.name }}</span></td>
                                     <td class="px-4 py-2 text-right">
                                         <input v-model="v.opening_qty" type="number" min="0" :data-testid="`opening-qty-${i}`" aria-label="Số lượng tồn ban đầu" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right tabular-nums" />

@@ -533,17 +533,19 @@ class InventoryService
     }
 
     /**
-     * A combo SKU has no stock of its own: receipts, counts, transfers and holds go to its components.
+     * A combo or pack-size SKU (one with components) has no stock of its own: receipts, counts, transfers and holds
+     * go to its components.
      *
      * @param  array<int, int>  $variantIds
      */
     private function assertNotCombo(array $variantIds): void
     {
-        $combo = ProductVariant::query()->withTrashed()->whereIn('product_variants.id', $variantIds)
-            ->whereHas('product', fn ($q) => $q->withTrashed()->where('type', Product::TYPE_COMBO))->value('sku');
+        $virtual = ProductVariant::query()->withTrashed()->whereIn('product_variants.id', $variantIds)
+            ->where(fn ($q) => $q->whereHas('components')->orWhereHas('product', fn ($p) => $p->withTrashed()->where('type', Product::TYPE_COMBO)))
+            ->value('sku');
 
-        if ($combo !== null) {
-            throw new InvalidStockOperation("SKU {$combo} là combo, không có tồn riêng: thao tác trên các SKU thành phần.");
+        if ($virtual !== null) {
+            throw new InvalidStockOperation("SKU {$virtual} là combo hoặc đơn vị quy đổi, không có tồn riêng: thao tác trên SKU thành phần / đơn vị gốc.");
         }
     }
 

@@ -101,8 +101,10 @@ const totals = computed(() => {
     return map;
 });
 
+// Pack sizes repeat the base SKU's stock in another unit: leave them out of the totals.
+const packIds = computed(() => new Set(product.value?.type === 'combo' ? [] : (product.value?.variants ?? []).filter((v) => v.components?.length).map((v) => v.id)));
 const stockTotals = computed(() =>
-    visibleStock.value.reduce(
+    visibleStock.value.filter((r) => !packIds.value.has(r.variant.id)).reduce(
         (s, r) => ({ on_hand: s.on_hand + r.on_hand, reserved: s.reserved + r.reserved, available: s.available + r.available, incoming: s.incoming + r.incoming, value: s.value + Math.max(0, r.on_hand) * Number(r.cost_price) }),
         { on_hand: 0, reserved: 0, available: 0, incoming: 0, value: 0 },
     ),
@@ -208,7 +210,12 @@ async function remove() {
                     <tbody class="divide-y">
                         <tr v-for="v in product.variants" :key="v.id">
                             <td class="px-4 py-2.5 font-mono text-xs font-medium">{{ v.sku }}</td>
-                            <td class="px-4 py-2.5">{{ v.name ?? '—' }}</td>
+                            <td class="px-4 py-2.5">
+                                {{ v.name ?? '—' }}
+                                <span v-if="product.type !== 'combo' && v.components?.length === 1" class="block text-xs text-muted-foreground" data-testid="pack-conversion">
+                                    = {{ v.components[0]!.quantity }} × {{ v.components[0]!.variant.sku }}
+                                </span>
+                            </td>
                             <td class="px-4 py-2.5 font-mono text-xs text-muted-foreground">{{ v.barcode ?? '—' }}</td>
                             <td class="px-4 py-2.5 text-right tabular-nums">{{ Number(v.ref_price) ? formatMoney(v.ref_price) : '—' }}</td>
                             <td class="px-4 py-2.5 text-right tabular-nums">{{ Number(v.wholesale_price) ? formatMoney(v.wholesale_price) : '—' }}</td>

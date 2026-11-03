@@ -53,6 +53,7 @@ class StockController extends Controller
         $rows = ProductVariant::query()
             ->with('product:id,ulid,name')
             ->whereHas('product', fn ($q) => $q->where('status', '!=', Product::STATUS_ARCHIVED)->where('type', '!=', Product::TYPE_COMBO))
+            ->whereDoesntHave('components') // pack sizes have no stock of their own
             ->leftJoinSub($balances, 's', 's.product_variant_id', '=', 'product_variants.id')
             ->select('product_variants.*',
                 DB::raw('COALESCE(s.on_hand, 0) as on_hand'),
@@ -115,7 +116,7 @@ class StockController extends Controller
             ->selectRaw('SUM(CASE WHEN available > 0 THEN 1 ELSE 0 END) as in_stock, SUM(CASE WHEN available > 0 AND available <= safety THEN 1 ELSE 0 END) as low_stock')
             ->first();
 
-        $skus = ProductVariant::query()->whereHas('product', fn ($q) => $q->where('type', '!=', Product::TYPE_COMBO))->count();
+        $skus = ProductVariant::query()->whereHas('product', fn ($q) => $q->where('type', '!=', Product::TYPE_COMBO))->whereDoesntHave('components')->count();
 
         return response()->json(['data' => [
             'skus' => $skus,
@@ -195,9 +196,16 @@ class StockController extends Controller
         $balances = StockBalance::query()->whereIn('product_variant_id', $variants->pluck('id'))->get()
             ->groupBy('product_variant_id');
         $incoming = $onOrder->byVariantAndWarehouse($variants->pluck('id')->all());
+        $packs = app(ComboResolver::class)->componentsOf($variants->pluck('id')->all());
 
         $rows = [];
         foreach ($variants as $variant) {
+            if (isset($packs[$variant->id])) {
+                // A pack size: whole packs the base stock makes, in each warehouse.
+                array_push($rows, ...$this->comboStock($variant, $warehouses));
+
+                continue;
+            }
             $byWarehouse = ($balances->get($variant->id) ?? collect())->keyBy('warehouse_id');
             foreach ($warehouses as $warehouse) {
                 $b = $byWarehouse->get($warehouse->id);
