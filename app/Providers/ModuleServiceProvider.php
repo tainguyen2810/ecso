@@ -42,6 +42,7 @@ use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Orders\Policies\OrderPolicy;
 use App\Modules\Orders\Policies\ReturnPolicy;
 use App\Modules\Platform\Console\CheckEnvCommand;
+use App\Modules\Platform\Console\DemoTenantCommand;
 use App\Modules\Platform\Console\InstallCommand;
 use App\Modules\Platform\Console\MonitorCommand;
 use App\Modules\Purchasing\Models\PurchaseOrder;
@@ -128,7 +129,7 @@ class ModuleServiceProvider extends ServiceProvider
         $this->configureAuthLinks();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, LowStockDigestCommand::class, PushDueInventoryCommand::class, ReconcileOrdersCommand::class, BillingSweepCommand::class, MonitorCommand::class]);
+            $this->commands([CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, LowStockDigestCommand::class, PushDueInventoryCommand::class, ReconcileOrdersCommand::class, BillingSweepCommand::class, MonitorCommand::class, DemoTenantCommand::class]);
         }
     }
 

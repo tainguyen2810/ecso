@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Tài khoản demo (2026-11-04)
+- Lệnh `php artisan ecso:demo-tenant <email> [--days=60] [--name=…] [--force]`: tạo đăng nhập mới (chủ + nhân viên kho `<tên>+kho@…`, mật khẩu ngẫu nhiên in một lần) và doanh nghiệp "… (dữ liệu mẫu)" có sản phẩm, tồn kho 2 kho, khách hàng, NCC, đơn nhập, phiếu kiểm/chuyển kho, ca bán hàng và đơn bán kênh riêng mỗi ngày trong N ngày (nhập hàng định kỳ mỗi tuần).
+- Không tạo super admin, không bật sàn giả lập; trên production phải thêm `--force` (chỉ dùng cho máy chủ demo). Ngày tháng của dữ liệu lịch sử nhất quán (đơn, thanh toán, sổ kho cùng ngày).
+- `DemoSeeder::populate()` tách phần đổ dữ liệu một doanh nghiệp để lệnh trên dùng lại; phần sàn giả lập chỉ chạy khi `FAKE_MARKETPLACE_ENABLED=true`.
+- Biểu đồ cột 30 ngày: khe hẹp hơn, nhãn ngày cách quãng để không tràn.
+
 ### Giao diện: Tổng quan mới và quy chuẩn màu (2026-11-03)
 - Sidebar xanh đậm, icon nét đơn sắc, nhóm menu ngăn bằng đường kẻ; nền trang xám nhạt.
 - Tổng quan: kết quả kinh doanh hôm nay (so với hôm qua), doanh thu 7/30 ngày theo sàn (cột chồng), đơn chờ xử lý theo trạng thái, top sản phẩm bán chạy, thông tin kho, tỷ trọng doanh thu theo sàn, gian hàng kết nối, đơn gần đây, SKU cần nhập thêm.
