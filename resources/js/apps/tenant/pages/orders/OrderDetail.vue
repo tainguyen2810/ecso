@@ -19,7 +19,7 @@ import { cn, formatDateTime, formatMoney, initials } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { actionLabels, capabilityLabels, deadlineLabel, historySource, manualActionOrder, mappingStatus, marketplaceNames, orderStatus, paymentMethodNames, paymentMethods, paymentStatus, returnStatus, returnTypes } from './labels';
-import { printInvoice } from './invoice';
+import PrintDialog from './PrintDialog.vue';
 import { downloadPackingSlips } from './packingSlip';
 import { orderWorkflow } from './workflow';
 import type { OrderDetail, Ref } from '@/shared/types';
@@ -29,6 +29,7 @@ const tenant = useTenantStore();
 const toast = useToast();
 
 const order = ref<OrderDetail | null>(null);
+const printOpen = ref(false);
 const loading = ref(true);
 const loadError = ref<string | null>(null);
 const busy = ref<string | null>(null);
@@ -253,7 +254,7 @@ async function createReturn() {
                 <div class="flex flex-wrap items-center gap-2">
                     <Button v-if="!isManual" variant="outline" size="sm" :loading="busy === 'sync'" @click="sync"><RefreshCw /> Đồng bộ từ sàn</Button>
                     <Button v-if="isManual && order.editable && tenant.can('orders.create')" variant="outline" size="sm" data-testid="edit-order" @click="$router.push(`/orders/${order.id}/edit`)"><Pencil /> Sửa đơn</Button>
-                    <Button v-if="isManual" variant="outline" size="sm" data-testid="print-invoice" @click="printInvoice(order, tenant.current?.name ?? '')"><ReceiptText /> In hóa đơn</Button>
+                    <Button v-if="isManual" variant="outline" size="sm" data-testid="print-invoice" @click="printOpen = true"><ReceiptText /> In đơn hàng</Button>
                     <Button v-if="tenant.can('orders.print')" variant="outline" size="sm" :loading="busy === 'print'" @click="print"><Printer /> In phiếu</Button>
                     <Button v-if="tenant.can('orders.create')" variant="outline" size="sm" data-testid="copy-order" @click="$router.push({ path: '/orders/new', query: { copy: order.id } })"><Copy /> Sao chép</Button>
                 </div>
@@ -523,6 +524,8 @@ async function createReturn() {
             </div>
         </div>
 
+
+        <PrintDialog v-model:open="printOpen" :orders="[order]" />
 
         <Dialog v-model:open="cancelOpen" title="Hủy đơn" :description="isManual ? 'Hàng đang giữ được nhả lại kho ngay. Nếu khách đã trả tiền, hãy ghi nhận hoàn tiền sau khi hủy.' : 'Yêu cầu hủy được gửi lên sàn. Hàng đang giữ sẽ được nhả khi sàn xác nhận hủy.'">
             <FormField label="Lý do"><Input v-model="cancelReason" placeholder="Hết hàng, khách yêu cầu…" /></FormField>

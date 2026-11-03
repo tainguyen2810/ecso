@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { AlertTriangle, Check, CirclePlus, Contact, PackageCheck, PackageOpen, Pencil, Repeat, Search, Store, Trash2, Truck, UserPlus, UserRound, X } from 'lucide-vue-next';
+import { AlertTriangle, ArrowDown, ArrowUp, Check, CirclePlus, Contact, ImageIcon, PackageCheck, PackageOpen, Pencil, Repeat, Search, Settings2, Store, Truck, UserPlus, UserRound, Wrench, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
 import TagInput from '../../components/TagInput.vue';
@@ -21,15 +21,22 @@ import { useTenantStore } from '@/shared/stores/tenant';
 import { channelTypes, paymentMethods } from './labels';
 import type { Customer, OrderDetail, OrderReturnData, SalesChannel, Variant, Warehouse } from '@/shared/types';
 
+/** A SKU line (stock is held) or a service line (own name and price, no stock). */
 interface Line {
+    uid: number;
+    kind: 'sku' | 'service';
     variant_id: string;
     sku: string;
     name: string;
+    image: string | null;
     available: number | null;
+    retail: number;
+    wholesale: number;
     quantity: number | string;
     unit_price: number | string;
     discount: number | string;
 }
+let nextUid = 1;
 
 const route = useRoute();
 const router = useRouter();
@@ -120,9 +127,9 @@ async function loadOrder(id: string, asCopy = false) {
     if (!asCopy || o.warehouse) form.warehouse_id = o.warehouse?.id ?? form.warehouse_id;
     copiedFrom.value = asCopy ? o.external_order_id : null;
     // A marketplace line without an internal SKU cannot be sold again from here.
-    const skipped = o.items.filter((i) => !i.variant).length;
+    const skipped = o.items.filter((i) => !i.variant && i.mapping_status !== 'service').length;
     if (asCopy && skipped) toast.info(`Bỏ qua ${skipped} dòng chưa liên kết SKU nội bộ.`);
-    o.items = o.items.filter((i) => i.variant);
+    o.items = o.items.filter((i) => i.variant || i.mapping_status === 'service');
     form.buyer_name = o.buyer_name ?? '';
     form.buyer_phone = o.buyer_phone ?? '';
     form.shipping_address = o.shipping_address ?? '';
@@ -135,10 +142,15 @@ async function loadOrder(id: string, asCopy = false) {
     form.deliver_on = asCopy ? '' : (o.deliver_on ?? '');
     customer.value = o.customer ? { ...o.customer, phone: null, address: null } : null;
     lines.value = o.items.map((i) => ({
-        variant_id: i.variant!.id,
-        sku: i.variant!.sku,
+        uid: nextUid++,
+        kind: i.variant ? 'sku' : 'service',
+        variant_id: i.variant?.id ?? '',
+        sku: i.variant?.sku ?? '',
         name: i.name + (i.variant_name ? ` · ${i.variant_name}` : ''),
+        image: null,
         available: null,
+        retail: Number(i.unit_price),
+        wholesale: 0,
         quantity: i.quantity,
         unit_price: Number(i.unit_price),
         discount: Number(i.discount),
@@ -154,22 +166,134 @@ watch(
     },
 );
 
+// Price policy of the order ("Giá bán lẻ" / "Giá bán buôn"): new lines start from it, switching re-prices SKU lines.
+const priceTier = ref<'retail' | 'wholesale'>('retail');
+const tierPrice = (l: { retail: number; wholesale: number }) => (priceTier.value === 'wholesale' && l.wholesale > 0 ? l.wholesale : l.retail);
+watch(priceTier, () => lines.value.filter((l) => l.kind === 'sku').forEach((l) => (l.unit_price = tierPrice(l))));
+
+// Display options of the product table and of "Thông tin bổ sung", kept in this browser per business.
+const viewKey = `ecso.orderform.view.${tenant.current?.id ?? 'default'}`;
+const defaultView = {
+    columns: { image: true, sku: true, available: true, discount: true },
+    newOnTop: false,
+    split: false,
+    extras: [
+        { key: 'warehouse', label: 'Kho xuất', show: true },
+        { key: 'seller', label: 'Bán bởi', show: true },
+        { key: 'deliver_on', label: 'Hẹn giao', show: true },
+    ],
+};
+function readView(): typeof defaultView {
+    try {
+        const saved = JSON.parse(localStorage.getItem(viewKey) ?? 'null');
+        return saved ? { ...defaultView, ...saved, columns: { ...defaultView.columns, ...saved.columns } } : structuredClone(defaultView);
+    } catch {
+        return structuredClone(defaultView);
+    }
+}
+const view = reactive(readView());
+const viewDraft = ref(structuredClone(defaultView));
+const viewOpen = ref(false);
+const extrasOpen = ref(false);
+function openView(which: 'columns' | 'extras') {
+    viewDraft.value = JSON.parse(JSON.stringify(view));
+    if (which === 'columns') viewOpen.value = true;
+    else extrasOpen.value = true;
+}
+function saveView() {
+    Object.assign(view, JSON.parse(JSON.stringify(viewDraft.value)));
+    try {
+        localStorage.setItem(viewKey, JSON.stringify(view));
+    } catch {
+        // Private mode: kept for this visit only.
+    }
+    viewOpen.value = false;
+    extrasOpen.value = false;
+}
+function moveExtra(i: number, step: number) {
+    const list = viewDraft.value.extras;
+    const j = i + step;
+    if (j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j]!, list[i]!];
+}
+const shownExtras = computed(() => view.extras.filter((e) => e.show));
+
+function place(line: Line) {
+    if (view.newOnTop) lines.value.unshift(line);
+    else lines.value.push(line);
+}
+
 function add(v: Variant) {
-    const existing = lines.value.find((l) => l.variant_id === v.id);
+    const existing = view.split ? undefined : lines.value.find((l) => l.kind === 'sku' && l.variant_id === v.id);
     if (existing) {
         existing.quantity = num(existing.quantity) + 1;
         return;
     }
-    lines.value.push({
+    const prices = { retail: Number(v.ref_price) || 0, wholesale: Number(v.wholesale_price) || 0 };
+    place({
+        uid: nextUid++,
+        kind: 'sku',
         variant_id: v.id!,
         sku: v.sku,
         name: (v.product?.name ?? '') + (v.name ? ` · ${v.name}` : ''),
+        image: v.product?.image ?? null,
         available: v.stock?.available ?? null,
+        ...prices,
         quantity: 1,
-        unit_price: Number(v.ref_price) || 0,
+        unit_price: tierPrice(prices),
         discount: 0,
     });
 }
+
+/** "Thêm dịch vụ khác (F9)": a line with its own name and price (repair, installation, delivery…), no stock. */
+async function addService() {
+    const line: Line = { uid: nextUid++, kind: 'service', variant_id: '', sku: '', name: '', image: null, available: null, retail: 0, wholesale: 0, quantity: 1, unit_price: 0, discount: 0 };
+    place(line);
+    await nextTick();
+    document.querySelector<HTMLInputElement>(`[data-service="${line.uid}"]`)?.focus();
+}
+
+// "Chọn nhanh": browse SKUs with their stock and add several at once.
+const pickOpen = ref(false);
+const pickQ = ref('');
+const pickRows = ref<Variant[]>([]);
+const picked = ref<Map<string, Variant>>(new Map());
+async function loadPick() {
+    const { data } = await api.get('/variants', { params: { q: pickQ.value || undefined, warehouse: form.warehouse_id || undefined } });
+    pickRows.value = data.data;
+}
+let pickTimer: ReturnType<typeof setTimeout> | undefined;
+watch(pickQ, () => {
+    clearTimeout(pickTimer);
+    pickTimer = setTimeout(loadPick, 250);
+});
+watch(pickOpen, (v) => v && ((picked.value = new Map()), loadPick()));
+function togglePick(v: Variant) {
+    const next = new Map(picked.value);
+    if (next.has(v.id!)) next.delete(v.id!);
+    else next.set(v.id!, v);
+    picked.value = next;
+}
+function confirmPick() {
+    picked.value.forEach((v) => add(v));
+    pickOpen.value = false;
+}
+
+// "Kiểm tra tồn kho": stock of the order's SKUs in every warehouse.
+const stockOpen = ref(false);
+const stockRows = ref<{ line: Line; balances: { warehouse: { id: string; name: string }; on_hand: number; reserved: number; available: number }[] }[]>([]);
+async function openStock() {
+    stockOpen.value = true;
+    const skuLines = lines.value.filter((l) => l.kind === 'sku');
+    stockRows.value = await Promise.all(
+        skuLines.map((line) => api.get(`/inventory/variants/${line.variant_id}/card`).then(({ data }) => ({ line, balances: data.balances })).catch(() => ({ line, balances: [] }))),
+    );
+}
+const stockWarehouses = computed(() => {
+    const seen = new Map<string, string>();
+    stockRows.value.forEach((r) => r.balances.forEach((b) => seen.set(b.warehouse.id, b.warehouse.name)));
+    return [...seen].map(([id, name]) => ({ id, name }));
+});
 
 let customerTimer: ReturnType<typeof setTimeout> | undefined;
 watch(customerQuery, (q) => {
@@ -206,6 +330,8 @@ function chooseCustomer(c: Customer) {
     form.buyer_name = c.name;
     form.buyer_phone = c.phone ?? '';
     form.shipping_address = c.address ?? form.shipping_address;
+    // The customer's group decides the starting price policy (retail / wholesale).
+    if (c.group?.price_tier) priceTier.value = c.group.price_tier;
 }
 
 function clearCustomer() {
@@ -292,7 +418,12 @@ async function submit() {
         note: form.note || null,
         tags: form.tags,
         deliver_on: form.deliver_on || null,
-        lines: lines.value.map((l) => ({ variant_id: l.variant_id, quantity: num(l.quantity), unit_price: num(l.unit_price), discount: num(l.discount) })),
+        lines: lines.value.map((l) => ({
+            ...(l.kind === 'service' ? { name: l.name.trim() } : { variant_id: l.variant_id }),
+            quantity: num(l.quantity),
+            unit_price: num(l.unit_price),
+            discount: num(l.discount),
+        })),
     };
     try {
         if (editId.value) {
@@ -321,12 +452,16 @@ const stages = [
 ];
 
 // Counter shortcuts: F1 save, F3 product search, F4 customer search, F6 order discount, F7 shipping fee.
+// F9 adds a service line.
 const shortcuts: Record<string, string> = { F3: '[data-shortcut="sku"] input', F4: '[data-testid="customer-search"]', F6: '[data-testid="order-discount"]', F7: '[data-testid="shipping-fee"]' };
 function onShortcut(e: KeyboardEvent) {
     if (loading.value) return;
     if (e.key === 'F1') {
         e.preventDefault();
         if (!saving.value && lines.value.length && form.channel_id) submit();
+    } else if (e.key === 'F9') {
+        e.preventDefault();
+        addService();
     } else if (shortcuts[e.key]) {
         e.preventDefault();
         const el = document.querySelector<HTMLInputElement>(shortcuts[e.key]!);
@@ -410,33 +545,49 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
             </Card>
 
             <Card title="Thông tin bổ sung" :caps="false">
+                <template #actions>
+                    <button type="button" class="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground" title="Sắp xếp thông tin bổ sung" data-testid="extras-settings" @click="openView('extras')"><Settings2 class="size-4" /></button>
+                </template>
                 <div class="space-y-3 p-4 text-sm">
                     <div class="grid grid-cols-[88px_1fr] items-center gap-2">
                         <label for="o-channel" class="text-muted-foreground">Kênh bán</label>
                         <Select id="o-channel" v-model="form.channel_id" :options="activeChannels" :disabled="!!editId" data-testid="order-channel" />
                     </div>
                     <p v-if="error?.field('channel_id')" class="text-xs text-destructive">{{ error.field('channel_id') }}</p>
-                    <div class="grid grid-cols-[88px_1fr] items-center gap-2">
-                        <label for="o-warehouse" class="text-muted-foreground">Kho xuất</label>
-                        <Select id="o-warehouse" v-model="form.warehouse_id" :options="activeWarehouses" data-testid="order-warehouse" />
-                    </div>
+                    <template v-for="e in shownExtras" :key="e.key">
+                        <div v-if="e.key === 'warehouse'" class="grid grid-cols-[88px_1fr] items-center gap-2">
+                            <label for="o-warehouse" class="text-muted-foreground">Kho xuất</label>
+                            <Select id="o-warehouse" v-model="form.warehouse_id" :options="activeWarehouses" data-testid="order-warehouse" />
+                        </div>
+                        <div v-else-if="e.key === 'seller'" class="grid grid-cols-[88px_1fr] items-center gap-2">
+                            <span class="text-muted-foreground">Bán bởi</span>
+                            <span class="flex h-9 items-center rounded-md border bg-muted/40 px-3">{{ auth.user?.name }}</span>
+                        </div>
+                        <div v-else-if="e.key === 'deliver_on'" class="grid grid-cols-[88px_1fr] items-center gap-2">
+                            <label for="o-deliver-on" class="text-muted-foreground">Hẹn giao</label>
+                            <Input id="o-deliver-on" v-model="form.deliver_on" type="date" data-testid="form-deliver-on" />
+                        </div>
+                    </template>
                     <p v-if="error?.field('warehouse_id')" class="text-xs text-destructive">{{ error.field('warehouse_id') }}</p>
-                    <div class="grid grid-cols-[88px_1fr] items-center gap-2">
-                        <span class="text-muted-foreground">Bán bởi</span>
-                        <span class="flex h-9 items-center rounded-md border bg-muted/40 px-3">{{ auth.user?.name }}</span>
-                    </div>
-                    <div class="grid grid-cols-[88px_1fr] items-center gap-2">
-                        <label for="o-deliver-on" class="text-muted-foreground">Hẹn giao</label>
-                        <Input id="o-deliver-on" v-model="form.deliver_on" type="date" data-testid="form-deliver-on" />
-                    </div>
                 </div>
             </Card>
         </div>
 
         <Card title="Thông tin sản phẩm" :caps="false">
-            <div class="border-b p-4">
-                <SkuPicker :warehouse="form.warehouse_id" :exclude="[]" placeholder="Tìm theo tên, mã SKU, hoặc quét mã barcode… (F3)" data-shortcut="sku" @pick="add" />
-                <p v-if="error?.field('lines')" class="mt-2 text-xs text-destructive">{{ error.field('lines') }}</p>
+            <template #actions>
+                <div class="flex items-center gap-3 text-sm">
+                    <label class="flex items-center gap-1.5" title="Quét/chọn lại cùng SKU sẽ thêm dòng mới thay vì cộng số lượng"><input v-model="view.split" type="checkbox" class="size-4" /> Tách dòng</label>
+                    <span class="h-4 w-px bg-border" />
+                    <button v-if="tenant.can('inventory.view')" type="button" class="font-medium text-primary hover:underline disabled:opacity-50" :disabled="!lines.some((l) => l.kind === 'sku')" data-testid="check-stock" @click="openStock">Kiểm tra tồn kho</button>
+                    <span class="h-4 w-px bg-border" />
+                    <button type="button" class="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground" title="Tùy chỉnh hiển thị" data-testid="lines-settings" @click="openView('columns')"><Settings2 class="size-4" /></button>
+                </div>
+            </template>
+            <div class="flex flex-wrap gap-2 border-b p-4">
+                <SkuPicker class="min-w-64 flex-1" :warehouse="form.warehouse_id" :exclude="[]" placeholder="Tìm theo tên, mã SKU, hoặc quét mã barcode… (F3)" data-shortcut="sku" @pick="add" />
+                <Button type="button" variant="outline" data-testid="quick-pick" @click="pickOpen = true">Chọn nhanh</Button>
+                <Select v-model="priceTier" class="w-40" :options="[{ value: 'retail', label: 'Giá bán lẻ' }, { value: 'wholesale', label: 'Giá bán buôn' }]" aria-label="Chính sách giá" data-testid="price-tier" />
+                <p v-if="error?.field('lines')" class="basis-full text-xs text-destructive">{{ error.field('lines') }}</p>
             </div>
             <div v-if="!lines.length" class="flex flex-col items-center py-10 text-center text-sm text-muted-foreground">
                 <PackageOpen class="mb-2 size-14 text-slate-300" :stroke-width="1.5" />
@@ -447,40 +598,51 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
                 <table class="w-full text-sm" data-testid="order-lines">
                     <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                         <tr>
-                            <th class="w-10 px-4 py-2 font-medium">STT</th>
-                            <th class="px-2 py-2 font-medium">Sản phẩm</th>
-                            <th class="whitespace-nowrap px-3 py-2 text-right font-medium">Khả dụng</th>
-                            <th class="px-2 py-2 text-right font-medium">Số lượng</th>
-                            <th class="px-2 py-2 text-right font-medium">Đơn giá</th>
-                            <th class="px-2 py-2 text-right font-medium">Chiết khấu</th>
-                            <th class="whitespace-nowrap px-3 py-2 text-right font-medium">Thành tiền</th>
-                            <th class="px-2 py-2" />
+                            <th class="w-12 px-4 py-2 font-medium">STT</th>
+                            <th v-if="view.columns.image" class="w-12 px-1 py-2 font-medium">Ảnh</th>
+                            <th class="px-2 py-2 font-medium">Tên sản phẩm</th>
+                            <th v-if="view.columns.available" class="whitespace-nowrap px-3 py-2 text-right font-medium">Khả dụng</th>
+                            <th class="w-24 px-2 py-2 text-right font-medium">Số lượng</th>
+                            <th class="w-32 px-2 py-2 text-right font-medium">Đơn giá</th>
+                            <th v-if="view.columns.discount" class="w-28 px-2 py-2 text-right font-medium">Chiết khấu</th>
+                            <th class="w-32 whitespace-nowrap px-3 py-2 text-right font-medium">Thành tiền</th>
+                            <th class="w-10 px-2 py-2" />
                         </tr>
                     </thead>
                     <tbody class="divide-y">
-                        <tr v-for="(l, i) in lines" :key="l.variant_id" class="align-top">
+                        <tr v-for="(l, i) in lines" :key="l.uid" class="align-middle">
                             <td class="px-4 py-2.5 text-muted-foreground">{{ i + 1 }}</td>
-                            <td class="px-2 py-2.5">
-                                <p class="max-w-72 truncate font-medium" :title="l.name">{{ l.name }}</p>
-                                <p class="font-mono text-[11px] text-muted-foreground">{{ l.sku }}</p>
+                            <td v-if="view.columns.image" class="px-1 py-2.5">
+                                <img v-if="l.image" :src="l.image" alt="" class="size-9 rounded-md border object-cover" />
+                                <span v-else class="grid size-9 place-items-center rounded-md border bg-slate-50 text-slate-400"><Wrench v-if="l.kind === 'service'" class="size-4" /><ImageIcon v-else class="size-4" /></span>
                             </td>
-                            <td class="px-3 py-2.5 text-right tabular-nums">
+                            <td class="px-2 py-2.5">
+                                <template v-if="l.kind === 'service'">
+                                    <input v-model="l.name" :data-service="l.uid" required maxlength="255" placeholder="Tên dịch vụ (VD: Công lắp đặt)" class="h-8 w-full max-w-md rounded-md border border-input bg-card px-2 text-sm" :data-testid="`line-name-${i}`" />
+                                    <p class="mt-0.5 text-[11px] text-muted-foreground">Dịch vụ · không trừ kho</p>
+                                </template>
+                                <template v-else>
+                                    <p class="max-w-80 truncate font-medium" :title="l.name">{{ l.name }}</p>
+                                    <p v-if="view.columns.sku" class="font-mono text-[11px] text-primary">{{ l.sku }}</p>
+                                </template>
+                            </td>
+                            <td v-if="view.columns.available" class="px-3 py-2.5 text-right tabular-nums">
                                 <span v-if="l.available !== null" :class="cn(num(l.quantity) > l.available && 'rounded-full bg-rose-50 px-2 font-medium text-rose-600')">{{ formatNumber(l.available) }}</span>
                                 <span v-else class="text-muted-foreground">—</span>
                             </td>
                             <td class="px-2 py-2.5 text-right">
-                                <input v-model="l.quantity" type="number" min="1" required :data-testid="`line-qty-${i}`" :class="cn('h-8 w-16 rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums', error?.field(`lines.${i}.quantity`) && 'border-destructive')" />
+                                <input v-model="l.quantity" type="number" min="1" required :data-testid="`line-qty-${i}`" :class="cn('h-8 w-20 rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums', error?.field(`lines.${i}.quantity`) && 'border-destructive')" />
                             </td>
                             <td class="px-2 py-2.5 text-right">
                                 <input v-model="l.unit_price" type="number" min="0" step="any" required :data-testid="`line-price-${i}`" class="h-8 w-28 rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" />
                             </td>
-                            <td class="px-2 py-2.5 text-right">
+                            <td v-if="view.columns.discount" class="px-2 py-2.5 text-right">
                                 <input v-model="l.discount" type="number" min="0" step="any" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" />
                                 <p v-if="error?.field(`lines.${i}.discount`)" class="text-xs text-destructive">{{ error.field(`lines.${i}.discount`) }}</p>
                             </td>
                             <td class="whitespace-nowrap px-3 py-2.5 text-right font-semibold tabular-nums">{{ formatMoney(lineTotal(l)) }}</td>
                             <td class="px-2 py-2.5 text-right">
-                                <Button variant="ghost" size="icon" class="size-8" title="Xóa dòng" @click="lines.splice(i, 1)"><Trash2 class="text-muted-foreground" /></Button>
+                                <Button variant="ghost" size="icon" class="size-8" title="Xóa dòng" @click="lines.splice(i, 1)"><X class="text-muted-foreground" /></Button>
                             </td>
                         </tr>
                     </tbody>
@@ -489,9 +651,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
                     Có sản phẩm vượt số khả dụng: đơn vẫn lưu được (giữ phần còn lại, thiếu sẽ được giữ khi nhập hàng) nhưng không xuất kho được cho đến khi đủ hàng.
                 </Alert>
             </div>
+            <div class="flex items-center border-t px-4 py-2.5">
+                <button type="button" class="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline" data-testid="add-service" @click="addService"><CirclePlus class="size-4" /> Thêm dịch vụ khác (F9)</button>
+            </div>
 
-            <div class="grid gap-6 border-t p-4 md:grid-cols-2">
-                <div class="space-y-4">
+            <div class="grid gap-6 border-t p-4 md:grid-cols-[minmax(0,1fr)_380px]">
+                <div class="max-w-md space-y-4">
                     <div>
                         <span class="mb-1.5 block text-sm text-muted-foreground">Tags</span>
                         <TagInput v-model="form.tags" :suggestions="tagSuggestions" />
@@ -500,27 +665,37 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
                         <textarea id="o-note" v-model="form.note" maxlength="500" rows="3" placeholder="VD: Hàng tặng gói riêng" class="w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
                     </FormField>
                 </div>
-                <dl class="space-y-2.5 text-sm md:pl-10">
-                    <div class="flex justify-between"><dt>Tổng tiền ({{ totalQty }} sản phẩm)</dt><dd class="tabular-nums">{{ formatMoney(subtotal) }}</dd></div>
-                    <div class="flex items-center justify-between gap-2"><dt>Chiết khấu <kbd class="text-[10px] text-muted-foreground">F6</kbd></dt><dd><input v-model="form.discount" type="number" min="0" class="h-7 w-32 border-0 border-b border-input bg-transparent px-1 text-right text-sm tabular-nums focus:border-primary focus:outline-none" data-testid="order-discount" /></dd></div>
-                    <p v-if="error?.field('discount')" class="text-right text-xs text-destructive">{{ error.field('discount') }}</p>
-                    <div class="flex items-center justify-between gap-2"><dt class="text-primary">Phí giao hàng <kbd class="text-[10px] text-muted-foreground">F7</kbd></dt><dd><input v-model="form.shipping_fee" type="number" min="0" class="h-7 w-32 border-0 border-b border-input bg-transparent px-1 text-right text-sm tabular-nums focus:border-primary focus:outline-none" data-testid="shipping-fee" /></dd></div>
-                    <div class="flex items-baseline justify-between border-t pt-2.5 font-semibold"><dt>Khách phải trả</dt><dd class="text-xl font-bold tabular-nums text-blue-600" data-testid="order-total">{{ formatMoney(total) }}</dd></div>
+                <!-- One value column (w-36, right-aligned) for every figure and input, so the numbers line up. -->
+                <dl class="grid grid-cols-[1fr_9rem] items-center gap-x-3 gap-y-2.5 text-sm">
+                    <dt>Tổng tiền ({{ totalQty }} sản phẩm)</dt>
+                    <dd class="text-right tabular-nums">{{ formatMoney(subtotal) }}</dd>
+                    <dt>Chiết khấu <kbd class="text-[10px] text-muted-foreground">F6</kbd></dt>
+                    <dd><input v-model="form.discount" type="number" min="0" class="h-8 w-full rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" data-testid="order-discount" /></dd>
+                    <p v-if="error?.field('discount')" class="col-span-2 text-right text-xs text-destructive">{{ error.field('discount') }}</p>
+                    <dt class="text-primary">Phí giao hàng <kbd class="text-[10px] text-muted-foreground">F7</kbd></dt>
+                    <dd><input v-model="form.shipping_fee" type="number" min="0" class="h-8 w-full rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" data-testid="shipping-fee" /></dd>
+                    <div class="col-span-2 border-t" />
+                    <dt class="font-semibold">Khách phải trả</dt>
+                    <dd class="text-right text-xl font-bold tabular-nums text-blue-600" data-testid="order-total">{{ formatMoney(total) }}</dd>
                     <template v-if="exchange">
-                        <div class="flex justify-between text-emerald-600"><dt>Trừ hàng đổi trả</dt><dd class="tabular-nums" data-testid="exchange-credit">−{{ formatMoney(exchangeCredit) }}</dd></div>
+                        <dt class="text-emerald-600">Trừ hàng đổi trả</dt>
+                        <dd class="text-right tabular-nums text-emerald-600" data-testid="exchange-credit">−{{ formatMoney(exchangeCredit) }}</dd>
                     </template>
                     <template v-if="!editId && tenant.can('orders.payment')">
-                        <div class="flex items-center justify-between gap-2 border-t pt-2.5">
-                            <dt class="font-semibold">Khách đã trả</dt>
-                            <dd class="flex items-center gap-2">
-                                <Select v-model="form.pay_method" class="h-8 w-32 text-xs" :options="Object.entries(paymentMethods).filter(([k]) => k !== 'cod').map(([value, label]) => ({ value, label }))" aria-label="Hình thức" />
-                                <input v-model="form.pay_amount" type="number" min="0" placeholder="0" class="h-8 w-32 rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" data-testid="pay-amount" />
-                            </dd>
-                        </div>
-                        <button type="button" class="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline" @click="payFull"><CirclePlus class="size-3.5" /> Thu đủ {{ formatMoney(total - exchangeCredit) }}</button>
-                        <p v-if="error?.field('amount')" class="text-xs text-destructive">{{ error.field('amount') }}</p>
+                        <div class="col-span-2 border-t" />
+                        <dt class="flex items-center gap-2 font-semibold">
+                            Khách đã trả
+                            <Select v-model="form.pay_method" class="h-8 w-32 text-xs font-normal" :options="Object.entries(paymentMethods).filter(([k]) => k !== 'cod').map(([value, label]) => ({ value, label }))" aria-label="Hình thức" />
+                        </dt>
+                        <dd><input v-model="form.pay_amount" type="number" min="0" placeholder="0" class="h-8 w-full rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" data-testid="pay-amount" /></dd>
+                        <dd class="col-span-2 -mt-1">
+                            <button type="button" class="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline" @click="payFull"><CirclePlus class="size-3.5" /> Thu đủ {{ formatMoney(total - exchangeCredit) }}</button>
+                            <p v-if="error?.field('amount')" class="text-xs text-destructive">{{ error.field('amount') }}</p>
+                        </dd>
                     </template>
-                    <div class="flex justify-between border-t pt-2.5 font-semibold"><dt>Còn phải trả</dt><dd :class="cn('tabular-nums', remaining > 0 && 'text-rose-600')">{{ formatMoney(remaining) }}</dd></div>
+                    <div class="col-span-2 border-t" />
+                    <dt class="font-semibold">Còn phải trả</dt>
+                    <dd :class="cn('text-right font-semibold tabular-nums', remaining > 0 && 'text-rose-600')">{{ formatMoney(remaining) }}</dd>
                 </dl>
             </div>
         </Card>
@@ -568,6 +743,111 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
         <template #footer>
             <Button variant="outline" @click="cancelNewCustomer">Thoát</Button>
             <Button form="new-customer-form" type="submit" :disabled="!newCustomer.name.trim()" data-testid="nc-save">Thêm</Button>
+        </template>
+    </Dialog>
+    <Dialog v-model:open="pickOpen" title="Chọn sản phẩm để bán hàng" size="lg">
+        <div class="relative mb-3">
+            <Search class="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+            <Input v-model="pickQ" class="pl-8" placeholder="Tìm kiếm sản phẩm" data-testid="quick-pick-search" />
+        </div>
+        <ul class="divide-y rounded-md border" data-testid="quick-pick-list">
+            <li v-for="v in pickRows" :key="v.id">
+                <button type="button" :class="cn('flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/40', picked.has(v.id!) && 'bg-blue-50/70 hover:bg-blue-50/70')" @click="togglePick(v)">
+                    <img v-if="v.product?.image" :src="v.product.image" alt="" class="size-11 shrink-0 rounded-md border object-cover" />
+                    <span v-else class="grid size-11 shrink-0 place-items-center rounded-md border bg-slate-50 text-slate-400"><ImageIcon class="size-5" /></span>
+                    <span class="min-w-0 flex-1">
+                        <span class="block truncate text-sm">{{ v.product?.name }}<template v-if="v.name"> ({{ v.name }})</template></span>
+                        <span class="font-mono text-[11px] text-muted-foreground">{{ v.sku }}</span>
+                    </span>
+                    <span class="shrink-0 text-right">
+                        <span class="block text-sm font-semibold tabular-nums">{{ formatNumber(tierPrice({ retail: Number(v.ref_price) || 0, wholesale: Number(v.wholesale_price) || 0 })) }}</span>
+                        <span v-if="v.stock" class="text-[11px] text-muted-foreground">Tồn: <b :class="v.stock.on_hand > 0 ? 'text-primary' : 'text-rose-600'">{{ formatNumber(v.stock.on_hand) }}</b> | Có thể bán: <b :class="v.stock.available > 0 ? 'text-primary' : 'text-rose-600'">{{ formatNumber(v.stock.available) }}</b></span>
+                    </span>
+                    <span :class="cn('grid size-6 shrink-0 place-items-center rounded-full border-2', picked.has(v.id!) ? 'border-primary bg-primary text-white' : 'border-primary/40 text-primary')">
+                        <Check v-if="picked.has(v.id!)" class="size-3.5" /><CirclePlus v-else class="size-3.5" />
+                    </span>
+                </button>
+            </li>
+            <li v-if="!pickRows.length" class="px-3 py-8 text-center text-sm text-muted-foreground">Không có sản phẩm khớp tìm kiếm.</li>
+        </ul>
+        <template #footer>
+            <span class="mr-auto self-center text-sm font-medium text-primary">Bạn đã chọn {{ picked.size }} sản phẩm</span>
+            <Button variant="outline" @click="pickOpen = false">Thoát</Button>
+            <Button :disabled="!picked.size" data-testid="quick-pick-done" @click="confirmPick">Chọn xong</Button>
+        </template>
+    </Dialog>
+
+    <Dialog v-model:open="stockOpen" title="Kiểm tra tồn kho" size="xl">
+        <div class="overflow-x-auto rounded-md border">
+            <table class="w-full text-sm" data-testid="stock-check">
+                <thead class="whitespace-nowrap bg-slate-50 text-xs font-semibold text-foreground/80">
+                    <tr class="border-b">
+                        <th rowspan="2" class="border-r px-3 py-2 text-left">Mã SKU</th>
+                        <th rowspan="2" class="border-r px-3 py-2 text-left">Tên sản phẩm</th>
+                        <th rowspan="2" class="border-r px-3 py-2 text-right">Số lượng</th>
+                        <th v-for="w in stockWarehouses" :key="w.id" colspan="3" class="border-r px-3 py-2 text-center">{{ w.name }}</th>
+                    </tr>
+                    <tr class="border-b">
+                        <template v-for="w in stockWarehouses" :key="w.id">
+                            <th class="px-3 py-1.5 text-right font-medium">Tồn kho</th>
+                            <th class="px-3 py-1.5 text-right font-medium">Đang giữ</th>
+                            <th class="border-r px-3 py-1.5 text-right font-medium">Có thể bán</th>
+                        </template>
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    <tr v-for="r in stockRows" :key="r.line.uid">
+                        <td class="border-r px-3 py-2 font-mono text-xs text-primary">{{ r.line.sku }}</td>
+                        <td class="border-r px-3 py-2">{{ r.line.name }}</td>
+                        <td class="border-r px-3 py-2 text-right tabular-nums">{{ formatNumber(num(r.line.quantity)) }}</td>
+                        <template v-for="w in stockWarehouses" :key="w.id">
+                            <td class="px-3 py-2 text-right tabular-nums">{{ formatNumber(r.balances.find((b) => b.warehouse.id === w.id)?.on_hand ?? 0) }}</td>
+                            <td class="px-3 py-2 text-right tabular-nums text-muted-foreground">{{ formatNumber(r.balances.find((b) => b.warehouse.id === w.id)?.reserved ?? 0) }}</td>
+                            <td :class="cn('border-r px-3 py-2 text-right font-medium tabular-nums', (r.balances.find((b) => b.warehouse.id === w.id)?.available ?? 0) < num(r.line.quantity) && 'text-rose-600')">{{ formatNumber(r.balances.find((b) => b.warehouse.id === w.id)?.available ?? 0) }}</td>
+                        </template>
+                    </tr>
+                    <tr v-if="!stockRows.length"><td :colspan="3 + stockWarehouses.length * 3" class="px-3 py-8 text-center text-muted-foreground">Đang tải…</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <template #footer><Button variant="outline" @click="stockOpen = false">Thoát</Button></template>
+    </Dialog>
+
+    <Dialog v-model:open="viewOpen" title="Tùy chỉnh hiển thị" size="lg">
+        <div class="space-y-5 text-sm">
+            <div>
+                <p class="mb-2 font-medium">Cột hiển thị</p>
+                <div class="grid grid-cols-2 gap-2">
+                    <label v-for="(label, key) in { image: 'Ảnh', sku: 'Mã SKU', available: 'Khả dụng', discount: 'Chiết khấu' }" :key="key" class="flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-muted/40">
+                        <input v-model="viewDraft.columns[key]" type="checkbox" class="size-4" /> {{ label }}
+                    </label>
+                </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-4">
+                <span class="font-medium">Thứ tự hiển thị hàng hóa:</span>
+                <label class="flex items-center gap-1.5"><input v-model="viewDraft.newOnTop" type="radio" :value="true" /> Thêm sau lên trên</label>
+                <label class="flex items-center gap-1.5"><input v-model="viewDraft.newOnTop" type="radio" :value="false" /> Thêm sau xuống dưới</label>
+            </div>
+            <label class="flex items-center gap-2"><input v-model="viewDraft.split" type="checkbox" class="size-4" /> Tách dòng khi thêm lại cùng sản phẩm</label>
+        </div>
+        <template #footer>
+            <Button variant="outline" @click="viewOpen = false">Thoát</Button>
+            <Button data-testid="lines-settings-save" @click="saveView">Lưu</Button>
+        </template>
+    </Dialog>
+
+    <Dialog v-model:open="extrasOpen" title="Sắp xếp thông tin bổ sung" description="Chọn thông tin hiển thị và thứ tự (Kênh bán luôn ở đầu)." size="md">
+        <ul class="divide-y rounded-md border text-sm">
+            <li v-for="(e, i) in viewDraft.extras" :key="e.key" class="flex items-center gap-3 px-3 py-2.5">
+                <input v-model="e.show" type="checkbox" class="size-4" :aria-label="`Hiện ${e.label}`" />
+                <span class="flex-1">{{ e.label }}</span>
+                <button type="button" class="rounded p-1 text-muted-foreground hover:bg-muted disabled:opacity-30" :disabled="i === 0" :aria-label="`Đưa ${e.label} lên`" @click="moveExtra(i, -1)"><ArrowUp class="size-4" /></button>
+                <button type="button" class="rounded p-1 text-muted-foreground hover:bg-muted disabled:opacity-30" :disabled="i === viewDraft.extras.length - 1" :aria-label="`Đưa ${e.label} xuống`" @click="moveExtra(i, 1)"><ArrowDown class="size-4" /></button>
+            </li>
+        </ul>
+        <template #footer>
+            <Button variant="outline" @click="extrasOpen = false">Thoát</Button>
+            <Button @click="saveView">Lưu</Button>
         </template>
     </Dialog>
 </template>

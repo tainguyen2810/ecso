@@ -213,7 +213,7 @@ class ProductController extends Controller
         ]);
         $exact = ! empty($data['ids']) || ! empty($data['products']);
 
-        $query = ProductVariant::query()->with(['product', 'components.component'])
+        $query = ProductVariant::query()->with(['product.images', 'components.component'])
             ->when($data['stocked'] ?? false, fn (Builder $q) => $q->whereDoesntHave('components')->whereHas('product', fn ($p) => $p->where('type', '!=', Product::TYPE_COMBO)))
             ->when($data['ids'] ?? null, fn (Builder $q, array $ids) => $q->whereIn('product_variants.ulid', $ids))
             ->when($data['products'] ?? null, fn (Builder $q, array $ids) => $q->whereIn('product_id', Product::query()->whereIn('ulid', $ids)->select('id')))

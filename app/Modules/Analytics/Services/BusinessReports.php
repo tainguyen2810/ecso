@@ -46,7 +46,7 @@ class BusinessReports
         $costs = DB::table('order_items')
             ->where('tenant_id', $this->tenant())
             ->groupBy('order_id')
-            ->selectRaw('order_id, SUM(COALESCE(cost_snapshot, 0) * quantity) as cogs, SUM(CASE WHEN cost_snapshot IS NULL THEN 1 ELSE 0 END) as missing, SUM(quantity) as units');
+            ->selectRaw('order_id, SUM(COALESCE(cost_snapshot, 0) * quantity) as cogs, SUM(CASE WHEN cost_snapshot IS NULL AND mapping_status <> \'service\' THEN 1 ELSE 0 END) as missing, SUM(quantity) as units');
 
         $base = DB::table('orders')
             ->leftJoinSub($costs, 'c', 'c.order_id', '=', 'orders.id')

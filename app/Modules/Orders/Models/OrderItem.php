@@ -12,6 +12,9 @@ class OrderItem extends Model
 {
     use BelongsToTenant;
 
+    /** mapping_status of a service line on an own-channel order: no SKU, never reserves or moves stock. */
+    public const SERVICE = 'service';
+
     protected $guarded = ['id', 'tenant_id'];
 
     protected function casts(): array

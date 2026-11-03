@@ -22,7 +22,7 @@ import { cn, formatDate, formatDateTime, formatMoney } from '@/shared/lib/utils'
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { actionLabels, deadlineLabel, marketplaceNames, orderFlags, orderStatus, orderTabs, paymentMethods, paymentStatus } from './labels';
-import { printInvoice } from './invoice';
+import PrintDialog from './PrintDialog.vue';
 import { downloadPackingSlips } from './packingSlip';
 import OrderPipeline from './OrderPipeline.vue';
 import OrderQuickView from './OrderQuickView.vue';
@@ -313,14 +313,16 @@ async function print() {
     }
 }
 
-/** Sales receipts of the selected manual orders, printed in one job. */
+const printOpen = ref(false);
+const printOrders = ref<OrderDetail[]>([]);
+/** Sales receipts of the selected manual orders, printed in one job (template picked in the print dialog). */
 async function printInvoices() {
     const manual = selectedOrders.value.filter((o) => o.source === 'manual');
     if (!manual.length) return void toast.info('Hóa đơn bán hàng chỉ in cho đơn của kênh bán riêng.');
     busy.value = 'invoice';
     try {
-        const details = await Promise.all(manual.map((o) => api.get(`/orders/${o.id}`).then(({ data }) => data.data as OrderDetail)));
-        printInvoice(details, tenant.current?.name ?? '');
+        printOrders.value = await Promise.all(manual.map((o) => api.get(`/orders/${o.id}`).then(({ data }) => data.data as OrderDetail)));
+        printOpen.value = true;
     } catch (e) {
         toast.error((e as ApiError).message);
     } finally {
@@ -359,16 +361,12 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
     <Card>
         <div class="border-b px-3"><Tabs v-model="filters.tab" :tabs="tabs" variant="underline" data-testid="order-tabs" /></div>
         <div class="space-y-3 border-b p-4">
+            <!-- Row 1: search and tools; row 2: the list filters in equal columns (balanced like Sapo). -->
             <div class="flex flex-wrap items-center gap-2">
-                <div class="relative min-w-60 flex-1">
+                <div class="relative min-w-72 flex-1">
                     <Search class="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                    <Input v-model="filters.q" class="pl-8" placeholder="Mã đơn, mã vận đơn, SKU, tên sản phẩm, tên hoặc SĐT khách…" data-testid="order-search" />
+                    <Input v-model="filters.q" class="pl-8" placeholder="Tìm theo mã đơn, mã vận đơn, SKU, tên sản phẩm, tên hoặc SĐT khách…" data-testid="order-search" />
                 </div>
-                <Select v-model="filters.source" class="w-40" :options="[{ value: '', label: 'Mọi nguồn đơn' }, { value: 'manual', label: 'Kênh bán riêng' }, { value: 'marketplace', label: 'Sàn TMĐT' }]" aria-label="Nguồn đơn" data-testid="filter-source" />
-                <Select v-if="filters.source !== 'marketplace' && channels.length" v-model="filters.channel" class="w-44" :options="[{ value: '', label: 'Mọi kênh riêng' }, ...channels.map((c) => ({ value: c.id, label: c.name }))]" aria-label="Kênh bán" />
-                <Select v-if="filters.source !== 'manual' && accounts.length" v-model="filters.account" class="w-48" :options="[{ value: '', label: 'Tất cả gian hàng' }, ...accounts.map((a) => ({ value: a.id, label: a.shop_name }))]" aria-label="Gian hàng" />
-                <Select v-model="filters.assignee" class="w-44" :options="[{ value: '', label: 'Mọi người xử lý' }, { value: 'me', label: 'Đơn của tôi' }, { value: 'none', label: 'Chưa phân công' }, ...assignees.map((a) => ({ value: a.id, label: a.name }))]" aria-label="Người xử lý" />
-                <Select v-model="filters.sort" class="w-44" :options="[{ value: 'newest', label: 'Mới nhất' }, { value: 'oldest', label: 'Cũ nhất' }, { value: 'ship_by', label: 'Hạn giao gần nhất' }]" aria-label="Sắp xếp" />
                 <Button variant="outline" :class="cn(moreFilters && 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-50')" data-testid="more-filters" @click="moreFilters = !moreFilters">
                     <Filter /> Bộ lọc khác <span v-if="advancedCount" class="rounded-full bg-primary px-1.5 text-xs text-primary-foreground">{{ advancedCount }}</span>
                 </Button>
@@ -380,7 +378,14 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                         </label>
                     </div>
                 </div>
-                <Button v-if="hasFilters" variant="outline" data-testid="save-view" @click="saveView"><Bookmark /> Lưu bộ lọc</Button>
+                <Button variant="outline" :disabled="!hasFilters" data-testid="save-view" @click="saveView"><Bookmark /> Lưu bộ lọc</Button>
+            </div>
+            <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                <Select v-model="filters.source" :options="[{ value: '', label: 'Mọi nguồn đơn' }, { value: 'manual', label: 'Kênh bán riêng' }, { value: 'marketplace', label: 'Sàn TMĐT' }]" aria-label="Nguồn đơn" data-testid="filter-source" />
+                <Select v-model="filters.channel" :disabled="filters.source === 'marketplace' || !channels.length" :options="[{ value: '', label: 'Mọi kênh riêng' }, ...channels.map((c) => ({ value: c.id, label: c.name }))]" aria-label="Kênh bán" />
+                <Select v-model="filters.account" :disabled="filters.source === 'manual' || !accounts.length" :options="[{ value: '', label: 'Tất cả gian hàng' }, ...accounts.map((a) => ({ value: a.id, label: a.shop_name }))]" aria-label="Gian hàng" />
+                <Select v-model="filters.assignee" :options="[{ value: '', label: 'Mọi người xử lý' }, { value: 'me', label: 'Đơn của tôi' }, { value: 'none', label: 'Chưa phân công' }, ...assignees.map((a) => ({ value: a.id, label: a.name }))]" aria-label="Người xử lý" />
+                <Select v-model="filters.sort" :options="[{ value: 'newest', label: 'Sắp xếp: Mới nhất' }, { value: 'oldest', label: 'Sắp xếp: Cũ nhất' }, { value: 'ship_by', label: 'Sắp xếp: Hạn giao gần nhất' }]" aria-label="Sắp xếp" />
             </div>
 
             <div v-if="moreFilters" class="grid gap-3 rounded-lg border bg-slate-50 p-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="advanced-filters">
@@ -481,15 +486,15 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                     <tr>
                         <th class="w-8 py-3 pl-3" />
                         <th class="w-8 py-3"><input type="checkbox" :checked="allSelected" aria-label="Chọn tất cả" @change="toggleAll" /></th>
-                        <th class="px-3 py-3">Mã đơn hàng</th>
-                        <th v-if="columns.date" class="whitespace-nowrap px-3 py-3">Ngày tạo đơn</th>
+                        <th class="w-[22%] px-3 py-3">Mã đơn hàng</th>
+                        <th v-if="columns.date" class="w-36 whitespace-nowrap px-3 py-3">Ngày tạo đơn</th>
                         <th v-if="columns.customer" class="px-3 py-3">Tên khách hàng</th>
                         <th v-if="columns.products" class="px-3 py-3">Sản phẩm</th>
-                        <th v-if="columns.status" class="px-3 py-3">Trạng thái đơn hàng</th>
-                        <th v-if="columns.payment" class="px-3 py-3">Thanh toán</th>
-                        <th v-if="columns.deadline" class="px-3 py-3">Hạn giao</th>
+                        <th v-if="columns.status" class="w-40 whitespace-nowrap px-3 py-3">Trạng thái đơn hàng</th>
+                        <th v-if="columns.payment" class="w-44 px-3 py-3">Thanh toán</th>
+                        <th v-if="columns.deadline" class="w-36 px-3 py-3">Hạn giao</th>
                         <th v-if="columns.assignee" class="px-3 py-3">Xử lý</th>
-                        <th v-if="columns.total" class="whitespace-nowrap px-4 py-3 text-right">Khách phải trả</th>
+                        <th v-if="columns.total" class="w-36 whitespace-nowrap px-4 py-3 text-right">Khách phải trả</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y">
@@ -552,6 +557,8 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
         </div>
         <Pagination :page="meta.current_page" :last-page="meta.last_page" :total="meta.total" @go="(p) => ((filters.page = p), load())" />
     </Card>
+
+    <PrintDialog v-model:open="printOpen" :orders="printOrders" />
 
     <Dialog v-model:open="assignOpen" title="Phân công đơn" :description="`${selected.size} đơn được chọn`">
         <Select v-model="assignTo" :options="[{ value: '', label: '— Bỏ phân công —' }, ...assignees.map((a) => ({ value: a.id, label: a.name }))]" aria-label="Nhân viên" />

@@ -57,7 +57,7 @@ class OrderStockSync
         $relevant = OrderStatus::policy($order->status) !== OrderStatus::RELEASE;
 
         $order->forceFill([
-            'has_unmapped' => $items->contains(fn (OrderItem $i) => $i->product_variant_id === null),
+            'has_unmapped' => $items->contains(fn (OrderItem $i) => $i->product_variant_id === null && $i->mapping_status !== OrderItem::SERVICE),
             'has_shortage' => $relevant && collect($snapshot)->contains(fn ($r) => $r['shortage'] > 0 && $r['status'] !== 'released'),
         ])->save();
     }

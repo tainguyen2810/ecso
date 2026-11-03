@@ -247,10 +247,12 @@ class ManualOrderService
      */
     private function ensureStock(Order $order): void
     {
-        $items = $order->items()->get();
-        if ($items->contains(fn (OrderItem $i) => $i->product_variant_id === null)) {
+        $all = $order->items()->get();
+        if ($all->contains(fn (OrderItem $i) => $i->product_variant_id === null && $i->mapping_status !== OrderItem::SERVICE)) {
             throw ValidationException::withMessages(['action' => 'Đơn có sản phẩm chưa liên kết SKU.']);
         }
+        // Service lines have no stock to hold.
+        $items = $all->whereNotNull('product_variant_id')->values();
 
         $warehouse = Warehouse::query()->withTrashed()->findOrFail($order->warehouse_id);
         foreach ($items->sortBy('product_variant_id') as $item) {
@@ -305,14 +307,36 @@ class ManualOrderService
     }
 
     /**
-     * @param  array<int, array{variant_id: string, quantity: int, unit_price?: string|int|float|null, discount?: string|int|float|null}>  $lines
+     * @param  array<int, array{variant_id?: string|null, name?: string|null, quantity: int, unit_price?: string|int|float|null, discount?: string|int|float|null}>  $lines
      */
     private function replaceItems(Order $order, array $lines): void
     {
-        $variants = ProductVariant::query()->with('product')->whereIn('ulid', collect($lines)->pluck('variant_id'))->get()->keyBy('ulid');
+        $variants = ProductVariant::query()->with('product')->whereIn('ulid', collect($lines)->pluck('variant_id')->filter())->get()->keyBy('ulid');
 
         $order->items()->delete();
         foreach (array_values($lines) as $i => $line) {
+            // Service line (repair fee, installation…): own name and price, no SKU and no stock movement.
+            if (empty($line['variant_id'])) {
+                $price = bcadd((string) ($line['unit_price'] ?? 0), '0', 2);
+                $discount = bcadd((string) ($line['discount'] ?? 0), '0', 2);
+                if (bccomp($discount, bcmul($price, (string) $line['quantity'], 2), 2) > 0) {
+                    throw ValidationException::withMessages(["lines.{$i}.discount" => 'Giảm giá lớn hơn thành tiền.']);
+                }
+                $item = new OrderItem;
+                $item->forceFill([
+                    'order_id' => $order->id,
+                    'external_item_id' => (string) ($i + 1).'-'.$order->version,
+                    'product_variant_id' => null,
+                    'name' => trim((string) $line['name']),
+                    'quantity' => (int) $line['quantity'],
+                    'unit_price' => $price,
+                    'discount' => $discount,
+                    'mapping_status' => OrderItem::SERVICE,
+                ])->save();
+
+                continue;
+            }
+
             $variant = $variants[$line['variant_id']] ?? throw ValidationException::withMessages(["lines.{$i}.variant_id" => 'SKU không tồn tại.']);
             $price = bcadd((string) ($line['unit_price'] ?? $variant->ref_price), '0', 2);
             $discount = bcadd((string) ($line['discount'] ?? 0), '0', 2);
@@ -336,12 +360,13 @@ class ManualOrderService
         }
     }
 
-    /** @return array<int, array{variant_id: string, quantity: int, unit_price: string, discount: string}> */
+    /** @return array<int, array{variant_id: string|null, name?: string, quantity: int, unit_price: string, discount: string}> */
     private function currentLines(Order $order): array
     {
-        return $order->items()->with('variant')->get()->map(fn (OrderItem $i) => [
-            'variant_id' => $i->variant->ulid, 'quantity' => $i->quantity, 'unit_price' => (string) $i->unit_price, 'discount' => (string) $i->discount,
-        ])->all();
+        return $order->items()->with('variant')->get()->map(fn (OrderItem $i) => $i->variant === null
+            ? ['variant_id' => null, 'name' => $i->name, 'quantity' => $i->quantity, 'unit_price' => (string) $i->unit_price, 'discount' => (string) $i->discount]
+            : ['variant_id' => $i->variant->ulid, 'quantity' => $i->quantity, 'unit_price' => (string) $i->unit_price, 'discount' => (string) $i->discount],
+        )->all();
     }
 
     private function refreshTotals(Order $order): void

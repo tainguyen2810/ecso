@@ -78,7 +78,7 @@ export interface Variant {
     cost_price?: string;
     weight_gram: number | null;
     status?: string;
-    product?: Ref;
+    product?: Ref & { image?: string | null };
     stock?: StockFigures;
 }
 

@@ -7,7 +7,7 @@ import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { formatDateTime, formatMoney } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
-import { printInvoice } from './invoice';
+import PrintDialog from './PrintDialog.vue';
 import { marketplaceNames, paymentStatus } from './labels';
 import type { OrderDetail } from '@/shared/types';
 
@@ -16,6 +16,7 @@ const props = defineProps<{ id: string }>();
 const tenant = useTenantStore();
 
 const order = ref<OrderDetail | null>(null);
+const printOpen = ref(false);
 const error = ref<string | null>(null);
 
 onMounted(async () => {
@@ -29,6 +30,7 @@ onMounted(async () => {
 </script>
 
 <template>
+    <PrintDialog v-if="order" v-model:open="printOpen" :orders="[order]" />
     <div class="border-l-2 border-primary bg-slate-50 px-4 py-4" data-testid="order-quick-view">
         <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
         <div v-else-if="!order" class="space-y-2"><Skeleton class="h-20" /><Skeleton class="h-24" /></div>
@@ -55,7 +57,7 @@ onMounted(async () => {
                 <div class="flex flex-row flex-wrap gap-2 md:flex-col">
                     <RouterLink :to="`/orders/${order.id}`"><Button size="sm" class="w-full"><ExternalLink /> Xem chi tiết</Button></RouterLink>
                     <RouterLink v-if="order.editable && tenant.can('orders.create')" :to="`/orders/${order.id}/edit`"><Button size="sm" variant="outline" class="w-full"><Pencil /> Sửa đơn</Button></RouterLink>
-                    <Button v-if="order.source === 'manual'" size="sm" variant="outline" @click="printInvoice(order, tenant.current?.name ?? '')"><ReceiptText /> In hóa đơn</Button>
+                    <Button v-if="order.source === 'manual'" size="sm" variant="outline" @click="printOpen = true"><ReceiptText /> In đơn hàng</Button>
                 </div>
             </div>
 
