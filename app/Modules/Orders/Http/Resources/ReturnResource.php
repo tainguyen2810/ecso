@@ -30,7 +30,7 @@ class ReturnResource extends JsonResource
                 'status' => $this->order->status,
                 'marketplace' => $this->order->marketplace,
                 // Buyer shown in the returns list: the customer record, else the name on the order.
-                'customer' => $this->order->relationLoaded('customer') ? ($this->order->customer?->name ?? $this->order->buyer_name) : null,
+                'customer' => $this->order->relationLoaded('customer') ? ($this->order->customer->name ?? $this->order->buyer_name) : null,
             ]),
             'warehouse' => $this->whenLoaded('warehouse', fn () => $this->warehouse ? ['id' => $this->warehouse->ulid, 'code' => $this->warehouse->code, 'name' => $this->warehouse->name] : null),
             'lines' => $this->whenLoaded('lines', fn () => $this->lines->map(fn (OrderReturnLine $l) => [
