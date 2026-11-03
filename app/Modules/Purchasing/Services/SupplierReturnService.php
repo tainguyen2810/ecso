@@ -83,7 +83,7 @@ class SupplierReturnService
             );
 
             if ($po) {
-                $po->forceFill(['returned_value' => bcadd((string) $po->returned_value, $return->total, 2)])->save();
+                $po->forceFill(['returned_value' => bcadd((string) $po->returned_value, (string) $return->total, 2)])->save();
             }
             $this->audit->record('purchase.returned', $return, ['number' => $return->number, 'total' => $return->total]);
 

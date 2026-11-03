@@ -114,6 +114,7 @@ class PurchaseOrderController extends Controller
             'place' => $purchases->place($purchaseOrder),
             'close' => $purchases->close($purchaseOrder, $reason),
             'cancel' => $purchases->cancel($purchaseOrder, $reason),
+            default => abort(404),
         };
 
         return new PurchaseOrderResource($po->fresh(self::DETAIL));

@@ -70,11 +70,7 @@ class PurchaseService
             if (isset($data['warehouse'])) {
                 $po->warehouse_id = $data['warehouse']->id;
             }
-            foreach (['expected_at', 'note'] as $field) {
-                if (array_key_exists($field, $data)) {
-                    $po->{$field} = $data[$field];
-                }
-            }
+            $po->fill(array_intersect_key($data, array_flip(['expected_at', 'note'])));
             $po->save();
             if (isset($data['lines'])) {
                 $this->replaceLines($po, $data['lines']);
