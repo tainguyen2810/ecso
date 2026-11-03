@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { Search, Undo2 } from 'lucide-vue-next';
+import { Plus, Search, Undo2 } from 'lucide-vue-next';
+import Button from '@/shared/ui/Button.vue';
+import Dialog from '@/shared/ui/Dialog.vue';
 import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
@@ -15,7 +17,10 @@ import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { cn, formatDateTime, formatMoney } from '@/shared/lib/utils';
 import { marketplaceNames, returnStatus, returnTypes } from '../orders/labels';
-import type { OrderReturnData } from '@/shared/types';
+import type { OrderReturnData, OrderSummary } from '@/shared/types';
+import { useTenantStore } from '@/shared/stores/tenant';
+
+const tenant = useTenantStore();
 
 const rows = ref<OrderReturnData[]>([]);
 const meta = ref({ current_page: 1, last_page: 1, total: 0 });
@@ -48,10 +53,33 @@ watch(q, () => {
     timer = setTimeout(() => ((page.value = 1), load()), 300);
 });
 watch([status, type], () => ((page.value = 1), load()));
+
+// "Tạo đơn trả hàng": pick a delivered or completed order, then the return form opens on that order.
+const pickOpen = ref(false);
+const pickQ = ref('');
+const pickRows = ref<OrderSummary[]>([]);
+const pickLoading = ref(false);
+async function loadPick() {
+    pickLoading.value = true;
+    try {
+        const { data } = await api.get('/orders', { params: { tab: 'done', q: pickQ.value || undefined, per_page: 20 } });
+        pickRows.value = data.data;
+    } finally {
+        pickLoading.value = false;
+    }
+}
+let pickTimer: ReturnType<typeof setTimeout> | undefined;
+watch(pickQ, () => {
+    clearTimeout(pickTimer);
+    pickTimer = setTimeout(loadPick, 300);
+});
+watch(pickOpen, (v) => v && loadPick());
 </script>
 
 <template>
-    <PageHeader title="Danh sách đơn trả hàng" description="Hàng hoàn từ khách, đơn hủy sau khi gửi, giao thất bại. Kho chỉ được cộng lại sau khi kiểm hàng, theo số lượng còn bán được." />
+    <PageHeader title="Danh sách đơn trả hàng" description="Hàng hoàn từ khách, đơn hủy sau khi gửi, giao thất bại. Kho chỉ được cộng lại sau khi kiểm hàng, theo số lượng còn bán được.">
+        <Button v-if="tenant.can('returns.inspect')" data-testid="new-return" @click="pickOpen = true"><Plus /> Tạo đơn trả hàng</Button>
+    </PageHeader>
     <Card>
         <div class="border-b px-3"><Tabs v-model="status" :tabs="tabs" variant="underline" /></div>
         <div class="space-y-3 border-b p-4">
@@ -113,4 +141,29 @@ watch([status, type], () => ((page.value = 1), load()));
         </div>
         <Pagination :page="meta.current_page" :last-page="meta.last_page" :total="meta.total" @go="(p) => ((page = p), load())" />
     </Card>
+
+    <Dialog v-model:open="pickOpen" title="Chọn đơn hàng để trả" description="Đơn đã giao hoặc hoàn tất." size="xl">
+        <div class="relative mb-3">
+            <Search class="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+            <Input v-model="pickQ" class="pl-8" placeholder="Tìm kiếm theo mã đơn hàng, tên, SĐT khách hàng" data-testid="return-order-search" />
+        </div>
+        <div class="overflow-x-auto rounded-md border">
+            <table class="w-full text-sm" data-testid="return-order-pick">
+                <thead class="whitespace-nowrap border-b bg-slate-50 text-left text-xs font-semibold text-foreground/80">
+                    <tr><th class="px-3 py-2.5">Mã đơn hàng</th><th class="px-3 py-2.5">Ngày tạo</th><th class="px-3 py-2.5">Nhân viên</th><th class="px-3 py-2.5">Khách hàng</th><th class="px-3 py-2.5 text-right">Tổng tiền</th><th class="px-3 py-2.5 text-center">Thao tác</th></tr>
+                </thead>
+                <tbody class="divide-y">
+                    <tr v-for="o in pickRows" :key="o.id" class="hover:bg-blue-50/40">
+                        <td class="px-3 py-2.5"><span class="inline-flex items-center gap-1.5"><MarketplaceLogo :marketplace="o.marketplace" :name="marketplaceNames[o.marketplace]" size="sm" />{{ o.external_order_id }}</span></td>
+                        <td class="whitespace-nowrap px-3 py-2.5 tabular-nums">{{ formatDateTime(o.placed_at) }}</td>
+                        <td class="px-3 py-2.5 text-muted-foreground">{{ o.assignee?.name ?? '—' }}</td>
+                        <td class="max-w-48 truncate px-3 py-2.5">{{ o.customer?.name ?? o.buyer_name ?? 'Khách lẻ' }}</td>
+                        <td class="px-3 py-2.5 text-right tabular-nums">{{ formatMoney(o.total) }}</td>
+                        <td class="px-3 py-2.5 text-center"><RouterLink :to="{ path: `/orders/${o.id}`, query: { return: '1' } }" class="font-medium text-primary hover:underline">Đổi trả</RouterLink></td>
+                    </tr>
+                    <tr v-if="!pickRows.length"><td colspan="6" class="px-3 py-8 text-center text-muted-foreground">{{ pickLoading ? 'Đang tải…' : 'Không có đơn đã giao hoặc hoàn tất khớp tìm kiếm.' }}</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </Dialog>
 </template>

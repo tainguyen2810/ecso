@@ -55,6 +55,8 @@ async function load() {
 }
 onMounted(async () => {
     await load();
+    // From "Tạo đơn trả hàng" on the returns list: open the return form straight away.
+    if (route.query.return === '1' && order.value && tenant.can('returns.inspect')) openReturn();
     api.get('/orders/assignees').then(({ data }) => (assignees.value = data.data)).catch(() => {});
     api.get('/orders/tags').then(({ data }) => (tagSuggestions.value = data.data)).catch(() => {});
 });

@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { AlertTriangle, Check, CirclePlus, Contact, PackageCheck, PackageOpen, Repeat, Search, Store, Trash2, Truck, UserRound, X } from 'lucide-vue-next';
+import { AlertTriangle, Check, CirclePlus, Contact, PackageCheck, PackageOpen, Pencil, Repeat, Search, Store, Trash2, Truck, UserPlus, UserRound, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
 import TagInput from '../../components/TagInput.vue';
 import Alert from '@/shared/ui/Alert.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
+import Dialog from '@/shared/ui/Dialog.vue';
 import FormField from '@/shared/ui/FormField.vue';
 import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
@@ -229,12 +230,27 @@ function focusSku() {
 }
 
 /** "Thêm mới khách hàng" from the search box: what was typed becomes the phone or the name. */
+const customerDialog = ref(false);
 function startNewCustomer() {
     const q = customerQuery.value.trim();
     newCustomer.enabled = true;
+    customerDialog.value = true;
     if (q && /^[\d\s+.]+$/.test(q)) newCustomer.phone = q;
     else if (q) newCustomer.name = q;
     customerQuery.value = '';
+}
+// Closing the dialog (×, Esc) without a name drops the new customer.
+watch(customerDialog, (isOpen) => {
+    if (!isOpen && !newCustomer.name.trim()) cancelNewCustomer();
+});
+function cancelNewCustomer() {
+    Object.assign(newCustomer, { enabled: false, name: '', phone: '', address: '' });
+    customerDialog.value = false;
+}
+/** The new customer is created together with the order; the dialog only collects the details. */
+function saveNewCustomer() {
+    if (!newCustomer.name.trim()) return;
+    customerDialog.value = false;
 }
 
 function payFull() {
@@ -377,17 +393,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
                             </div>
                         </div>
                     </template>
-                    <div v-else class="grid gap-3 sm:grid-cols-2">
-                        <FormField label="Tên khách" for="nc-name" :error="error?.field('customer.name')"><Input id="nc-name" v-model="newCustomer.name" required data-testid="nc-name" /></FormField>
-                        <FormField label="Số điện thoại" for="nc-phone" :error="error?.field('phone') ?? error?.field('customer.phone')"><Input id="nc-phone" v-model="newCustomer.phone" inputmode="tel" data-testid="nc-phone" /></FormField>
-                        <FormField label="Địa chỉ" for="nc-address" class="sm:col-span-2"><Input id="nc-address" v-model="newCustomer.address" /></FormField>
-                        <Alert v-if="phoneMatch" :icon="UserRound" tone="amber" class="sm:col-span-2">
-                            <div class="flex flex-wrap items-center justify-between gap-2">
-                                <span>Số này đã có: <b>{{ phoneMatch.name }}</b> ({{ phoneMatch.code }})</span>
-                                <Button size="sm" variant="outline" @click="chooseCustomer(phoneMatch)">Dùng khách này</Button>
+                    <div v-else class="flex items-center justify-between rounded-lg border border-emerald-100 bg-emerald-50/70 px-3 py-2.5" data-testid="pending-customer">
+                        <div class="flex items-center gap-3 text-sm">
+                            <span class="grid size-9 place-items-center rounded-full bg-white text-emerald-500"><UserPlus class="size-5" /></span>
+                            <div>
+                                <p><span class="font-medium">{{ newCustomer.name || 'Khách mới' }}</span> <span class="rounded-full bg-emerald-100 px-1.5 text-[11px] text-emerald-700">Khách mới</span></p>
+                                <p class="text-xs text-muted-foreground">{{ newCustomer.phone }}<template v-if="newCustomer.address"> · {{ newCustomer.address }}</template> · tạo cùng đơn hàng</p>
                             </div>
-                        </Alert>
-                        <div class="sm:col-span-2"><Button size="sm" variant="ghost" @click="newCustomer.enabled = false">Hủy thêm khách</Button></div>
+                        </div>
+                        <div class="flex gap-1">
+                            <Button variant="ghost" size="icon" class="size-7" title="Sửa" @click="customerDialog = true"><Pencil /></Button>
+                            <Button variant="ghost" size="icon" class="size-7" title="Bỏ" @click="cancelNewCustomer"><X /></Button>
+                        </div>
                     </div>
                 </div>
             </Card>
@@ -535,4 +552,22 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
             </div>
         </Card>
     </form>
+
+    <Dialog v-model:open="customerDialog" title="Thêm mới khách hàng" description="Khách được lưu vào danh bạ khi tạo đơn." size="lg">
+        <form id="new-customer-form" class="grid gap-3 sm:grid-cols-2" @submit.prevent="saveNewCustomer">
+            <FormField label="Tên khách hàng *" for="nc-name" :error="error?.field('customer.name')"><Input id="nc-name" v-model="newCustomer.name" required data-testid="nc-name" /></FormField>
+            <FormField label="Số điện thoại" for="nc-phone" :error="error?.field('phone') ?? error?.field('customer.phone')"><Input id="nc-phone" v-model="newCustomer.phone" inputmode="tel" data-testid="nc-phone" /></FormField>
+            <FormField label="Địa chỉ" for="nc-address" class="sm:col-span-2"><Input id="nc-address" v-model="newCustomer.address" placeholder="Số nhà, tên đường, phường/xã, tỉnh/thành" /></FormField>
+            <Alert v-if="phoneMatch" :icon="UserRound" tone="amber" class="sm:col-span-2">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <span>Số này đã có: <b>{{ phoneMatch.name }}</b> ({{ phoneMatch.code }})</span>
+                    <Button size="sm" variant="outline" @click="(chooseCustomer(phoneMatch), (customerDialog = false))">Dùng khách này</Button>
+                </div>
+            </Alert>
+        </form>
+        <template #footer>
+            <Button variant="outline" @click="cancelNewCustomer">Thoát</Button>
+            <Button form="new-customer-form" type="submit" :disabled="!newCustomer.name.trim()" data-testid="nc-save">Thêm</Button>
+        </template>
+    </Dialog>
 </template>
