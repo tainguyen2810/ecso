@@ -1,3 +1,4 @@
+import { adjustmentReasons } from '../inventory/labels';
 import { paymentMethods, returnStatus, returnTypes } from '../orders/labels';
 
 export type ColumnType = 'text' | 'number' | 'money' | 'pct' | 'date' | 'datetime';
@@ -230,6 +231,57 @@ export const reports: Record<string, DetailReport> = {
             { key: 'shortfall', label: 'Thiếu', type: 'number', tone: () => 'danger' },
             { key: 'sold_30d', label: 'Bán 30 ngày', type: 'number' },
             { key: 'days_left', label: 'Đủ bán', value: (r) => (r.days_left === null ? '—' : `${r.days_left} ngày`) },
+        ],
+    },
+    'supplier-payments': {
+        key: 'supplier-payments',
+        title: 'Thanh toán nhập hàng',
+        description: 'Tiền đã trả nhà cung cấp trong kỳ (không tính phiếu chi đã hủy).',
+        endpoint: '/reports/supplier-payments',
+        permission: 'purchasing.view',
+        period: 'range',
+        tabs: { method: 'Theo phương thức', staff: 'Theo nhân viên', supplier: 'Theo nhà cung cấp', day: 'Theo ngày' },
+        empty: 'Chưa trả tiền nhà cung cấp nào trong kỳ.',
+        columns: (_d, by) => [
+            {
+                key: 'label',
+                label: { method: 'Phương thức', staff: 'Nhân viên', supplier: 'Nhà cung cấp', day: 'Ngày' }[by] ?? '',
+                value: (r) => (by === 'method' ? (paymentMethods[r.label] ?? r.label) : by === 'day' ? isoDay(r.label) : r.label),
+                link: (r) => (by === 'supplier' && r.id ? `/purchasing/suppliers/${r.id}` : null),
+            },
+            { key: 'entries', label: 'Số phiếu chi', type: 'number', total: true },
+            ...(by === 'supplier' ? [] : [{ key: 'suppliers', label: 'Số NCC', type: 'number' as const }]),
+            { key: 'paid', label: 'Đã trả', type: 'money', total: true },
+        ],
+    },
+    adjustments: {
+        key: 'adjustments',
+        title: 'Kiểm kê và điều chỉnh kho',
+        description: 'Phiếu kiểm kê, xuất hủy, điều chỉnh đã duyệt trong kỳ: số lượng tăng, giảm và giá trị chênh lệch.',
+        endpoint: '/reports/adjustments',
+        permission: 'inventory.view',
+        period: 'range',
+        warehouse: true,
+        tabs: { document: 'Theo phiếu', product: 'Theo sản phẩm', reason: 'Theo lý do' },
+        empty: 'Không có phiếu điều chỉnh nào được duyệt trong kỳ.',
+        note: 'Giá trị tính theo giá vốn bình quân hiện tại; số âm là hàng giảm (thiếu, hỏng, mất).',
+        columns: (_d, by) => [
+            {
+                key: 'label',
+                label: { document: 'Phiếu', product: 'Sản phẩm', reason: 'Lý do' }[by] ?? '',
+                value: (r) => (by === 'reason' ? (adjustmentReasons[r.label] ?? r.label) : r.label),
+                sub: (r) => (by === 'document' ? (adjustmentReasons[r.sku] ?? r.sku) : by === 'product' ? r.sku : null),
+                link: (r) => (by === 'document' ? `/inventory/adjustments/${r.id}` : by === 'product' ? `/inventory/sku/${r.id}` : null),
+            },
+            ...(by === 'document'
+                ? [
+                      { key: 'decided_at', label: 'Ngày duyệt', type: 'datetime' as const },
+                      { key: 'warehouse', label: 'Kho' },
+                  ]
+                : [{ key: 'documents', label: 'Số phiếu', type: 'number' as const, total: true }]),
+            { key: 'increase', label: 'SL tăng', type: 'number', total: true },
+            { key: 'decrease', label: 'SL giảm', type: 'number', total: true, tone: (r) => (r.decrease ? 'danger' : undefined) },
+            { key: 'value', label: 'Giá trị chênh lệch', type: 'money', total: true, tone: negative('value') },
         ],
     },
     'over-stock': {

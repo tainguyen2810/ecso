@@ -18,6 +18,8 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::get('reports/payments', [ReportsController::class, 'payments']);
     Route::get('reports/purchases', [ReportsController::class, 'purchases']);
     Route::get('reports/customers', [ReportsController::class, 'customers']);
+    Route::get('reports/supplier-payments', [ReportsController::class, 'supplierPayments']);
+    Route::get('reports/adjustments', [ReportsController::class, 'adjustments']);
     Route::get('reports/stock-on-hand', [ReportsController::class, 'stockOnHand']);
     Route::get('reports/low-stock', [ReportsController::class, 'lowStock']);
     Route::get('reports/over-stock', [ReportsController::class, 'overStock']);

@@ -60,6 +60,7 @@ test('reports: sales and profit, stock ledger, cashbook', async ({ page }) => {
 });
 
 test('report centre: every group opens its detail reports on the same period', async ({ page }) => {
+    test.setTimeout(120_000);
     const dir = 'docs/screenshots/reports-centre';
     const snap = async (name: string) => {
         await page.evaluate(() => document.querySelectorAll<HTMLElement>('[role="status"]').forEach((t) => t.click()));
@@ -96,6 +97,8 @@ test('report centre: every group opens its detail reports on the same period', a
         ['stock-on-hand', '05-stock-on-hand', ''],
         ['low-stock', '06-low-stock', ''],
         ['over-stock', '06b-over-stock', ''],
+        ['adjustments', '06c-adjustments', '?by=reason'],
+        ['supplier-payments', '07b-supplier-payments', '?by=supplier'],
         ['purchases', '07-purchases-by-supplier', '?by=supplier'],
         ['payables', '08-supplier-debts', ''],
         ['payments', '09-payments-by-method', '?by=method'],

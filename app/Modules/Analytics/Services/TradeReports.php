@@ -155,6 +155,39 @@ class TradeReports
     }
 
     /**
+     * Payments made to suppliers (voided ones excluded) by method, staff, supplier or day.
+     *
+     * @return array<string, mixed>
+     */
+    public function supplierPayments(CarbonImmutable $from, CarbonImmutable $to, string $by = 'method'): array
+    {
+        $base = DB::table('supplier_payments as sp')
+            ->where('sp.tenant_id', $this->tenant())
+            ->whereNull('sp.voided_at')
+            ->whereBetween('sp.paid_at', [$from, $to]);
+        $metrics = 'COUNT(*) as entries, SUM(sp.amount) as paid, COUNT(DISTINCT sp.supplier_id) as suppliers';
+
+        $rows = match ($by) {
+            'staff' => (clone $base)->leftJoin('users as u', 'u.id', '=', 'sp.created_by')
+                ->groupBy('sp.created_by', 'u.name')->selectRaw("COALESCE(u.name, 'Không rõ') as label, NULL as id, {$metrics}")->orderByDesc('paid')->get(),
+            'supplier' => (clone $base)->join('suppliers as s', 's.id', '=', 'sp.supplier_id')
+                ->groupBy('sp.supplier_id', 's.ulid', 's.name')->selectRaw("s.name as label, s.ulid as id, {$metrics}")->orderByDesc('paid')->get(),
+            'day' => (clone $base)->groupByRaw('DATE(sp.paid_at)')->selectRaw("DATE(sp.paid_at) as label, NULL as id, {$metrics}")->orderBy('label')->get(),
+            default => (clone $base)->groupBy('sp.method')->selectRaw("sp.method as label, NULL as id, {$metrics}")->orderByDesc('paid')->get(),
+        };
+
+        $out = $rows->map(fn ($r) => [
+            'label' => (string) $r->label,
+            'id' => $r->id,
+            'entries' => (int) $r->entries,
+            'suppliers' => (int) $r->suppliers,
+            'paid' => round((float) $r->paid, 2),
+        ])->all();
+
+        return ['range' => $this->range($from, $to), 'by' => $by, 'rows' => $out, 'totals' => $this->sum($out, ['entries', 'paid'])];
+    }
+
+    /**
      * Goods received into stock in the range (opening balances left out), by supplier, SKU or day, with goods
      * returned to suppliers alongside. Receipts not tied to a purchase order are grouped as "Nhập lẻ".
      *
