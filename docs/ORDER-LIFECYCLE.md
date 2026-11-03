@@ -124,3 +124,26 @@ RETURN_REQUESTED → APPROVED → IN_TRANSIT_BACK → RECEIVED → INSPECTED →
 - **PII**: `buyer_name`, `shipping_address` mã hóa (encrypted cast); điện thoại chỉ lưu dạng che.
 - **Phiếu đóng gói PDF**: server trả dữ liệu + đánh dấu đã in; PDF tạo ở trình duyệt bằng pdfmake (font Roboto hỗ trợ tiếng Việt). Lý do: môi trường build không tải được dompdf; tránh phụ thuộc PHP nặng.
 - **Sàn giả lập (FAKE)**: bảng `fake_marketplace_*`, webhook ký HMAC-SHA256(timestamp.body), lệch tối đa 300 giây. Chỉ bật khi `FAKE_MARKETPLACE_ENABLED=true`; `ecso:check-env --production` báo lỗi nếu bật trên production.
+
+## 9. Đơn kênh bán riêng (Phase 9)
+
+Đơn tạo trong ECSO (`marketplace = manual`) dùng chung bảng, trạng thái và lõi tồn kho với đơn sàn, chỉ khác ở chỗ ECSO là nơi quyết định trạng thái:
+
+| Thao tác | Từ | Đến | Tồn kho |
+|---|---|---|---|
+| Tạo đơn | — | Chờ xác nhận (hoặc Đã xác nhận / Hoàn tất ngay) | Giữ hàng; thiếu thì giữ phần có, phần thiếu tự giữ khi nhập hàng |
+| confirm | Chờ xác nhận | Chờ đóng gói | — |
+| pack | Chờ đóng gói | Chờ bàn giao | — |
+| handover (đơn vị VC, mã vận đơn) | Chờ đóng gói, Chờ bàn giao | Đã bàn giao | **Trừ kho** |
+| deliver | Đã bàn giao, Đang giao | Đã giao | — |
+| complete | Chờ xác nhận … Chờ bàn giao, Đã giao | Hoàn tất | Trừ kho nếu chưa trừ |
+| fail_delivery | Đã bàn giao, Đang giao | Giao thất bại | Tự mở phiếu hàng hoàn |
+| cancel (lý do) | Các trạng thái chưa bàn giao | Đã hủy | Nhả hàng giữ |
+
+Khác đơn sàn: **không bao giờ xuất kho khi còn thiếu hàng**. Trước khi chuyển sang trạng thái đã xuất, hệ thống bù phần thiếu bằng hàng đang có; vẫn thiếu thì từ chối (`stock`). Bán tại quầy "Hoàn tất ngay" vượt tồn bị từ chối và không để lại đơn nào.
+
+Sửa đơn: được sửa dòng hàng, khách, giao hàng, phí, giảm giá khi đơn còn Chờ xác nhận / Chờ đóng gói. Sửa dòng hàng thì nhả toàn bộ hàng giữ rồi giữ lại theo dòng mới.
+
+Thanh toán: thu nhiều lần (tiền mặt, chuyển khoản, thẻ, ví, COD…), không thu vượt số còn phải thu; hoàn tiền không vượt số khách đã trả; phiếu nhập nhầm thì hủy. Hủy đơn đã thu tiền sẽ gắn cảnh báo "cần hoàn tiền". Công nợ khách = tổng (tổng đơn − đã thu) của các đơn chưa hủy, chưa hoàn.
+
+Trả hàng của đơn kênh riêng dùng đúng luồng ở mục 5.

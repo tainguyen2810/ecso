@@ -39,6 +39,11 @@ use App\Modules\Orders\Policies\ReturnPolicy;
 use App\Modules\Platform\Console\CheckEnvCommand;
 use App\Modules\Platform\Console\InstallCommand;
 use App\Modules\Platform\Console\MonitorCommand;
+use App\Modules\Sales\Listeners\CreateDefaultSalesChannel;
+use App\Modules\Sales\Models\Customer;
+use App\Modules\Sales\Models\SalesChannel;
+use App\Modules\Sales\Policies\CustomerPolicy;
+use App\Modules\Sales\Policies\SalesChannelPolicy;
 use App\Modules\Tenancy\Events\TenantCreated;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Models\TenantInvitation;
@@ -58,7 +63,7 @@ use Illuminate\Support\ServiceProvider;
 class ModuleServiceProvider extends ServiceProvider
 {
     /** Modules whose Routes/api.php is mounted under /api/v1. */
-    private const API_MODULES = ['Identity', 'Tenancy', 'Billing', 'Audit', 'Admin', 'Catalog', 'Inventory', 'Marketplace', 'Orders', 'Analytics'];
+    private const API_MODULES = ['Identity', 'Tenancy', 'Billing', 'Audit', 'Admin', 'Catalog', 'Inventory', 'Marketplace', 'Orders', 'Analytics', 'Sales'];
 
     public function register(): void
     {
@@ -83,8 +88,11 @@ class ModuleServiceProvider extends ServiceProvider
         Gate::policy(ListingVariant::class, MarketplacePolicy::class);
         Gate::policy(Order::class, OrderPolicy::class);
         Gate::policy(OrderReturn::class, ReturnPolicy::class);
+        Gate::policy(Customer::class, CustomerPolicy::class);
+        Gate::policy(SalesChannel::class, SalesChannelPolicy::class);
 
         Event::listen(TenantCreated::class, CreateDefaultWarehouse::class);
+        Event::listen(TenantCreated::class, CreateDefaultSalesChannel::class);
         Event::listen(OrderImported::class, CountOrderUsage::class);
         Event::listen(WebhookReceived::class, QueueWebhookProcessing::class);
         // Order shortages are filled first, then the marketplaces get the resulting published stock.

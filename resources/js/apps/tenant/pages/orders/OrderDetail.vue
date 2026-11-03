@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import { AlertTriangle, ArrowLeft, Link2, Printer, RefreshCw, Undo2 } from 'lucide-vue-next';
+import { AlertTriangle, ArrowLeft, Ban, Banknote, Link2, Pencil, Printer, ReceiptText, RefreshCw, Undo2 } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
@@ -16,7 +16,8 @@ import { api, ApiError } from '@/shared/lib/api';
 import { formatDateTime, formatMoney } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
-import { actionLabels, capabilityLabels, deadlineLabel, historySource, mappingStatus, marketplaceNames, orderStatus, returnStatus, returnTypes } from './labels';
+import { actionLabels, capabilityLabels, deadlineLabel, historySource, manualActionOrder, mappingStatus, marketplaceNames, orderStatus, paymentMethods, paymentStatus, returnStatus, returnTypes } from './labels';
+import { printInvoice } from './invoice';
 import { downloadPackingSlips } from './packingSlip';
 import type { OrderDetail, Ref } from '@/shared/types';
 
@@ -54,19 +55,74 @@ onMounted(async () => {
     api.get('/orders/assignees').then(({ data }) => (assignees.value = data.data)).catch(() => {});
 });
 
-const actionList = computed(() => Object.entries(order.value?.actions ?? {}).filter(([, a]) => a.allowed));
+const isManual = computed(() => order.value?.source === 'manual');
+const actionList = computed(() => {
+    const entries = Object.entries(order.value?.actions ?? {}).filter(([, a]) => a.allowed);
+    return isManual.value ? entries.sort(([a], [b]) => manualActionOrder.indexOf(a) - manualActionOrder.indexOf(b)) : entries;
+});
+
+const handoverOpen = ref(false);
+const handover = ref({ carrier: '', tracking_number: '' });
+const payOpen = ref(false);
+const payForm = ref({ kind: 'payment', method: 'cash', amount: '' as string | number, reference: '', note: '' });
+const payError = ref<ApiError | null>(null);
+
+function startAction(action: string) {
+    if (action === 'cancel') cancelOpen.value = true;
+    else if (action === 'handover' && isManual.value) {
+        handover.value = { carrier: order.value!.carrier ?? '', tracking_number: order.value!.tracking_number ?? '' };
+        handoverOpen.value = true;
+    } else act(action);
+}
+
+function openPay(kind: 'payment' | 'refund') {
+    const o = order.value!;
+    const refundable = Number(o.paid_amount ?? 0) - Number(o.refunded_amount ?? 0);
+    payError.value = null;
+    payForm.value = { kind, method: o.is_cod && kind === 'payment' ? 'cod' : 'cash', amount: kind === 'payment' ? Number(o.balance_due ?? 0) : refundable, reference: '', note: '' };
+    payOpen.value = true;
+}
+
+async function pay() {
+    busy.value = 'pay';
+    payError.value = null;
+    try {
+        const f = payForm.value;
+        await api.post(`/orders/${order.value!.id}/payments`, { ...f, amount: Number(f.amount), reference: f.reference || null, note: f.note || null });
+        toast.success(f.kind === 'refund' ? 'Đã ghi nhận hoàn tiền.' : 'Đã ghi nhận thanh toán.');
+        payOpen.value = false;
+        await load();
+    } catch (e) {
+        payError.value = e as ApiError;
+    } finally {
+        busy.value = null;
+    }
+}
+
+async function voidPayment(id: string) {
+    const reason = window.prompt('Lý do hủy phiếu thu/chi này?');
+    if (!reason) return;
+    try {
+        await api.post(`/payments/${id}/void`, { reason });
+        toast.success('Đã hủy phiếu.');
+        await load();
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    }
+}
 const totalQty = computed(() => order.value?.items.reduce((s, i) => s + i.quantity, 0) ?? 0);
 
 async function act(action: string, params: Record<string, unknown> = {}) {
     busy.value = action;
     try {
-        await api.post(`/orders/${order.value!.id}/actions/${action}`, params);
-        toast.success(`${actionLabels[action]}: đã gửi lên sàn và cập nhật đơn.`);
+        await api.post(isManual.value ? `/sales-orders/${order.value!.id}/actions/${action}` : `/orders/${order.value!.id}/actions/${action}`, params);
+        toast.success(isManual.value ? `${actionLabels[action]}: đã cập nhật đơn.` : `${actionLabels[action]}: đã gửi lên sàn và cập nhật đơn.`);
         cancelOpen.value = false;
+        handoverOpen.value = false;
         await load();
     } catch (e) {
         const err = e as ApiError;
-        toast.error(err.body.code === 'UNSUPPORTED_CAPABILITY' ? `Sàn chưa hỗ trợ thao tác này qua API (${err.message}). Hãy thực hiện trên trang quản lý của sàn.` : err.message);
+        toast.error(err.body.code === 'UNSUPPORTED_CAPABILITY' ? `Sàn chưa hỗ trợ thao tác này qua API (${err.message}). Hãy thực hiện trên trang quản lý của sàn.` : (err.field('stock') ?? err.message));
     } finally {
         busy.value = null;
     }
@@ -155,9 +211,15 @@ async function createReturn() {
     <ErrorState v-else-if="loadError" :message="loadError" @retry="load" />
     <template v-else-if="order">
         <RouterLink to="/orders" class="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft class="size-4" /> Đơn hàng</RouterLink>
-        <PageHeader :title="`Đơn ${order.external_order_id}`" :description="`${marketplaceNames[order.marketplace] ?? order.marketplace} · ${order.shop?.name ?? ''} · đặt lúc ${formatDateTime(order.placed_at)}`">
+        <PageHeader
+            :title="`Đơn ${order.external_order_id}`"
+            :description="isManual ? `${order.channel?.name ?? 'Kênh riêng'} · tạo lúc ${formatDateTime(order.placed_at)}${order.created_by ? ' bởi ' + order.created_by : ''}` : `${marketplaceNames[order.marketplace] ?? order.marketplace} · ${order.shop?.name ?? ''} · đặt lúc ${formatDateTime(order.placed_at)}`"
+        >
             <Badge :tone="orderStatus[order.status]?.tone" data-testid="order-status">{{ orderStatus[order.status]?.label ?? order.status }}</Badge>
-            <Button variant="outline" :loading="busy === 'sync'" @click="sync"><RefreshCw /> Đồng bộ từ sàn</Button>
+            <Badge v-if="isManual && order.payment_status" :tone="paymentStatus[order.payment_status]?.tone" data-testid="payment-status">{{ paymentStatus[order.payment_status]?.label }}</Badge>
+            <Button v-if="!isManual" variant="outline" :loading="busy === 'sync'" @click="sync"><RefreshCw /> Đồng bộ từ sàn</Button>
+            <Button v-if="isManual && order.editable && tenant.can('orders.create')" variant="outline" data-testid="edit-order" @click="$router.push(`/orders/${order.id}/edit`)"><Pencil /> Sửa đơn</Button>
+            <Button v-if="isManual" variant="outline" data-testid="print-invoice" @click="printInvoice(order, tenant.current?.name ?? '')"><ReceiptText /> In hóa đơn</Button>
             <Button v-if="tenant.can('orders.print')" variant="outline" :loading="busy === 'print'" @click="print"><Printer /> In phiếu</Button>
         </PageHeader>
 
@@ -180,7 +242,7 @@ async function createReturn() {
                     <table class="w-full text-sm" data-testid="order-items">
                         <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
                             <tr>
-                                <th class="px-4 py-2 font-medium">Sản phẩm trên sàn</th>
+                                <th class="px-4 py-2 font-medium">{{ isManual ? 'Sản phẩm' : 'Sản phẩm trên sàn' }}</th>
                                 <th class="px-4 py-2 font-medium">SKU nội bộ</th>
                                 <th class="px-4 py-2 text-right font-medium">SL</th>
                                 <th class="px-4 py-2 text-right font-medium">Đơn giá</th>
@@ -191,7 +253,7 @@ async function createReturn() {
                             <tr v-for="i in order.items" :key="i.id">
                                 <td class="px-4 py-3">
                                     <div class="font-medium">{{ i.name }}</div>
-                                    <div class="text-xs text-muted-foreground">{{ i.variant_name }} · SKU sàn: {{ i.seller_sku ?? '—' }}</div>
+                                    <div class="text-xs text-muted-foreground">{{ i.variant_name }}<template v-if="!isManual"> · SKU sàn: {{ i.seller_sku ?? '—' }}</template><template v-else-if="Number(i.discount) > 0"> · giảm {{ formatMoney(i.discount) }}</template></div>
                                 </td>
                                 <td class="px-4 py-3">
                                     <RouterLink v-if="i.variant" :to="`/inventory/sku/${i.variant.id}`" class="font-mono text-xs hover:underline">{{ i.variant.sku }}</RouterLink>
@@ -222,7 +284,7 @@ async function createReturn() {
                         <dt class="text-muted-foreground">Giảm giá</dt><dd class="text-right tabular-nums">−{{ formatMoney(order.discount) }}</dd>
                         <dt class="font-medium">Khách trả</dt><dd class="text-right font-semibold tabular-nums">{{ formatMoney(order.total) }}</dd>
                     </dl>
-                    <p class="border-t px-5 py-2 text-xs text-muted-foreground">Số tiền khách trả chưa phải tiền thực nhận: phí sàn, phí thanh toán và đối soát sẽ được tính ở module Tài chính.</p>
+                    <p v-if="!isManual" class="border-t px-5 py-2 text-xs text-muted-foreground">Số tiền khách trả chưa phải tiền thực nhận: phí sàn, phí thanh toán và đối soát sẽ được tính ở module Tài chính.</p>
                 </Card>
 
                 <Card title="Lịch sử trạng thái">
@@ -265,12 +327,12 @@ async function createReturn() {
                         <div v-for="[action, a] in actionList" :key="action" class="flex items-center justify-between gap-2">
                             <Button
                                 v-if="tenant.can('orders.update')"
-                                :variant="action === 'cancel' ? 'outline' : 'default'"
+                                :variant="action === 'cancel' || action === 'fail_delivery' || (isManual && action !== actionList[0]?.[0]) ? 'outline' : 'default'"
                                 class="flex-1"
                                 :disabled="a.capability !== 'supported'"
                                 :loading="busy === action"
                                 :data-testid="`action-${action}`"
-                                @click="action === 'cancel' ? (cancelOpen = true) : act(action)"
+                                @click="startAction(action)"
                             >
                                 {{ actionLabels[action] }}
                             </Button>
@@ -294,17 +356,45 @@ async function createReturn() {
                     </div>
                 </Card>
 
+                <Card v-if="isManual" title="Thanh toán" data-testid="payments-card">
+                    <template v-if="tenant.can('orders.payment')" #actions>
+                        <div class="flex gap-1">
+                            <Button v-if="Number(order.balance_due ?? 0) > 0" size="sm" data-testid="add-payment" @click="openPay('payment')"><Banknote /> Thu tiền</Button>
+                            <Button v-if="Number(order.paid_amount ?? 0) > Number(order.refunded_amount ?? 0)" size="sm" variant="outline" data-testid="add-refund" @click="openPay('refund')">Hoàn tiền</Button>
+                        </div>
+                    </template>
+                    <dl class="grid grid-cols-2 gap-y-1 px-5 py-3 text-sm">
+                        <dt class="text-muted-foreground">Đã thu</dt><dd class="text-right tabular-nums text-success">{{ formatMoney(order.paid_amount) }}</dd>
+                        <template v-if="Number(order.refunded_amount) > 0"><dt class="text-muted-foreground">Đã hoàn</dt><dd class="text-right tabular-nums">{{ formatMoney(order.refunded_amount) }}</dd></template>
+                        <dt class="font-medium">Còn phải thu</dt><dd class="text-right font-semibold tabular-nums" :class="Number(order.balance_due ?? 0) > 0 && 'text-destructive'" data-testid="balance-due">{{ order.balance_due === null ? '—' : formatMoney(order.balance_due) }}</dd>
+                    </dl>
+                    <ul v-if="order.payments.length" class="divide-y border-t text-sm">
+                        <li v-for="p in order.payments" :key="p.id" class="flex items-center justify-between gap-2 px-5 py-2.5">
+                            <div :class="p.voided_at && 'opacity-50 line-through'">
+                                <div>{{ p.kind === 'refund' ? 'Hoàn' : 'Thu' }} · {{ paymentMethods[p.method] }}<span v-if="p.reference" class="ml-1 font-mono text-xs">{{ p.reference }}</span></div>
+                                <div class="text-xs text-muted-foreground">{{ formatDateTime(p.paid_at) }}<span v-if="p.created_by"> · {{ p.created_by }}</span><span v-if="p.void_reason"> · hủy: {{ p.void_reason }}</span></div>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <span class="tabular-nums" :class="p.kind === 'refund' ? 'text-destructive' : ''">{{ p.kind === 'refund' ? '−' : '' }}{{ formatMoney(p.amount) }}</span>
+                                <Button v-if="!p.voided_at && tenant.can('orders.payment')" variant="ghost" size="icon" class="size-7" title="Hủy phiếu (nhập nhầm)" @click="voidPayment(p.id)"><Ban class="size-3.5" /></Button>
+                            </div>
+                        </li>
+                    </ul>
+                </Card>
+
                 <Card title="Giao hàng">
                     <dl class="space-y-2 px-5 py-4 text-sm">
+                        <div v-if="order.customer"><dt class="text-xs text-muted-foreground">Khách hàng</dt><dd><RouterLink :to="`/customers/${order.customer.id}`" class="font-medium hover:underline">{{ order.customer.name }}</RouterLink> <span class="font-mono text-xs text-muted-foreground">{{ order.customer.code }}</span></dd></div>
                         <div><dt class="text-xs text-muted-foreground">Người nhận</dt><dd>{{ order.buyer_name ?? '—' }} <span class="text-muted-foreground">{{ order.buyer_phone }}</span></dd></div>
                         <div><dt class="text-xs text-muted-foreground">Địa chỉ</dt><dd>{{ order.shipping_address ?? '—' }}</dd></div>
                         <div><dt class="text-xs text-muted-foreground">Đơn vị vận chuyển · Mã vận đơn</dt><dd>{{ order.carrier ?? '—' }} · <span class="font-mono text-xs">{{ order.tracking_number ?? '—' }}</span></dd></div>
-                        <div><dt class="text-xs text-muted-foreground">Thanh toán</dt><dd>{{ order.is_cod ? 'Thu hộ (COD)' : (order.payment_method ?? 'Đã thanh toán') }}</dd></div>
+                        <div v-if="!isManual"><dt class="text-xs text-muted-foreground">Thanh toán</dt><dd>{{ order.is_cod ? 'Thu hộ (COD)' : (order.payment_method ?? 'Đã thanh toán') }}</dd></div>
+                        <div v-else-if="order.is_cod"><dt class="text-xs text-muted-foreground">Thanh toán</dt><dd>Thu hộ (COD) khi giao</dd></div>
                         <div><dt class="text-xs text-muted-foreground">Kho xuất</dt><dd>{{ order.warehouse ? `${order.warehouse.code} · ${order.warehouse.name}` : '—' }}</dd></div>
                         <div v-if="order.buyer_note"><dt class="text-xs text-muted-foreground">Ghi chú của khách</dt><dd class="italic">{{ order.buyer_note }}</dd></div>
                         <div v-if="order.cancel_reason"><dt class="text-xs text-muted-foreground">Lý do hủy</dt><dd>{{ order.cancel_reason }}</dd></div>
                     </dl>
-                    <p class="border-t px-5 py-2 text-xs text-muted-foreground">Số điện thoại chỉ lưu dạng che; tên và địa chỉ được mã hóa khi lưu.</p>
+                    <p class="border-t px-5 py-2 text-xs text-muted-foreground">{{ isManual ? 'Tên, số điện thoại và địa chỉ được mã hóa khi lưu.' : 'Số điện thoại chỉ lưu dạng che; tên và địa chỉ được mã hóa khi lưu.' }}</p>
                 </Card>
 
                 <Card title="Trả hàng / hoàn tiền">
@@ -325,11 +415,36 @@ async function createReturn() {
             </div>
         </div>
 
-        <Dialog v-model:open="cancelOpen" title="Hủy đơn" description="Yêu cầu hủy được gửi lên sàn. Hàng đang giữ sẽ được nhả khi sàn xác nhận hủy.">
+        <Dialog v-model:open="cancelOpen" title="Hủy đơn" :description="isManual ? 'Hàng đang giữ được nhả lại kho ngay. Nếu khách đã trả tiền, hãy ghi nhận hoàn tiền sau khi hủy.' : 'Yêu cầu hủy được gửi lên sàn. Hàng đang giữ sẽ được nhả khi sàn xác nhận hủy.'">
             <FormField label="Lý do"><Input v-model="cancelReason" placeholder="Hết hàng, khách yêu cầu…" /></FormField>
             <template #footer>
                 <Button variant="outline" @click="cancelOpen = false">Đóng</Button>
                 <Button variant="destructive" :loading="busy === 'cancel'" @click="act('cancel', { reason: cancelReason || null })">Hủy đơn</Button>
+            </template>
+        </Dialog>
+
+        <Dialog v-model:open="handoverOpen" title="Bàn giao vận chuyển" description="Hàng được trừ khỏi kho khi bàn giao. Kho phải đủ hàng.">
+            <div class="space-y-3">
+                <FormField label="Đơn vị vận chuyển"><Input v-model="handover.carrier" placeholder="GHN, GHTK, tự giao…" /></FormField>
+                <FormField label="Mã vận đơn"><Input v-model="handover.tracking_number" data-testid="tracking-input" /></FormField>
+            </div>
+            <template #footer>
+                <Button variant="outline" @click="handoverOpen = false">Đóng</Button>
+                <Button :loading="busy === 'handover'" data-testid="confirm-handover" @click="act('handover', { carrier: handover.carrier || null, tracking_number: handover.tracking_number || null })">Bàn giao</Button>
+            </template>
+        </Dialog>
+
+        <Dialog v-model:open="payOpen" :title="payForm.kind === 'refund' ? 'Hoàn tiền cho khách' : 'Thu tiền'">
+            <div class="space-y-3">
+                <FormField label="Hình thức"><Select v-model="payForm.method" :options="Object.entries(paymentMethods).map(([value, label]) => ({ value, label }))" /></FormField>
+                <FormField label="Số tiền" :error="payError?.field('amount')"><Input v-model="payForm.amount" type="number" min="1" data-testid="pay-amount-input" /></FormField>
+                <FormField label="Mã giao dịch (nếu có)"><Input v-model="payForm.reference" /></FormField>
+                <FormField label="Ghi chú"><Input v-model="payForm.note" /></FormField>
+                <p v-if="payError && !payError.field('amount')" class="text-sm text-destructive">{{ payError.message }}</p>
+            </div>
+            <template #footer>
+                <Button variant="outline" @click="payOpen = false">Đóng</Button>
+                <Button :loading="busy === 'pay'" data-testid="confirm-pay" @click="pay">Ghi nhận</Button>
             </template>
         </Dialog>
 

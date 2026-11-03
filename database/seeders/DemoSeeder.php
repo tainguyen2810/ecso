@@ -7,6 +7,7 @@ use App\Modules\Billing\Models\Plan;
 use App\Modules\Billing\Models\Subscription;
 use App\Modules\Catalog\Models\Brand;
 use App\Modules\Catalog\Models\Category;
+use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Catalog\Services\ProductService;
 use App\Modules\Identity\Models\User;
 use App\Modules\Inventory\Models\StockReceipt;
@@ -21,6 +22,10 @@ use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Orders\Services\OrderActions;
 use App\Modules\Orders\Services\ReturnService;
+use App\Modules\Sales\Models\SalesChannel;
+use App\Modules\Sales\Services\CustomerService;
+use App\Modules\Sales\Services\ManualOrderService;
+use App\Modules\Sales\Services\PaymentService;
 use App\Modules\Tenancy\Models\TenantUser;
 use App\Modules\Tenancy\Services\TenantService;
 use App\Modules\Tenancy\Support\TenantContext;
@@ -87,6 +92,53 @@ class DemoSeeder extends Seeder
         TenantContext::run($shop, fn () => $this->catalog($staff));
         Auth::setUser($owner);
         TenantContext::run($shop, fn () => $this->marketplace($owner, $staff));
+        Auth::setUser($owner);
+        TenantContext::run($shop, fn () => $this->sales());
+    }
+
+    /** Own sales channels, customers and manual orders in several states (Phase 9). */
+    private function sales(): void
+    {
+        $orders = app(ManualOrderService::class);
+        $payments = app(PaymentService::class);
+        $customers = app(CustomerService::class);
+
+        $pos = SalesChannel::query()->where('name', SalesChannel::DEFAULT_NAME)->firstOrFail();
+        $facebook = SalesChannel::query()->create(['name' => 'Fanpage Cửa hàng Mẫu', 'type' => 'facebook', 'is_active' => true]);
+        $zalo = SalesChannel::query()->create(['name' => 'Zalo OA', 'type' => 'zalo', 'is_active' => true]);
+
+        $people = collect([
+            ['name' => 'Lê Thị Hoa', 'phone' => '0912345678', 'address' => '12 Nguyễn Trãi, Quận 1, TP.HCM', 'group' => 'VIP'],
+            ['name' => 'Phạm Minh Tuấn', 'phone' => '0987654321', 'address' => '45 Lý Thường Kiệt, Hà Nội', 'group' => 'Sỉ'],
+            ['name' => 'Đỗ Thu Trang', 'phone' => '0909111222', 'address' => '8 Trần Phú, Đà Nẵng'],
+            ['name' => 'Võ Quốc Bảo', 'phone' => '0933444555', 'address' => '102 Hai Bà Trưng, Quận 3, TP.HCM', 'group' => 'VIP'],
+            ['name' => 'Ngô Thanh Hà', 'phone' => '0977888999', 'address' => '5 Lê Duẩn, Huế'],
+        ])->map(fn ($p) => $customers->create($p));
+
+        $variants = ProductVariant::query()->whereIn('id', DB::table('stock_balances')->where('tenant_id', app(TenantContext::class)->id())->whereRaw('on_hand - reserved > 30')->pluck('product_variant_id'))->orderBy('id')->limit(6)->get();
+        if ($variants->count() < 3) {
+            return;
+        }
+        $line = fn (int $i, int $qty) => ['variant_id' => $variants[$i % $variants->count()]->ulid, 'quantity' => $qty];
+
+        // Counter sales, paid at once.
+        foreach ([[0, 1], [1, 2], [2, 1]] as $k => [$i, $qty]) {
+            $order = $orders->create(['channel_id' => $pos->ulid, 'stage' => 'completed', 'customer_id' => $k === 0 ? $people[3]->ulid : null, 'lines' => [$line($i, $qty)]]);
+            $payments->record($order, ['method' => $k === 1 ? 'bank_transfer' : 'cash', 'amount' => $order->total]);
+        }
+        // Online orders waiting to be processed.
+        $orders->create(['channel_id' => $facebook->ulid, 'customer_id' => $people[0]->ulid, 'shipping_fee' => 30000, 'is_cod' => true, 'carrier' => 'GHN', 'lines' => [$line(0, 2), $line(3, 1)], 'note' => 'Gọi trước khi giao']);
+        $orders->create(['channel_id' => $zalo->ulid, 'customer_id' => $people[2]->ulid, 'shipping_fee' => 25000, 'stage' => 'confirmed', 'lines' => [$line(4, 1)]]);
+        $deposit = $orders->create(['channel_id' => $facebook->ulid, 'customer_id' => $people[1]->ulid, 'stage' => 'confirmed', 'discount' => 50000, 'lines' => [$line(1, 10), $line(2, 5)]]);
+        $payments->record($deposit, ['method' => 'bank_transfer', 'amount' => 500000, 'reference' => 'FT26110312345']);
+        // Shipped with COD still to collect, and a delivered order on credit (customer debt).
+        $shipped = $orders->create(['channel_id' => $facebook->ulid, 'customer_id' => $people[4]->ulid, 'shipping_fee' => 30000, 'is_cod' => true, 'stage' => 'confirmed', 'lines' => [$line(5, 1)]]);
+        $orders->transition($shipped, 'handover', ['carrier' => 'GHTK', 'tracking_number' => 'S2611031234']);
+        $credit = $orders->create(['channel_id' => $zalo->ulid, 'customer_id' => $people[1]->ulid, 'stage' => 'completed', 'lines' => [$line(3, 6)]]);
+        $payments->record($credit, ['method' => 'cash', 'amount' => 300000]);
+        // Cancelled before packing.
+        $cancelled = $orders->create(['channel_id' => $facebook->ulid, 'customer_id' => $people[2]->ulid, 'lines' => [$line(0, 1)]]);
+        $orders->transition($cancelled, 'cancel', ['reason' => 'Khách đặt nhầm mẫu']);
     }
 
     /**

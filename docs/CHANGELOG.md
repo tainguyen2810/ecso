@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+### Phase 9 — Bán hàng kênh riêng và khách hàng (2026-11-03)
+- Kênh bán riêng (quầy, cửa hàng, Facebook, Zalo, website, điện thoại): trang Thiết lập → Kênh bán riêng, mỗi kênh một kho xuất mặc định. Mỗi doanh nghiệp có sẵn kênh "Bán tại cửa hàng".
+- Tạo đơn bán tay (`/orders/new`): quét mã vạch/tìm SKU, giá và giảm giá từng dòng, phí giao, giảm giá đơn, chọn khách cũ hoặc thêm khách mới (nhận ra số điện thoại đã có), chọn trạng thái khi lưu (chờ xác nhận / đã xác nhận / hoàn tất ngay), thu tiền ngay.
+- Xử lý đơn kênh riêng ngay trên ECSO: xác nhận, đóng gói, bàn giao (đơn vị vận chuyển, mã vận đơn), đã giao, hoàn tất, giao thất bại, hủy. Sửa đơn khi chưa đóng gói. Không xuất kho khi thiếu hàng.
+- Thu tiền nhiều lần, hoàn tiền, hủy phiếu nhập nhầm; trạng thái thanh toán trên danh sách đơn. In hóa đơn bán hàng khổ K80 hoặc A5.
+- Khách hàng: danh bạ có tìm theo tên, mã, số điện thoại (đủ số hoặc 4 số cuối), nhóm khách, tổng mua, công nợ, lịch sử đơn và thu tiền. Số điện thoại và địa chỉ được mã hóa.
+- Danh sách đơn: lọc theo nguồn (kênh riêng / sàn), theo kênh; nút "Tạo đơn".
+- Quyền mới: `orders.create`, `orders.payment`, `customers.view`, `customers.manage` (đã gán cho các vai trò hệ thống).
+
 ### Trình cài đặt trên web (2026-10-31)
 - `/install`: trình cài đặt 7 bước kiểu WordPress. Gồm mã cài đặt, kiểm tra máy chủ, database, Redis (có thể bỏ qua), thông tin website và tài khoản nhận tiền, quản trị viên, hoàn tất.
 - Upload mới (chưa có `.env`) thì mọi trang tự chuyển đến `/install`; API trả `503 NOT_INSTALLED`.
