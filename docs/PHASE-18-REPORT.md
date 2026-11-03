@@ -20,6 +20,7 @@
 - **Loại phiếu** (`/cash/types`): mỗi doanh nghiệp có sẵn 15 loại mặc định, thêm, đổi tên hoặc ngừng dùng được. Mỗi loại có mặc định "Tính KQKD". Riêng góp vốn và rút vốn mặc định không tính.
 - **Sổ quỹ** có thêm phiếu thu chi lập tay, tab Thu/Chi, ô tìm kiếm, bảng giải thích thuật ngữ và nút sang lập phiếu.
 - **Tài chính**: thêm thẻ "Lợi nhuận sau thu chi khác", bằng lãi gộp cộng phiếu thu trừ phiếu chi có tính KQKD. Thẻ ẩn khi lọc theo một gian hàng.
+- **Báo cáo lãi lỗ** (`/reports/profit-loss`): thêm dòng "V. Thu nhập khác" và "VI. Chi phí khác" lấy từ phiếu có tính KQKD, bấm vào để mở danh sách phiếu.
 
 ## Thay đổi CSDL
 - Bảng mới `cash_voucher_types`, `cash_vouchers`. Không sửa bảng cũ.
