@@ -50,6 +50,15 @@ describe('sales invoice', () => {
         expect(html).toContain('size: A5');
     });
 
+    it('prints A5 landscape and A4 as a table with signatures, and K57 as a narrow roll', () => {
+        const a5 = invoiceHtml(order(), 'Shop', 'a5');
+        expect(a5).toContain('size: A5 landscape');
+        expect(a5).toContain('<th>Sản phẩm</th>');
+        expect(a5).toContain('Người mua hàng');
+        expect(invoiceHtml(order(), 'Shop', 'a4')).toContain('size: A4;');
+        expect(invoiceHtml(order(), 'Shop', 'k57')).toContain('57mm');
+    });
+
     it('prints several receipts in one document, one per page', () => {
         const html = invoicesHtml([order(), order({ external_order_id: 'SO-000013' })], 'Shop');
         expect(html.match(/<html/g)).toHaveLength(1);

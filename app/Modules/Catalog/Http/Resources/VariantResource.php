@@ -27,7 +27,12 @@ class VariantResource extends JsonResource
                 'variant' => ['id' => $c->component->ulid, 'sku' => $c->component->sku, 'name' => $c->component->displayName()],
                 'quantity' => $c->quantity,
             ])),
-            'product' => $this->whenLoaded('product', fn () => ['id' => $this->product->ulid, 'name' => $this->product->name]),
+            'product' => $this->whenLoaded('product', fn () => [
+                'id' => $this->product->ulid,
+                'name' => $this->product->name,
+                // First photo, for the order form's picker (only when the caller loaded product.images).
+                'image' => $this->product->relationLoaded('images') ? $this->product->images->first()?->url() : null,
+            ]),
             'stock' => $this->when(isset($this->on_hand), fn () => [
                 'on_hand' => (int) $this->on_hand,
                 'reserved' => (int) $this->reserved,

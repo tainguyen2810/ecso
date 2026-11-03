@@ -39,7 +39,7 @@ class TradeReports
             ->groupBy('i.product_variant_id', 'v.ulid', 'v.sku', 'v.name', 'p.name')
             ->selectRaw('v.ulid, v.sku, v.name as variant_name, p.name as product_name, MAX(i.name) as item_name, MAX(i.seller_sku) as seller_sku, '
                 .'COUNT(DISTINCT o.id) as orders, SUM(i.quantity) as units, SUM(i.quantity * i.unit_price) as goods, SUM(i.discount) as discount, '
-                .'SUM(COALESCE(i.cost_snapshot, 0) * i.quantity) as cogs, SUM(CASE WHEN i.cost_snapshot IS NULL THEN 1 ELSE 0 END) as missing')
+                .'SUM(COALESCE(i.cost_snapshot, 0) * i.quantity) as cogs, SUM(CASE WHEN i.cost_snapshot IS NULL AND i.mapping_status <> \'service\' THEN 1 ELSE 0 END) as missing')
             ->orderByDesc('goods')
             ->limit(2000)
             ->get();

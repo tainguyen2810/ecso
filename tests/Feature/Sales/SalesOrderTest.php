@@ -271,3 +271,37 @@ it('sums the cashier shift by payment method, refunds subtracted', function () {
 
     actingInTenant(addMember($tenant, Role::VIEWER), $tenant)->getJson('/api/v1/pos/summary')->assertForbidden();
 });
+
+it('sells a service line next to goods: no SKU, no stock, kept when the order is edited and completed', function () {
+    [$tenant, $owner] = tenantWithOwner();
+    $variant = makeVariant($tenant, 'PIN-01', ['ref_price' => 400000]);
+    stockIn($tenant, $variant, 5);
+    $api = actingInTenant($owner, $tenant);
+
+    $created = $api->postJson('/api/v1/sales-orders', [
+        'channel_id' => defaultChannel($tenant)->ulid,
+        'lines' => [
+            ['variant_id' => $variant->ulid, 'quantity' => 1, 'unit_price' => 400000],
+            ['name' => 'Công thay pin', 'quantity' => 1, 'unit_price' => 50000, 'discount' => 10000],
+        ],
+    ])->assertCreated()
+        ->assertJsonPath('data.total', '440000.00')
+        ->assertJsonPath('data.flags.unmapped', false);
+    $id = $created->json('data.id');
+    $api->getJson("/api/v1/orders/{$id}")->assertOk()
+        ->assertJsonPath('data.items.1.name', 'Công thay pin')
+        ->assertJsonPath('data.items.1.mapping_status', 'service')
+        ->assertJsonPath('data.items.1.variant', null)
+        ->assertJsonPath('data.items.1.reservation', null);
+    expect(balanceOf(defaultWarehouse($tenant), $variant)->reserved)->toBe(1);
+
+    // Editing another field keeps the service line; completing only moves the SKU's stock.
+    $api->putJson("/api/v1/sales-orders/{$id}", ['note' => 'Khách lấy chiều'])->assertOk()->assertJsonPath('data.total', '440000.00');
+    $api->postJson("/api/v1/sales-orders/{$id}/actions/confirm")->assertOk();
+    $api->postJson("/api/v1/sales-orders/{$id}/actions/complete")->assertOk()->assertJsonPath('data.status', OrderStatus::COMPLETED);
+    expect(balanceOf(defaultWarehouse($tenant), $variant)->on_hand)->toBe(4);
+
+    // A line needs a SKU or a name.
+    $api->postJson('/api/v1/sales-orders', ['channel_id' => defaultChannel($tenant)->ulid, 'lines' => [['quantity' => 1, 'unit_price' => 1000]]])
+        ->assertStatus(422)->assertJsonValidationErrors(['lines.0.variant_id']);
+});

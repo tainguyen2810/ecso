@@ -43,7 +43,7 @@ class FinanceReport
             ->where('orders.tenant_id', $this->tenantId())
             ->when($accountId, fn ($q) => $q->where('orders.marketplace_account_id', $accountId))
             ->whereIn('orders.status', $completedStatuses)->whereBetween('orders.delivered_at', [$from, $to])
-            ->whereNull('order_items.cost_snapshot')->count();
+            ->whereNull('order_items.cost_snapshot')->where('order_items.mapping_status', '!=', 'service')->count();
 
         $refunds = (float) OrderReturn::query()->where('status', '!=', OrderReturn::REJECTED)->whereBetween('created_at', [$from, $to])
             ->when($accountId, fn ($q) => $q->whereIn('order_id', $orders()->select('id')))->sum('refund_amount');

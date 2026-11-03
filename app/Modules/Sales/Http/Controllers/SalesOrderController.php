@@ -115,7 +115,9 @@ class SalesOrderController extends Controller
     private function lineRules(): array
     {
         return [
-            'lines.*.variant_id' => ['required', 'string'],
+            // A line is either a SKU (variant_id) or a service with its own name (no stock).
+            'lines.*.variant_id' => ['nullable', 'string', 'required_without:lines.*.name'],
+            'lines.*.name' => ['nullable', 'string', 'max:255', 'required_without:lines.*.variant_id'],
             'lines.*.quantity' => ['required', 'integer', 'min:1', 'max:100000'],
             'lines.*.unit_price' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             'lines.*.discount' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],

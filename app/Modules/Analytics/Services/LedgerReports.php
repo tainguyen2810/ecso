@@ -122,7 +122,7 @@ class LedgerReports
             ->selectRaw('COALESCE(SUM(subtotal), 0) as goods, COALESCE(SUM(discount), 0) as discount, COALESCE(SUM(shipping_fee), 0) as shipping')->first();
         $cost = DB::table('order_items as i')->join('orders as o', 'o.id', '=', 'i.order_id')
             ->where('o.tenant_id', $this->tenant())->whereBetween('o.placed_at', [$from, $to])->where('o.status', '!=', OrderStatus::CANCELLED)
-            ->selectRaw('COALESCE(SUM(i.cost_snapshot * i.quantity), 0) as cogs, COALESCE(SUM(CASE WHEN i.cost_snapshot IS NULL AND o.status IN (\''.implode("','", OrderStatus::SHIPPED).'\') THEN 1 ELSE 0 END), 0) as missing')
+            ->selectRaw('COALESCE(SUM(i.cost_snapshot * i.quantity), 0) as cogs, COALESCE(SUM(CASE WHEN i.cost_snapshot IS NULL AND i.mapping_status <> \'service\' AND o.status IN (\''.implode("','", OrderStatus::SHIPPED).'\') THEN 1 ELSE 0 END), 0) as missing')
             ->first();
         // Marketplace returns often carry no refund amount: count the goods value of their lines instead.
         $lineValue = DB::table('order_return_lines as l')->join('order_items as i', 'i.id', '=', 'l.order_item_id')
