@@ -19,6 +19,9 @@ const max = computed(() => {
     return Math.ceil(top / step) * step;
 });
 const ticks = computed(() => [0, 0.25, 0.5, 0.75, 1].map((f) => f * max.value));
+// Many bars (30 days): thinner gaps and every n-th label, so the axis never overflows.
+const dense = computed(() => props.labels.length > 14);
+const labelStep = computed(() => Math.ceil(props.labels.length / 10));
 
 function short(v: number): string {
     if (v >= 1e9) return `${formatNumber(v / 1e9)} tỷ`;
@@ -40,14 +43,14 @@ function tip(i: number): string {
             <div v-for="t in ticks" :key="t" class="absolute inset-x-0 border-t border-dashed" :style="{ bottom: `${(t / max) * 100}%` }">
                 <span class="absolute -left-12 -top-2 w-10 text-right text-[10px] text-muted-foreground">{{ short(t) }}</span>
             </div>
-            <div class="absolute inset-0 flex items-end gap-[3%] px-[1.5%]">
-                <div v-for="(l, i) in labels" :key="l" class="flex h-full flex-1 flex-col-reverse" :title="tip(i)">
+            <div :class="['absolute inset-0 flex items-end px-[1.5%]', dense ? 'gap-[0.8%]' : 'gap-[3%]']">
+                <div v-for="(l, i) in labels" :key="l" class="flex h-full min-w-0 flex-1 flex-col-reverse" :title="tip(i)">
                     <div v-for="s in series" :key="s.key" :style="{ height: `${((s.values[i] ?? 0) / max) * 100}%`, background: s.color }" class="first:rounded-b-none last:rounded-t-[3px]" />
                 </div>
             </div>
         </div>
-        <div class="ml-12 mt-2 flex gap-[3%] px-[1.5%] text-[11px] text-muted-foreground">
-            <span v-for="l in labels" :key="l" class="flex-1 text-center">{{ l }}</span>
+        <div :class="['ml-12 mt-2 flex px-[1.5%] text-[11px] text-muted-foreground', dense ? 'gap-[0.8%]' : 'gap-[3%]']">
+            <span v-for="(l, i) in labels" :key="l" class="min-w-0 flex-1 overflow-visible whitespace-nowrap text-center">{{ i % labelStep === 0 ? l : '' }}</span>
         </div>
     </div>
 </template>

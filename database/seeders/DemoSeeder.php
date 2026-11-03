@@ -15,6 +15,7 @@ use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Services\InventoryDocumentService;
 use App\Modules\Inventory\Services\InventoryService;
 use App\Modules\Inventory\Services\WarehouseService;
+use App\Modules\Marketplace\Connectors\ConnectorRegistry;
 use App\Modules\Marketplace\Connectors\Fake\FakeMarketplace;
 use App\Modules\Marketplace\Services\AccountService;
 use App\Modules\Marketplace\Services\ListingService;
@@ -33,6 +34,7 @@ use App\Modules\Sales\Services\CashShiftService;
 use App\Modules\Sales\Services\CustomerService;
 use App\Modules\Sales\Services\ManualOrderService;
 use App\Modules\Sales\Services\PaymentService;
+use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Models\TenantUser;
 use App\Modules\Tenancy\Services\TenantService;
 use App\Modules\Tenancy\Support\TenantContext;
@@ -78,6 +80,15 @@ class DemoSeeder extends Seeder
         $shop = $tenants->create($owner, ['name' => 'Cửa hàng Mẫu']);
         $tenants->create($owner, ['name' => 'Thời trang Demo']);
 
+        $this->populate($shop, $owner, $staff);
+    }
+
+    /**
+     * Fills one business with the demo catalog, stock, own-channel sales, purchasing and (when the marketplace
+     * simulator is on) a simulated shop. Also used by `ecso:demo-tenant`, which never enables the simulator.
+     */
+    public function populate(Tenant $shop, User $owner, User $staff): void
+    {
         // Demo shop on Starter so the members screen has room for invitations (free plan allows 2 users).
         // A paid monthly period that started 10 days ago (as if the first invoice had been paid).
         Subscription::withoutGlobalScopes()->where('tenant_id', $shop->id)->update([
@@ -97,8 +108,10 @@ class DemoSeeder extends Seeder
 
         Auth::setUser($owner);
         TenantContext::run($shop, fn () => $this->catalog($staff));
-        Auth::setUser($owner);
-        TenantContext::run($shop, fn () => $this->marketplace($owner, $staff));
+        if (ConnectorRegistry::fakeEnabled()) {
+            Auth::setUser($owner);
+            TenantContext::run($shop, fn () => $this->marketplace($owner, $staff));
+        }
         Auth::setUser($owner);
         TenantContext::run($shop, fn () => $this->sales());
         Auth::setUser($owner);
