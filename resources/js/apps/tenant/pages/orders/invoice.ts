@@ -1,5 +1,5 @@
 import { formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
-import { paymentMethods } from './labels';
+import { paymentMethodNames } from './labels';
 import type { OrderDetail } from '@/shared/types';
 
 export type InvoiceSize = 'k80' | 'a5';
@@ -48,7 +48,7 @@ ${order.buyer_name ? `<p>Khách: <b>${esc(order.buyer_name)}</b>${order.buyer_ph
 ${Number(order.shipping_fee) > 0 ? `<tr><td>Phí giao hàng</td><td class="r">${formatMoney(order.shipping_fee)}</td></tr>` : ''}
 ${Number(order.discount) > 0 ? `<tr><td>Giảm giá</td><td class="r">−${formatMoney(order.discount)}</td></tr>` : ''}
 <tr class="total"><td>TỔNG CỘNG</td><td class="r">${formatMoney(order.total)}</td></tr>
-${payments.map((p) => `<tr><td>${p.kind === 'refund' ? 'Hoàn tiền' : 'Đã trả'} (${esc(paymentMethods[p.method] ?? p.method)})</td><td class="r">${p.kind === 'refund' ? '−' : ''}${formatMoney(p.amount)}</td></tr>`).join('')}
+${payments.map((p) => `<tr><td>${p.kind === 'refund' ? 'Hoàn tiền' : 'Đã trả'} (${esc(paymentMethodNames[p.method] ?? p.method)})</td><td class="r">${p.kind === 'refund' ? '−' : ''}${formatMoney(p.amount)}</td></tr>`).join('')}
 ${paid > 0 || due > 0 ? `<tr><td><b>Còn phải trả</b></td><td class="r"><b>${formatMoney(due)}</b></td></tr>` : ''}
 </table>
 ${order.buyer_note ? `<hr><p>Ghi chú: ${esc(order.buyer_note)}</p>` : ''}
