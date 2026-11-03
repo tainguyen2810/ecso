@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, ImagePlus, Plus, Sparkles, Trash2, X } from 'lucide-vue-next';
+import { ArrowLeft, ImagePlus, Plus, Sparkles, Tags, Trash2, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -14,7 +14,7 @@ import { api, ApiError } from '@/shared/lib/api';
 import { cn, formatMoney } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
-import type { Product, Ref } from '@/shared/types';
+import type { Product, Ref, Warehouse } from '@/shared/types';
 
 interface VariantRow {
     id?: string;
@@ -23,28 +23,55 @@ interface VariantRow {
     barcode: string;
     options: Record<string, string>;
     ref_price: string;
+    wholesale_price: string;
     weight_gram: string;
     cost_price?: string;
+    opening_qty: string;
+    opening_cost: string;
     skuTaken?: string | null;
 }
+
+const UNITS = ['Cái', 'Chiếc', 'Bộ', 'Đôi', 'Hộp', 'Gói', 'Chai', 'Thùng', 'Kg', 'Mét'];
+const VAT_RATES = [
+    { value: '', label: 'Không áp dụng' },
+    { value: '0', label: '0%' },
+    { value: '5', label: '5%' },
+    { value: '8', label: '8%' },
+    { value: '10', label: '10%' },
+];
 
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
 const tenant = useTenantStore();
 const canManage = computed(() => tenant.can('products.manage'));
+const canReceive = computed(() => tenant.can('inventory.receive'));
 const productId = computed(() => (route.params.id as string | undefined) ?? null);
+const copyFrom = computed(() => (route.query.copy as string | undefined) ?? null);
 const isNew = computed(() => !productId.value);
 
-const loading = ref(!isNew.value);
+const loading = ref(!isNew.value || !!copyFrom.value);
 const loadError = ref<string | null>(null);
 const categories = ref<Ref[]>([]);
 const brands = ref<Ref[]>([]);
+const knownTags = ref<string[]>([]);
+const warehouses = ref<Warehouse[]>([]);
 const images = ref<{ id: number; url: string }[]>([]);
-const form = reactive({ name: '', description: '', status: 'active', category_id: '', brand_id: '' });
+const form = reactive({ name: '', description: '', status: 'active', category_id: '', brand_id: '', unit: '', vat_rate: '', opening_warehouse_id: '' });
+const tags = ref<string[]>([]);
+const tagInput = ref('');
 const variants = ref<VariantRow[]>([]);
 const saving = ref(false);
 const error = ref<ApiError | null>(null);
+const showOpening = computed(() => isNew.value && canReceive.value);
+const hasOpening = computed(() => variants.value.some((v) => Number(v.opening_qty) > 0));
+
+function addTag(raw = tagInput.value) {
+    for (const t of raw.split(',').map((s) => s.trim()).filter(Boolean)) {
+        if (!tags.value.some((x) => x.toLowerCase() === t.toLowerCase()) && tags.value.length < 20) tags.value.push(t.slice(0, 40));
+    }
+    tagInput.value = '';
+}
 
 // Variant generator: option groups like Màu = Trắng, Đen and Size = M, L.
 const groups = ref<{ name: string; values: string }[]>([
@@ -54,29 +81,49 @@ const groups = ref<{ name: string; values: string }[]>([
 const skuPrefix = ref('');
 
 function emptyRow(): VariantRow {
-    return { sku: '', name: '', barcode: '', options: {}, ref_price: '', weight_gram: '' };
+    return { sku: '', name: '', barcode: '', options: {}, ref_price: '', wholesale_price: '', weight_gram: '', opening_qty: '', opening_cost: '' };
 }
+
+const money = (value: string | number | null | undefined) => (Number(value) ? String(Math.round(Number(value))) : '');
 
 onMounted(async () => {
     // Set the first row before awaiting: rows generated while the lookups load must not be overwritten.
-    if (isNew.value) variants.value = [emptyRow()];
-    const [c, b] = await Promise.all([api.get('/categories'), api.get('/brands')]);
+    if (isNew.value && !copyFrom.value) variants.value = [emptyRow()];
+    const [c, b, t] = await Promise.all([api.get('/categories'), api.get('/brands'), api.get('/products/tags')]);
     categories.value = c.data.data;
     brands.value = b.data.data;
-    if (isNew.value) return;
+    knownTags.value = t.data.data;
+    if (showOpening.value) {
+        warehouses.value = ((await api.get('/warehouses')).data.data as Warehouse[]).filter((w) => w.status === 'active');
+        form.opening_warehouse_id = (warehouses.value.find((w) => w.is_default) ?? warehouses.value[0])?.id ?? '';
+    }
+    if (isNew.value && !copyFrom.value) return;
     try {
-        const p: Product = (await api.get(`/products/${productId.value}`)).data.data;
-        Object.assign(form, { name: p.name, description: p.description ?? '', status: p.status, category_id: p.category?.id ?? '', brand_id: p.brand?.id ?? '' });
-        images.value = p.images ?? [];
+        const p: Product = (await api.get(`/products/${productId.value ?? copyFrom.value}`)).data.data;
+        const copying = isNew.value;
+        Object.assign(form, {
+            name: copying ? `${p.name} (bản sao)` : p.name,
+            description: p.description ?? '',
+            status: p.status,
+            category_id: p.category?.id ?? '',
+            brand_id: p.brand?.id ?? '',
+            unit: p.unit ?? '',
+            vat_rate: p.vat_rate === null || p.vat_rate === undefined ? '' : String(Number(p.vat_rate)),
+        });
+        tags.value = [...(p.tags ?? [])];
+        images.value = copying ? [] : (p.images ?? []);
+        // A copy keeps names, options and prices; SKU and barcode must be new (unique per business).
         variants.value = (p.variants ?? []).map((v) => ({
-            id: v.id,
-            sku: v.sku,
+            ...(copying ? {} : { id: v.id, cost_price: v.cost_price }),
+            sku: copying ? '' : v.sku,
             name: v.name ?? '',
-            barcode: v.barcode ?? '',
+            barcode: copying ? '' : (v.barcode ?? ''),
             options: Array.isArray(v.options) ? {} : v.options,
-            ref_price: v.ref_price ? String(Math.round(Number(v.ref_price))) : '',
+            ref_price: money(v.ref_price),
+            wholesale_price: money(v.wholesale_price),
             weight_gram: v.weight_gram ? String(v.weight_gram) : '',
-            cost_price: v.cost_price,
+            opening_qty: '',
+            opening_cost: '',
         }));
     } catch (e) {
         loadError.value = (e as ApiError).message;
@@ -131,7 +178,10 @@ function fieldError(i: number, field: string): string | undefined {
     return error.value?.field(`variants.${i}.${field}`);
 }
 
-async function save() {
+const num = (value: string) => (value === '' || value === null || value === undefined ? null : Number(value));
+
+async function save(then: 'detail' | 'labels' = 'detail') {
+    addTag();
     saving.value = true;
     error.value = null;
     try {
@@ -141,19 +191,27 @@ async function save() {
             status: form.status,
             category_id: form.category_id || null,
             brand_id: form.brand_id || null,
+            unit: form.unit.trim() || null,
+            tags: tags.value,
+            vat_rate: form.vat_rate === '' ? null : Number(form.vat_rate),
+            ...(isNew.value && hasOpening.value ? { opening_warehouse_id: form.opening_warehouse_id || null } : {}),
             variants: variants.value.map((v) => ({
                 ...(v.id ? { id: v.id } : {}),
                 sku: v.sku.trim(),
                 name: v.name || null,
                 barcode: v.barcode || null,
                 options: Object.keys(v.options).length ? v.options : null,
-                ref_price: v.ref_price === '' ? null : Number(v.ref_price),
-                weight_gram: v.weight_gram === '' ? null : Number(v.weight_gram),
+                ref_price: num(v.ref_price),
+                wholesale_price: num(v.wholesale_price),
+                weight_gram: num(v.weight_gram),
+                ...(isNew.value && Number(v.opening_qty) > 0 ? { opening_qty: Number(v.opening_qty), opening_cost: num(v.opening_cost) ?? 0 } : {}),
             })),
         };
         const { data } = isNew.value ? await api.post('/products', payload) : await api.put(`/products/${productId.value}`, payload);
         toast.success(isNew.value ? 'Đã tạo sản phẩm' : 'Đã lưu thay đổi');
-        if (isNew.value) await router.replace(`/products/${data.data.id}`);
+        const id = data.data.id as string;
+        if (then === 'labels') await router.push({ path: '/products/labels', query: { products: id } });
+        else await router.replace(`/products/${id}`);
     } catch (e) {
         error.value = e as ApiError;
         toast.error(error.value.body.errors ? 'Vui lòng kiểm tra các trường được đánh dấu.' : error.value.message);
@@ -193,12 +251,18 @@ async function removeImage(id: number) {
 </script>
 
 <template>
-    <RouterLink to="/products" class="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft class="size-4" /> Sản phẩm</RouterLink>
+    <RouterLink :to="productId ? `/products/${productId}` : '/products'" class="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <ArrowLeft class="size-4" /> {{ productId ? 'Chi tiết sản phẩm' : 'Sản phẩm' }}
+    </RouterLink>
     <ErrorState v-if="loadError" :message="loadError" />
     <div v-else-if="loading" class="space-y-3"><Skeleton class="h-10 w-80" /><Skeleton class="h-72" /></div>
-    <form v-else @submit.prevent="save">
-        <PageHeader :title="isNew ? 'Thêm sản phẩm' : form.name || 'Sản phẩm'" :description="isNew ? 'Mỗi biến thể là một SKU bán được, có tồn kho riêng.' : undefined">
+    <form v-else @submit.prevent="save()">
+        <PageHeader
+            :title="isNew ? (copyFrom ? 'Sao chép sản phẩm' : 'Thêm sản phẩm') : form.name || 'Sản phẩm'"
+            :description="copyFrom ? 'Đã chép thông tin, biến thể và giá. Nhập SKU mới cho từng biến thể.' : isNew ? 'Mỗi biến thể là một SKU bán được, có tồn kho riêng.' : undefined"
+        >
             <Button v-if="!isNew && canManage" variant="ghost" class="text-destructive" @click="remove"><Trash2 /> Xóa</Button>
+            <Button v-if="canManage" variant="outline" :disabled="saving" data-testid="save-and-print" @click="save('labels')"><Tags /> Lưu và in tem</Button>
             <Button v-if="canManage" type="submit" :loading="saving" data-testid="save-product">{{ isNew ? 'Tạo sản phẩm' : 'Lưu thay đổi' }}</Button>
         </PageHeader>
 
@@ -214,6 +278,33 @@ async function removeImage(id: number) {
                         </FormField>
                         <FormField label="Thương hiệu" for="p-brand">
                             <Select id="p-brand" v-model="form.brand_id" :options="[{ value: '', label: '— Không chọn —' }, ...brands.map((b) => ({ value: b.id, label: b.name }))]" />
+                        </FormField>
+                        <FormField label="Đơn vị tính" for="p-unit" :error="error?.field('unit')">
+                            <Input id="p-unit" v-model="form.unit" maxlength="30" list="unit-suggestions" placeholder="Cái, Hộp, Kg…" data-testid="product-unit" />
+                            <datalist id="unit-suggestions"><option v-for="u in UNITS" :key="u" :value="u" /></datalist>
+                        </FormField>
+                        <FormField label="Thuế GTGT" for="p-vat" :error="error?.field('vat_rate')">
+                            <Select id="p-vat" v-model="form.vat_rate" :options="VAT_RATES" />
+                        </FormField>
+                        <FormField label="Tags" for="p-tags" class="sm:col-span-2" :error="error?.field('tags')">
+                            <div class="flex min-h-9 flex-wrap items-center gap-1.5 rounded-md border border-input bg-card px-2 py-1 shadow-xs focus-within:ring-2 focus-within:ring-ring">
+                                <span v-for="(t, i) in tags" :key="t" class="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs">
+                                    {{ t }}
+                                    <button type="button" class="text-muted-foreground hover:text-foreground" :aria-label="`Bỏ tag ${t}`" @click="tags.splice(i, 1)"><X class="size-3" /></button>
+                                </span>
+                                <input
+                                    id="p-tags"
+                                    v-model="tagInput"
+                                    list="tag-suggestions"
+                                    class="h-7 min-w-32 flex-1 bg-transparent text-sm outline-none"
+                                    placeholder="Gõ tag rồi nhấn Enter"
+                                    data-testid="product-tags"
+                                    @keydown.enter.prevent="addTag()"
+                                    @keydown.,.prevent="addTag()"
+                                    @blur="addTag()"
+                                />
+                                <datalist id="tag-suggestions"><option v-for="t in knownTags.filter((k) => !tags.includes(k))" :key="t" :value="t" /></datalist>
+                            </div>
                         </FormField>
                         <FormField label="Mô tả" for="p-desc" class="sm:col-span-2">
                             <textarea id="p-desc" v-model="form.description" rows="3" class="w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
@@ -249,7 +340,8 @@ async function removeImage(id: number) {
                                     <th class="px-3 py-2 font-medium">SKU *</th>
                                     <th class="px-3 py-2 font-medium">Tên biến thể</th>
                                     <th class="px-3 py-2 font-medium">Mã vạch</th>
-                                    <th class="px-3 py-2 text-right font-medium">Giá tham khảo</th>
+                                    <th class="px-3 py-2 text-right font-medium">Giá bán lẻ</th>
+                                    <th class="px-3 py-2 text-right font-medium">Giá bán buôn</th>
                                     <th class="px-3 py-2 text-right font-medium">KL (g)</th>
                                     <th v-if="!isNew" class="px-4 py-2 text-right font-medium">Giá vốn BQ</th>
                                     <th class="px-2 py-2" />
@@ -275,7 +367,8 @@ async function removeImage(id: number) {
                                         <input v-model="v.barcode" :disabled="!canManage" maxlength="64" :class="cn('h-8 w-32 rounded-md border border-input bg-card px-2 font-mono text-xs', fieldError(i, 'barcode') && 'border-destructive')" />
                                         <p v-if="fieldError(i, 'barcode')" class="mt-1 max-w-36 text-xs text-destructive">{{ fieldError(i, 'barcode') }}</p>
                                     </td>
-                                    <td class="px-3 py-2 text-right"><input v-model="v.ref_price" type="number" min="0" :disabled="!canManage" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
+                                    <td class="px-3 py-2 text-right"><input v-model="v.ref_price" type="number" min="0" :disabled="!canManage" aria-label="Giá bán lẻ" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
+                                    <td class="px-3 py-2 text-right"><input v-model="v.wholesale_price" type="number" min="0" :disabled="!canManage" aria-label="Giá bán buôn" :data-testid="`wholesale-${i}`" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
                                     <td class="px-3 py-2 text-right"><input v-model="v.weight_gram" type="number" min="0" :disabled="!canManage" class="h-8 w-16 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
                                     <td v-if="!isNew" class="px-4 py-2 text-right tabular-nums text-muted-foreground">
                                         {{ v.cost_price ? formatMoney(v.cost_price) : '—' }}
@@ -283,6 +376,37 @@ async function removeImage(id: number) {
                                     </td>
                                     <td class="px-2 py-2 text-right">
                                         <Button v-if="canManage && variants.length > 1" variant="ghost" size="icon" class="size-8" title="Xóa biến thể" @click="variants.splice(i, 1)"><Trash2 class="text-muted-foreground" /></Button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
+
+                <Card v-if="showOpening" title="Tồn kho ban đầu" description="Không bắt buộc. Ghi số lượng đang có và giá vốn để tạo một phiếu nhập tồn đầu kỳ cùng lúc với sản phẩm.">
+                    <div class="flex flex-wrap items-end gap-3 border-b px-5 py-3">
+                        <FormField label="Nhập vào kho" for="p-opening-wh" :error="error?.field('opening_warehouse_id')" class="w-56">
+                            <Select id="p-opening-wh" v-model="form.opening_warehouse_id" :options="warehouses.map((w) => ({ value: w.id, label: w.name }))" />
+                        </FormField>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm" data-testid="opening-table">
+                            <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                                <tr>
+                                    <th class="px-4 py-2 font-medium">SKU</th>
+                                    <th class="px-4 py-2 text-right font-medium">Số lượng</th>
+                                    <th class="px-4 py-2 text-right font-medium">Giá vốn</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                <tr v-for="(v, i) in variants" :key="`opening-${i}`">
+                                    <td class="px-4 py-2"><span class="font-mono text-xs">{{ v.sku || '(chưa có SKU)' }}</span><span v-if="v.name" class="text-muted-foreground"> · {{ v.name }}</span></td>
+                                    <td class="px-4 py-2 text-right">
+                                        <input v-model="v.opening_qty" type="number" min="0" :data-testid="`opening-qty-${i}`" aria-label="Số lượng tồn ban đầu" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right tabular-nums" />
+                                        <p v-if="fieldError(i, 'opening_qty')" class="mt-1 text-xs text-destructive">{{ fieldError(i, 'opening_qty') }}</p>
+                                    </td>
+                                    <td class="px-4 py-2 text-right">
+                                        <input v-model="v.opening_cost" type="number" min="0" :data-testid="`opening-cost-${i}`" aria-label="Giá vốn ban đầu" class="h-8 w-28 rounded-md border border-input bg-card px-2 text-right tabular-nums" />
                                     </td>
                                 </tr>
                             </tbody>

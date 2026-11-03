@@ -5,25 +5,39 @@ namespace App\Modules\Catalog\Services;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Catalog\Models\Product;
 use App\Modules\Catalog\Models\ProductVariant;
+use App\Modules\Inventory\Models\StockReceipt;
+use App\Modules\Inventory\Models\Warehouse;
+use App\Modules\Inventory\Services\InventoryDocumentService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class ProductService
 {
-    public const VARIANT_FIELDS = ['sku', 'barcode', 'name', 'options', 'ref_price', 'weight_gram', 'status'];
+    public const VARIANT_FIELDS = ['sku', 'barcode', 'name', 'options', 'ref_price', 'wholesale_price', 'weight_gram', 'status'];
 
-    public function __construct(private readonly AuditLogger $audit) {}
+    public function __construct(private readonly AuditLogger $audit, private readonly InventoryDocumentService $documents) {}
 
     /**
+     * Variants with opening_qty > 0 get their first stock in one opening receipt (same ledger path as a manual
+     * receipt, so the weighted average cost starts at opening_cost).
+     *
      * @param  array<string, mixed>  $data  validated: product fields + variants[]
      */
-    public function create(array $data): Product
+    public function create(array $data, ?Warehouse $openingWarehouse = null): Product
     {
-        return DB::transaction(function () use ($data) {
-            $product = Product::create(collect($data)->only(['name', 'category_id', 'brand_id', 'description', 'status'])->all());
+        return DB::transaction(function () use ($data, $openingWarehouse) {
+            $product = Product::create(collect($data)->only(Product::FIELDS)->all());
+            $opening = [];
 
-            foreach ($data['variants'] as $variant) {
-                $product->variants()->create($this->variantAttributes($variant));
+            foreach ($data['variants'] as $input) {
+                $variant = $product->variants()->create($this->variantAttributes($input));
+                if ((int) ($input['opening_qty'] ?? 0) > 0) {
+                    $opening[] = ['variant_id' => $variant->id, 'quantity' => (int) $input['opening_qty'], 'unit_cost' => (string) ($input['opening_cost'] ?? 0)];
+                }
+            }
+
+            if ($opening !== [] && $openingWarehouse !== null) {
+                $this->documents->receive($openingWarehouse, $opening, 'Tồn đầu khi tạo sản phẩm', StockReceipt::SOURCE_OPENING);
             }
 
             $this->audit->record('product.created', $product, ['name' => $product->name, 'skus' => array_column($data['variants'], 'sku')]);
@@ -41,7 +55,7 @@ class ProductService
     public function update(Product $product, array $data): Product
     {
         return DB::transaction(function () use ($product, $data) {
-            $product->fill(collect($data)->only(['name', 'category_id', 'brand_id', 'description', 'status'])->all())->save();
+            $product->fill(collect($data)->only(Product::FIELDS)->all())->save();
 
             if (array_key_exists('variants', $data)) {
                 $existing = $product->variants()->get()->keyBy('ulid');
@@ -102,6 +116,29 @@ class ProductService
         return $count;
     }
 
+    /**
+     * Deletes each product on its own: one with stock left is skipped and reported, the others still go.
+     *
+     * @param  iterable<Product>  $products
+     * @return array{deleted: int, skipped: array<int, array{name: string, message: string}>}
+     */
+    public function bulkDelete(iterable $products): array
+    {
+        $deleted = 0;
+        $skipped = [];
+
+        foreach ($products as $product) {
+            try {
+                $this->delete($product);
+                $deleted++;
+            } catch (ValidationException $e) {
+                $skipped[] = ['name' => $product->name, 'message' => collect($e->errors())->flatten()->first() ?? $e->getMessage()];
+            }
+        }
+
+        return ['deleted' => $deleted, 'skipped' => $skipped];
+    }
+
     private function deleteVariant(ProductVariant $variant): void
     {
         $hasStock = DB::table('stock_balances')
@@ -128,8 +165,10 @@ class ProductService
             $attributes['sku'] = ProductVariant::normalizeSku($attributes['sku']);
         }
         // Optional in the form, NOT NULL DEFAULT 0 in the table.
-        if (array_key_exists('ref_price', $attributes) && $attributes['ref_price'] === null) {
-            $attributes['ref_price'] = 0;
+        foreach (['ref_price', 'wholesale_price'] as $price) {
+            if (array_key_exists($price, $attributes) && $attributes[$price] === null) {
+                $attributes[$price] = 0;
+            }
         }
         if (array_key_exists('barcode', $attributes) && $attributes['barcode'] !== null) {
             $attributes['barcode'] = trim($attributes['barcode']) ?: null;

@@ -21,6 +21,8 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::get('products/import-template', [ProductTransferController::class, 'template']);
     Route::post('products/import', [ProductTransferController::class, 'import'])->middleware('throttle:10,1');
     Route::post('products/bulk-status', [ProductController::class, 'bulkStatus']);
+    Route::post('products/bulk-delete', [ProductController::class, 'bulkDelete']);
+    Route::get('products/tags', [ProductController::class, 'tags']);
     Route::get('variants', [ProductController::class, 'variants']);
     Route::apiResource('products', ProductController::class);
     Route::post('products/{product}/images', [ProductImageController::class, 'store'])->middleware('throttle:60,1');
