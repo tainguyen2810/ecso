@@ -25,7 +25,7 @@ class ReturnController extends Controller
             'q' => ['nullable', 'string', 'max:64'],
         ]);
 
-        return ReturnResource::collection(OrderReturn::query()->with(['order', 'warehouse'])->withCount('lines')
+        return ReturnResource::collection(OrderReturn::query()->with(['order.customer', 'warehouse', 'exchangeOrder'])->withCount('lines')
             ->when($filters['status'] ?? null, fn ($q, $s) => $s === 'pending_receipt'
                 ? $q->where('type', '!=', OrderReturn::TYPE_REFUND_ONLY)->whereIn('status', [OrderReturn::REQUESTED, OrderReturn::APPROVED, OrderReturn::IN_TRANSIT])
                 : $q->where('status', $s))

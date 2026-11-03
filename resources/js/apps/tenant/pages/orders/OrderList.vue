@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { AlertTriangle, Ban, Banknote, Bookmark, ChevronDown, ChevronRight, Clock, Columns3, Download, Filter, PackageX, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingCart, Unlink, UserPlus, X } from 'lucide-vue-next';
+import { Ban, Banknote, Bookmark, ChevronDown, ChevronsRight, Clock, Columns3, Download, Filter, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingCart, UserPlus, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
@@ -218,9 +218,10 @@ function removeView(name: string) {
 }
 const hasFilters = computed(() => filters.tab !== 'all' || !!filters.q || !!filters.source || !!filters.channel || !!filters.account || !!filters.assignee || filters.flags.length > 0 || advancedCount.value > 0);
 
-const columnLabels = { products: 'Sản phẩm', total: 'Tổng tiền', status: 'Trạng thái', deadline: 'Hạn giao / hẹn giao', assignee: 'Người xử lý' } as const;
+const columnLabels = { date: 'Ngày tạo đơn', customer: 'Tên khách hàng', products: 'Sản phẩm', status: 'Trạng thái đơn hàng', payment: 'Thanh toán', deadline: 'Hạn giao / hẹn giao', assignee: 'Người xử lý', total: 'Khách phải trả' } as const;
 type ColumnKey = keyof typeof columnLabels;
-const columns = ref<Record<ColumnKey, boolean>>({ products: true, total: true, status: true, deadline: true, assignee: true, ...readStore('columns', {}) });
+// Like Sapo's list: one line per order; products and assignee can be turned on from "Cột".
+const columns = ref<Record<ColumnKey, boolean>>({ date: true, customer: true, products: false, status: true, payment: true, deadline: true, assignee: false, total: true, ...readStore('columns', {}) });
 watch(columns, (v) => writeStore('columns', v), { deep: true });
 const columnsOpen = ref(false);
 const columnCount = computed(() => 3 + Object.values(columns.value).filter(Boolean).length);
@@ -476,63 +477,71 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
         </EmptyState>
         <div v-else class="overflow-x-auto">
             <table class="w-full text-sm" data-testid="order-table">
-                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                <thead class="border-b bg-slate-50 text-left text-xs font-semibold text-foreground/80">
                     <tr>
-                        <th class="w-8 py-2.5 pl-3" />
-                        <th class="w-8 py-2.5"><input type="checkbox" :checked="allSelected" aria-label="Chọn tất cả" @change="toggleAll" /></th>
-                        <th class="px-2 py-2.5 font-medium">Đơn hàng</th>
-                        <th v-if="columns.products" class="px-4 py-2.5 font-medium">Sản phẩm</th>
-                        <th v-if="columns.total" class="px-4 py-2.5 text-right font-medium">Tổng tiền</th>
-                        <th v-if="columns.status" class="px-4 py-2.5 font-medium">Trạng thái</th>
-                        <th v-if="columns.deadline" class="px-4 py-2.5 font-medium">Hạn giao</th>
-                        <th v-if="columns.assignee" class="px-4 py-2.5 font-medium">Xử lý</th>
+                        <th class="w-8 py-3 pl-3" />
+                        <th class="w-8 py-3"><input type="checkbox" :checked="allSelected" aria-label="Chọn tất cả" @change="toggleAll" /></th>
+                        <th class="px-3 py-3">Mã đơn hàng</th>
+                        <th v-if="columns.date" class="whitespace-nowrap px-3 py-3">Ngày tạo đơn</th>
+                        <th v-if="columns.customer" class="px-3 py-3">Tên khách hàng</th>
+                        <th v-if="columns.products" class="px-3 py-3">Sản phẩm</th>
+                        <th v-if="columns.status" class="px-3 py-3">Trạng thái đơn hàng</th>
+                        <th v-if="columns.payment" class="px-3 py-3">Thanh toán</th>
+                        <th v-if="columns.deadline" class="px-3 py-3">Hạn giao</th>
+                        <th v-if="columns.assignee" class="px-3 py-3">Xử lý</th>
+                        <th v-if="columns.total" class="whitespace-nowrap px-4 py-3 text-right">Khách phải trả</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y">
                     <template v-for="o in orders" :key="o.id">
-                        <tr :class="cn('cursor-pointer align-top hover:bg-blue-50/40', selected.has(o.id) && 'bg-blue-50/70 hover:bg-blue-50/70', expanded.has(o.id) && 'bg-slate-50')" @click="$router.push(`/orders/${o.id}`)">
+                        <tr :class="cn('cursor-pointer hover:bg-blue-50/40', selected.has(o.id) && 'bg-blue-50/70 hover:bg-blue-50/70', expanded.has(o.id) && 'bg-slate-50')" @click="$router.push(`/orders/${o.id}`)">
                             <td class="py-3 pl-3" @click.stop>
                                 <button type="button" class="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground" :aria-label="expanded.has(o.id) ? `Thu gọn đơn ${o.external_order_id}` : `Xem nhanh đơn ${o.external_order_id}`" :aria-expanded="expanded.has(o.id)" data-testid="quick-view-toggle" @click="toggleExpand(o.id)">
-                                    <ChevronDown v-if="expanded.has(o.id)" class="size-4" /><ChevronRight v-else class="size-4" />
+                                    <ChevronDown v-if="expanded.has(o.id)" class="size-4" /><ChevronsRight v-else class="size-4" />
                                 </button>
                             </td>
                             <td class="py-3" @click.stop><input type="checkbox" :checked="selected.has(o.id)" :aria-label="`Chọn đơn ${o.external_order_id}`" @change="toggle(o.id)" /></td>
-                            <td class="px-2 py-3">
-                                <div class="flex gap-2.5">
-                                    <MarketplaceLogo :marketplace="o.marketplace" :name="marketplaceNames[o.marketplace]" class="mt-0.5" />
-                                    <div class="min-w-0">
-                                        <div class="font-mono text-[13px] font-semibold text-primary">{{ o.external_order_id }}</div>
-                                        <div class="text-xs text-muted-foreground">{{ o.shop?.name ?? o.channel?.name ?? marketplaceNames[o.marketplace] }} · {{ formatDateTime(o.placed_at) }}</div>
-                                        <div v-if="o.customer" class="mt-0.5 text-xs font-medium">{{ o.customer.name }}</div>
-                                        <div v-if="o.tags?.length" class="mt-1 flex flex-wrap gap-1"><span v-for="t in o.tags" :key="t" class="rounded-full bg-slate-100 px-1.5 text-[11px] text-slate-600">#{{ t }}</span></div>
-                                    </div>
+                            <td class="px-3 py-3">
+                                <div class="flex items-center gap-2">
+                                    <MarketplaceLogo :marketplace="o.marketplace" :name="marketplaceNames[o.marketplace]" size="sm" />
+                                    <span class="font-medium text-primary">{{ o.external_order_id }}</span>
+                                </div>
+                                <div class="mt-0.5 flex flex-wrap items-center gap-1 pl-7 text-[11px] text-muted-foreground">
+                                    {{ o.shop?.name ?? o.channel?.name ?? marketplaceNames[o.marketplace] }}
+                                    <span v-if="o.flags.shortage" class="rounded-full bg-rose-50 px-1.5 text-rose-600" title="Thiếu hàng">Thiếu hàng</span>
+                                    <span v-if="o.flags.unmapped" class="rounded-full bg-amber-50 px-1.5 text-amber-700">Chưa map SKU</span>
+                                    <span v-if="o.sync_warning" class="rounded-full bg-amber-50 px-1.5 text-amber-700">Cảnh báo</span>
+                                    <span v-if="o.flags.printed" class="inline-flex items-center gap-0.5"><Printer class="size-3" /> Đã in</span>
+                                    <span v-for="t in o.tags ?? []" :key="t" class="rounded-full bg-slate-100 px-1.5 text-slate-600">#{{ t }}</span>
                                 </div>
                             </td>
-                            <td v-if="columns.products" class="max-w-80 px-4 py-3">
+                            <td v-if="columns.date" class="whitespace-nowrap px-3 py-3 tabular-nums">{{ formatDateTime(o.placed_at) }}</td>
+                            <td v-if="columns.customer" class="max-w-56 px-3 py-3">
+                                <div class="truncate">{{ o.customer?.name ?? o.buyer_name ?? 'Khách lẻ' }}</div>
+                            </td>
+                            <td v-if="columns.products" class="max-w-80 px-3 py-3">
                                 <div v-for="(i, idx) in o.items_preview" :key="idx" class="truncate text-xs">
                                     <span class="font-medium tabular-nums">{{ i.quantity }}×</span> {{ i.name }}<span v-if="i.variant_name" class="text-muted-foreground"> · {{ i.variant_name }}</span>
                                 </div>
                                 <div v-if="(o.items_count ?? 0) > 3" class="text-xs text-muted-foreground">+{{ (o.items_count ?? 0) - 3 }} sản phẩm khác</div>
-                                <div class="mt-1 flex flex-wrap gap-1">
-                                    <Badge v-if="o.flags.shortage" tone="danger"><PackageX class="mr-1 size-3" />Thiếu hàng</Badge>
-                                    <Badge v-if="o.flags.unmapped" tone="warning"><Unlink class="mr-1 size-3" />Chưa map SKU</Badge>
-                                    <Badge v-if="o.sync_warning" tone="warning"><AlertTriangle class="mr-1 size-3" />Cảnh báo</Badge>
-                                    <Badge v-if="o.flags.printed" tone="muted"><Printer class="mr-1 size-3" />Đã in</Badge>
-                                </div>
                             </td>
-                            <td v-if="columns.total" class="px-4 py-3 text-right tabular-nums">
-                                <span class="font-semibold">{{ formatMoney(o.total) }}</span>
-                                <div v-if="o.payment_status && o.status !== 'CANCELLED'" class="text-xs" :class="o.payment_status === 'paid' ? 'text-emerald-600' : 'text-rose-600'">{{ paymentStatus[o.payment_status]?.label }}</div>
-                                <div v-if="o.is_cod" class="text-xs text-muted-foreground">COD</div>
+                            <td v-if="columns.status" class="px-3 py-3"><Badge :tone="orderStatus[o.status]?.tone">{{ orderStatus[o.status]?.label ?? o.status }}</Badge></td>
+                            <td v-if="columns.payment" class="whitespace-nowrap px-3 py-3 text-xs">
+                                <span v-if="o.payment_status && o.status !== 'CANCELLED'" class="inline-flex items-center gap-1.5" :title="paymentStatus[o.payment_status]?.label">
+                                    <span :class="cn('size-2.5 rounded-full border-2', o.payment_status === 'paid' ? 'border-emerald-500 bg-emerald-500' : o.payment_status === 'partial' ? 'border-amber-500 bg-[linear-gradient(90deg,var(--color-amber-500)_50%,transparent_50%)]' : 'border-slate-400')" />
+                                    <span :class="o.payment_status === 'paid' ? 'text-emerald-600' : o.payment_status === 'partial' ? 'text-amber-700' : 'text-muted-foreground'">{{ paymentStatus[o.payment_status]?.label }}</span>
+                                </span>
+                                <span v-else-if="o.is_cod" class="text-muted-foreground">COD</span>
+                                <span v-else class="text-muted-foreground">{{ o.source === 'manual' ? '—' : 'Sàn thu' }}</span>
                             </td>
-                            <td v-if="columns.status" class="px-4 py-3"><Badge :tone="orderStatus[o.status]?.tone">{{ orderStatus[o.status]?.label ?? o.status }}</Badge></td>
-                            <td v-if="columns.deadline" class="px-4 py-3 text-xs">
+                            <td v-if="columns.deadline" class="whitespace-nowrap px-3 py-3 text-xs">
                                 <span v-if="o.flags.overdue" class="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 font-medium text-rose-600"><Clock class="size-3" />{{ deadlineLabel(o.ship_by_at) }}</span>
                                 <span v-else-if="o.flags.due_soon" class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700"><Clock class="size-3" />{{ deadlineLabel(o.ship_by_at) }}</span>
-                                <span v-else class="text-muted-foreground">{{ formatDateTime(o.ship_by_at) }}</span>
+                                <span v-else class="text-muted-foreground">{{ o.ship_by_at ? formatDateTime(o.ship_by_at) : '—' }}</span>
                                 <div v-if="o.deliver_on" class="mt-0.5 text-foreground" data-testid="row-deliver-on">Hẹn {{ formatDate(o.deliver_on) }}</div>
                             </td>
-                            <td v-if="columns.assignee" class="px-4 py-3 text-xs text-muted-foreground">{{ o.assignee?.name ?? '—' }}</td>
+                            <td v-if="columns.assignee" class="px-3 py-3 text-xs text-muted-foreground">{{ o.assignee?.name ?? '—' }}</td>
+                            <td v-if="columns.total" class="px-4 py-3 text-right font-semibold tabular-nums">{{ formatMoney(o.total) }}</td>
                         </tr>
                         <tr v-if="expanded.has(o.id)">
                             <td :colspan="columnCount" class="p-0"><OrderQuickView :id="o.id" /></td>

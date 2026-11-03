@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { ArrowRight, Search, Undo2 } from 'lucide-vue-next';
+import { Search, Undo2 } from 'lucide-vue-next';
+import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import Tabs from '../../components/Tabs.vue';
@@ -12,7 +13,7 @@ import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
-import { formatDateTime, formatMoney } from '@/shared/lib/utils';
+import { cn, formatDateTime, formatMoney } from '@/shared/lib/utils';
 import { marketplaceNames, returnStatus, returnTypes } from '../orders/labels';
 import type { OrderReturnData } from '@/shared/types';
 
@@ -25,7 +26,7 @@ const type = ref('');
 const q = ref('');
 const page = ref(1);
 
-const tabs = computed(() => [{ value: 'all', label: 'Tất cả' }, { value: 'pending_receipt', label: 'Chưa nhận hàng' }, ...['received', 'in_transit', 'requested', 'approved', 'inspected', 'closed', 'rejected'].map((s) => ({ value: s, label: returnStatus[s]!.label }))]);
+const tabs = computed(() => [{ value: 'all', label: 'Tất cả đơn trả' }, { value: 'pending_receipt', label: 'Chưa nhận hàng' }, ...['received', 'in_transit', 'requested', 'approved', 'inspected', 'closed', 'rejected'].map((s) => ({ value: s, label: returnStatus[s]!.label }))]);
 
 async function load() {
     loading.value = true;
@@ -50,14 +51,14 @@ watch([status, type], () => ((page.value = 1), load()));
 </script>
 
 <template>
-    <PageHeader title="Trả hàng" description="Hàng hoàn từ khách, đơn hủy sau khi gửi, giao thất bại. Kho chỉ được cộng lại sau khi kiểm hàng, theo số lượng còn bán được." />
+    <PageHeader title="Danh sách đơn trả hàng" description="Hàng hoàn từ khách, đơn hủy sau khi gửi, giao thất bại. Kho chỉ được cộng lại sau khi kiểm hàng, theo số lượng còn bán được." />
     <Card>
         <div class="border-b px-3"><Tabs v-model="status" :tabs="tabs" variant="underline" /></div>
         <div class="space-y-3 border-b p-4">
             <div class="flex flex-wrap gap-2">
                 <div class="relative min-w-60 flex-1">
                     <Search class="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                    <Input v-model="q" class="pl-8" placeholder="Số phiếu, mã đơn…" />
+                    <Input v-model="q" class="pl-8" placeholder="Tìm theo mã đơn trả, mã đơn hàng…" />
                 </div>
                 <Select v-model="type" class="w-48" :options="[{ value: '', label: 'Mọi loại' }, ...Object.entries(returnTypes).map(([value, label]) => ({ value, label }))]" aria-label="Loại" />
             </div>
@@ -67,30 +68,45 @@ watch([status, type], () => ((page.value = 1), load()));
         <EmptyState v-else-if="!rows.length" :icon="Undo2" title="Chưa có phiếu trả hàng" description="Phiếu được tạo tự động khi đơn bị hủy sau khi gửi hoặc giao thất bại, hoặc tạo thủ công từ trang chi tiết đơn." />
         <div v-else class="overflow-x-auto">
             <table class="w-full text-sm" data-testid="return-table">
-                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                <thead class="whitespace-nowrap border-b bg-slate-50 text-left text-xs font-semibold text-foreground/80">
                     <tr>
-                        <th class="px-4 py-2.5 font-medium">Số phiếu</th>
-                        <th class="px-4 py-2.5 font-medium">Đơn hàng</th>
-                        <th class="px-4 py-2.5 font-medium">Loại</th>
-                        <th class="px-4 py-2.5 font-medium">Lý do</th>
-                        <th class="px-4 py-2.5 text-right font-medium">Số dòng</th>
-                        <th class="px-4 py-2.5 text-right font-medium">Hoàn tiền</th>
-                        <th class="px-4 py-2.5 font-medium">Trạng thái</th>
-                        <th class="px-4 py-2.5 font-medium">Ngày tạo</th>
-                        <th class="px-4 py-2.5" />
+                        <th class="px-4 py-3">Mã đơn trả hàng</th>
+                        <th class="px-3 py-3">Mã đơn hàng</th>
+                        <th class="px-3 py-3">Mã đơn đổi hàng</th>
+                        <th class="px-3 py-3">Khách hàng</th>
+                        <th class="px-3 py-3">Trạng thái</th>
+                        <th class="px-3 py-3">Hoàn tiền</th>
+                        <th class="px-3 py-3 text-right">Tiền hoàn</th>
+                        <th class="whitespace-nowrap px-3 py-3">Ngày nhận hàng</th>
+                        <th class="px-4 py-3">Lý do trả hàng</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y">
-                    <tr v-for="r in rows" :key="r.id" class="cursor-pointer hover:bg-muted/30" @click="$router.push(`/returns/${r.id}`)">
-                        <td class="px-4 py-3 font-mono text-xs font-medium">{{ r.number }}</td>
-                        <td class="px-4 py-3"><span class="font-mono text-xs">{{ r.order?.external_order_id }}</span> <span class="text-xs text-muted-foreground">· {{ marketplaceNames[r.order?.marketplace ?? ''] }}</span></td>
-                        <td class="px-4 py-3">{{ returnTypes[r.type] }}</td>
+                    <tr v-for="r in rows" :key="r.id" class="cursor-pointer hover:bg-blue-50/40" @click="$router.push(`/returns/${r.id}`)">
+                        <td class="px-4 py-3">
+                            <span class="font-medium text-primary">{{ r.number }}</span>
+                            <div class="text-[11px] text-muted-foreground">{{ returnTypes[r.type] }} · {{ r.lines_count }} dòng</div>
+                        </td>
+                        <td class="px-3 py-3" @click.stop>
+                            <RouterLink v-if="r.order" :to="`/orders/${r.order.id}`" class="inline-flex items-center gap-1.5 text-primary hover:underline">
+                                <MarketplaceLogo :marketplace="r.order.marketplace" :name="marketplaceNames[r.order.marketplace]" size="sm" />{{ r.order.external_order_id }}
+                            </RouterLink>
+                        </td>
+                        <td class="px-3 py-3" @click.stop>
+                            <RouterLink v-if="r.exchange_order" :to="`/orders/${r.exchange_order.id}`" class="text-primary hover:underline">{{ r.exchange_order.external_order_id }}</RouterLink>
+                            <span v-else class="text-muted-foreground">—</span>
+                        </td>
+                        <td class="max-w-48 truncate px-3 py-3">{{ r.order?.customer ?? 'Khách lẻ' }}</td>
+                        <td class="whitespace-nowrap px-3 py-3"><Badge :tone="returnStatus[r.status]?.tone">{{ returnStatus[r.status]?.label }}</Badge></td>
+                        <td class="px-3 py-3 text-xs">
+                            <span class="inline-flex items-center gap-1.5" :title="Number(r.refund_amount ?? 0) > 0 ? 'Có hoàn tiền' : 'Không hoàn tiền'">
+                                <span :class="cn('size-2.5 rounded-full border-2', Number(r.refund_amount ?? 0) > 0 ? 'border-emerald-500 bg-emerald-500' : 'border-slate-400')" />
+                                <span class="text-muted-foreground">{{ Number(r.refund_amount ?? 0) > 0 ? 'Có' : 'Không' }}</span>
+                            </span>
+                        </td>
+                        <td class="px-3 py-3 text-right font-semibold tabular-nums">{{ formatMoney(r.refund_amount ?? 0) }}</td>
+                        <td class="whitespace-nowrap px-3 py-3 tabular-nums text-muted-foreground">{{ r.received_at ? formatDateTime(r.received_at) : '—' }}</td>
                         <td class="max-w-56 truncate px-4 py-3 text-muted-foreground" :title="r.reason ?? ''">{{ r.reason ?? '—' }}</td>
-                        <td class="px-4 py-3 text-right tabular-nums">{{ r.lines_count }}</td>
-                        <td class="px-4 py-3 text-right tabular-nums">{{ formatMoney(r.refund_amount) }}</td>
-                        <td class="px-4 py-3"><Badge :tone="returnStatus[r.status]?.tone">{{ returnStatus[r.status]?.label }}</Badge></td>
-                        <td class="px-4 py-3 text-muted-foreground">{{ formatDateTime(r.created_at) }}</td>
-                        <td class="px-4 py-3"><ArrowRight class="ml-auto size-4 text-muted-foreground" /></td>
                     </tr>
                 </tbody>
             </table>
