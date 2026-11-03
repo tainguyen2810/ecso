@@ -17,14 +17,14 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::delete('brands/{brand}', [TaxonomyController::class, 'destroyBrand']);
 
     Route::get('products/sku-check', [ProductController::class, 'checkSku']);
-    Route::get('products/export', [ProductTransferController::class, 'export'])->middleware('throttle:10,1');
+    Route::get('products/export', [ProductTransferController::class, 'export'])->middleware('throttle:10,1,catalog.products.export');
     Route::get('products/import-template', [ProductTransferController::class, 'template']);
-    Route::post('products/import', [ProductTransferController::class, 'import'])->middleware('throttle:10,1');
+    Route::post('products/import', [ProductTransferController::class, 'import'])->middleware('throttle:10,1,catalog.products.import');
     Route::post('products/bulk-status', [ProductController::class, 'bulkStatus']);
     Route::post('products/bulk-delete', [ProductController::class, 'bulkDelete']);
     Route::get('products/tags', [ProductController::class, 'tags']);
     Route::get('variants', [ProductController::class, 'variants']);
     Route::apiResource('products', ProductController::class);
-    Route::post('products/{product}/images', [ProductImageController::class, 'store'])->middleware('throttle:60,1');
+    Route::post('products/{product}/images', [ProductImageController::class, 'store'])->middleware('throttle:60,1,catalog.products.x.images');
     Route::delete('products/{product}/images/{image}', [ProductImageController::class, 'destroy']);
 });
