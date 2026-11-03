@@ -3,6 +3,7 @@ import {
     Boxes,
     CreditCard,
     LayoutDashboard,
+    MonitorSmartphone,
     Package,
     PlugZap,
     ReceiptText,
@@ -36,6 +37,7 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
         items: [
             { name: 'dashboard', label: 'Tổng quan', path: '/', icon: LayoutDashboard, permission: 'dashboard.view', shortcut: 'd' },
             { name: 'orders', label: 'Đơn hàng', path: '/orders', icon: ShoppingCart, permission: 'orders.view', shortcut: 'o', description: 'Quản lý đơn tập trung từ mọi sàn: lọc, xử lý hàng loạt, in phiếu, theo dõi trạng thái.' },
+            { name: 'pos', label: 'Bán tại quầy', path: '/pos', icon: MonitorSmartphone, permission: 'orders.create', shortcut: 'b', description: 'Màn hình bán hàng nhanh: quét mã vạch, tính tiền thừa, in hóa đơn K80.' },
             { name: 'customers', label: 'Khách hàng', path: '/customers', icon: UsersRound, permission: 'customers.view', shortcut: 'k', description: 'Danh bạ khách mua qua kênh riêng, lịch sử mua và công nợ.' },
             { name: 'products', label: 'Sản phẩm', path: '/products', icon: Package, permission: 'products.view', shortcut: 'p', description: 'SKU, biến thể, mã vạch, mapping với listing trên sàn.' },
             { name: 'inventory', label: 'Kho hàng', path: '/inventory', icon: Boxes, permission: 'inventory.view', shortcut: 'i', description: 'Tồn kho nhiều kho, sổ kho, giữ tồn, điều chỉnh và chuyển kho.' },
