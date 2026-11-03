@@ -18,7 +18,7 @@ import { api, ApiError } from '@/shared/lib/api';
 import { cn, formatDate, formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
-import { orderStatus, paymentMethods, paymentStatus } from '../orders/labels';
+import { orderStatus, paymentMethodNames, paymentMethods, paymentStatus } from '../orders/labels';
 import type { Customer, CustomerAddress, CustomerLedgerEntry, CustomerNote, OrderPaymentData, OrderSummary } from '@/shared/types';
 
 type Detail = Customer & { orders: OrderSummary[]; payments: OrderPaymentData[]; addresses: CustomerAddress[]; notes: CustomerNote[] };
@@ -216,7 +216,7 @@ const tabs = computed(() => [
                 <Card v-else-if="tab === 'payments'">
                     <ul v-if="customer.payments.length" class="divide-y text-sm">
                         <li v-for="p in customer.payments" :key="p.id" class="flex items-center justify-between px-5 py-2.5" :class="p.voided_at && 'opacity-50 line-through'">
-                            <div><div>{{ p.kind === 'refund' ? 'Hoàn' : 'Thu' }} · {{ paymentMethods[p.method] }}</div><div class="text-xs text-muted-foreground">{{ p.order?.number }} · {{ formatDateTime(p.paid_at) }}</div></div>
+                            <div><div>{{ p.kind === 'refund' ? 'Hoàn' : 'Thu' }} · {{ paymentMethodNames[p.method] ?? p.method }}</div><div class="text-xs text-muted-foreground">{{ p.order?.number }} · {{ formatDateTime(p.paid_at) }}</div></div>
                             <span class="tabular-nums" :class="p.kind === 'refund' ? 'text-destructive' : 'text-success'">{{ p.kind === 'refund' ? '−' : '+' }}{{ formatMoney(p.amount) }}</span>
                         </li>
                     </ul>

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, PackageOpen, Trash2, UserRound, X } from 'lucide-vue-next';
+import { ArrowLeft, PackageOpen, Repeat, Trash2, UserRound, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
+import TagInput from '../../components/TagInput.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
@@ -16,7 +17,7 @@ import { cn, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { channelTypes, paymentMethods } from './labels';
-import type { Customer, OrderDetail, SalesChannel, Variant, Warehouse } from '@/shared/types';
+import type { Customer, OrderDetail, OrderReturnData, SalesChannel, Variant, Warehouse } from '@/shared/types';
 
 interface Line {
     variant_id: string;
@@ -35,6 +36,10 @@ const tenant = useTenantStore();
 const editId = computed(() => (route.name === 'order-edit' ? String(route.params.id) : null));
 const copyId = computed(() => (editId.value ? null : ((route.query.copy as string | undefined) ?? null)));
 const copiedFrom = ref<string | null>(null);
+// Exchange: a new order paid (partly) by the goods of a return (?exchange=<return id>).
+const exchangeId = computed(() => (editId.value ? null : ((route.query.exchange as string | undefined) ?? null)));
+const exchange = ref<OrderReturnData | null>(null);
+const tagSuggestions = ref<string[]>([]);
 
 const loading = ref(true);
 const channels = ref<SalesChannel[]>([]);
@@ -57,6 +62,8 @@ const form = reactive({
     shipping_fee: 0 as number | string,
     discount: 0 as number | string,
     note: '',
+    tags: [] as string[],
+    deliver_on: '',
     pay_method: 'cash',
     pay_amount: '' as number | string,
 });
@@ -67,11 +74,14 @@ const num = (v: number | string) => Number(v) || 0;
 const lineTotal = (l: Line) => Math.max(0, num(l.quantity) * num(l.unit_price) - num(l.discount));
 const subtotal = computed(() => lines.value.reduce((s, l) => s + lineTotal(l), 0));
 const total = computed(() => Math.max(0, subtotal.value + num(form.shipping_fee) - num(form.discount)));
+/** Estimate shown while typing; the server caps it at what the buyer actually paid on the original order. */
+const exchangeCredit = computed(() => (exchange.value ? Math.min(Number(exchange.value.goods_value ?? 0), total.value) : 0));
 const activeChannels = computed(() => channels.value.filter((c) => c.is_active || c.id === form.channel_id).map((c) => ({ value: c.id, label: `${c.name} · ${channelTypes[c.type] ?? c.type}` })));
 const activeWarehouses = computed(() => warehouses.value.filter((w) => w.status === 'active').map((w) => ({ value: w.id, label: `${w.code} · ${w.name}` })));
 
 onMounted(async () => {
     try {
+        api.get('/orders/tags').then(({ data }) => (tagSuggestions.value = data.data)).catch(() => {});
         const [c, w] = await Promise.all([api.get('/sales-channels'), api.get('/warehouses')]);
         channels.value = c.data.data;
         warehouses.value = w.data.data;
@@ -86,6 +96,7 @@ onMounted(async () => {
                 chooseCustomer(data.data);
             }
             if (copyId.value) await loadOrder(copyId.value, true);
+            if (exchangeId.value) await loadExchange(exchangeId.value);
         }
     } finally {
         loading.value = false;
@@ -116,6 +127,8 @@ async function loadOrder(id: string, asCopy = false) {
     form.shipping_fee = Number(o.shipping_fee);
     form.discount = Number(o.discount);
     form.note = o.buyer_note ?? '';
+    form.tags = [...(o.tags ?? [])];
+    form.deliver_on = asCopy ? '' : (o.deliver_on ?? '');
     customer.value = o.customer ? { ...o.customer, phone: null, address: null } : null;
     lines.value = o.items.map((i) => ({
         variant_id: i.variant!.id,
@@ -206,7 +219,25 @@ watch(
 );
 
 function payFull() {
-    form.pay_amount = total.value;
+    form.pay_amount = total.value - exchangeCredit.value;
+}
+
+/** Starts an exchange order for the buyer of a return, on the same channel and warehouse. */
+async function loadExchange(returnId: string) {
+    const { data } = await api.get(`/returns/${returnId}`);
+    exchange.value = data.data;
+    if (exchange.value?.exchange_order) {
+        toast.error(`Phiếu ${exchange.value.number} đã đổi sang đơn ${exchange.value.exchange_order.external_order_id}.`);
+        exchange.value = null;
+        return;
+    }
+    const original = (await api.get(`/orders/${exchange.value!.order!.id}`)).data.data as OrderDetail;
+    if (original.channel) form.channel_id = original.channel.id;
+    if (original.warehouse) form.warehouse_id = original.warehouse.id;
+    customer.value = original.customer ? { ...original.customer, phone: null, address: null } : null;
+    form.buyer_name = original.buyer_name ?? '';
+    form.buyer_phone = original.buyer_phone ?? '';
+    form.shipping_address = original.shipping_address ?? '';
 }
 
 async function submit() {
@@ -224,6 +255,8 @@ async function submit() {
         shipping_fee: num(form.shipping_fee),
         discount: num(form.discount),
         note: form.note || null,
+        tags: form.tags,
+        deliver_on: form.deliver_on || null,
         lines: lines.value.map((l) => ({ variant_id: l.variant_id, quantity: num(l.quantity), unit_price: num(l.unit_price), discount: num(l.discount) })),
     };
     try {
@@ -233,7 +266,7 @@ async function submit() {
             await router.push(`/orders/${editId.value}`);
         } else {
             const payments = num(form.pay_amount) > 0 ? [{ method: form.pay_method, amount: num(form.pay_amount) }] : [];
-            const { data } = await api.post('/sales-orders', { ...body, channel_id: form.channel_id, stage: form.stage, payments });
+            const { data } = await api.post('/sales-orders', { ...body, channel_id: form.channel_id, stage: form.stage, payments, exchange_return_id: exchange.value?.id ?? null });
             toast.success(`Đã tạo đơn ${data.data.external_order_id}`);
             await router.push(`/orders/${data.data.id}`);
         }
@@ -277,7 +310,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
     />
 
     <div v-if="loading" class="space-y-4"><Skeleton class="h-40" /><Skeleton class="h-64" /></div>
-    <form v-else class="grid gap-5 lg:grid-cols-3" data-testid="order-form" @submit.prevent="submit">
+    <div v-if="!loading && exchange" class="mb-4 flex items-start gap-2 rounded-md border border-primary/30 bg-primary/5 px-4 py-3 text-sm" data-testid="exchange-banner">
+        <Repeat class="mt-0.5 size-4 shrink-0 text-primary" />
+        <span>
+            Đơn đổi hàng cho phiếu trả <b class="font-mono">{{ exchange.number }}</b> (đơn {{ exchange.order?.external_order_id }}). Hàng trả trị giá
+            <b>{{ formatMoney(exchange.goods_value) }}</b> được trừ vào đơn này, tối đa bằng số khách đã trả ở đơn cũ. Chọn sản phẩm khách lấy đổi.
+        </span>
+    </div>
+    <form v-if="!loading" class="grid gap-5 lg:grid-cols-3" data-testid="order-form" @submit.prevent="submit">
         <div class="space-y-5 lg:col-span-2">
             <Card title="Sản phẩm" description="Quét mã vạch hoặc tìm SKU để thêm. Giá mặc định là giá bán tham khảo của SKU.">
                 <div class="border-b p-4">
@@ -380,6 +420,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
                     <FormField label="Đơn vị vận chuyển" for="o-carrier"><Input id="o-carrier" v-model="form.carrier" placeholder="GHN, GHTK, tự giao…" /></FormField>
                     <label class="flex items-center gap-2 self-end pb-2 text-sm"><input v-model="form.is_cod" type="checkbox" class="size-4" /> Thu hộ (COD) khi giao</label>
                     <FormField label="Ghi chú" for="o-note" class="sm:col-span-2"><Input id="o-note" v-model="form.note" maxlength="500" /></FormField>
+                    <FormField label="Ngày hẹn giao" for="o-deliver-on"><Input id="o-deliver-on" v-model="form.deliver_on" type="date" data-testid="form-deliver-on" /></FormField>
+                    <div>
+                        <span class="mb-1.5 block text-sm font-medium">Tags</span>
+                        <TagInput v-model="form.tags" :suggestions="tagSuggestions" />
+                    </div>
                 </div>
             </Card>
         </div>
@@ -407,6 +452,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
                         <div class="flex items-center justify-between gap-2"><dt class="text-muted-foreground">Giảm giá đơn <kbd class="text-[10px]">F6</kbd></dt><dd><input v-model="form.discount" type="number" min="0" class="h-7 w-28 rounded border border-input bg-card px-2 text-right text-sm tabular-nums" data-testid="order-discount" /></dd></div>
                         <p v-if="error?.field('discount')" class="text-xs text-destructive">{{ error.field('discount') }}</p>
                         <div class="flex justify-between border-t pt-2 text-base font-semibold"><dt>Khách phải trả</dt><dd class="tabular-nums" data-testid="order-total">{{ formatMoney(total) }}</dd></div>
+                        <template v-if="exchange">
+                            <div class="flex justify-between text-primary"><dt>Trừ hàng đổi trả</dt><dd class="tabular-nums" data-testid="exchange-credit">−{{ formatMoney(exchangeCredit) }}</dd></div>
+                            <div class="flex justify-between font-semibold"><dt>Còn phải trả</dt><dd class="tabular-nums">{{ formatMoney(total - exchangeCredit) }}</dd></div>
+                        </template>
                     </dl>
 
                     <div v-if="!editId && tenant.can('orders.payment')" class="space-y-2">
@@ -415,7 +464,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
                             <Select v-model="form.pay_method" class="w-36" :options="Object.entries(paymentMethods).filter(([k]) => k !== 'cod').map(([value, label]) => ({ value, label }))" aria-label="Hình thức" />
                             <Input v-model="form.pay_amount" type="number" min="0" placeholder="0" class="text-right" data-testid="pay-amount" />
                         </div>
-                        <button type="button" class="text-xs font-medium text-primary hover:underline" @click="payFull">Thu đủ {{ formatMoney(total) }}</button>
+                        <button type="button" class="text-xs font-medium text-primary hover:underline" @click="payFull">Thu đủ {{ formatMoney(total - exchangeCredit) }}</button>
                         <p v-if="error?.field('amount')" class="text-xs text-destructive">{{ error.field('amount') }}</p>
                     </div>
 

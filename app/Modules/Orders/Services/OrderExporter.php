@@ -20,7 +20,7 @@ class OrderExporter
     public const HEADINGS = [
         'Mã đơn', 'Ngày đặt', 'Nguồn', 'Kênh / gian hàng', 'Khách hàng', 'Người nhận', 'Điện thoại', 'Địa chỉ giao',
         'Sản phẩm', 'Số lượng', 'Tiền hàng', 'Phí giao', 'Giảm giá', 'Tổng tiền', 'Đã thu', 'Thanh toán',
-        'Trạng thái', 'Đơn vị vận chuyển', 'Mã vận đơn', 'Người xử lý', 'Lý do hủy',
+        'Trạng thái', 'Đơn vị vận chuyển', 'Mã vận đơn', 'Người xử lý', 'Lý do hủy', 'Tags', 'Ngày hẹn giao',
     ];
 
     private const STATUS = [
@@ -91,6 +91,8 @@ class OrderExporter
                         (string) $o->tracking_number,
                         (string) $o->assignee?->name,
                         (string) $o->cancel_reason,
+                        implode(', ', $o->tags ?? []),
+                        $o->deliver_on?->format('d/m/Y') ?? '',
                     ]));
                 }
             });

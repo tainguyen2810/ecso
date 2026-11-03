@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import { ArrowLeft, ClipboardCheck } from 'lucide-vue-next';
+import { ArrowLeft, ClipboardCheck, Repeat } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
@@ -157,7 +157,12 @@ async function submitInspect() {
                 <dl class="space-y-2 px-5 py-4 text-sm">
                     <div><dt class="text-xs text-muted-foreground">Đơn hàng</dt><dd><RouterLink :to="`/orders/${ret.order?.id}`" class="font-mono text-xs hover:underline">{{ ret.order?.external_order_id }}</RouterLink> <Badge class="ml-1" :tone="orderStatus[ret.order?.status ?? '']?.tone">{{ orderStatus[ret.order?.status ?? '']?.label }}</Badge></dd></div>
                     <div><dt class="text-xs text-muted-foreground">Lý do</dt><dd>{{ ret.reason ?? '—' }}</dd></div>
-                    <div><dt class="text-xs text-muted-foreground">Hoàn tiền</dt><dd>{{ formatMoney(ret.refund_amount) }}</dd></div>
+                    <div><dt class="text-xs text-muted-foreground">Giá trị hàng trả</dt><dd>{{ formatMoney(ret.goods_value ?? ret.refund_amount) }}</dd></div>
+                    <div data-testid="return-exchange"><dt class="text-xs text-muted-foreground">Đổi hàng</dt><dd>
+                        <template v-if="ret.exchange_order">Đơn <RouterLink :to="`/orders/${ret.exchange_order.id}`" class="font-mono text-xs text-primary hover:underline">{{ ret.exchange_order.external_order_id }}</RouterLink><span v-if="Number(ret.exchange_credit) > 0"> · bù trừ {{ formatMoney(ret.exchange_credit) }}</span></template>
+                        <RouterLink v-else-if="ret.expects_goods && ret.status !== 'rejected' && tenant.can('orders.create')" :to="{ path: '/orders/new', query: { exchange: ret.id } }" data-testid="return-create-exchange"><Button size="sm" variant="outline"><Repeat /> Tạo đơn đổi hàng</Button></RouterLink>
+                        <span v-else>—</span>
+                    </dd></div>
                     <div v-if="ret.warehouse"><dt class="text-xs text-muted-foreground">Kho nhập lại</dt><dd>{{ ret.warehouse.code }} · {{ ret.warehouse.name }}</dd></div>
                     <div><dt class="text-xs text-muted-foreground">Nhận hàng</dt><dd>{{ formatDateTime(ret.received_at) }}</dd></div>
                     <div><dt class="text-xs text-muted-foreground">Kiểm hàng</dt><dd>{{ formatDateTime(ret.inspected_at) }}<span v-if="ret.inspected_by"> · {{ ret.inspected_by }}</span></dd></div>

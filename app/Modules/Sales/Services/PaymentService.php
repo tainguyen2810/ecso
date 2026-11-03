@@ -79,6 +79,10 @@ class PaymentService
             if ($payment->voided_at !== null) {
                 return $payment;
             }
+            // The set-off of an exchange has a twin entry on the other order: voiding one side would unbalance them.
+            if ($payment->method === OrderPayment::EXCHANGE) {
+                throw ValidationException::withMessages(['payment' => 'Không hủy được bút toán bù trừ đổi hàng.']);
+            }
 
             $payment->forceFill(['voided_at' => now(), 'voided_by' => Auth::id(), 'void_reason' => $reason])->save();
             $this->recompute($order);

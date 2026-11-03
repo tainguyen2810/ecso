@@ -3,6 +3,7 @@
 namespace App\Modules\Orders\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Identity\Models\User;
 use App\Modules\Inventory\Services\ReservationLedger;
 use App\Modules\Marketplace\Connectors\Capability;
@@ -20,6 +21,7 @@ use App\Modules\Orders\Services\OrderActions;
 use App\Modules\Orders\Services\OrderExporter;
 use App\Modules\Orders\Services\OrderQuery;
 use App\Modules\Orders\Services\OrderSync;
+use App\Modules\Orders\Support\OrderTags;
 use App\Modules\Sales\Http\Resources\PaymentResource;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\OrderPayment;
@@ -107,7 +109,12 @@ class OrderController extends Controller
             'notes' => $order->notes()->with('user:id,name')->get()->map(fn (OrderNote $n) => [
                 'id' => $n->id, 'body' => $n->body, 'user' => $n->user?->name, 'created_at' => $n->created_at?->toIso8601String(),
             ]),
-            'returns' => ReturnResource::collection($order->returns()->get()),
+            'returns' => ReturnResource::collection($order->returns()->with('exchangeOrder')->get()),
+            // This order was taken in exchange for returned goods.
+            'exchanged_from' => OrderReturn::query()->with('order')->where('exchange_order_id', $order->id)->get()->map(fn (OrderReturn $r) => [
+                'id' => $r->ulid, 'number' => $r->number, 'credit' => $r->exchange_credit,
+                'order' => ['id' => $r->order->ulid, 'external_order_id' => $r->order->external_order_id],
+            ]),
             'actions' => $order->isManual()
                 ? collect(ManualOrderService::ACTIONS)->map(fn ($def) => ['allowed' => in_array($order->status, $def[0], true), 'capability' => Capability::SUPPORTED])
                 : collect(OrderActions::ALLOWED_FROM)->map(fn ($from, $action) => [
@@ -169,6 +176,37 @@ class OrderController extends Controller
         $data = $request->validate(['user_id' => ['nullable', 'string']]);
 
         return new OrderResource($actions->assign($order, $this->member($data['user_id'] ?? null))->load(['account', 'assignee']));
+    }
+
+    /** Internal tags and the date promised to the buyer: editable on any order, marketplace ones included. */
+    public function meta(Request $request, Order $order, AuditLogger $audit): OrderResource
+    {
+        $this->authorize('update', $order);
+        $data = $request->validate([
+            'tags' => ['sometimes', 'nullable', 'array', 'max:'.OrderTags::MAX],
+            'tags.*' => ['nullable', 'string', 'max:40'],
+            'deliver_on' => ['sometimes', 'nullable', 'date'],
+        ]);
+        if (array_key_exists('tags', $data)) {
+            $order->tags = OrderTags::normalize($data['tags']);
+        }
+        if (array_key_exists('deliver_on', $data)) {
+            $order->deliver_on = $data['deliver_on'];
+        }
+        $order->save();
+        $audit->record('order.meta_updated', $order, ['order' => $order->external_order_id, 'tags' => $order->tags, 'deliver_on' => $order->deliver_on?->toDateString()]);
+
+        return new OrderResource($order->load(['account', 'channel', 'customer', 'assignee']));
+    }
+
+    /** Tags already used on orders, for suggestions. */
+    public function tags(): JsonResponse
+    {
+        $this->authorize('viewAny', Order::class);
+        $tags = Order::query()->whereNotNull('tags')->latest('id')->limit(2000)->pluck('tags')->flatten()
+            ->unique(fn ($t) => mb_strtolower((string) $t))->sort()->values();
+
+        return response()->json(['data' => $tags]);
     }
 
     public function note(Request $request, Order $order, OrderActions $actions): JsonResponse
@@ -341,6 +379,9 @@ class OrderController extends Controller
             'to' => ['nullable', 'date'],
             'q' => ['nullable', 'string', 'max:100'],
             'sku' => ['nullable', 'string'],
+            'tag' => ['nullable', 'string', 'max:40'],
+            'deliver_from' => ['nullable', 'date'],
+            'deliver_to' => ['nullable', 'date'],
             'assignee' => ['nullable', 'string'],
             'flags' => ['nullable', 'array'],
             'flags.*' => [Rule::in(['shortage', 'unmapped', 'overdue', 'due_soon', 'warning', 'not_printed', 'payment_due'])],

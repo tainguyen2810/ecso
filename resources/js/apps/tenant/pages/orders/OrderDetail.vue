@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { AlertTriangle, ArrowLeft, Ban, Banknote, Check, Copy, Link2, Pencil, Printer, ReceiptText, RefreshCw, Undo2, X } from 'lucide-vue-next';
+import { AlertTriangle, ArrowLeft, Ban, Banknote, Check, Copy, Link2, Pencil, Printer, ReceiptText, RefreshCw, Repeat, Undo2, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
+import TagInput from '../../components/TagInput.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -16,7 +17,7 @@ import { api, ApiError } from '@/shared/lib/api';
 import { cn, formatDateTime, formatMoney } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
-import { actionLabels, capabilityLabels, deadlineLabel, historySource, manualActionOrder, mappingStatus, marketplaceNames, orderStatus, paymentMethods, paymentStatus, returnStatus, returnTypes } from './labels';
+import { actionLabels, capabilityLabels, deadlineLabel, historySource, manualActionOrder, mappingStatus, marketplaceNames, orderStatus, paymentMethodNames, paymentMethods, paymentStatus, returnStatus, returnTypes } from './labels';
 import { printInvoice } from './invoice';
 import { downloadPackingSlips } from './packingSlip';
 import { orderWorkflow } from './workflow';
@@ -54,7 +55,22 @@ async function load() {
 onMounted(async () => {
     await load();
     api.get('/orders/assignees').then(({ data }) => (assignees.value = data.data)).catch(() => {});
+    api.get('/orders/tags').then(({ data }) => (tagSuggestions.value = data.data)).catch(() => {});
 });
+
+// Tags and the promised delivery date are saved as soon as they change.
+const meta = ref({ tags: [] as string[], deliver_on: '' });
+const tagSuggestions = ref<string[]>([]);
+watch(order, (o) => (meta.value = { tags: [...(o?.tags ?? [])], deliver_on: o?.deliver_on ?? '' }));
+async function saveMeta() {
+    try {
+        const { data } = await api.put(`/orders/${order.value!.id}/meta`, { tags: meta.value.tags, deliver_on: meta.value.deliver_on || null });
+        order.value = { ...order.value!, tags: data.data.tags, deliver_on: data.data.deliver_on };
+        toast.success('Đã lưu.');
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    }
+}
 
 const isManual = computed(() => order.value?.source === 'manual');
 const actionList = computed(() => {
@@ -244,6 +260,10 @@ async function createReturn() {
             </li>
         </ol>
 
+        <div v-for="x in order.exchanged_from ?? []" :key="x.id" class="mb-4 flex items-start gap-2 rounded-md border border-primary/30 bg-primary/5 px-4 py-3 text-sm" data-testid="exchanged-from">
+            <Repeat class="mt-0.5 size-4 shrink-0 text-primary" />
+            <span>Đơn đổi hàng từ phiếu trả <RouterLink :to="`/returns/${x.id}`" class="font-mono font-medium hover:underline">{{ x.number }}</RouterLink> của đơn <RouterLink :to="`/orders/${x.order.id}`" class="font-mono font-medium hover:underline">{{ x.order.external_order_id }}</RouterLink><template v-if="Number(x.credit) > 0">: hàng trả được trừ {{ formatMoney(x.credit) }} vào đơn này</template>.</span>
+        </div>
         <div v-if="order.sync_warning" class="mb-4 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-4 py-3 text-sm" data-testid="sync-warning">
             <AlertTriangle class="mt-0.5 size-4 shrink-0" /> {{ order.sync_warning }}
         </div>
@@ -342,6 +362,15 @@ async function createReturn() {
             </div>
 
             <div class="space-y-4">
+                <Card title="Tags · hẹn giao" data-testid="order-meta">
+                    <div class="space-y-3 px-5 py-4">
+                        <TagInput v-model="meta.tags" :suggestions="tagSuggestions" :disabled="!tenant.can('orders.update')" @update:model-value="saveMeta" />
+                        <FormField label="Ngày hẹn giao cho khách" for="deliver-on">
+                            <Input id="deliver-on" v-model="meta.deliver_on" type="date" :disabled="!tenant.can('orders.update')" data-testid="deliver-on" @change="saveMeta" />
+                        </FormField>
+                    </div>
+                </Card>
+
                 <Card title="Xử lý đơn">
                     <div class="space-y-3 px-5 py-4">
                         <p v-if="!actionList.length" class="text-sm text-muted-foreground">Không có thao tác nào ở trạng thái hiện tại.</p>
@@ -392,12 +421,12 @@ async function createReturn() {
                     <ul v-if="order.payments.length" class="divide-y border-t text-sm">
                         <li v-for="p in order.payments" :key="p.id" class="flex items-center justify-between gap-2 px-5 py-2.5">
                             <div :class="p.voided_at && 'opacity-50 line-through'">
-                                <div>{{ p.kind === 'refund' ? 'Hoàn' : 'Thu' }} · {{ paymentMethods[p.method] }}<span v-if="p.reference" class="ml-1 font-mono text-xs">{{ p.reference }}</span></div>
+                                <div>{{ p.kind === 'refund' ? 'Hoàn' : 'Thu' }} · {{ paymentMethodNames[p.method] ?? p.method }}<span v-if="p.reference" class="ml-1 font-mono text-xs">{{ p.reference }}</span></div>
                                 <div class="text-xs text-muted-foreground">{{ formatDateTime(p.paid_at) }}<span v-if="p.created_by"> · {{ p.created_by }}</span><span v-if="p.void_reason"> · hủy: {{ p.void_reason }}</span></div>
                             </div>
                             <div class="flex items-center gap-1">
                                 <span class="tabular-nums" :class="p.kind === 'refund' ? 'text-destructive' : ''">{{ p.kind === 'refund' ? '−' : '' }}{{ formatMoney(p.amount) }}</span>
-                                <Button v-if="!p.voided_at && tenant.can('orders.payment')" variant="ghost" size="icon" class="size-7" title="Hủy phiếu (nhập nhầm)" @click="voidPayment(p.id)"><Ban class="size-3.5" /></Button>
+                                <Button v-if="!p.voided_at && p.method !== 'exchange' && tenant.can('orders.payment')" variant="ghost" size="icon" class="size-7" title="Hủy phiếu (nhập nhầm)" @click="voidPayment(p.id)"><Ban class="size-3.5" /></Button>
                             </div>
                         </li>
                     </ul>
@@ -440,12 +469,26 @@ async function createReturn() {
                         <Button size="sm" variant="outline" data-testid="create-return" @click="openReturn"><Undo2 /> Tạo</Button>
                     </template>
                     <ul v-if="order.returns.length" class="divide-y text-sm">
-                        <li v-for="r in order.returns" :key="r.id" class="flex items-center justify-between px-5 py-3">
-                            <RouterLink :to="`/returns/${r.id}`" class="hover:underline">
-                                <div class="font-mono text-xs font-medium">{{ r.number }}</div>
-                                <div class="text-xs text-muted-foreground">{{ returnTypes[r.type] }}</div>
+                        <li v-for="r in order.returns" :key="r.id" class="px-5 py-3">
+                            <div class="flex items-center justify-between">
+                                <RouterLink :to="`/returns/${r.id}`" class="hover:underline">
+                                    <div class="font-mono text-xs font-medium">{{ r.number }}</div>
+                                    <div class="text-xs text-muted-foreground">{{ returnTypes[r.type] }}</div>
+                                </RouterLink>
+                                <Badge :tone="returnStatus[r.status]?.tone">{{ returnStatus[r.status]?.label }}</Badge>
+                            </div>
+                            <div v-if="r.exchange_order" class="mt-1 text-xs">
+                                Đổi sang <RouterLink :to="`/orders/${r.exchange_order.id}`" class="font-mono text-primary hover:underline">{{ r.exchange_order.external_order_id }}</RouterLink>
+                                <span v-if="Number(r.exchange_credit) > 0" class="text-muted-foreground"> · bù trừ {{ formatMoney(r.exchange_credit) }}</span>
+                            </div>
+                            <RouterLink
+                                v-else-if="r.type !== 'refund_only' && r.status !== 'rejected' && tenant.can('orders.create')"
+                                :to="{ path: '/orders/new', query: { exchange: r.id } }"
+                                class="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                data-testid="create-exchange"
+                            >
+                                <Repeat class="size-3" /> Tạo đơn đổi hàng
                             </RouterLink>
-                            <Badge :tone="returnStatus[r.status]?.tone">{{ returnStatus[r.status]?.label }}</Badge>
                         </li>
                     </ul>
                     <p v-else class="px-5 py-4 text-sm text-muted-foreground">Chưa có.</p>
