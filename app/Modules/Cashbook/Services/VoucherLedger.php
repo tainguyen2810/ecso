@@ -21,7 +21,7 @@ class VoucherLedger
 
     /**
      * @param  array{direction?: string|null, status?: string|null, from?: string|null, to?: string|null, method?: string|null, type?: string|null, party_kind?: string|null, q?: string|null}  $filters
-     * @return array{page: LengthAwarePaginator<int, object>, totals: array{count: int, amount: float}}
+     * @return array{page: LengthAwarePaginator<int, object>, totals: array{count: int, in: float, out: float}}
      */
     public function search(array $filters, int $perPage = 20): array
     {
@@ -40,10 +40,12 @@ class VoucherLedger
                     ->orWhere('document_number', 'like', $like)->orWhere('reference', 'like', $like));
             });
 
-        $totals = (clone $query)->whereNull('voided_at')->selectRaw('COUNT(*) as n, COALESCE(SUM(amount), 0) as total')->first();
+        $totals = (clone $query)->whereNull('voided_at')
+            ->selectRaw("COUNT(*) as n, COALESCE(SUM(CASE WHEN direction = 'receipt' THEN amount ELSE 0 END), 0) as total_in, COALESCE(SUM(CASE WHEN direction = 'payment' THEN amount ELSE 0 END), 0) as total_out")
+            ->first();
         $page = $query->orderByDesc('paid_at')->orderByDesc('created_at')->paginate($perPage);
 
-        return ['page' => $page, 'totals' => ['count' => (int) ($totals->n ?? 0), 'amount' => (float) ($totals->total ?? 0)]];
+        return ['page' => $page, 'totals' => ['count' => (int) ($totals->n ?? 0), 'in' => (float) ($totals->total_in ?? 0), 'out' => (float) ($totals->total_out ?? 0)]];
     }
 
     /** A single row of the ledger, by source and public id. */

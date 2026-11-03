@@ -71,7 +71,8 @@ it('records receipt and payment vouchers, lists them with automatic ones and voi
 
     $payments = actingInTenant($owner, $tenant)->getJson('/api/v1/cash-vouchers?direction=payment')->assertOk();
     expect($payments->json('meta.total'))->toBe(2)
-        ->and($payments->json('totals.amount'))->toEqual(1050000)
+        ->and($payments->json('totals.out'))->toEqual(1050000)
+        ->and($payments->json('totals.in'))->toEqual(0)
         ->and(collect($payments->json('data'))->pluck('source')->sort()->values()->all())->toBe(['supplier_payment', 'voucher']);
     $receipts = actingInTenant($owner, $tenant)->getJson('/api/v1/cash-vouchers?direction=receipt')->json('data');
     expect(collect($receipts)->firstWhere('source', 'order_payment')['type']['name'])->toBe('Thu tiền đơn hàng');

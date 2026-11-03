@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { CircleHelp, Download, Info, Search, Wallet } from 'lucide-vue-next';
+import { CircleHelp, Download, HandCoins, Info, Search, Wallet } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import RangePicker from './RangePicker.vue';
-import ReportsNav from './ReportsNav.vue';
+import CashNav from '../cash/CashNav.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
@@ -19,11 +19,12 @@ import { downloadCsv, presetRange, toCsv } from './range';
 
 interface Entry {
     paid_at: string;
-    type: 'payment' | 'refund' | 'supplier';
+    type: 'payment' | 'refund' | 'supplier' | 'voucher';
+    label: string | null;
     method: string;
     amount: number;
     balance: number;
-    document: { id: string; number: string; kind: 'order' | 'purchase' } | null;
+    document: { id: string; number: string; kind: 'order' | 'purchase' | 'voucher' } | null;
     party: string | null;
     reference: string | null;
     created_by: string | null;
@@ -37,7 +38,9 @@ interface Book {
     rows: Entry[];
 }
 
-const types: Record<Entry['type'], string> = { payment: 'Thu tiền bán hàng', refund: 'Hoàn tiền khách', supplier: 'Chi trả nhà cung cấp' };
+const types: Record<Entry['type'], string> = { payment: 'Thu tiền bán hàng', refund: 'Hoàn tiền khách', supplier: 'Chi trả nhà cung cấp', voucher: 'Phiếu thu chi' };
+const label = (e: Entry) => (e.type === 'voucher' && e.label ? e.label : types[e.type]);
+const link = (d: NonNullable<Entry['document']>) => (d.kind === 'order' ? `/orders/${d.id}` : d.kind === 'purchase' ? `/purchasing/${d.id}` : `/cash?open=voucher:${d.id}`);
 const range = ref(presetRange('month'));
 const method = ref('');
 const data = ref<Book | null>(null);
@@ -49,8 +52,8 @@ const glossary = ref(false);
 const directions = { all: 'Tất cả', in: 'Thu', out: 'Chi' } as const;
 const terms = [
     ['Tồn đầu kỳ', 'Tiền trong quỹ tính đến hết ngày trước ngày bắt đầu kỳ đang xem.'],
-    ['Tổng thu', 'Tiền thu vào trong kỳ: khách trả tiền đơn hàng.'],
-    ['Tổng chi', 'Tiền chi ra trong kỳ: hoàn tiền cho khách và trả tiền nhà cung cấp.'],
+    ['Tổng thu', 'Tiền thu vào trong kỳ: khách trả tiền đơn hàng, thu nợ và các phiếu thu.'],
+    ['Tổng chi', 'Tiền chi ra trong kỳ: hoàn tiền cho khách, trả tiền nhà cung cấp và các phiếu chi.'],
     ['Tồn cuối kỳ', 'Tồn đầu kỳ + Tổng thu − Tổng chi, tức tiền trong quỹ tính đến hết ngày cuối kỳ.'],
     ['Tồn quỹ từng dòng', 'Số dư ngay sau khoản thu hoặc chi đó, cộng dồn từ tồn đầu kỳ.'],
     ['Hình thức', 'Chọn Tiền mặt để xem riêng quỹ tiền mặt. Các hình thức khác là tiền qua ngân hàng, thẻ, ví.'],
@@ -86,18 +89,19 @@ function exportCsv() {
         `so-quy-${method.value || 'tat-ca'}-${range.value.from}-${range.value.to}.csv`,
         toCsv(
             ['Thời gian', 'Loại', 'Hình thức', 'Chứng từ', 'Đối tượng', 'Tham chiếu', 'Thu', 'Chi', 'Tồn quỹ', 'Người lập'],
-            [...data.value.rows].reverse().map((e) => [formatDateTime(e.paid_at), types[e.type], paymentMethods[e.method] ?? e.method, e.document?.number ?? '', e.party, e.reference, e.amount > 0 ? e.amount : null, e.amount < 0 ? -e.amount : null, e.balance, e.created_by]),
+            [...data.value.rows].reverse().map((e) => [formatDateTime(e.paid_at), label(e), paymentMethods[e.method] ?? e.method, e.document?.number ?? '', e.party, e.reference, e.amount > 0 ? e.amount : null, e.amount < 0 ? -e.amount : null, e.balance, e.created_by]),
         ),
     );
 }
 </script>
 
 <template>
-    <PageHeader title="Báo cáo" description="Sổ quỹ: tiền thu từ khách kênh riêng, hoàn tiền và chi trả nhà cung cấp.">
+    <PageHeader title="Thu chi" description="Sổ quỹ: tiền thu từ khách, hoàn tiền, chi trả nhà cung cấp và các phiếu thu chi lập tay.">
         <RangePicker v-model:from="range.from" v-model:to="range.to" />
+        <Button variant="outline" size="sm" @click="$router.push('/cash')"><HandCoins /> Lập phiếu thu chi</Button>
         <Button variant="ghost" size="sm" data-testid="cashbook-glossary" @click="glossary = true"><CircleHelp /> Giải thích thuật ngữ</Button>
     </PageHeader>
-    <ReportsNav />
+    <CashNav />
     <ErrorState v-if="error" :message="error" @retry="load" />
     <div v-else-if="!data" class="grid gap-4 md:grid-cols-4"><Skeleton v-for="i in 4" :key="i" class="h-24" /></div>
     <template v-else>
@@ -151,8 +155,8 @@ function exportCsv() {
                     <tbody class="divide-y">
                         <tr v-for="(e, i) in rows" :key="i">
                             <td class="whitespace-nowrap px-4 py-2 text-muted-foreground">{{ formatDateTime(e.paid_at) }}<div class="text-xs">{{ e.created_by }}</div></td>
-                            <td class="px-4 py-2">{{ types[e.type] }} · {{ paymentMethods[e.method] ?? e.method }}<div class="text-xs text-muted-foreground">{{ e.party }}<template v-if="e.reference"> · {{ e.reference }}</template></div></td>
-                            <td class="px-4 py-2"><RouterLink v-if="e.document" :to="e.document.kind === 'order' ? `/orders/${e.document.id}` : `/purchasing/${e.document.id}`" class="font-mono text-xs hover:underline">{{ e.document.number }}</RouterLink><span v-else class="text-xs text-muted-foreground">Thanh toán chung</span></td>
+                            <td class="px-4 py-2">{{ label(e) }} · {{ paymentMethods[e.method] ?? e.method }}<div class="text-xs text-muted-foreground">{{ e.party }}<template v-if="e.reference"> · {{ e.reference }}</template></div></td>
+                            <td class="px-4 py-2"><RouterLink v-if="e.document" :to="link(e.document)" class="font-mono text-xs hover:underline">{{ e.document.number }}</RouterLink><span v-else class="text-xs text-muted-foreground">Thanh toán chung</span></td>
                             <td class="px-4 py-2 text-right tabular-nums text-success">{{ e.amount > 0 ? formatMoney(e.amount) : '' }}</td>
                             <td class="px-4 py-2 text-right tabular-nums text-destructive">{{ e.amount < 0 ? formatMoney(-e.amount) : '' }}</td>
                             <td class="px-4 py-2 text-right tabular-nums">{{ formatMoney(e.balance) }}</td>
