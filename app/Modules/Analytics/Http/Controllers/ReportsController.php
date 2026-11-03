@@ -88,6 +88,23 @@ class ReportsController extends Controller
         return response()->json(['data' => $trade->purchases($from, $to, $this->by($request, ['supplier', 'product', 'day']))]);
     }
 
+    public function supplierPayments(Request $request, TradeReports $trade): JsonResponse
+    {
+        $this->allow('purchasing.view');
+        [$from, $to] = $this->range($request);
+
+        return response()->json(['data' => $trade->supplierPayments($from, $to, $this->by($request, ['method', 'staff', 'supplier', 'day']))]);
+    }
+
+    public function adjustments(Request $request, StockReports $stock): JsonResponse
+    {
+        $this->allow('inventory.view');
+        [$from, $to] = $this->range($request);
+        $warehouse = $request->validate(['warehouse' => ['nullable', 'string']])['warehouse'] ?? null;
+
+        return response()->json(['data' => $stock->adjustments($from, $to, $this->by($request, ['document', 'product', 'reason']), $this->warehouse($warehouse))]);
+    }
+
     public function customers(Request $request, TradeReports $trade): JsonResponse
     {
         $this->allow('reports.view');

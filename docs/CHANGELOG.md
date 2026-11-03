@@ -18,13 +18,20 @@
 - Trang `/pos/shifts`: lịch sử ca. Thu ngân xem ca của mình; quyền mới `orders.shifts` (Quản lý vận hành, Kế toán) xem mọi ca và đóng hộ ca bị quên.
 - Nộp/rút tiền két là chuyển tiền nội bộ, không ghi vào sổ quỹ.
 
+### Phase 18 — Thu chi: phiếu thu, phiếu chi, sổ quỹ (2026-11-03)
+- Menu Thu chi (`/cash`): phiếu thu/chi lập tay (PT-/PC-), đối tượng khách hàng, NCC, nhân viên, đơn vị vận chuyển, khác; hủy có lý do; in phiếu A5 có số tiền bằng chữ.
+- Danh sách chung phiếu lập tay và phiếu tự động (thu đơn, hoàn tiền, trả NCC), lọc theo ngày, loại, đối tượng, hình thức, trạng thái; xuất CSV.
+- Phiếu thu nợ khách chia vào các đơn còn nợ (đơn cũ trước); phiếu chi trả nợ NCC ghi vào công nợ NCC.
+- Loại phiếu do doanh nghiệp quản lý, có cờ tính vào kết quả kinh doanh; trang Tài chính có lợi nhuận sau thu chi khác.
+- Sổ quỹ: gồm phiếu lập tay, tab Thu/Chi, tìm kiếm, giải thích thuật ngữ. Quyền mới `finance.vouchers`.
+
 ### Trung tâm báo cáo (2026-11-03)
 - `/reports` thành trang tổng hợp: 6 nhóm (Bán hàng, Trả hàng, Khách hàng, Tài chính, Nhập hàng, Kho hàng), mỗi nhóm có số chính của kỳ và danh sách báo cáo chi tiết. Nhóm chỉ hiện với người có quyền tương ứng.
-- Báo cáo mới: bán hàng theo sản phẩm / khách hàng / kho; trả hàng theo đơn và theo sản phẩm; thanh toán của khách theo phương thức / nhân viên / ngày; nhập hàng theo nhà cung cấp / sản phẩm / ngày; khách mua hàng (khách mới, quay lại); tồn kho tại một ngày bất kỳ theo từng kho; hàng dưới định mức (kèm số bán 30 ngày, số ngày còn đủ bán); hàng vượt tồn tối đa (số dư, giá trị dư); công nợ khách hàng; công nợ nhà cung cấp.
+- Báo cáo mới: bán hàng theo sản phẩm / khách hàng / kho; trả hàng theo đơn và theo sản phẩm; thanh toán của khách theo phương thức / nhân viên / ngày; nhập hàng theo nhà cung cấp / sản phẩm / ngày; khách mua hàng (khách mới, quay lại); tồn kho tại một ngày bất kỳ theo từng kho; hàng dưới định mức (kèm số bán 30 ngày, số ngày còn đủ bán); hàng vượt tồn tối đa (số dư, giá trị dư); kiểm kê và điều chỉnh kho theo phiếu / sản phẩm / lý do; thanh toán nhập hàng theo phương thức / nhân viên / nhà cung cấp / ngày; công nợ khách hàng; công nợ nhà cung cấp.
 - Báo cáo lãi lỗ (`/reports/profit-loss`): doanh thu thuần, giá vốn, lợi nhuận gộp, hao hụt kho, lợi nhuận; đặt cạnh kỳ trước cùng số ngày và % thay đổi; bấm dòng để xem chi tiết.
 - Kỳ báo cáo, tab và bộ lọc nằm trên URL: mở báo cáo từ trang tổng hợp giữ nguyên kỳ đang xem, có thể lưu hoặc gửi link. Mọi báo cáo xuất CSV mở được bằng Excel.
 - Báo cáo bán hàng & lợi nhuận chuyển sang `/reports/sales`.
-- API: `GET /reports/{overview,product-sales,returns,payments,purchases,customers,stock-on-hand,low-stock,over-stock,profit-loss,receivables,payables}`.
+- API: `GET /reports/{overview,product-sales,returns,payments,purchases,customers,stock-on-hand,low-stock,over-stock,adjustments,supplier-payments,profit-loss,receivables,payables}`.
 
 ### Khách hàng — nhóm, hồ sơ, bộ lọc, công nợ, nhập/xuất (2026-11-03)
 - Nhóm khách hàng thành danh mục riêng (`/customers/groups`): mã, tên, mô tả, giá áp dụng (lẻ/buôn), chiết khấu %, cách thanh toán quen dùng, số khách mỗi nhóm. Nhóm chữ cũ được chuyển tự động.

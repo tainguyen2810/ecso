@@ -5,6 +5,9 @@ namespace App\Providers;
 use App\Modules\Billing\Console\BillingSweepCommand;
 use App\Modules\Billing\Listeners\CountOrderUsage;
 use App\Modules\Billing\Payments\GatewayRegistry;
+use App\Modules\Cashbook\Models\CashVoucher;
+use App\Modules\Cashbook\Models\CashVoucherType;
+use App\Modules\Cashbook\Policies\CashbookPolicy;
 use App\Modules\Catalog\Models\Brand;
 use App\Modules\Catalog\Models\Category;
 use App\Modules\Catalog\Models\Product;
@@ -72,7 +75,7 @@ use Illuminate\Support\ServiceProvider;
 class ModuleServiceProvider extends ServiceProvider
 {
     /** Modules whose Routes/api.php is mounted under /api/v1. */
-    private const API_MODULES = ['Identity', 'Tenancy', 'Billing', 'Audit', 'Admin', 'Catalog', 'Inventory', 'Marketplace', 'Orders', 'Analytics', 'Sales', 'Purchasing'];
+    private const API_MODULES = ['Identity', 'Tenancy', 'Billing', 'Audit', 'Admin', 'Catalog', 'Inventory', 'Marketplace', 'Orders', 'Analytics', 'Sales', 'Purchasing', 'Cashbook'];
 
     public function register(): void
     {
@@ -102,6 +105,10 @@ class ModuleServiceProvider extends ServiceProvider
         Gate::policy(CashShift::class, CashShiftPolicy::class);
         foreach ([Supplier::class, PurchaseOrder::class, SupplierReturn::class, SupplierPayment::class] as $model) {
             Gate::policy($model, PurchasingPolicy::class);
+        }
+
+        foreach ([CashVoucher::class, CashVoucherType::class] as $model) {
+            Gate::policy($model, CashbookPolicy::class);
         }
 
         Event::listen(TenantCreated::class, CreateDefaultWarehouse::class);

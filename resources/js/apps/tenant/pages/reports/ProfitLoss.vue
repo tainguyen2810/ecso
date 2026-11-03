@@ -31,12 +31,13 @@ interface PlData {
 }
 
 /** Lines whose increase is bad news: the change badge is red when they go up. */
-const COSTS = ['discount', 'returns', 'cogs', 'cogs_out', 'stock_loss', 'write_off', 'stocktake'];
+const COSTS = ['discount', 'returns', 'cogs', 'cogs_out', 'stock_loss', 'write_off', 'stocktake', 'other_expenses'];
 const DRILL: Record<string, { name: string; params?: Record<string, string>; query?: Record<string, string> }> = {
     sales: { name: 'report-sales' },
     products: { name: 'report-detail', params: { report: 'product-sales' } },
     returns: { name: 'report-detail', params: { report: 'returns' } },
     stock: { name: 'report-stock' },
+    cash: { name: 'cash' },
 };
 
 const { range } = useReportQuery();
