@@ -2,6 +2,7 @@
 
 namespace App\Modules\Marketplace\Services;
 
+use App\Modules\Catalog\Services\ComboResolver;
 use App\Modules\Inventory\Domain\AllocationCalculator;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Services\StockReader;
@@ -16,7 +17,7 @@ use App\Modules\Marketplace\Models\MarketplaceAccount;
  */
 class InventorySyncPlanner
 {
-    public function __construct(private readonly StockReader $stock) {}
+    public function __construct(private readonly StockReader $stock, private readonly ComboResolver $combos) {}
 
     /**
      * @param  array<int, int>  $variantIds
@@ -24,6 +25,8 @@ class InventorySyncPlanner
      */
     public function plan(array $variantIds, bool $force = false): int
     {
+        // A combo listing follows its components' stock.
+        $variantIds = array_values(array_unique([...$variantIds, ...$this->combos->combosContaining($variantIds)]));
         $listings = ListingVariant::query()->whereIn('product_variant_id', $variantIds)
             ->where('mapping_status', ListingVariant::MAPPED)->get()->groupBy('marketplace_account_id');
 

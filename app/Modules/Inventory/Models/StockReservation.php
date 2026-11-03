@@ -25,6 +25,8 @@ class StockReservation extends Model
         return [
             'quantity' => 'integer',
             'shortage' => 'integer',
+            'bundle_variant_id' => 'integer',
+            'bundle_quantity' => 'integer',
             'released_at' => 'datetime',
             'consumed_at' => 'datetime',
         ];

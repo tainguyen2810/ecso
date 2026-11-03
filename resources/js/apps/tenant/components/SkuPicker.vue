@@ -7,7 +7,7 @@ import { formatNumber } from '@/shared/lib/utils';
 import type { Variant } from '@/shared/types';
 
 /** Search SKU / barcode / product name. Pressing Enter on an exact barcode match picks it (scanner friendly). */
-const props = defineProps<{ warehouse?: string; exclude?: string[]; placeholder?: string }>();
+const props = defineProps<{ warehouse?: string; exclude?: string[]; placeholder?: string; stocked?: boolean }>();
 const emit = defineEmits<{ pick: [variant: Variant] }>();
 
 const query = ref('');
@@ -19,7 +19,7 @@ let searchedFor: string | null = null;
 
 async function search() {
     searchedFor = query.value;
-    const { data } = await api.get('/variants', { params: { q: query.value || undefined, warehouse: props.warehouse || undefined } });
+    const { data } = await api.get('/variants', { params: { q: query.value || undefined, warehouse: props.warehouse || undefined, stocked: props.stocked ? 1 : undefined } });
     results.value = (data.data as Variant[]).filter((v) => !props.exclude?.includes(v.id!));
     active.value = 0;
 }

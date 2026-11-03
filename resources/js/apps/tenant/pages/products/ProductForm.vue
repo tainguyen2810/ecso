@@ -14,7 +14,8 @@ import { api, ApiError } from '@/shared/lib/api';
 import { cn, formatMoney } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
-import type { Product, Ref, Warehouse } from '@/shared/types';
+import SkuPicker from '../../components/SkuPicker.vue';
+import type { Product, Ref, Variant, Warehouse } from '@/shared/types';
 
 interface VariantRow {
     id?: string;
@@ -63,8 +64,24 @@ const tagInput = ref('');
 const variants = ref<VariantRow[]>([]);
 const saving = ref(false);
 const error = ref<ApiError | null>(null);
-const showOpening = computed(() => isNew.value && canReceive.value);
-const hasOpening = computed(() => variants.value.some((v) => Number(v.opening_qty) > 0));
+// Combo: one SKU, no stock of its own; components are other SKUs with a quantity per combo.
+const productType = ref<'standard' | 'combo'>(route.query.type === 'combo' ? 'combo' : 'standard');
+const isCombo = computed(() => productType.value === 'combo');
+const components = ref<{ variant: { id: string; sku: string; name: string; cost_price?: string; ref_price?: string | number | null }; quantity: number }[]>([]);
+const componentCost = computed(() => components.value.reduce((s, c) => s + Number(c.variant.cost_price ?? 0) * c.quantity, 0));
+const componentPrice = computed(() => components.value.reduce((s, c) => s + Number(c.variant.ref_price ?? 0) * c.quantity, 0));
+function addComponent(v: Variant) {
+    const existing = components.value.find((c) => c.variant.id === v.id);
+    if (existing) existing.quantity++;
+    else components.value.push({ variant: { id: v.id!, sku: v.sku, name: [v.product?.name, v.name].filter(Boolean).join(' - '), cost_price: v.cost_price, ref_price: v.ref_price }, quantity: 1 });
+}
+function setType(type: 'standard' | 'combo') {
+    productType.value = type;
+    if (type === 'combo') variants.value = [variants.value[0] ?? emptyRow()];
+}
+
+const showOpening = computed(() => isNew.value && canReceive.value && !isCombo.value);
+const hasOpening = computed(() => !isCombo.value && variants.value.some((v) => Number(v.opening_qty) > 0));
 
 function addTag(raw = tagInput.value) {
     for (const t of raw.split(',').map((s) => s.trim()).filter(Boolean)) {
@@ -93,7 +110,7 @@ onMounted(async () => {
     categories.value = c.data.data;
     brands.value = b.data.data;
     knownTags.value = t.data.data;
-    if (showOpening.value) {
+    if (isNew.value && canReceive.value) {
         warehouses.value = ((await api.get('/warehouses')).data.data as Warehouse[]).filter((w) => w.status === 'active');
         form.opening_warehouse_id = (warehouses.value.find((w) => w.is_default) ?? warehouses.value[0])?.id ?? '';
     }
@@ -112,6 +129,8 @@ onMounted(async () => {
         });
         tags.value = [...(p.tags ?? [])];
         images.value = copying ? [] : (p.images ?? []);
+        productType.value = p.type ?? 'standard';
+        components.value = (p.variants?.[0]?.components ?? []).map((c) => ({ variant: { ...c.variant }, quantity: c.quantity }));
         // A copy keeps names, options and prices; SKU and barcode must be new (unique per business).
         variants.value = (p.variants ?? []).map((v) => ({
             ...(copying ? {} : { id: v.id, cost_price: v.cost_price }),
@@ -195,6 +214,8 @@ async function save(then: 'detail' | 'labels' = 'detail') {
             tags: tags.value,
             vat_rate: form.vat_rate === '' ? null : Number(form.vat_rate),
             ...(isNew.value && hasOpening.value ? { opening_warehouse_id: form.opening_warehouse_id || null } : {}),
+            ...(isNew.value ? { type: productType.value } : {}),
+            ...(isCombo.value ? { components: components.value.map((c) => ({ variant_id: c.variant.id, quantity: c.quantity })) } : {}),
             variants: variants.value.map((v) => ({
                 ...(v.id ? { id: v.id } : {}),
                 sku: v.sku.trim(),
@@ -268,6 +289,25 @@ async function removeImage(id: number) {
 
         <div class="grid gap-5 lg:grid-cols-3">
             <div class="space-y-5 lg:col-span-2">
+                <div v-if="isNew && !copyFrom" class="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Loại sản phẩm">
+                    <button
+                        v-for="t in [
+                            { value: 'standard', title: 'Sản phẩm thường', text: 'Có tồn kho riêng, một hoặc nhiều biến thể.' },
+                            { value: 'combo', title: 'Combo', text: 'Gồm nhiều SKU khác. Bán combo thì trừ tồn các SKU thành phần.' },
+                        ] as const"
+                        :key="t.value"
+                        type="button"
+                        role="radio"
+                        :aria-checked="productType === t.value"
+                        :data-testid="`type-${t.value}`"
+                        :class="cn('rounded-lg border bg-card p-4 text-left text-sm shadow-xs transition-colors hover:border-primary/60', productType === t.value && 'border-primary ring-2 ring-primary/20')"
+                        @click="setType(t.value)"
+                    >
+                        <p class="font-medium">{{ t.title }}</p>
+                        <p class="mt-1 text-xs text-muted-foreground">{{ t.text }}</p>
+                    </button>
+                </div>
+
                 <Card title="Thông tin chung">
                     <div class="grid gap-4 p-5 sm:grid-cols-2">
                         <FormField label="Tên sản phẩm" for="p-name" :error="error?.field('name')" class="sm:col-span-2">
@@ -312,12 +352,53 @@ async function removeImage(id: number) {
                     </div>
                 </Card>
 
-                <Card title="Biến thể và SKU" description="SKU duy nhất trong doanh nghiệp (không phân biệt hoa thường). Giá vốn tự tính từ phiếu nhập.">
-                    <template v-if="canManage" #actions>
+                <Card v-if="isCombo" title="Thành phần combo" description="Mỗi combo bán ra sẽ giữ và xuất kho đúng số lượng các SKU dưới đây." data-testid="combo-components">
+                    <div v-if="canManage" class="border-b px-5 py-3">
+                        <SkuPicker stocked placeholder="Tìm hoặc quét SKU thành phần" :exclude="components.map((c) => c.variant.id)" @pick="addComponent" />
+                    </div>
+                    <p v-if="error?.field('components')" class="px-5 pt-3 text-sm text-destructive">{{ error.field('components') }}</p>
+                    <p v-if="!components.length" class="px-5 py-6 text-center text-sm text-muted-foreground">Chưa có SKU thành phần.</p>
+                    <table v-else class="w-full text-sm">
+                        <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                            <tr>
+                                <th class="px-5 py-2 font-medium">SKU thành phần</th>
+                                <th class="px-3 py-2 text-right font-medium">Số lượng / combo</th>
+                                <th class="px-3 py-2 text-right font-medium">Giá vốn BQ</th>
+                                <th class="w-10" />
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            <tr v-for="(c, i) in components" :key="c.variant.id">
+                                <td class="px-5 py-2">
+                                    <p class="font-mono text-xs font-medium">{{ c.variant.sku }}</p>
+                                    <p class="text-xs text-muted-foreground">{{ c.variant.name }}</p>
+                                    <p v-if="error?.field(`components.${i}.variant_id`)" class="text-xs text-destructive">{{ error.field(`components.${i}.variant_id`) }}</p>
+                                </td>
+                                <td class="px-3 py-2 text-right">
+                                    <input v-model.number="c.quantity" type="number" min="1" max="10000" :disabled="!canManage" :data-testid="`component-qty-${i}`" aria-label="Số lượng mỗi combo" class="h-8 w-20 rounded-md border border-input bg-card px-2 text-right tabular-nums" />
+                                </td>
+                                <td class="px-3 py-2 text-right tabular-nums text-muted-foreground">{{ c.variant.cost_price ? formatMoney(Number(c.variant.cost_price) * c.quantity) : '—' }}</td>
+                                <td class="px-2 text-right">
+                                    <Button v-if="canManage" variant="ghost" size="icon" class="size-8" title="Bỏ thành phần" @click="components.splice(i, 1)"><Trash2 class="text-muted-foreground" /></Button>
+                                </td>
+                            </tr>
+                        </tbody>
+                        <tfoot class="border-t text-xs text-muted-foreground">
+                            <tr>
+                                <td class="px-5 py-2" colspan="2">Tổng giá bán lẻ nếu mua lẻ: <span class="font-medium text-foreground">{{ formatMoney(componentPrice) }}</span></td>
+                                <td class="px-3 py-2 text-right">Giá vốn combo: <span class="font-medium text-foreground">{{ formatMoney(componentCost) }}</span></td>
+                                <td />
+                            </tr>
+                        </tfoot>
+                    </table>
+                </Card>
+
+                <Card :title="isCombo ? 'SKU và giá combo' : 'Biến thể và SKU'" description="SKU duy nhất trong doanh nghiệp (không phân biệt hoa thường). Giá vốn tự tính từ phiếu nhập.">
+                    <template v-if="canManage && !isCombo" #actions>
                         <Button variant="outline" size="sm" @click="variants.push(emptyRow())"><Plus /> Thêm dòng</Button>
                     </template>
 
-                    <details v-if="canManage" class="border-b bg-muted/30 px-5 py-3 text-sm" :open="isNew">
+                    <details v-if="canManage && !isCombo" class="border-b bg-muted/30 px-5 py-3 text-sm" :open="isNew">
                         <summary class="cursor-pointer font-medium"><Sparkles class="mr-1 inline size-4 text-primary" /> Tạo nhanh biến thể theo thuộc tính</summary>
                         <div class="mt-3 grid gap-3 sm:grid-cols-[8rem_1fr]">
                             <template v-for="(g, i) in groups" :key="i">

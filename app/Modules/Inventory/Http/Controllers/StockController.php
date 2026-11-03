@@ -4,7 +4,9 @@ namespace App\Modules\Inventory\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Catalog\Models\Product;
+use App\Modules\Catalog\Models\ProductComponent;
 use App\Modules\Catalog\Models\ProductVariant;
+use App\Modules\Catalog\Services\ComboResolver;
 use App\Modules\Inventory\Http\Resources\MovementResource;
 use App\Modules\Inventory\Models\InventoryAdjustment;
 use App\Modules\Inventory\Models\StockBalance;
@@ -15,9 +17,11 @@ use App\Modules\Inventory\Models\StockTransfer;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Services\InventoryService;
 use App\Modules\Inventory\Services\LowStockQuery;
+use App\Modules\Inventory\Services\StockReader;
 use App\Modules\Purchasing\Services\OnOrderQuery;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -48,7 +52,7 @@ class StockController extends Controller
 
         $rows = ProductVariant::query()
             ->with('product:id,ulid,name')
-            ->whereHas('product', fn ($q) => $q->where('status', '!=', Product::STATUS_ARCHIVED))
+            ->whereHas('product', fn ($q) => $q->where('status', '!=', Product::STATUS_ARCHIVED)->where('type', '!=', Product::TYPE_COMBO))
             ->leftJoinSub($balances, 's', 's.product_variant_id', '=', 'product_variants.id')
             ->select('product_variants.*',
                 DB::raw('COALESCE(s.on_hand, 0) as on_hand'),
@@ -111,7 +115,7 @@ class StockController extends Controller
             ->selectRaw('SUM(CASE WHEN available > 0 THEN 1 ELSE 0 END) as in_stock, SUM(CASE WHEN available > 0 AND available <= safety THEN 1 ELSE 0 END) as low_stock')
             ->first();
 
-        $skus = ProductVariant::query()->count();
+        $skus = ProductVariant::query()->whereHas('product', fn ($q) => $q->where('type', '!=', Product::TYPE_COMBO))->count();
 
         return response()->json(['data' => [
             'skus' => $skus,
@@ -180,6 +184,14 @@ class StockController extends Controller
 
         $variants = $product->variants()->get();
         $warehouses = Warehouse::query()->where('status', Warehouse::STATUS_ACTIVE)->orderByDesc('is_default')->orderBy('name')->get();
+
+        if ($product->isCombo()) {
+            return response()->json([
+                'data' => $this->comboStock($variants->first(), $warehouses),
+                'warehouses' => $warehouses->map(fn (Warehouse $w) => ['id' => $w->ulid, 'name' => $w->name]),
+            ]);
+        }
+
         $balances = StockBalance::query()->whereIn('product_variant_id', $variants->pluck('id'))->get()
             ->groupBy('product_variant_id');
         $incoming = $onOrder->byVariantAndWarehouse($variants->pluck('id')->all());
@@ -208,15 +220,50 @@ class StockController extends Controller
         ]);
     }
 
-    /** Ledger rows of all SKUs of one product, newest first (product page, "lịch sử kho"). */
+    /**
+     * A combo per warehouse: how many whole combos the components make (available) and the cost of one combo.
+     *
+     * @param  Collection<int, Warehouse>  $warehouses
+     * @return array<int, array<string, mixed>>
+     */
+    private function comboStock(?ProductVariant $combo, Collection $warehouses): array
+    {
+        if ($combo === null) {
+            return [];
+        }
+        $reader = app(StockReader::class);
+        $cost = $combo->components()->with('component')->get()
+            ->reduce(fn (string $sum, ProductComponent $c) => bcadd($sum, bcmul((string) $c->component->cost_price, (string) $c->quantity, 4), 4), '0');
+
+        return $warehouses->map(function (Warehouse $warehouse) use ($combo, $reader, $cost) {
+            $available = $reader->available([$combo->id], $warehouse->id)[$combo->id] ?? 0;
+
+            return [
+                'variant' => ['id' => $combo->ulid, 'sku' => $combo->sku, 'name' => $combo->name],
+                'warehouse' => ['id' => $warehouse->ulid, 'code' => $warehouse->code, 'name' => $warehouse->name],
+                'on_hand' => $available,
+                'reserved' => 0,
+                'available' => $available,
+                'safety_stock' => 0,
+                'incoming' => 0,
+                'cost_price' => $cost,
+            ];
+        })->values()->all();
+    }
+
+    /** Ledger rows of all SKUs of one product, newest first (product page, "lịch sử kho"). A combo shows its components'. */
     public function productMovements(Request $request, Product $product): JsonResponse
     {
         $this->authorize('viewAny', StockBalance::class);
         $filters = $request->validate(['warehouse' => ['nullable', 'string']]);
         $warehouse = $this->warehouse($filters['warehouse'] ?? null);
+        $variantIds = $product->variants()->withTrashed()->pluck('id')->all();
+        if ($product->isCombo()) {
+            $variantIds = array_merge(...array_values(array_map('array_keys', app(ComboResolver::class)->componentsOf($variantIds))) ?: [[]]);
+        }
 
         $movements = StockMovement::query()->with(['warehouse', 'actor:id,name', 'variant:id,ulid,sku,name'])
-            ->whereIn('product_variant_id', $product->variants()->withTrashed()->select('id'))
+            ->whereIn('product_variant_id', $variantIds)
             ->where('type', '!=', 'MARKER')
             ->when($warehouse, fn ($q) => $q->where('warehouse_id', $warehouse->id))
             ->orderByDesc('id')

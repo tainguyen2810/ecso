@@ -119,7 +119,7 @@ async function submit(place: boolean) {
     <form class="grid gap-5 lg:grid-cols-3" @submit.prevent="submit(true)">
         <Card class="lg:col-span-2" title="Hàng đặt" description="Quét mã vạch hoặc tìm SKU để thêm dòng.">
             <div class="border-b p-4">
-                <SkuPicker :warehouse="form.warehouse_id" :exclude="[]" @pick="add" />
+                <SkuPicker stocked :warehouse="form.warehouse_id" :exclude="[]" @pick="add" />
                 <p v-if="error?.field('lines')" class="mt-2 text-xs text-destructive">{{ error.field('lines') }}</p>
             </div>
             <EmptyState v-if="!lines.length" :icon="PackageOpen" title="Chưa có dòng hàng" description="Tìm SKU ở ô phía trên, hoặc dùng tab Gợi ý nhập hàng để tạo đơn từ tốc độ bán." />

@@ -10,9 +10,11 @@ use App\Modules\Catalog\Models\Brand;
 use App\Modules\Catalog\Models\Category;
 use App\Modules\Catalog\Models\Product;
 use App\Modules\Catalog\Models\ProductVariant;
+use App\Modules\Catalog\Services\ComboResolver;
 use App\Modules\Catalog\Services\ProductService;
 use App\Modules\Inventory\Models\StockReceipt;
 use App\Modules\Inventory\Models\Warehouse;
+use App\Modules\Inventory\Services\StockReader;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -24,7 +26,27 @@ use Illuminate\Validation\ValidationException;
 
 class ProductController extends Controller
 {
-    public function index(Request $request): AnonymousResourceCollection
+    /**
+     * A combo has no stock rows: show the number of whole combos its components make as on hand and available.
+     *
+     * @param  iterable<Product|ProductVariant>  $models
+     */
+    private function withComboStock(iterable $models, StockReader $stockReader, ?int $warehouseId = null): void
+    {
+        $byVariant = [];
+        foreach ($models as $model) {
+            $variant = $model instanceof Product ? ($model->isCombo() ? $model->variants->first() : null) : $model;
+            if ($variant) {
+                $byVariant[$variant->id] = $model;
+            }
+        }
+        $combos = array_intersect_key($stockReader->available(array_keys($byVariant), $warehouseId), app(ComboResolver::class)->componentsOf(array_keys($byVariant)));
+        foreach ($combos as $variantId => $available) {
+            $byVariant[$variantId]->setAttribute('on_hand', $available)->setAttribute('reserved', 0);
+        }
+    }
+
+    public function index(Request $request, StockReader $stockReader): AnonymousResourceCollection
     {
         $this->authorize('viewAny', Product::class);
 
@@ -34,6 +56,7 @@ class ProductController extends Controller
             'category' => ['nullable', 'string'],
             'brand' => ['nullable', 'string'],
             'tag' => ['nullable', 'string', 'max:40'],
+            'type' => ['nullable', Rule::in([Product::TYPE_STANDARD, Product::TYPE_COMBO])],
             'created_from' => ['nullable', 'date'],
             'created_to' => ['nullable', 'date'],
             'sort' => ['nullable', Rule::in(['newest', 'oldest', 'name', 'available', '-available'])],
@@ -49,9 +72,10 @@ class ProductController extends Controller
 
         $products = Product::query()
             ->with(['category', 'brand', 'variants'])
-            ->withCount('variants')
             ->leftJoinSub($stock, 's', 's.product_id', '=', 'products.id')
             ->select('products.*', 's.on_hand', 's.reserved')
+            // After select(): select() replaces the column list, which would drop the count.
+            ->withCount('variants')
             ->when($filters['q'] ?? null, function (Builder $q, string $term) {
                 $q->where(fn (Builder $w) => $w->where('products.name', 'like', "%{$term}%")
                     ->orWhereHas('variants', fn (Builder $v) => $v->where('sku', 'like', "%{$term}%")->orWhere('barcode', $term)));
@@ -60,6 +84,7 @@ class ProductController extends Controller
             ->when($filters['category'] ?? null, fn (Builder $q, string $c) => $q->whereIn('category_id', Category::query()->where('ulid', $c)->select('id')))
             ->when($filters['brand'] ?? null, fn (Builder $q, string $b) => $q->whereIn('brand_id', Brand::query()->where('ulid', $b)->select('id')))
             ->when($filters['tag'] ?? null, fn (Builder $q, string $t) => $q->whereJsonContains('products.tags', $t))
+            ->when($filters['type'] ?? null, fn (Builder $q, string $t) => $q->where('products.type', $t))
             ->when($filters['created_from'] ?? null, fn (Builder $q, string $d) => $q->where('products.created_at', '>=', $d))
             ->when($filters['created_to'] ?? null, fn (Builder $q, string $d) => $q->where('products.created_at', '<', now()->parse($d)->addDay()))
             ->tap(fn (Builder $q) => match ($filters['sort'] ?? 'newest') {
@@ -70,6 +95,8 @@ class ProductController extends Controller
                 default => $q->orderByDesc('products.id'),
             })
             ->paginate($filters['per_page'] ?? 20);
+
+        $this->withComboStock($products->getCollection(), $stockReader);
 
         return ProductResource::collection($products);
     }
@@ -88,14 +115,14 @@ class ProductController extends Controller
 
         $product = $service->create($data, $warehouse);
 
-        return (new ProductResource($product->load(['category', 'brand', 'variants', 'images'])))->response()->setStatusCode(201);
+        return (new ProductResource($product->load(['category', 'brand', 'variants.components.component.product', 'images'])))->response()->setStatusCode(201);
     }
 
     public function show(Product $product): ProductResource
     {
         $this->authorize('view', $product);
 
-        return new ProductResource($product->load(['category', 'brand', 'variants', 'images']));
+        return new ProductResource($product->load(['category', 'brand', 'variants.components.component.product', 'images']));
     }
 
     public function update(ProductRequest $request, Product $product, ProductService $service): ProductResource
@@ -103,7 +130,7 @@ class ProductController extends Controller
         $this->authorize('update', $product);
         $service->update($product, $request->payload());
 
-        return new ProductResource($product->refresh()->load(['category', 'brand', 'variants', 'images']));
+        return new ProductResource($product->refresh()->load(['category', 'brand', 'variants.components.component.product', 'images']));
     }
 
     public function destroy(Product $product, ProductService $service): JsonResponse
@@ -170,7 +197,7 @@ class ProductController extends Controller
     /**
      * SKU picker for inventory documents. With ?warehouse= includes that warehouse's balance.
      */
-    public function variants(Request $request): AnonymousResourceCollection
+    public function variants(Request $request, StockReader $stockReader): AnonymousResourceCollection
     {
         $this->authorize('viewAny', Product::class);
         $data = $request->validate([
@@ -181,10 +208,13 @@ class ProductController extends Controller
             'ids.*' => ['string'],
             'products' => ['nullable', 'array', 'max:200'],
             'products.*' => ['string'],
+            // Stock documents (receipts, counts, transfers, purchases): combos have no stock of their own.
+            'stocked' => ['nullable', 'boolean'],
         ]);
         $exact = ! empty($data['ids']) || ! empty($data['products']);
 
-        $query = ProductVariant::query()->with('product')
+        $query = ProductVariant::query()->with(['product', 'components.component'])
+            ->when($data['stocked'] ?? false, fn (Builder $q) => $q->whereHas('product', fn ($p) => $p->where('type', '!=', Product::TYPE_COMBO)))
             ->when($data['ids'] ?? null, fn (Builder $q, array $ids) => $q->whereIn('product_variants.ulid', $ids))
             ->when($data['products'] ?? null, fn (Builder $q, array $ids) => $q->whereIn('product_id', Product::query()->whereIn('ulid', $ids)->select('id')))
             ->unless($exact, fn (Builder $q) => $q->whereHas('product', fn ($p) => $p->where('status', '!=', Product::STATUS_ARCHIVED)))
@@ -194,12 +224,18 @@ class ProductController extends Controller
             ->when($exact, fn (Builder $q) => $q->orderBy('product_id')->orderBy('product_variants.id'), fn (Builder $q) => $q->orderBy('sku'))
             ->limit($exact ? 500 : 30);
 
+        $warehouseId = null;
         if ($warehouse = $data['warehouse'] ?? null) {
             $warehouseId = DB::table('warehouses')->where('tenant_id', app(TenantContext::class)->id())->where('ulid', $warehouse)->value('id');
             $query->leftJoin('stock_balances as b', fn ($j) => $j->on('b.product_variant_id', '=', 'product_variants.id')->where('b.warehouse_id', $warehouseId))
                 ->select('product_variants.*', DB::raw('COALESCE(b.on_hand, 0) as on_hand'), DB::raw('COALESCE(b.reserved, 0) as reserved'));
         }
 
-        return VariantResource::collection($query->get());
+        $variants = $query->get();
+        if ($warehouseId) {
+            $this->withComboStock($variants, $stockReader, $warehouseId);
+        }
+
+        return VariantResource::collection($variants);
     }
 }

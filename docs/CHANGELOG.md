@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Phase 14 — Combo sản phẩm (2026-11-03)
+- Loại sản phẩm Combo: một SKU gồm nhiều SKU thành phần, không có tồn riêng; tồn = số combo ghép được, theo kho.
+- Đơn hàng, POS, hàng hoàn và đồng bộ tồn lên sàn xử lý combo trên SKU thành phần; giá vốn combo = tổng giá vốn thành phần.
+- Chứng từ kho không nhận SKU combo.
+- Sửa: danh sách sản phẩm kéo người dùng quay lại khi đang tải; số biến thể; nút kiểm hàng hoàn bị gửi thiếu kho.
+
 ### Phase 13 — Hoàn thiện module Sản phẩm (2026-11-03)
 - Trang chi tiết sản phẩm: tồn theo từng kho (gồm hàng đang về), lịch sử kho, giá bán lẻ/buôn/giá vốn; nút Sao chép, In tem, Sửa.
 - Trường mới: đơn vị tính, tags, thuế GTGT, giá bán buôn; có trong import/export.

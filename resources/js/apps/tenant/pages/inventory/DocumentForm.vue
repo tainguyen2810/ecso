@@ -109,7 +109,7 @@ const hints: Record<DocumentKindKey, string> = {
     <form class="grid gap-5 lg:grid-cols-3" @submit.prevent="submit">
         <Card class="lg:col-span-2" title="Hàng hóa" :description="kindKey === 'adjustments' ? 'Kiểm kê: nhập số đếm thực tế. Chênh lệch: nhập số tăng (+) hoặc giảm (−).' : 'Quét mã vạch hoặc tìm SKU để thêm dòng.'">
             <div class="border-b p-4">
-                <SkuPicker :warehouse="sourceWarehouse" :exclude="[]" @pick="add" />
+                <SkuPicker stocked :warehouse="sourceWarehouse" :exclude="[]" @pick="add" />
                 <p v-if="error?.field('lines')" class="mt-2 text-xs text-destructive">{{ error.field('lines') }}</p>
             </div>
             <EmptyState v-if="!lines.length" :icon="PackageOpen" title="Chưa có dòng hàng" description="Tìm SKU ở ô phía trên. Máy quét mã vạch hoạt động như bàn phím: quét xong nhấn Enter là thêm dòng." />

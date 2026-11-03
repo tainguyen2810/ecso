@@ -42,15 +42,16 @@ const filters = reactive({
     category: q('category'),
     brand: q('brand'),
     tag: q('tag'),
+    type: q('type'),
     created_from: q('created_from'),
     created_to: q('created_to'),
     sort: q('sort') || 'newest',
     page: 1,
 });
-const moreFilters = ref(!!(filters.brand || filters.tag || filters.created_from || filters.created_to));
-const activeExtra = computed(() => [filters.brand, filters.tag, filters.created_from, filters.created_to].filter(Boolean).length);
+const moreFilters = ref(!!(filters.type || filters.brand || filters.tag || filters.created_from || filters.created_to));
+const activeExtra = computed(() => [filters.type, filters.brand, filters.tag, filters.created_from, filters.created_to].filter(Boolean).length);
 function clearExtra() {
-    Object.assign(filters, { brand: '', tag: '', created_from: '', created_to: '' });
+    Object.assign(filters, { type: '', brand: '', tag: '', created_from: '', created_to: '' });
 }
 const expanded = ref<Set<string>>(new Set());
 const selected = ref<Set<string>>(new Set());
@@ -77,7 +78,10 @@ async function load() {
     try {
         const { page, ...rest } = filters;
         const query = Object.fromEntries(Object.entries(rest).filter(([k, v]) => v && !(k === 'status' && v === 'active') && !(k === 'sort' && v === 'newest')));
-        router.replace({ query });
+        // Only while still on the list: a slow load must not pull the user back from a page they opened.
+        const key = (o: Record<string, unknown>) => JSON.stringify(Object.entries(o).filter(([, v]) => v).sort(([a], [b]) => a.localeCompare(b)));
+        const same = key(query) === key(route.query);
+        if (!same && route.name === 'products') router.replace({ query });
         const { data } = await api.get('/products', {
             params: { ...query, status: filters.status === 'all' ? undefined : filters.status, sort: filters.sort, page },
         });
@@ -105,7 +109,7 @@ watch(() => filters.q, () => {
     timer = setTimeout(() => ((filters.page = 1), load()), 250);
 });
 watch(
-    () => [filters.status, filters.category, filters.brand, filters.tag, filters.created_from, filters.created_to, filters.sort],
+    () => [filters.status, filters.category, filters.type, filters.brand, filters.tag, filters.created_from, filters.created_to, filters.sort],
     () => ((filters.page = 1), load()),
 );
 
@@ -156,6 +160,7 @@ function toggleAll() {
     <PageHeader title="Sản phẩm" description="Sản phẩm, biến thể và SKU nội bộ. SKU là duy nhất trong doanh nghiệp.">
         <Button variant="outline" :loading="exporting" @click="exportXlsx"><Download /> Xuất Excel</Button>
         <Button v-if="canManage" variant="outline" data-testid="import-button" @click="importOpen = true"><Upload /> Import</Button>
+        <RouterLink v-if="canManage" :to="{ path: '/products/new', query: { type: 'combo' } }"><Button variant="outline" data-testid="new-combo"><Plus /> Thêm combo</Button></RouterLink>
         <RouterLink v-if="canManage" to="/products/new"><Button data-testid="new-product"><Plus /> Thêm sản phẩm</Button></RouterLink>
     </PageHeader>
     <ProductsNav />
@@ -194,6 +199,10 @@ function toggleAll() {
             />
         </div>
         <div v-if="moreFilters" class="flex flex-wrap items-end gap-3 border-b bg-muted/30 px-4 py-3 text-sm" data-testid="extra-filters">
+            <label class="grid gap-1">
+                <span class="text-xs text-muted-foreground">Loại</span>
+                <Select v-model="filters.type" class="w-40" aria-label="Loại sản phẩm" :options="[{ value: '', label: 'Mọi loại' }, { value: 'standard', label: 'Sản phẩm thường' }, { value: 'combo', label: 'Combo' }]" />
+            </label>
             <label class="grid gap-1">
                 <span class="text-xs text-muted-foreground">Thương hiệu</span>
                 <Select v-model="filters.brand" class="w-44" aria-label="Thương hiệu" :options="[{ value: '', label: 'Mọi thương hiệu' }, ...brands.map((b) => ({ value: b.id, label: b.name }))]" />
@@ -264,6 +273,7 @@ function toggleAll() {
                                     <span v-else class="flex size-10 items-center justify-center rounded bg-muted text-muted-foreground"><Package class="size-4" /></span>
                                     <div class="min-w-0">
                                         <RouterLink :to="`/products/${p.id}`" class="font-medium hover:text-primary hover:underline">{{ p.name }}</RouterLink>
+                                        <Badge v-if="p.type === 'combo'" class="ml-1.5">Combo</Badge>
                                         <p class="truncate text-xs text-muted-foreground">
                                             {{ p.variants_count }} biến thể ·
                                             <span class="font-mono">{{ p.variants?.slice(0, 2).map((v) => v.sku).join(', ') }}{{ (p.variants?.length ?? 0) > 2 ? '…' : '' }}</span>

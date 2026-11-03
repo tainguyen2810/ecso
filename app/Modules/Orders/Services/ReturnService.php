@@ -3,6 +3,7 @@
 namespace App\Modules\Orders\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Catalog\Services\ComboResolver;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Services\InventoryService;
 use App\Modules\Inventory\Services\ReservationLedger;
@@ -27,6 +28,7 @@ class ReturnService
         private readonly InventoryService $inventory,
         private readonly ReservationLedger $ledger,
         private readonly AuditLogger $audit,
+        private readonly ComboResolver $combos,
     ) {}
 
     /**
@@ -165,6 +167,8 @@ class ReturnService
             }
 
             if ($restock !== []) {
+                // A returned combo goes back into stock as its components.
+                $restock = $this->combos->expand($restock);
                 $this->inventory->restockReturn($warehouse, $restock, "restock:return:{$return->id}", $return, "Hàng hoàn {$return->number}");
             }
 
