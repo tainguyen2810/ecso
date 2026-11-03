@@ -17,7 +17,7 @@ async function logout() {
 
 <template>
     <div class="flex min-h-screen">
-        <aside class="sticky top-0 hidden h-screen w-60 flex-col bg-[oklch(0.24_0.04_264)] text-white/80 md:flex">
+        <aside class="sticky top-0 hidden h-screen w-60 flex-col bg-sidebar text-white/80 md:flex">
             <div class="flex items-center gap-2 border-b border-white/10 px-5 py-4 font-semibold text-white">
                 <ShieldCheck class="size-5" /> ECSO Admin
             </div>

@@ -11,6 +11,7 @@ import Card from '@/shared/ui/Card.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import Input from '@/shared/ui/Input.vue';
+import KpiCard from '@/shared/ui/KpiCard.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
@@ -65,11 +66,11 @@ watch(() => filters.q, () => {
 watch(() => [filters.warehouse, filters.state], () => ((filters.page = 1), load()));
 
 const cards = computed(() => [
-    { label: 'SKU đang quản lý', value: formatNumber(summary.value?.skus), icon: Boxes, tone: '' },
-    { label: 'Tổng tồn thực tế', value: formatNumber(summary.value?.on_hand), hint: `${formatNumber(summary.value?.reserved)} đang giữ cho đơn`, icon: PackageCheck, tone: '' },
-    { label: 'Giá trị tồn (giá vốn)', value: formatMoney(summary.value?.inventory_value), icon: Coins, tone: '' },
-    { label: 'Sắp hết hàng', value: formatNumber(summary.value?.low_stock), icon: AlertTriangle, tone: 'text-[oklch(0.55_0.13_70)]', state: 'low' },
-    { label: 'Hết hàng', value: formatNumber(summary.value?.out_of_stock), icon: PackageX, tone: 'text-destructive', state: 'out' },
+    { label: 'SKU đang quản lý', value: formatNumber(summary.value?.skus), icon: Boxes, tone: 'slate' as const },
+    { label: 'Tổng tồn thực tế', value: formatNumber(summary.value?.on_hand), hint: `${formatNumber(summary.value?.reserved)} đang giữ cho đơn`, icon: PackageCheck, tone: 'slate' as const },
+    { label: 'Giá trị tồn (giá vốn)', value: formatMoney(summary.value?.inventory_value), icon: Coins, tone: 'slate' as const },
+    { label: 'Sắp hết hàng', value: formatNumber(summary.value?.low_stock), icon: AlertTriangle, tone: 'amber' as const, state: 'low' },
+    { label: 'Hết hàng', value: formatNumber(summary.value?.out_of_stock), icon: PackageX, tone: 'red' as const, state: 'out' },
 ]);
 
 const editing = ref<string | null>(null);
@@ -110,21 +111,19 @@ function stateOf(row: StockRow): { label: string; tone: 'success' | 'warning' | 
     <InventoryNav />
 
     <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <Card
+        <KpiCard
             v-for="c in cards"
             :key="c.label"
-            :class="cn('p-4', c.state && 'cursor-pointer hover:border-primary/40', c.state && filters.state === c.state && 'border-primary ring-1 ring-primary/30')"
+            :label="c.label"
+            :value="summary ? c.value : null"
+            :icon="c.icon"
+            :tone="c.tone"
+            :active="!!c.state && filters.state === c.state"
+            :class="cn(c.state && 'cursor-pointer hover:border-primary/40')"
             @click="c.state && (filters.state = filters.state === c.state ? 'all' : c.state)"
         >
-            <div class="flex items-center justify-between text-xs text-muted-foreground">
-                {{ c.label }} <component :is="c.icon" :class="cn('size-4', c.tone)" />
-            </div>
-            <p :class="cn('mt-2 text-xl font-semibold tabular-nums tracking-tight', c.tone)">
-                <Skeleton v-if="!summary" class="h-7 w-20" />
-                <template v-else>{{ c.value }}</template>
-            </p>
-            <p v-if="c.hint && summary" class="mt-0.5 text-xs text-muted-foreground">{{ c.hint }}</p>
-        </Card>
+            <template v-if="c.hint && summary">{{ c.hint }}</template>
+        </KpiCard>
     </div>
 
     <Card class="mt-5">
@@ -158,7 +157,7 @@ function stateOf(row: StockRow): { label: string; tone: 'success' | 'warning' | 
         </EmptyState>
         <div v-else class="overflow-x-auto" :class="loading && 'opacity-60'">
             <table class="w-full text-sm" data-testid="stock-table">
-                <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                     <tr>
                         <th class="px-4 py-2.5 font-medium">SKU / Sản phẩm</th>
                         <th class="px-4 py-2.5 text-right font-medium">Tồn thực tế</th>

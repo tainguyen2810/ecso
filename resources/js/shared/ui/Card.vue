@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { cn } from '@/shared/lib/utils';
 
-/** `caps`: dashboard-style section heading (bold uppercase, like "KẾT QUẢ KINH DOANH HÔM NAY"). */
-defineProps<{ class?: string; title?: string; description?: string; caps?: boolean }>();
+/** Section heading is bold uppercase by default (docs/DESIGN-SYSTEM.md); `:caps="false"` for a plain title. */
+withDefaults(defineProps<{ class?: string; title?: string; description?: string; caps?: boolean }>(), { caps: true });
 </script>
 
 <template>

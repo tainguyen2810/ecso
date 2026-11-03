@@ -59,7 +59,7 @@ watch(q, () => {
         <div v-else-if="!rows" class="space-y-3 p-4"><Skeleton v-for="i in 5" :key="i" class="h-9" /></div>
         <EmptyState v-else-if="!rows.length" :icon="Building2" title="Không có tenant phù hợp" />
         <table v-else class="w-full text-sm">
-            <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                 <tr>
                     <th class="px-4 py-2.5 font-medium">Tenant</th>
                     <th class="px-4 py-2.5 font-medium">Chủ sở hữu</th>

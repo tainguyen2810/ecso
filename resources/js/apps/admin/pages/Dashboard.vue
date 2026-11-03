@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { AlertOctagon, Building2, Clock, CreditCard, Layers, Lock, PlugZap, ShoppingCart, UserPlus, Users } from 'lucide-vue-next';
 import Card from '@/shared/ui/Card.vue';
+import KpiCard from '@/shared/ui/KpiCard.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
@@ -60,15 +61,9 @@ const cards = computed(() => {
     <div v-else-if="!stats" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Skeleton v-for="i in 8" :key="i" class="h-24" /></div>
     <template v-else>
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Card v-for="c in cards" :key="c.label" class="p-4">
-                <div class="flex items-center justify-between text-xs text-muted-foreground">
-                    {{ c.label }} <component :is="c.icon" class="size-4" />
-                </div>
-                <p :class="['mt-2 text-2xl font-semibold', c.danger && 'text-destructive', c.value === null && 'text-muted-foreground/50']">
-                    {{ c.value === null ? '—' : c.value.toLocaleString('vi-VN') }}
-                </p>
-                <p v-if="c.value === null" class="text-xs text-muted-foreground">Có từ Phase {{ c.phase }}</p>
-            </Card>
+            <KpiCard v-for="c in cards" :key="c.label" :label="c.label" :icon="c.icon" :tone="c.danger ? 'red' : 'slate'" :value="c.value === null ? null : c.value.toLocaleString('vi-VN')">
+                <template v-if="c.value === null">Có từ Phase {{ c.phase }}</template>
+            </KpiCard>
         </div>
         <Card class="mt-6" title="Subscription theo gói">
             <div class="flex flex-wrap gap-6 p-5">

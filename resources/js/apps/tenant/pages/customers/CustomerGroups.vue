@@ -98,7 +98,7 @@ async function remove(g: CustomerGroup) {
         </EmptyState>
         <div v-else class="overflow-x-auto">
             <table class="w-full text-sm" data-testid="group-table">
-                <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                     <tr>
                         <th class="px-4 py-2.5 font-medium">Nhóm</th>
                         <th class="px-4 py-2.5 font-medium">Giá áp dụng</th>

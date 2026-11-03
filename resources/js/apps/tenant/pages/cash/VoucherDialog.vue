@@ -216,7 +216,7 @@ async function save(again = false) {
                 <Input v-else id="v-party" v-model="form.party_name" :placeholder="form.party_kind === 'carrier' ? 'VD: Giao Hàng Nhanh, Be' : 'VD: Chủ nhà, Điện lực'" data-testid="v-party" />
             </FormField>
 
-            <div v-if="debtAllowed" class="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm sm:col-span-2" data-testid="v-debt">
+            <div v-if="debtAllowed" class="rounded-lg border border-blue-100 bg-blue-50/70 p-3 text-sm sm:col-span-2" data-testid="v-debt">
                 <label class="flex items-center gap-2 font-medium">
                     <input v-model="debtMode" type="checkbox" class="size-4" data-testid="v-debt-mode" />
                     {{ receipt ? 'Thu nợ khách' : 'Trả nợ nhà cung cấp' }}, đang nợ {{ formatMoney(debt) }}

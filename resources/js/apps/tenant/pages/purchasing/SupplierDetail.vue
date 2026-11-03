@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, Pencil, Plus, Trash2, Wallet } from 'lucide-vue-next';
+import { ArrowLeft, HandCoins, PackageCheck, Pencil, Plus, Trash2, Wallet } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import SupplierDialog from './SupplierDialog.vue';
 import SupplierPaymentDialog from './SupplierPaymentDialog.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
+import KpiCard from '@/shared/ui/KpiCard.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
@@ -65,15 +66,15 @@ async function remove() {
         </PageHeader>
 
         <div class="mb-4 grid gap-4 sm:grid-cols-3">
-            <Card><div class="p-4"><p class="text-xs text-muted-foreground">Đã nhập (trừ hàng trả)</p><p class="mt-1 text-2xl font-semibold tabular-nums">{{ formatMoney(supplier.purchased) }}</p></div></Card>
-            <Card><div class="p-4"><p class="text-xs text-muted-foreground">Đã thanh toán</p><p class="mt-1 text-2xl font-semibold tabular-nums">{{ formatMoney(supplier.paid) }}</p></div></Card>
-            <Card><div class="p-4"><p class="text-xs text-muted-foreground">{{ Number(supplier.debt) < 0 ? 'Đã trả trước' : 'Còn nợ' }}</p><p class="mt-1 text-2xl font-semibold tabular-nums" :class="Number(supplier.debt) > 0 && 'text-destructive'" data-testid="supplier-debt">{{ formatMoney(Math.abs(Number(supplier.debt))) }}</p></div></Card>
+            <KpiCard label="Đã nhập (trừ hàng trả)" :icon="PackageCheck" :value="formatMoney(supplier.purchased)" />
+            <KpiCard label="Đã thanh toán" :icon="Wallet" tone="green" :value="formatMoney(supplier.paid)" />
+            <KpiCard :label="Number(supplier.debt) < 0 ? 'Đã trả trước' : 'Còn nợ'" :icon="HandCoins" :tone="Number(supplier.debt) > 0 ? 'red' : 'slate'" :value="formatMoney(Math.abs(Number(supplier.debt)))"><template #value><span data-testid="supplier-debt">{{ formatMoney(Math.abs(Number(supplier.debt))) }}</span></template></KpiCard>
         </div>
 
         <div class="grid gap-4 lg:grid-cols-3">
             <Card title="Đơn nhập" class="lg:col-span-2">
                 <table v-if="supplier.orders.length" class="w-full text-sm">
-                    <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                         <tr><th class="px-4 py-2 font-medium">Đơn nhập</th><th class="px-4 py-2 font-medium">Ngày tạo</th><th class="px-4 py-2 font-medium">Trạng thái</th><th class="px-4 py-2 text-right font-medium">Giá trị</th><th class="px-4 py-2 text-right font-medium">Còn nợ</th></tr>
                     </thead>
                     <tbody class="divide-y">

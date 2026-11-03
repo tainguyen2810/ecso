@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { HelpCircle, Info } from 'lucide-vue-next';
+import { Banknote, CircleCheck, CircleX, HelpCircle, Info, Package, TrendingUp, Undo2 } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Card from '@/shared/ui/Card.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import Input from '@/shared/ui/Input.vue';
+import KpiCard from '@/shared/ui/KpiCard.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { formatMoney, formatNumber } from '@/shared/lib/utils';
@@ -80,36 +81,15 @@ function shortDay(day: string): string {
         </div>
 
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="finance-kpis">
-            <Card class="p-4">
-                <p class="text-xs text-muted-foreground">Doanh thu đặt hàng</p>
-                <p class="mt-2 text-2xl font-semibold tabular-nums">{{ formatMoney(data.ordered.revenue) }}</p>
-                <p class="text-xs text-muted-foreground">{{ formatNumber(data.ordered.orders) }} đơn (trừ đơn hủy)</p>
-            </Card>
-            <Card class="p-4">
-                <p class="text-xs text-muted-foreground">Doanh thu hoàn thành</p>
-                <p class="mt-2 text-2xl font-semibold tabular-nums">{{ formatMoney(data.completed.revenue) }}</p>
-                <p class="text-xs text-muted-foreground">{{ formatNumber(data.completed.orders) }} đơn đã giao trong kỳ</p>
-            </Card>
-            <Card class="p-4">
-                <p class="text-xs text-muted-foreground">Giá vốn hàng đã giao</p>
-                <p class="mt-2 text-2xl font-semibold tabular-nums">{{ formatMoney(data.cogs) }}</p>
-                <p v-if="data.cogs_missing_lines" class="text-xs text-[oklch(0.5_0.13_70)]">{{ data.cogs_missing_lines }} dòng hàng chưa có giá vốn</p>
-                <p v-else class="text-xs text-muted-foreground">Theo giá vốn bình quân lúc xuất kho</p>
-            </Card>
-            <Card class="p-4">
-                <p class="text-xs text-muted-foreground">Lợi nhuận gộp ước tính</p>
-                <p class="mt-2 text-2xl font-semibold tabular-nums" data-testid="gross-profit">{{ formatMoney(data.estimated_gross_profit) }}</p>
-                <p class="text-xs text-muted-foreground">{{ margin === null ? '—' : margin + '%' }} · chưa trừ phí sàn</p>
-            </Card>
-            <Card class="p-4">
-                <p class="text-xs text-muted-foreground">Hoàn tiền</p>
-                <p class="mt-2 text-xl font-semibold tabular-nums">{{ formatMoney(data.refunds) }}</p>
-            </Card>
-            <Card class="p-4">
-                <p class="text-xs text-muted-foreground">Đơn hủy</p>
-                <p class="mt-2 text-xl font-semibold tabular-nums">{{ formatNumber(data.cancelled.orders) }}</p>
-                <p class="text-xs text-muted-foreground">{{ formatMoney(data.cancelled.revenue) }}</p>
-            </Card>
+            <KpiCard label="Doanh thu đặt hàng" :icon="Banknote" tone="blue" :value="formatMoney(data.ordered.revenue)">{{ formatNumber(data.ordered.orders) }} đơn (trừ đơn hủy)</KpiCard>
+            <KpiCard label="Doanh thu hoàn thành" :icon="CircleCheck" tone="green" :value="formatMoney(data.completed.revenue)">{{ formatNumber(data.completed.orders) }} đơn đã giao trong kỳ</KpiCard>
+            <KpiCard label="Giá vốn hàng đã giao" :icon="Package" :value="formatMoney(data.cogs)">
+                <span v-if="data.cogs_missing_lines" class="text-amber-600">{{ data.cogs_missing_lines }} dòng hàng chưa có giá vốn</span>
+                <template v-else>Theo giá vốn bình quân lúc xuất kho</template>
+            </KpiCard>
+            <KpiCard label="Lợi nhuận gộp ước tính" :icon="TrendingUp" :tone="Number(data.estimated_gross_profit) < 0 ? 'red' : 'green'" :value="formatMoney(data.estimated_gross_profit)"><template #value><span data-testid="gross-profit">{{ formatMoney(data.estimated_gross_profit) }}</span></template>{{ margin === null ? '—' : margin + '%' }} · chưa trừ phí sàn</KpiCard>
+            <KpiCard label="Hoàn tiền" :icon="Undo2" :value="formatMoney(data.refunds)" />
+            <KpiCard label="Đơn hủy" :icon="CircleX" :tone="data.cancelled.orders > 0 ? 'red' : 'slate'" :value="formatNumber(data.cancelled.orders)">{{ formatMoney(data.cancelled.revenue) }}</KpiCard>
             <Card v-if="data.estimated_profit !== null" class="p-4 sm:col-span-2" data-testid="other-pnl">
                 <p class="text-xs text-muted-foreground">Lợi nhuận sau thu chi khác</p>
                 <p class="mt-2 text-xl font-semibold tabular-nums">{{ formatMoney(data.estimated_profit) }}</p>

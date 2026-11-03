@@ -128,7 +128,7 @@ async function print(mode: 'open' | 'download') {
             <EmptyState v-if="!rows.length" :icon="Tags" title="Chưa chọn SKU" description="Chọn sản phẩm ở danh sách rồi bấm In tem, hoặc quét mã vạch ở ô trên." />
             <div v-else class="overflow-x-auto">
                 <table class="w-full text-sm" data-testid="label-table">
-                    <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                         <tr>
                             <th class="px-4 py-2 font-medium">Sản phẩm</th>
                             <th class="px-4 py-2 font-medium">Mã in trên tem</th>

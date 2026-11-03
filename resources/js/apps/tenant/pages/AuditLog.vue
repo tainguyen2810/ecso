@@ -70,7 +70,7 @@ function summary(changes: Record<string, unknown> | null): string {
         <EmptyState v-else-if="!logs.length" :icon="ScrollText" title="Chưa có hoạt động" />
         <div v-else class="overflow-x-auto">
             <table class="w-full text-sm">
-                <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                     <tr>
                         <th class="px-4 py-2.5 font-medium">Thời gian</th>
                         <th class="px-4 py-2.5 font-medium">Người thực hiện</th>

@@ -127,7 +127,7 @@ test('transfers and warehouses', async ({ page }) => {
     await shot(page, '16-warehouses');
 
     await page.goto('/');
-    await expect(page.getByText('SKU sắp hết hàng')).toBeVisible();
+    await expect(page.getByTestId('dashboard-stock')).toContainText('SKU dưới tồn an toàn');
     await shot(page, '17-dashboard');
 });
 

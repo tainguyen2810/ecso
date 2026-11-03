@@ -52,8 +52,8 @@ watch([status, type], () => ((page.value = 1), load()));
 <template>
     <PageHeader title="Trả hàng" description="Hàng hoàn từ khách, đơn hủy sau khi gửi, giao thất bại. Kho chỉ được cộng lại sau khi kiểm hàng, theo số lượng còn bán được." />
     <Card>
+        <div class="border-b px-3"><Tabs v-model="status" :tabs="tabs" variant="underline" /></div>
         <div class="space-y-3 border-b p-4">
-            <Tabs v-model="status" :tabs="tabs" />
             <div class="flex flex-wrap gap-2">
                 <div class="relative min-w-60 flex-1">
                     <Search class="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
@@ -67,7 +67,7 @@ watch([status, type], () => ((page.value = 1), load()));
         <EmptyState v-else-if="!rows.length" :icon="Undo2" title="Chưa có phiếu trả hàng" description="Phiếu được tạo tự động khi đơn bị hủy sau khi gửi hoặc giao thất bại, hoặc tạo thủ công từ trang chi tiết đơn." />
         <div v-else class="overflow-x-auto">
             <table class="w-full text-sm" data-testid="return-table">
-                <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                     <tr>
                         <th class="px-4 py-2.5 font-medium">Số phiếu</th>
                         <th class="px-4 py-2.5 font-medium">Đơn hàng</th>

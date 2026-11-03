@@ -194,7 +194,7 @@ async function exportCsv() {
         <EmptyState v-else-if="!rows.length" :icon="ReceiptText" title="Không có phiếu nào" description="Đổi khoảng ngày hoặc bộ lọc, hoặc lập phiếu thu, phiếu chi mới." />
         <div v-else class="overflow-x-auto" :class="loading && 'opacity-60'">
             <table class="w-full text-sm" data-testid="voucher-table">
-                <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                     <tr>
                         <th class="px-4 py-2.5 font-medium">Mã phiếu</th>
                         <th class="px-4 py-2.5 font-medium">Ngày ghi nhận</th>

@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { ArrowLeft, History, Lock } from 'lucide-vue-next';
+import { ArrowLeft, Boxes, History, Lock, PackageCheck, Warehouse } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import InventoryNav from './InventoryNav.vue';
 import Pagination from '../../components/Pagination.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Card from '@/shared/ui/Card.vue';
+import KpiCard from '@/shared/ui/KpiCard.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import Select from '@/shared/ui/Select.vue';
@@ -72,21 +73,11 @@ function delta(n: number): string {
     <ErrorState v-if="loadError && !variant" :message="loadError" @retry="load" />
     <template v-else>
         <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Card class="p-4">
-                <p class="text-xs text-muted-foreground">Tổng tồn thực tế</p>
-                <p class="mt-1 text-2xl font-semibold tabular-nums">{{ formatNumber(totals.on_hand) }}</p>
-                <p class="text-xs text-muted-foreground">Giá vốn BQ {{ formatMoney(variant?.cost_price) }}</p>
-            </Card>
-            <Card class="p-4">
-                <p class="text-xs text-muted-foreground">Khả dụng</p>
-                <p :class="cn('mt-1 text-2xl font-semibold tabular-nums', totals.available <= 0 && 'text-destructive')">{{ formatNumber(totals.available) }}</p>
-                <p class="flex items-center gap-1 text-xs text-muted-foreground"><Lock class="size-3" /> {{ formatNumber(totals.reserved) }} đang giữ cho {{ reservations }} đơn</p>
-            </Card>
-            <Card v-for="b in balances" :key="b.warehouse.id" class="p-4">
-                <p class="text-xs text-muted-foreground">{{ b.warehouse.code }} · {{ b.warehouse.name }}</p>
-                <p class="mt-1 text-lg font-semibold tabular-nums">{{ formatNumber(b.on_hand) }} <span class="text-sm font-normal text-muted-foreground">thực tế</span></p>
-                <p class="text-xs text-muted-foreground">Khả dụng {{ formatNumber(b.available) }} · an toàn {{ b.safety_stock }}</p>
-            </Card>
+            <KpiCard label="Tổng tồn thực tế" :icon="Boxes" :value="formatNumber(totals.on_hand)">Giá vốn BQ {{ formatMoney(variant?.cost_price) }}</KpiCard>
+            <KpiCard label="Khả dụng" :icon="PackageCheck" :tone="totals.available <= 0 ? 'red' : 'green'" :value="formatNumber(totals.available)">
+                <span class="inline-flex items-center gap-1"><Lock class="size-3" /> {{ formatNumber(totals.reserved) }} đang giữ cho {{ reservations }} đơn</span>
+            </KpiCard>
+            <KpiCard v-for="b in balances" :key="b.warehouse.id" :label="`${b.warehouse.code} · ${b.warehouse.name}`" :icon="Warehouse" :value="`${formatNumber(b.on_hand)} thực tế`">Khả dụng {{ formatNumber(b.available) }} · an toàn {{ b.safety_stock }}</KpiCard>
         </div>
 
         <Card class="mt-5" title="Lịch sử nhập xuất" description="Sổ kho bất biến: mỗi dòng là một phát sinh, kèm tồn sau phát sinh. Không thể sửa hoặc xóa.">
@@ -100,7 +91,7 @@ function delta(n: number): string {
             <EmptyState v-else-if="!movements.length" :icon="History" title="Chưa có phát sinh" description="Nhập kho hoặc điều chỉnh để tạo dòng đầu tiên trên thẻ kho." />
             <div v-else class="overflow-x-auto">
                 <table class="w-full text-sm" data-testid="movement-table">
-                    <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                         <tr>
                             <th class="px-4 py-2.5 font-medium">Thời gian</th>
                             <th class="px-4 py-2.5 font-medium">Loại</th>

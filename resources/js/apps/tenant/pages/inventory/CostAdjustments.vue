@@ -120,7 +120,7 @@ function toggle(id: string) {
         <div v-if="loading && !docs.length" class="space-y-3 p-4"><Skeleton v-for="i in 4" :key="i" class="h-10" /></div>
         <EmptyState v-else-if="!docs.length" :icon="Wallet" title="Chưa có phiếu điều chỉnh giá vốn" description="Mỗi phiếu ghi lại giá vốn cũ và mới của từng SKU, ai làm và lúc nào." />
         <table v-else class="w-full text-sm" data-testid="cost-adjustment-table">
-            <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                 <tr>
                     <th class="px-4 py-2.5 font-medium">Số phiếu</th>
                     <th class="px-4 py-2.5 font-medium">Thời gian</th>

@@ -373,7 +373,7 @@ async function removeImage(id: number) {
                     <p v-if="error?.field('components')" class="px-5 pt-3 text-sm text-destructive">{{ error.field('components') }}</p>
                     <p v-if="!components.length" class="px-5 py-6 text-center text-sm text-muted-foreground">Chưa có SKU thành phần.</p>
                     <table v-else class="w-full text-sm">
-                        <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                        <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                             <tr>
                                 <th class="px-5 py-2 font-medium">SKU thành phần</th>
                                 <th class="px-3 py-2 text-right font-medium">Số lượng / combo</th>
@@ -430,7 +430,7 @@ async function removeImage(id: number) {
                     <p v-if="error?.field('variants')" class="px-5 pt-3 text-sm text-destructive">{{ error.field('variants') }}</p>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm" data-testid="variant-table">
-                            <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                            <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                                 <tr>
                                     <th class="px-3 py-2 font-medium">SKU *</th>
                                     <th class="px-3 py-2 font-medium">Tên biến thể</th>
@@ -485,7 +485,7 @@ async function removeImage(id: number) {
                     <p v-if="!packRows.length" class="px-5 py-5 text-sm text-muted-foreground">Chưa có đơn vị quy đổi.</p>
                     <div v-else class="overflow-x-auto">
                         <table class="w-full text-sm">
-                            <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                            <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                                 <tr>
                                     <th class="px-3 py-2 font-medium">Tên đơn vị</th>
                                     <th class="px-3 py-2 font-medium">Quy đổi</th>
@@ -533,7 +533,7 @@ async function removeImage(id: number) {
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm" data-testid="opening-table">
-                            <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                            <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                                 <tr>
                                     <th class="px-4 py-2 font-medium">SKU</th>
                                     <th class="px-4 py-2 text-right font-medium">Số lượng</th>

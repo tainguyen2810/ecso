@@ -31,8 +31,9 @@ Chốt ngày 03/11/2026 cùng màn Tổng quan mới (tham khảo bố cục T�
 
 | Thành phần | Dùng khi |
 |---|---|
-| `Card` | Mọi khối nội dung. `caps` = tiêu đề in hoa đậm kiểu dashboard ("KẾT QUẢ KINH DOANH HÔM NAY"); slot `actions` cho link/bộ lọc bên phải tiêu đề. |
+| `Card` | Mọi khối nội dung. Tiêu đề mặc định in hoa đậm kiểu dashboard ("KẾT QUẢ KINH DOANH HÔM NAY"), `:caps="false"` để dùng tiêu đề thường; slot `actions` cho link/bộ lọc bên phải tiêu đề. |
 | `StatTile` | Ô chỉ số: icon tròn + nhãn + số lớn + dòng phụ (slot). Có `to` thì bấm được. Đặt nhiều ô trong `grid divide-x`. |
+| `KpiCard` | Ô chỉ số đứng riêng (có viền) cho hàng KPI đầu trang: icon tròn + nhãn + số + dòng phụ; `tone` tô màu số khi có nghĩa, `active` khi ô đang là bộ lọc. Dùng cho Kho, Tài chính, Báo cáo, Sổ quỹ, Khách hàng, NCC, Thẻ kho, Admin. |
 | `IconBubble` | Icon trong vòng tròn nền nhạt theo tone (hàng đợi, ô chỉ số). |
 | `charts/StackedBarChart` | Cột chồng theo ngày, mỗi chuỗi một màu; có chú thích, trục tiền rút gọn ("10 tr"), tooltip số chính xác. |
 | `charts/DonutChart` | Tỷ trọng (doanh thu theo sàn) kèm chú thích %. |

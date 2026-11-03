@@ -170,7 +170,7 @@ async function voidPayment(id: string) {
             <Card title="Hàng đặt" class="lg:col-span-2">
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
-                        <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                        <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                             <tr><th class="px-4 py-2 font-medium">SKU</th><th class="px-4 py-2 text-right font-medium">Đặt</th><th class="px-4 py-2 text-right font-medium">Đã nhận</th><th class="px-4 py-2 text-right font-medium">Đã trả</th><th class="px-4 py-2 text-right font-medium">Còn chờ</th><th class="px-4 py-2 text-right font-medium">Đơn giá</th><th class="px-4 py-2 text-right font-medium">VAT</th><th class="px-4 py-2 text-right font-medium" title="Giá vốn mỗi đơn vị khi nhập kho theo giá đặt">Giá vốn</th></tr>
                         </thead>
                         <tbody class="divide-y">
@@ -179,7 +179,7 @@ async function voidPayment(id: string) {
                                 <td class="px-4 py-2.5 text-right tabular-nums">{{ formatNumber(l.quantity) }}</td>
                                 <td class="px-4 py-2.5 text-right tabular-nums" :class="l.received_qty >= l.quantity && 'text-success'">{{ formatNumber(l.received_qty) }}</td>
                                 <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ l.returned_qty ? formatNumber(l.returned_qty) : '—' }}</td>
-                                <td class="px-4 py-2.5 text-right tabular-nums" :class="l.remaining > 0 && isOpen && 'font-medium text-[oklch(0.5_0.13_70)]'">{{ l.remaining ? formatNumber(l.remaining) : '—' }}</td>
+                                <td class="px-4 py-2.5 text-right tabular-nums" :class="l.remaining > 0 && isOpen && 'font-medium text-amber-600'">{{ l.remaining ? formatNumber(l.remaining) : '—' }}</td>
                                 <td class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(l.unit_cost) }}</td>
                                 <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ Number(l.tax_rate) }}%</td>
                                 <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ formatMoney(l.landed_unit_cost) }}</td>

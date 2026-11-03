@@ -177,7 +177,7 @@ async function copy(text: string) {
                     </li>
                 </ol>
 
-                <div v-if="error" class="mb-4 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive" data-testid="install-error">
+                <div v-if="error" class="mb-4 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50/70 p-3 text-sm text-destructive" data-testid="install-error">
                     <CircleAlert class="mt-0.5 size-4 shrink-0" /> {{ error }}
                 </div>
 

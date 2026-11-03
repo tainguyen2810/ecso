@@ -94,7 +94,7 @@ async function update(w: Warehouse, payload: Record<string, unknown>, message: s
     </PageHeader>
     <InventoryNav />
 
-    <div v-if="atLimit && canManage" class="mb-4 rounded-md border border-warning/40 bg-warning/10 px-4 py-3 text-sm">
+    <div v-if="atLimit && canManage" class="mb-4 rounded-lg border border-amber-200 bg-amber-50/70 px-4 py-3 text-sm">
         Gói hiện tại cho phép tối đa <b>{{ limit }}</b> kho. <RouterLink to="/subscription" class="font-medium text-primary hover:underline">Xem gói dịch vụ</RouterLink> để thêm kho.
     </div>
 

@@ -6,6 +6,7 @@ import PageHeader from '../../PageHeader.vue';
 import RangePicker from './RangePicker.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
+import KpiCard from '@/shared/ui/KpiCard.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import Input from '@/shared/ui/Input.vue';
@@ -124,13 +125,9 @@ function exportCsv() {
     </PageHeader>
 
     <div v-if="data && report.kpis" class="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="report-kpis">
-        <Card v-for="k in report.kpis(data)" :key="k.label">
-            <div class="p-4">
-                <p class="text-xs text-muted-foreground">{{ k.label }}</p>
-                <p class="mt-1 text-2xl font-semibold tabular-nums">{{ show(k.type, k.value) }}</p>
-                <p v-if="k.hint" class="text-xs text-muted-foreground">{{ k.hint }}</p>
-            </div>
-        </Card>
+        <KpiCard v-for="k in report.kpis(data)" :key="k.label" :label="k.label" :value="show(k.type, k.value)">
+            <template v-if="k.hint">{{ k.hint }}</template>
+        </KpiCard>
     </div>
     <p v-if="report.note" class="mb-4 flex items-start gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
         <Info class="mt-0.5 size-3.5 shrink-0" /><span>{{ report.note }}</span>
@@ -173,7 +170,7 @@ function exportCsv() {
         <EmptyState v-else-if="!rows.length" :icon="FileBarChart" title="Chưa có số liệu" :description="report.empty" />
         <div v-else class="overflow-x-auto" :class="loading && 'opacity-60'">
             <table class="w-full text-sm" data-testid="report-table">
-                <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                     <tr>
                         <th v-for="c in columns" :key="c.key" :class="cn('whitespace-nowrap px-4 py-2.5 font-medium', numeric(c) && 'text-right')">{{ c.label }}</th>
                     </tr>

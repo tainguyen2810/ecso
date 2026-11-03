@@ -115,7 +115,7 @@ const hints: Record<DocumentKindKey, string> = {
             <EmptyState v-if="!lines.length" :icon="PackageOpen" title="Chưa có dòng hàng" description="Tìm SKU ở ô phía trên. Máy quét mã vạch hoạt động như bàn phím: quét xong nhấn Enter là thêm dòng." />
             <div v-else class="overflow-x-auto">
                 <table class="w-full text-sm" data-testid="line-table">
-                    <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                         <tr>
                             <th class="px-4 py-2 font-medium">SKU</th>
                             <th class="px-4 py-2 text-right font-medium">Tồn hiện tại</th>

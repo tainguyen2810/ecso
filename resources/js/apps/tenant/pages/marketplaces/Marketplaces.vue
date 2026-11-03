@@ -314,7 +314,7 @@ const accountLabel = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 
         <Card title="Khả năng tích hợp theo sàn" description="Chỉ đánh dấu “Hỗ trợ” khi đã kiểm chứng với tài liệu chính thức và credentials. UNKNOWN = chưa có tài liệu/credentials để xác minh, hệ thống coi là không khả dụng.">
             <div class="overflow-x-auto">
                 <table class="w-full text-sm" data-testid="capability-matrix">
-                    <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                         <tr>
                             <th class="px-4 py-2.5 font-medium">Thao tác</th>
                             <th v-for="c in catalog" :key="c.key" class="px-4 py-2.5 text-center font-medium">{{ c.name }}</th>

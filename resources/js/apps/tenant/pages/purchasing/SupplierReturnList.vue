@@ -43,7 +43,7 @@ onMounted(load);
         <EmptyState v-else-if="!rows.length" :icon="Undo2" title="Chưa trả hàng nhà cung cấp" description="Mở một đơn nhập đã nhận hàng và bấm Trả hàng để xuất trả hàng lỗi. Công nợ NCC giảm tương ứng." />
         <div v-else class="overflow-x-auto">
             <table class="w-full text-sm">
-                <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                     <tr><th class="px-4 py-2.5 font-medium">Phiếu</th><th class="px-4 py-2.5 font-medium">Nhà cung cấp</th><th class="px-4 py-2.5 font-medium">Đơn nhập</th><th class="px-4 py-2.5 font-medium">Lý do</th><th class="px-4 py-2.5 font-medium">Ngày</th><th class="px-4 py-2.5 text-right font-medium">Giá trị</th></tr>
                 </thead>
                 <tbody class="divide-y">

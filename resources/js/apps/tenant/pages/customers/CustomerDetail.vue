@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, MapPin, Pencil, Plus, Trash2 } from 'lucide-vue-next';
+import { ArrowLeft, Banknote, CalendarClock, HandCoins, MapPin, Pencil, Plus, ShoppingCart, Trash2 } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Tabs from '../../components/Tabs.vue';
 import CustomerDialog from './CustomerDialog.vue';
@@ -9,6 +9,7 @@ import { customerStatus, genderLabels, priceTierLabels } from './labels';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
+import KpiCard from '@/shared/ui/KpiCard.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import FormField from '@/shared/ui/FormField.vue';
@@ -161,19 +162,19 @@ const tabs = computed(() => [
         </PageHeader>
 
         <div class="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Card><div class="p-4"><p class="text-xs text-muted-foreground">Số đơn</p><p class="mt-1 text-2xl font-semibold tabular-nums">{{ formatNumber(customer.orders_count) }}</p></div></Card>
-            <Card><div class="p-4"><p class="text-xs text-muted-foreground">Tổng chi tiêu (không tính đơn hủy/hoàn)</p><p class="mt-1 text-2xl font-semibold tabular-nums">{{ formatMoney(customer.total_spent) }}</p></div></Card>
-            <Card><div class="p-4"><p class="text-xs text-muted-foreground">Còn nợ</p><p class="mt-1 text-2xl font-semibold tabular-nums" :class="Number(customer.debt) > 0 && 'text-destructive'" data-testid="customer-debt">{{ formatMoney(customer.debt) }}</p></div></Card>
-            <Card><div class="p-4"><p class="text-xs text-muted-foreground">Mua gần nhất</p><p class="mt-1 text-lg font-semibold">{{ customer.last_order_at ? formatDate(customer.last_order_at) : '—' }}</p></div></Card>
+            <KpiCard label="Số đơn" :icon="ShoppingCart" :value="formatNumber(customer.orders_count)" />
+            <KpiCard label="Tổng chi tiêu (không tính đơn hủy/hoàn)" :icon="Banknote" tone="blue" :value="formatMoney(customer.total_spent)" />
+            <KpiCard label="Còn nợ" :icon="HandCoins" :tone="Number(customer.debt) > 0 ? 'red' : 'slate'" :value="formatMoney(customer.debt)"><template #value><span data-testid="customer-debt">{{ formatMoney(customer.debt) }}</span></template></KpiCard>
+            <KpiCard label="Mua gần nhất" :icon="CalendarClock" :value="customer.last_order_at ? formatDate(customer.last_order_at) : null" />
         </div>
 
         <div class="grid gap-4 lg:grid-cols-3">
             <div class="min-w-0 space-y-4 lg:col-span-2">
-                <Tabs v-model="tab" :tabs="tabs" data-testid="customer-tabs" />
+                <div class="rounded-lg border bg-card px-3 shadow-xs"><Tabs v-model="tab" :tabs="tabs" variant="underline" data-testid="customer-tabs" /></div>
 
                 <Card v-if="tab === 'orders'">
                     <table v-if="customer.orders.length" class="w-full text-sm">
-                        <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                        <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                             <tr><th class="px-4 py-2 font-medium">Mã đơn</th><th class="px-4 py-2 font-medium">Ngày</th><th class="px-4 py-2 font-medium">Trạng thái</th><th class="px-4 py-2 font-medium">Thanh toán</th><th class="px-4 py-2 text-right font-medium">Tổng</th></tr>
                         </thead>
                         <tbody class="divide-y">
@@ -197,7 +198,7 @@ const tabs = computed(() => [
                     <div v-else class="overflow-x-auto">
                         <p class="border-b px-5 py-2.5 text-xs text-muted-foreground">Mỗi đơn (trừ đơn hủy, đơn hoàn) cộng vào nợ, mỗi lần thu tiền trừ đi. Mới nhất ở trên.</p>
                         <table class="w-full text-sm">
-                            <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                            <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                                 <tr><th class="px-4 py-2 font-medium">Thời gian</th><th class="px-4 py-2 font-medium">Chứng từ</th><th class="px-4 py-2 font-medium">Diễn giải</th><th class="px-4 py-2 text-right font-medium">Phát sinh</th><th class="px-4 py-2 text-right font-medium">Còn nợ</th></tr>
                             </thead>
                             <tbody class="divide-y">

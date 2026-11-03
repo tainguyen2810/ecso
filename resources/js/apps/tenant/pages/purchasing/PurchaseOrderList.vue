@@ -76,7 +76,7 @@ const statusOptions = [
         <EmptyState v-else-if="!rows.length" :icon="ClipboardList" title="Chưa có đơn nhập" description="Tạo đơn nhập để đặt hàng nhà cung cấp, sau đó nhận hàng một hoặc nhiều đợt. Mỗi đợt nhận tạo phiếu nhập kho và cập nhật giá vốn." />
         <div v-else class="overflow-x-auto">
             <table class="w-full text-sm" data-testid="po-table">
-                <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                     <tr>
                         <th class="px-4 py-2.5 font-medium">Đơn nhập</th>
                         <th class="px-4 py-2.5 font-medium">Nhà cung cấp</th>

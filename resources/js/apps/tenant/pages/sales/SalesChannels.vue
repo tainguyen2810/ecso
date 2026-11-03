@@ -84,7 +84,7 @@ async function remove(c: SalesChannel) {
         <div v-if="loading" class="space-y-3 p-4"><Skeleton v-for="i in 3" :key="i" class="h-10" /></div>
         <EmptyState v-else-if="!rows.length" :icon="Store" title="Chưa có kênh bán" description="Thêm kênh để tạo đơn bán ngoài sàn." />
         <table v-else class="w-full text-sm" data-testid="channel-table">
-            <thead class="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                 <tr><th class="px-4 py-2.5 font-medium">Tên kênh</th><th class="px-4 py-2.5 font-medium">Loại</th><th class="px-4 py-2.5 font-medium">Kho xuất mặc định</th><th class="px-4 py-2.5 text-right font-medium">Số đơn</th><th class="px-4 py-2.5 font-medium">Trạng thái</th><th class="px-4 py-2.5" /></tr>
             </thead>
             <tbody class="divide-y">
