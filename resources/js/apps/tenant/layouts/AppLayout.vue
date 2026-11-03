@@ -50,27 +50,27 @@ useGoShortcuts(
         <aside
             :class="
                 cn(
-                    'fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r bg-sidebar transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0',
+                    'fixed inset-y-0 left-0 z-40 flex w-60 flex-col bg-sidebar text-sidebar-foreground transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0',
                     mobileOpen ? 'translate-x-0' : '-translate-x-full',
                 )
             "
         >
-            <div class="relative border-b p-3">
+            <div class="relative border-b border-sidebar-border p-3">
                 <button
-                    class="flex w-full items-center gap-2.5 rounded-md p-2 text-left hover:bg-muted"
+                    class="flex w-full items-center gap-2.5 rounded-md p-2 text-left hover:bg-sidebar-hover"
                     data-testid="tenant-switcher"
                     @click="switcherOpen = !switcherOpen"
                 >
-                    <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-xs font-semibold text-primary-foreground">
+                    <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-sidebar-active text-xs font-semibold text-white">
                         {{ initials(tenant.current?.name ?? '?') }}
                     </span>
                     <span class="min-w-0 flex-1">
-                        <span class="block truncate text-sm font-semibold">{{ tenant.current?.name }}</span>
-                        <span class="block truncate text-xs text-muted-foreground">{{ tenant.context?.role.name }}</span>
+                        <span class="block truncate text-sm font-semibold text-white">{{ tenant.current?.name }}</span>
+                        <span class="block truncate text-xs text-sidebar-muted">{{ tenant.context?.role.name }}</span>
                     </span>
-                    <ChevronsUpDown class="size-4 text-muted-foreground" />
+                    <ChevronsUpDown class="size-4 text-sidebar-muted" />
                 </button>
-                <div v-if="switcherOpen" class="absolute left-3 right-3 top-full z-50 mt-1 rounded-md border bg-card p-1 shadow-lg">
+                <div v-if="switcherOpen" class="absolute left-3 right-3 top-full z-50 mt-1 rounded-md border bg-card p-1 text-foreground shadow-lg">
                     <p class="px-2 py-1.5 text-xs font-medium text-muted-foreground">Doanh nghiệp của bạn</p>
                     <button
                         v-for="t in tenant.tenants"
@@ -88,36 +88,36 @@ useGoShortcuts(
                 </div>
             </div>
 
-            <nav class="flex-1 space-y-5 overflow-y-auto px-3 py-4">
-                <div v-for="group in visibleGroups" :key="group.label">
-                    <p class="px-2 pb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{{ group.label }}</p>
+            <nav class="flex-1 overflow-y-auto px-2 py-3">
+                <div v-for="(group, i) in visibleGroups" :key="group.label" :class="i > 0 && 'mt-3 border-t border-sidebar-border pt-3'">
+                    <p class="px-3 pb-1.5 text-xs font-bold uppercase text-white/90">{{ group.label }}</p>
                     <RouterLink
                         v-for="item in group.items"
                         :key="item.name"
                         :to="item.path"
                         :class="
                             cn(
-                                'group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-foreground/80 hover:bg-muted hover:text-foreground',
-                                route.meta.nav === item.name && 'bg-secondary font-medium text-primary hover:bg-secondary',
+                                'group flex items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-hover hover:text-white',
+                                route.meta.nav === item.name && 'bg-sidebar-active font-medium text-white hover:bg-sidebar-active',
                             )
                         "
                         @click="mobileOpen = false"
                     >
-                        <component :is="item.icon" class="size-4 shrink-0" />
+                        <component :is="item.icon" class="size-[18px] shrink-0" :stroke-width="1.75" />
                         <span class="flex-1">{{ item.label }}</span>
                         <Badge v-if="item.phase" tone="muted" class="px-1.5 text-[10px]">{{ item.phase > 8 ? "Sau MVP" : "P" + item.phase }}</Badge>
                     </RouterLink>
                 </div>
             </nav>
 
-            <div class="border-t p-3">
+            <div class="border-t border-sidebar-border p-3">
                 <div class="flex items-center gap-2.5 rounded-md p-2">
-                    <span class="flex size-8 items-center justify-center rounded-full bg-muted text-xs font-semibold">{{ initials(auth.user?.name ?? '') }}</span>
+                    <span class="flex size-8 items-center justify-center rounded-full bg-sidebar-hover text-xs font-semibold text-white">{{ initials(auth.user?.name ?? '') }}</span>
                     <span class="min-w-0 flex-1">
-                        <span class="block truncate text-sm font-medium">{{ auth.user?.name }}</span>
-                        <span class="block truncate text-xs text-muted-foreground">{{ auth.user?.email }}</span>
+                        <span class="block truncate text-sm font-medium text-white">{{ auth.user?.name }}</span>
+                        <span class="block truncate text-xs text-sidebar-muted">{{ auth.user?.email }}</span>
                     </span>
-                    <button class="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" title="Đăng xuất" @click="logout">
+                    <button class="rounded p-1.5 text-sidebar-muted hover:bg-sidebar-hover hover:text-white" title="Đăng xuất" @click="logout">
                         <LogOut class="size-4" />
                     </button>
                 </div>

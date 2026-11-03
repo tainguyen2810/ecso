@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Giao diện: Tổng quan mới và quy chuẩn màu (2026-11-03)
+- Sidebar xanh đậm, icon nét đơn sắc, nhóm menu ngăn bằng đường kẻ; nền trang xám nhạt.
+- Tổng quan: kết quả kinh doanh hôm nay (so với hôm qua), doanh thu 7/30 ngày theo sàn (cột chồng), đơn chờ xử lý theo trạng thái, top sản phẩm bán chạy, thông tin kho, tỷ trọng doanh thu theo sàn, gian hàng kết nối, đơn gần đây, SKU cần nhập thêm.
+- `GET /orders/summary` thêm `days` (7|30), `revenue_by_day`, `revenue_by_channel`, `queues`, `yesterday_ordered_revenue`, `today_cancelled`, `today_returns` (các trường cũ giữ nguyên).
+- Thành phần dùng chung mới: `StatTile`, `IconBubble`, `charts/StackedBarChart`, `charts/DonutChart`, `Card caps`; token màu sidebar và màu kênh bán. Quy chuẩn: `docs/DESIGN-SYSTEM.md`.
+
 ### Mua hàng: VAT đầu vào, chi phí nhập, in phiếu đặt hàng (2026-11-03)
 - Thuế GTGT theo từng dòng đơn nhập (0/5/8/10 %), VAT mặc định cho dòng mới. Công nợ NCC tính cả VAT; trả hàng NCC trả lại cả VAT.
 - Chi phí nhập hàng (vận chuyển, bốc xếp) trên đơn nhập, phân bổ vào giá vốn theo giá trị hàng (theo số lượng nếu hàng 0 đồng). Chọn trả cho NCC (cộng công nợ) hoặc trả bên khác.
