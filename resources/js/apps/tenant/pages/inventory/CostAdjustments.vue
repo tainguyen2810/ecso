@@ -105,7 +105,7 @@ function toggle(id: string) {
 </script>
 
 <template>
-    <PageHeader title="Kho hàng" description="Điều chỉnh giá vốn bình quân khi giá nhập ghi sai hoặc có chiết khấu sau. Số lượng tồn không đổi; lần nhập sau sẽ tính bình quân từ giá mới.">
+    <PageHeader title="Điều chỉnh giá vốn" description="Điều chỉnh giá vốn bình quân khi giá nhập ghi sai hoặc có chiết khấu sau. Số lượng tồn không đổi; lần nhập sau sẽ tính bình quân từ giá mới.">
         <Button v-if="canCreate" data-testid="new-cost-adjustment" @click="open = true"><Plus /> Tạo phiếu điều chỉnh giá vốn</Button>
     </PageHeader>
     <InventoryNav />

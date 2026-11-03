@@ -120,10 +120,13 @@ export interface Warehouse {
 
 export interface StockRow extends StockFigures {
     variant: { id: string; sku: string; name: string | null; barcode: string | null };
-    product: Ref;
+    product: Ref & { image?: string | null };
     safety_stock: number;
     sellable: number;
     cost_price: string;
+    ref_price?: string;
+    wholesale_price?: string | null;
+    created_at?: string | null;
 }
 
 export interface StockSummary {

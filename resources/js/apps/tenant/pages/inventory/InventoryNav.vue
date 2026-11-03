@@ -8,11 +8,11 @@ const route = useRoute();
 const tenant = useTenantStore();
 const links = computed(() =>
     [
-        { to: '/inventory', label: 'Tồn kho', match: ['inventory', 'inventory-card'] },
+        { to: '/inventory', label: 'Quản lý kho', match: ['inventory', 'inventory-card'] },
         { to: '/inventory/receipts', label: 'Nhập kho', match: ['inventory-receipts'] },
-        { to: '/inventory/adjustments', label: 'Điều chỉnh', match: ['inventory-adjustments'] },
-        { to: '/inventory/stocktake', label: 'Kiểm kho', match: ['stocktake'] },
-        { to: '/inventory/transfers', label: 'Chuyển kho', match: ['inventory-transfers'] },
+        { to: '/inventory/adjustments', label: 'Điều chỉnh tồn', match: ['inventory-adjustments'] },
+        { to: '/inventory/stocktake', label: 'Kiểm hàng', match: ['stocktake'] },
+        { to: '/inventory/transfers', label: 'Chuyển hàng', match: ['inventory-transfers'] },
         { to: '/inventory/cost-adjustments', label: 'Điều chỉnh giá vốn', match: ['cost-adjustments'] },
         { to: '/inventory/warehouses', label: 'Danh sách kho', match: ['warehouses'] },
     ].filter(() => tenant.can('inventory.view')),

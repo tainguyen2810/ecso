@@ -35,7 +35,7 @@ onMounted(load);
 </script>
 
 <template>
-    <PageHeader title="Mua hàng" description="Nhà cung cấp, đơn nhập hàng, nhận hàng nhiều đợt, trả hàng và công nợ nhà cung cấp." />
+    <PageHeader title="Trả hàng nhà cung cấp" description="Nhà cung cấp, đơn nhập hàng, nhận hàng nhiều đợt, trả hàng và công nợ nhà cung cấp." />
     <PurchasingNav />
     <Card>
         <div v-if="loading && !rows.length" class="space-y-3 p-4"><Skeleton v-for="i in 4" :key="i" class="h-10" /></div>

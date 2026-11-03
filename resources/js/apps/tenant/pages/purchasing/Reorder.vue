@@ -63,7 +63,7 @@ async function createOrder() {
 </script>
 
 <template>
-    <PageHeader title="Mua hàng" description="Nhà cung cấp, đơn nhập hàng, nhận hàng nhiều đợt, trả hàng và công nợ nhà cung cấp.">
+    <PageHeader title="Gợi ý nhập hàng" description="Nhà cung cấp, đơn nhập hàng, nhận hàng nhiều đợt, trả hàng và công nợ nhà cung cấp.">
         <Button v-if="tenant.can('purchasing.manage')" :disabled="!selected.length" data-testid="reorder-create" @click="createOrder"><ShoppingBasket /> Tạo đơn nhập ({{ selected.length }})</Button>
     </PageHeader>
     <PurchasingNav />

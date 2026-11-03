@@ -1,10 +1,8 @@
 import {
     BarChart3,
-    Boxes,
     CreditCard,
     HandCoins,
     LayoutDashboard,
-    MonitorSmartphone,
     Package,
     PlugZap,
     ReceiptText,
@@ -13,7 +11,6 @@ import {
     Store,
     UsersRound,
     ShoppingCart,
-    Truck,
     Users,
     Wallet,
 } from 'lucide-vue-next';
@@ -31,6 +28,8 @@ export interface NavItem {
     description?: string;
     /** Sub-menu shown under the item when it is open (like Sapo's sidebar). */
     children?: NavChild[];
+    /** Also shown to members who hold any of these (a group that gathers several modules). */
+    anyPermission?: string[];
     /** Other route `meta.nav` values that belong to this item (e.g. returns under orders). */
     alsoActive?: string[];
 }
@@ -47,30 +46,27 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
         items: [
             { name: 'dashboard', label: 'Tổng quan', path: '/', icon: LayoutDashboard, permission: 'dashboard.view', shortcut: 'd' },
             { name: 'orders', label: 'Đơn hàng', path: '/orders', icon: ShoppingCart, permission: 'orders.view', shortcut: 'o', description: 'Quản lý đơn tập trung từ mọi sàn: lọc, xử lý hàng loạt, in phiếu, theo dõi trạng thái.',
-                alsoActive: ['returns'],
+                alsoActive: ['returns', 'pos'],
                 children: [
                     { label: 'Tạo đơn và giao hàng', path: '/orders/new', permission: 'orders.create' },
                     { label: 'Danh sách đơn hàng', path: '/orders' },
+                    { label: 'Bán tại quầy', path: '/pos', permission: 'orders.create' },
+                    { label: 'Ca bán hàng', path: '/pos/shifts', permission: 'orders.create' },
                     { label: 'Khách trả hàng', path: '/returns', permission: 'returns.view' },
                 ] },
-            { name: 'pos', label: 'Bán tại quầy', path: '/pos', icon: MonitorSmartphone, permission: 'orders.create', shortcut: 'b', description: 'Màn hình bán hàng nhanh: quét mã vạch, tính tiền thừa, in hóa đơn K80.',
-                children: [{ label: 'Bán hàng', path: '/pos' }, { label: 'Ca bán hàng', path: '/pos/shifts' }] },
             { name: 'customers', label: 'Khách hàng', path: '/customers', icon: UsersRound, permission: 'customers.view', shortcut: 'k', description: 'Danh bạ khách mua qua kênh riêng, lịch sử mua và công nợ.',
                 children: [{ label: 'Danh sách khách hàng', path: '/customers' }, { label: 'Nhóm khách hàng', path: '/customers/groups' }] },
-            { name: 'products', label: 'Sản phẩm', path: '/products', icon: Package, permission: 'products.view', shortcut: 'p', description: 'SKU, biến thể, mã vạch, mapping với listing trên sàn.',
-                children: [{ label: 'Danh sách sản phẩm', path: '/products' }, { label: 'Danh mục và thương hiệu', path: '/products/taxonomy' }, { label: 'In tem mã vạch', path: '/products/labels' }] },
-            { name: 'inventory', label: 'Kho hàng', path: '/inventory', icon: Boxes, permission: 'inventory.view', shortcut: 'i', description: 'Tồn kho nhiều kho, sổ kho, giữ tồn, điều chỉnh và chuyển kho.',
+            { name: 'products', label: 'Sản phẩm', path: '/products', icon: Package, permission: 'products.view', anyPermission: ['inventory.view', 'purchasing.view'], shortcut: 'p', description: 'Sản phẩm, tồn kho, nhập hàng, kiểm hàng, chuyển hàng, nhà cung cấp và giá vốn.',
+                alsoActive: ['inventory', 'purchasing'],
                 children: [
-                    { label: 'Tồn kho', path: '/inventory' },
-                    { label: 'Nhập kho', path: '/inventory/receipts' },
-                    { label: 'Điều chỉnh', path: '/inventory/adjustments' },
-                    { label: 'Kiểm kho', path: '/inventory/stocktake', permission: 'inventory.adjust' },
-                    { label: 'Chuyển kho', path: '/inventory/transfers' },
-                    { label: 'Điều chỉnh giá vốn', path: '/inventory/cost-adjustments' },
-                    { label: 'Danh sách kho', path: '/inventory/warehouses' },
+                    { label: 'Danh sách sản phẩm', path: '/products', permission: 'products.view' },
+                    { label: 'Quản lý kho', path: '/inventory', permission: 'inventory.view' },
+                    { label: 'Nhập hàng', path: '/purchasing', permission: 'purchasing.view' },
+                    { label: 'Kiểm hàng', path: '/inventory/stocktake', permission: 'inventory.adjust' },
+                    { label: 'Chuyển hàng', path: '/inventory/transfers', permission: 'inventory.view' },
+                    { label: 'Nhà cung cấp', path: '/purchasing/suppliers', permission: 'purchasing.view' },
+                    { label: 'Điều chỉnh giá vốn', path: '/inventory/cost-adjustments', permission: 'inventory.view' },
                 ] },
-            { name: 'purchasing', label: 'Mua hàng', path: '/purchasing', icon: Truck, permission: 'purchasing.view', shortcut: 'n', description: 'Nhà cung cấp, đơn nhập hàng, nhận hàng nhiều đợt, trả hàng và công nợ NCC.',
-                children: [{ label: 'Đơn nhập hàng', path: '/purchasing' }, { label: 'Nhà cung cấp', path: '/purchasing/suppliers' }, { label: 'Trả hàng NCC', path: '/purchasing/returns' }, { label: 'Gợi ý nhập hàng', path: '/purchasing/reorder' }] },
         ],
     },
     {

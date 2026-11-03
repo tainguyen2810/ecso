@@ -110,7 +110,7 @@ async function print(mode: 'open' | 'download') {
 </script>
 
 <template>
-    <PageHeader title="Sản phẩm" description="In tem dán sản phẩm: mã vạch (EAN-13 nếu SKU có mã vạch hợp lệ, còn lại Code 128 theo SKU), tên và giá.">
+    <PageHeader title="In tem mã vạch" description="In tem dán sản phẩm: mã vạch (EAN-13 nếu SKU có mã vạch hợp lệ, còn lại Code 128 theo SKU), tên và giá.">
         <Button variant="outline" :disabled="!total || busy" @click="print('open')"><Printer /> Mở để in</Button>
         <Button :disabled="!total" :loading="busy" data-testid="download-labels" @click="print('download')"><Download /> Tải PDF ({{ formatNumber(total) }} tem)</Button>
     </PageHeader>

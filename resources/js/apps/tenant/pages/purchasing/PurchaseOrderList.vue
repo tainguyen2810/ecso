@@ -59,7 +59,7 @@ const statusOptions = [
 </script>
 
 <template>
-    <PageHeader title="Mua hàng" description="Nhà cung cấp, đơn nhập hàng, nhận hàng nhiều đợt, trả hàng và công nợ nhà cung cấp.">
+    <PageHeader title="Nhập hàng" description="Nhà cung cấp, đơn nhập hàng, nhận hàng nhiều đợt, trả hàng và công nợ nhà cung cấp.">
         <Button v-if="tenant.can('purchasing.manage')" data-testid="new-po" @click="$router.push('/purchasing/new')"><Plus /> Tạo đơn nhập</Button>
     </PageHeader>
     <PurchasingNav />

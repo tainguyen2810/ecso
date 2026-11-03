@@ -52,7 +52,7 @@ watch([sort, debtOnly], () => ((page.value = 1), load()));
 </script>
 
 <template>
-    <PageHeader title="Mua hàng" description="Nhà cung cấp, đơn nhập hàng, nhận hàng nhiều đợt, trả hàng và công nợ nhà cung cấp.">
+    <PageHeader title="Nhà cung cấp" description="Nhà cung cấp, đơn nhập hàng, nhận hàng nhiều đợt, trả hàng và công nợ nhà cung cấp.">
         <Button v-if="tenant.can('purchasing.manage')" data-testid="add-supplier" @click="dialog = true"><Plus /> Thêm nhà cung cấp</Button>
     </PageHeader>
     <PurchasingNav />
