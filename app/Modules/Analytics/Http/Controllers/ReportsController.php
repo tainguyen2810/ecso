@@ -49,7 +49,7 @@ class ReportsController extends Controller
             $data['payable'] = $ledger->payables()['totals'];
         }
         if ($this->context->can('inventory.view')) {
-            $data['stock'] = [...$stock->onHand($to)['totals'], 'low' => $stock->lowStock()['totals']];
+            $data['stock'] = [...$stock->onHand($to)['totals'], 'low' => $stock->lowStock()['totals'], 'over' => $stock->overStock()['totals']];
         }
 
         return response()->json(['data' => $data]);
@@ -116,6 +116,14 @@ class ReportsController extends Controller
         $warehouse = $request->validate(['warehouse' => ['nullable', 'string']])['warehouse'] ?? null;
 
         return response()->json(['data' => $stock->lowStock($this->warehouse($warehouse))]);
+    }
+
+    public function overStock(Request $request, StockReports $stock): JsonResponse
+    {
+        $this->allow('inventory.view');
+        $warehouse = $request->validate(['warehouse' => ['nullable', 'string']])['warehouse'] ?? null;
+
+        return response()->json(['data' => $stock->overStock($this->warehouse($warehouse))]);
     }
 
     public function profitLoss(Request $request, LedgerReports $ledger): JsonResponse

@@ -107,6 +107,10 @@ it('reports purchases, supplier debts, stock on any date and SKUs below safety s
     $low = $api->getJson('/api/v1/reports/low-stock')->assertOk()->json('data');
     expect($low['rows'][0])->toMatchArray(['available' => 10, 'safety_stock' => 15, 'shortfall' => 5, 'sold_30d' => 0, 'days_left' => null, 'out_of_stock' => false]);
 
+    $api->getJson('/api/v1/reports/over-stock')->assertOk()->assertJsonCount(0, 'data.rows');
+    $api->putJson("/api/v1/inventory/variants/{$variant->ulid}/location", ['warehouse' => defaultWarehouse($tenant)->ulid, 'max_stock' => 4])->assertOk();
+    expect($api->getJson('/api/v1/reports/over-stock')->assertOk()->json('data.rows.0'))->toMatchArray(['on_hand' => 10, 'max_stock' => 4, 'excess' => 6, 'excess_value' => 360000]);
+
     $overview = $api->getJson('/api/v1/reports/overview')->assertOk()->json('data');
     expect($overview['purchases']['value'])->toEqual(600000)
         ->and($overview['payable']['debt'])->toEqual(600000)

@@ -157,11 +157,13 @@ const groups = computed<Group[]>(() => {
                 { label: 'SKU còn hàng', value: formatNumber(d.stock.skus) },
                 { label: 'Dưới định mức', value: formatNumber(d.stock.low.skus), tone: d.stock.low.skus ? 'danger' : undefined },
                 { label: 'Đã hết hàng', value: formatNumber(d.stock.low.out_of_stock), tone: d.stock.low.out_of_stock ? 'danger' : undefined },
+                { label: 'Vượt tồn tối đa', value: formatNumber(d.stock.over.skus) },
             ],
             links: [
                 { label: 'Tồn kho tại ngày', to: detail('stock-on-hand', {}, false) },
                 { label: 'Xuất nhập tồn', to: { name: 'report-stock' } },
                 { label: 'Hàng dưới định mức', to: detail('low-stock', {}, false) },
+                { label: 'Hàng vượt tồn tối đa', to: detail('over-stock', {}, false) },
                 { label: 'Thẻ kho từng SKU', to: { name: 'inventory' }, hint: 'Chọn SKU ở trang Tồn kho' },
             ],
         });

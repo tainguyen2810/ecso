@@ -95,6 +95,7 @@ test('report centre: every group opens its detail reports on the same period', a
     for (const [report, name, query] of [
         ['stock-on-hand', '05-stock-on-hand', ''],
         ['low-stock', '06-low-stock', ''],
+        ['over-stock', '06b-over-stock', ''],
         ['purchases', '07-purchases-by-supplier', '?by=supplier'],
         ['payables', '08-supplier-debts', ''],
         ['payments', '09-payments-by-method', '?by=method'],

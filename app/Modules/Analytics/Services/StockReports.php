@@ -6,7 +6,7 @@ use App\Modules\Tenancy\Support\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
-/** Stock on hand at any past date (rebuilt from the movement ledger) and SKUs at or below their safety stock. */
+/** Stock on hand at any past date (rebuilt from the movement ledger) and SKUs outside their safety and maximum stock. */
 class StockReports
 {
     public function __construct(private readonly TenantContext $context) {}
@@ -94,12 +94,7 @@ class StockReports
      */
     public function lowStock(?int $warehouseId = null): array
     {
-        $since = CarbonImmutable::now()->subDays(30);
-        $sold = DB::table('stock_movements')->where('tenant_id', $this->tenant())->where('created_at', '>=', $since)
-            ->whereIn('type', BusinessReports::STOCK_COLUMNS['sale_out'])
-            ->when($warehouseId, fn ($w) => $w->where('warehouse_id', $warehouseId))
-            ->groupBy('product_variant_id', 'warehouse_id')
-            ->selectRaw('product_variant_id, warehouse_id, -SUM(on_hand_delta) as units');
+        $sold = $this->soldLast30Days($warehouseId);
 
         $rows = DB::table('stock_balances as b')
             ->join('warehouses as w', 'w.id', '=', 'b.warehouse_id')
@@ -136,6 +131,56 @@ class StockReports
             'rows' => $rows,
             'totals' => ['skus' => count($rows), 'out_of_stock' => count(array_filter($rows, fn ($r) => $r['out_of_stock']))],
         ];
+    }
+
+    /**
+     * Balances holding more than the maximum stock set for them: the excess and the money it ties up.
+     *
+     * @return array<string, mixed>
+     */
+    public function overStock(?int $warehouseId = null): array
+    {
+        $rows = DB::table('stock_balances as b')
+            ->join('warehouses as w', 'w.id', '=', 'b.warehouse_id')
+            ->join('product_variants as v', 'v.id', '=', 'b.product_variant_id')
+            ->join('products as p', 'p.id', '=', 'v.product_id')
+            ->leftJoinSub($this->soldLast30Days($warehouseId), 's', fn ($j) => $j->on('s.product_variant_id', '=', 'b.product_variant_id')->on('s.warehouse_id', '=', 'b.warehouse_id'))
+            ->where('b.tenant_id', $this->tenant())
+            ->whereNotNull('b.max_stock')
+            ->whereRaw('b.on_hand > CAST(b.max_stock AS SIGNED)')
+            ->when($warehouseId, fn ($w) => $w->where('b.warehouse_id', $warehouseId))
+            ->limit(2000)
+            ->get(['v.ulid', 'v.sku', 'v.name as variant_name', 'v.cost_price', 'p.name as product_name', 'w.ulid as warehouse_id', 'w.name as warehouse', 'b.on_hand', 'b.max_stock', 's.units'])
+            ->map(function ($r) {
+                $excess = (int) $r->on_hand - (int) $r->max_stock;
+                $sold = (int) ($r->units ?? 0);
+
+                return [
+                    'variant' => ['id' => $r->ulid, 'sku' => $r->sku, 'name' => trim($r->product_name.($r->variant_name ? ' - '.$r->variant_name : ''))],
+                    'warehouse' => ['id' => $r->warehouse_id, 'name' => $r->warehouse],
+                    'on_hand' => (int) $r->on_hand,
+                    'max_stock' => (int) $r->max_stock,
+                    'excess' => $excess,
+                    'excess_value' => round($excess * (float) $r->cost_price, 2),
+                    'sold_30d' => $sold,
+                    'days_left' => $sold > 0 ? round((int) $r->on_hand / ($sold / 30), 1) : null,
+                ];
+            })->sortByDesc('excess_value')->values()->all();
+
+        return [
+            'rows' => $rows,
+            'totals' => ['skus' => count($rows), 'excess' => array_sum(array_column($rows, 'excess')), 'excess_value' => round(array_sum(array_column($rows, 'excess_value')), 2)],
+        ];
+    }
+
+    /** Units shipped per SKU and warehouse in the last 30 days, as a subquery. */
+    private function soldLast30Days(?int $warehouseId)
+    {
+        return DB::table('stock_movements')->where('tenant_id', $this->tenant())->where('created_at', '>=', CarbonImmutable::now()->subDays(30))
+            ->whereIn('type', BusinessReports::STOCK_COLUMNS['sale_out'])
+            ->when($warehouseId, fn ($w) => $w->where('warehouse_id', $warehouseId))
+            ->groupBy('product_variant_id', 'warehouse_id')
+            ->selectRaw('product_variant_id, warehouse_id, -SUM(on_hand_delta) as units');
     }
 
     private function tenant(): int
