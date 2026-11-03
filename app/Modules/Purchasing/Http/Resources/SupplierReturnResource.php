@@ -15,6 +15,7 @@ class SupplierReturnResource extends JsonResource
             'id' => $this->ulid,
             'number' => $this->number,
             'total' => $this->total,
+            'tax_amount' => $this->tax_amount,
             'reason' => $this->reason,
             'created_by' => $this->whenLoaded('creator', fn () => $this->creator?->name),
             'created_at' => $this->created_at?->toIso8601String(),
@@ -25,6 +26,7 @@ class SupplierReturnResource extends JsonResource
                 'variant' => ['id' => $l->variant->ulid, 'sku' => $l->variant->sku, 'name' => $l->variant->displayName()],
                 'quantity' => $l->quantity,
                 'unit_cost' => $l->unit_cost,
+                'tax_rate' => $l->tax_rate,
             ])),
         ];
     }

@@ -15,7 +15,7 @@ class PurchaseOrderLine extends Model
 
     protected function casts(): array
     {
-        return ['quantity' => 'integer', 'received_qty' => 'integer', 'returned_qty' => 'integer', 'unit_cost' => 'decimal:4'];
+        return ['quantity' => 'integer', 'received_qty' => 'integer', 'returned_qty' => 'integer', 'unit_cost' => 'decimal:4', 'tax_rate' => 'decimal:2'];
     }
 
     public function remaining(): int

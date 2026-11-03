@@ -17,7 +17,7 @@ use Illuminate\Validation\ValidationException;
 /**
  * Goods sent back to a supplier. Stock leaves the warehouse (SUPPLIER_RETURN) at once and the supplier debt
  * goes down by the returned value. Against a purchase order the quantity is capped by what was received and
- * the value uses the order's cost; without an order it uses the current average cost unless one is given.
+ * the value uses the order's cost plus its VAT; without an order it uses the current average cost unless one is given.
  */
 class SupplierReturnService
 {
@@ -45,8 +45,10 @@ class SupplierReturnService
 
             $rows = [];
             $total = '0';
+            $tax = '0';
             foreach ($lines as $i => $line) {
                 $cost = $line['unit_cost'] ?? null;
+                $rate = '0';
                 if ($po) {
                     $poLine = $poLines->get($line['variant_id']);
                     if (! $poLine) {
@@ -57,11 +59,15 @@ class SupplierReturnService
                         throw ValidationException::withMessages(["lines.{$i}.quantity" => "Chỉ trả được tối đa {$returnable}."]);
                     }
                     $cost ??= $poLine->unit_cost;
+                    $rate = (string) $poLine->tax_rate;
                     $poLine->increment('returned_qty', $line['quantity']);
                 }
                 $cost = bcadd((string) ($cost ?? $costs[$line['variant_id']] ?? '0'), '0', 4);
-                $rows[] = ['product_variant_id' => $line['variant_id'], 'quantity' => $line['quantity'], 'unit_cost' => $cost];
-                $total = bcadd($total, bcmul($cost, (string) $line['quantity'], 4), 4);
+                $rows[] = ['product_variant_id' => $line['variant_id'], 'quantity' => $line['quantity'], 'unit_cost' => $cost, 'tax_rate' => $rate];
+                $goods = bcmul($cost, (string) $line['quantity'], 4);
+                $lineTax = bcdiv(bcmul($goods, $rate, 6), '100', 4);
+                $total = bcadd($total, bcadd($goods, $lineTax, 4), 4);
+                $tax = bcadd($tax, $lineTax, 4);
             }
 
             $return = new SupplierReturn([
@@ -69,6 +75,7 @@ class SupplierReturnService
                 'purchase_order_id' => $po?->id,
                 'warehouse_id' => $warehouse->id,
                 'total' => bcadd($total, '0', 2),
+                'tax_amount' => bcadd($tax, '0', 2),
                 'reason' => $reason,
             ]);
             $return->forceFill(['number' => DocumentNumber::next('TNC'), 'created_by' => Auth::id()])->save();

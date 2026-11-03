@@ -14,6 +14,7 @@ import { api, ApiError } from '@/shared/lib/api';
 import { formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { REORDER_DRAFT_KEY, type ReorderDraft } from './reorder';
+import { purchaseCosts, VAT_RATES } from './costs';
 import type { PurchaseOrderData, Supplier, Variant, Warehouse } from '@/shared/types';
 
 interface Line {
@@ -23,6 +24,7 @@ interface Line {
     stock: number | null;
     quantity: string;
     unit_cost: string;
+    tax_rate: string;
 }
 
 const route = useRoute();
@@ -32,12 +34,14 @@ const editId = computed(() => (route.params.id ? String(route.params.id) : null)
 
 const suppliers = ref<Supplier[]>([]);
 const warehouses = ref<Warehouse[]>([]);
-const form = reactive({ supplier_id: '', warehouse_id: '', expected_at: '', note: '' });
+const form = reactive({ supplier_id: '', warehouse_id: '', expected_at: '', note: '', extra_cost: '', extra_cost_note: '', extra_cost_to_supplier: false, vat_in_cost: false });
+const defaultVat = ref('0');
 const lines = ref<Line[]>([]);
 const saving = ref(false);
 const error = ref<ApiError | null>(null);
 
-const total = computed(() => lines.value.reduce((t, l) => ({ qty: t.qty + (Number(l.quantity) || 0), value: t.value + (Number(l.quantity) || 0) * (Number(l.unit_cost) || 0) }), { qty: 0, value: 0 }));
+const costs = computed(() => purchaseCosts(lines.value, form));
+const vatOptions = VAT_RATES.map((r) => ({ value: String(r), label: `${r}%` }));
 
 onMounted(async () => {
     const [s, w] = await Promise.all([api.get('/suppliers', { params: { active: 1, per_page: 200 } }), api.get('/warehouses')]);
@@ -48,15 +52,24 @@ onMounted(async () => {
 
     if (editId.value) {
         const po: PurchaseOrderData = (await api.get(`/purchase-orders/${editId.value}`)).data.data;
-        Object.assign(form, { supplier_id: po.supplier?.id ?? '', warehouse_id: po.warehouse?.id ?? '', expected_at: po.expected_at ?? '', note: po.note ?? '' });
-        lines.value = (po.lines ?? []).map((l) => ({ id: l.variant!.id, sku: l.variant!.sku, name: l.variant!.name, stock: null, quantity: String(l.quantity), unit_cost: String(Math.round(Number(l.unit_cost))) }));
+        Object.assign(form, {
+            supplier_id: po.supplier?.id ?? '',
+            warehouse_id: po.warehouse?.id ?? '',
+            expected_at: po.expected_at ?? '',
+            note: po.note ?? '',
+            extra_cost: Number(po.extra_cost) ? String(Math.round(Number(po.extra_cost))) : '',
+            extra_cost_note: po.extra_cost_note ?? '',
+            extra_cost_to_supplier: po.extra_cost_to_supplier,
+            vat_in_cost: po.vat_in_cost,
+        });
+        lines.value = (po.lines ?? []).map((l) => ({ id: l.variant!.id, sku: l.variant!.sku, name: l.variant!.name, stock: null, quantity: String(l.quantity), unit_cost: String(Math.round(Number(l.unit_cost))), tax_rate: String(Number(l.tax_rate)) }));
     } else if (route.query.from === 'reorder') {
         try {
             const draft: ReorderDraft = JSON.parse(sessionStorage.getItem(REORDER_DRAFT_KEY) ?? 'null');
             if (draft) {
                 form.warehouse_id = draft.warehouse_id || form.warehouse_id;
                 form.supplier_id = draft.supplier_id || form.supplier_id;
-                lines.value = draft.lines.map((l) => ({ ...l, quantity: String(l.quantity), unit_cost: String(Math.round(Number(l.unit_cost))) }));
+                lines.value = draft.lines.map((l) => ({ ...l, quantity: String(l.quantity), unit_cost: String(Math.round(Number(l.unit_cost))), tax_rate: defaultVat.value }));
             }
         } catch {
             /* storage unavailable: start empty */
@@ -77,6 +90,7 @@ function add(v: Variant) {
         stock: v.stock?.on_hand ?? null,
         quantity: '1',
         unit_cost: v.cost_price && Number(v.cost_price) > 0 ? String(Math.round(Number(v.cost_price))) : '',
+        tax_rate: defaultVat.value,
     });
 }
 
@@ -92,7 +106,11 @@ async function submit(place: boolean) {
         warehouse_id: form.warehouse_id,
         expected_at: form.expected_at || null,
         note: form.note || null,
-        lines: lines.value.map((l) => ({ variant_id: l.id, quantity: Number(l.quantity), unit_cost: Number(l.unit_cost || 0) })),
+        extra_cost: Number(form.extra_cost) || 0,
+        extra_cost_note: form.extra_cost_note || null,
+        extra_cost_to_supplier: form.extra_cost_to_supplier,
+        vat_in_cost: form.vat_in_cost,
+        lines: lines.value.map((l) => ({ variant_id: l.id, quantity: Number(l.quantity), unit_cost: Number(l.unit_cost || 0), tax_rate: Number(l.tax_rate) || 0 })),
     };
     try {
         const { data } = editId.value ? await api.put(`/purchase-orders/${editId.value}`, body) : await api.post('/purchase-orders', { ...body, place });
@@ -131,7 +149,9 @@ async function submit(place: boolean) {
                             <th class="px-4 py-2 text-right font-medium">Tồn</th>
                             <th class="px-4 py-2 text-right font-medium">Số lượng</th>
                             <th class="px-4 py-2 text-right font-medium">Đơn giá nhập</th>
+                            <th class="px-4 py-2 text-right font-medium">VAT</th>
                             <th class="px-4 py-2 text-right font-medium">Thành tiền</th>
+                            <th class="px-4 py-2 text-right font-medium" title="Giá vốn mỗi đơn vị khi nhập kho: đơn giá + phần chi phí nhập (+ VAT nếu tính vào giá vốn)">Giá vốn</th>
                             <th class="px-2 py-2" />
                         </tr>
                     </thead>
@@ -151,7 +171,14 @@ async function submit(place: boolean) {
                                 <input v-model="l.unit_cost" type="number" min="0" class="h-8 w-28 rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" :data-testid="`po-cost-${i}`" />
                                 <p v-if="lineError(i, 'unit_cost')" class="text-xs text-destructive">{{ lineError(i, 'unit_cost') }}</p>
                             </td>
+                            <td class="px-4 py-2.5 text-right">
+                                <select v-model="l.tax_rate" class="h-8 rounded-md border border-input bg-card px-1 text-sm" :data-testid="`po-vat-${i}`" aria-label="Thuế GTGT">
+                                    <option v-for="o in vatOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+                                </select>
+                                <p v-if="lineError(i, 'tax_rate')" class="text-xs text-destructive">{{ lineError(i, 'tax_rate') }}</p>
+                            </td>
                             <td class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{{ formatMoney((Number(l.quantity) || 0) * (Number(l.unit_cost) || 0)) }}</td>
+                            <td class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-muted-foreground" :data-testid="`po-landed-${i}`">{{ formatNumber(costs.landed[i]) }}</td>
                             <td class="px-2 py-2.5"><button type="button" class="rounded p-1 text-muted-foreground hover:text-destructive" title="Xóa dòng" @click="lines.splice(i, 1)"><Trash2 class="size-4" /></button></td>
                         </tr>
                     </tbody>
@@ -173,10 +200,26 @@ async function submit(place: boolean) {
                     <FormField label="Ghi chú" for="po-note"><Input id="po-note" v-model="form.note" /></FormField>
                 </div>
             </Card>
+            <Card title="Thuế và chi phí nhập" description="Chi phí nhập (vận chuyển, bốc xếp) được phân bổ vào giá vốn theo giá trị hàng.">
+                <div class="space-y-3 p-5 text-sm">
+                    <FormField label="VAT mặc định cho dòng mới" for="po-default-vat">
+                        <Select id="po-default-vat" v-model="defaultVat" :options="vatOptions" />
+                    </FormField>
+                    <label class="flex items-start gap-2"><input v-model="form.vat_in_cost" type="checkbox" class="mt-0.5" data-testid="po-vat-in-cost" /> <span>Tính VAT vào giá vốn <span class="block text-xs text-muted-foreground">Chọn khi không được khấu trừ thuế đầu vào (hộ kinh doanh, phương pháp trực tiếp).</span></span></label>
+                    <FormField label="Chi phí nhập hàng" for="po-extra" :error="error?.field('extra_cost')">
+                        <Input id="po-extra" v-model="form.extra_cost" type="number" min="0" class="text-right tabular-nums" data-testid="po-extra-cost" />
+                    </FormField>
+                    <FormField label="Diễn giải chi phí" for="po-extra-note"><Input id="po-extra-note" v-model="form.extra_cost_note" placeholder="Phí vận chuyển, bốc xếp…" /></FormField>
+                    <label class="flex items-start gap-2"><input v-model="form.extra_cost_to_supplier" type="checkbox" class="mt-0.5" data-testid="po-extra-to-supplier" /> <span>Chi phí trả cho nhà cung cấp <span class="block text-xs text-muted-foreground">Có trên hóa đơn NCC, cộng vào công nợ. Bỏ chọn nếu trả cho đơn vị vận chuyển.</span></span></label>
+                </div>
+            </Card>
             <Card>
                 <div class="space-y-2 p-5 text-sm">
-                    <div class="flex justify-between"><span class="text-muted-foreground">Số lượng</span><span class="tabular-nums">{{ formatNumber(total.qty) }}</span></div>
-                    <div class="flex justify-between text-base font-semibold"><span>Tổng giá trị</span><span class="tabular-nums" data-testid="po-total">{{ formatMoney(total.value) }}</span></div>
+                    <div class="flex justify-between"><span class="text-muted-foreground">Số lượng</span><span class="tabular-nums">{{ formatNumber(costs.quantity) }}</span></div>
+                    <div class="flex justify-between"><span class="text-muted-foreground">Tiền hàng</span><span class="tabular-nums">{{ formatMoney(costs.subtotal) }}</span></div>
+                    <div class="flex justify-between"><span class="text-muted-foreground">Thuế GTGT</span><span class="tabular-nums" data-testid="po-tax">{{ formatMoney(costs.tax) }}</span></div>
+                    <div v-if="Number(form.extra_cost)" class="flex justify-between"><span class="text-muted-foreground">Chi phí nhập {{ form.extra_cost_to_supplier ? '(trả NCC)' : '(trả bên khác)' }}</span><span class="tabular-nums">{{ formatMoney(form.extra_cost) }}</span></div>
+                    <div class="flex justify-between text-base font-semibold"><span>Phải trả NCC</span><span class="tabular-nums" data-testid="po-total">{{ formatMoney(costs.total) }}</span></div>
                     <div class="flex flex-col gap-2 pt-3">
                         <Button type="submit" :loading="saving" :disabled="!lines.length || !form.supplier_id" data-testid="po-place">{{ editId ? 'Lưu thay đổi' : 'Đặt hàng' }}</Button>
                         <Button v-if="!editId" type="button" variant="outline" :disabled="!lines.length || !form.supplier_id || saving" data-testid="po-draft" @click="submit(false)">Lưu nháp</Button>

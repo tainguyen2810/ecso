@@ -10,9 +10,9 @@ use Illuminate\Support\Facades\Route;
 // Two-factor setup/verification: reachable before 2FA has been passed.
 Route::prefix('admin/2fa')->middleware(['auth:sanctum', 'super-admin:setup'])->group(function () {
     Route::get('/', [TwoFactorController::class, 'status']);
-    Route::post('setup', [TwoFactorController::class, 'setup'])->middleware('throttle:5,1');
-    Route::post('confirm', [TwoFactorController::class, 'confirm'])->middleware('throttle:5,1');
-    Route::post('verify', [TwoFactorController::class, 'verify'])->middleware('throttle:5,1');
+    Route::post('setup', [TwoFactorController::class, 'setup'])->middleware('throttle:5,1,admin.setup');
+    Route::post('confirm', [TwoFactorController::class, 'confirm'])->middleware('throttle:5,1,admin.confirm');
+    Route::post('verify', [TwoFactorController::class, 'verify'])->middleware('throttle:5,1,admin.verify');
 });
 
 Route::prefix('admin')->middleware(['auth:sanctum', 'super-admin'])->group(function () {
@@ -21,6 +21,6 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'super-admin'])->group(funct
     Route::get('monitoring', AdminMonitoringController::class);
     Route::get('billing/summary', [AdminBillingController::class, 'summary']);
     Route::get('invoices', [AdminBillingController::class, 'invoices']);
-    Route::post('invoices/{invoice}/payments', [AdminBillingController::class, 'confirmPayment'])->middleware('throttle:30,1');
+    Route::post('invoices/{invoice}/payments', [AdminBillingController::class, 'confirmPayment'])->middleware('throttle:30,1,admin.invoices.x.payments');
     Route::post('invoices/{invoice}/cancel', [AdminBillingController::class, 'cancelInvoice']);
 });

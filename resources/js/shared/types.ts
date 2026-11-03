@@ -461,7 +461,8 @@ export interface SupplierReturnData {
     supplier?: { id: string; code: string; name: string };
     order?: { id: string; number: string } | null;
     warehouse?: { id: string; name: string };
-    lines?: { variant: { id: string; sku: string; name: string }; quantity: number; unit_cost: string }[];
+    tax_amount?: string;
+    lines?: { variant: { id: string; sku: string; name: string }; quantity: number; unit_cost: string; tax_rate?: string }[];
 }
 
 export interface PurchaseOrderLineData {
@@ -471,20 +472,30 @@ export interface PurchaseOrderLineData {
     returned_qty: number;
     remaining: number;
     unit_cost: string;
+    tax_rate: string;
+    landed_unit_cost: string;
 }
 
 export interface PurchaseOrderData {
     id: string;
     number: string;
     status: string;
-    supplier?: { id: string; code: string; name: string };
+    supplier?: { id: string; code: string; name: string; contact_name?: string | null; phone?: string | null; email?: string | null; address?: string | null; tax_code?: string | null };
     warehouse?: { id: string; code: string; name: string };
     expected_at: string | null;
     ordered_at: string | null;
     received_at: string | null;
     closed_at: string | null;
+    subtotal: string;
+    tax_amount: string;
+    extra_cost: string;
+    extra_cost_note: string | null;
+    extra_cost_to_supplier: boolean;
+    vat_in_cost: boolean;
     total: string;
     received_value: string;
+    received_tax: string;
+    received_extra_cost: string;
     returned_value: string;
     paid_amount: string;
     balance_due: string;
@@ -498,4 +509,40 @@ export interface PurchaseOrderData {
     receipts?: { id: string; number: string; created_at: string | null; created_by: string | null; total_quantity: number; total_value: string }[];
     payments?: SupplierPaymentData[];
     returns?: SupplierReturnData[];
+}
+
+export interface CashShiftTotals {
+    orders: number;
+    cancelled: number;
+    revenue: string;
+    by_method: Record<string, string>;
+    collected: string;
+    cash_sales: string;
+    cash_refunds: string;
+    cash_in: string;
+    cash_out: string;
+    opening_cash: string;
+    expected_cash: string;
+}
+
+export interface CashShift {
+    id: string;
+    number: string;
+    status: 'open' | 'closed';
+    cashier?: { id: string; name: string };
+    warehouse?: { id: string; name: string } | null;
+    opened_at: string;
+    opening_cash: string;
+    opening_note: string | null;
+    closed_at: string | null;
+    closed_by?: string | null;
+    expected_cash: string | null;
+    counted_cash: string | null;
+    difference: string | null;
+    handed_over: string | null;
+    kept_in_drawer: string | null;
+    denominations: Record<string, number> | null;
+    closing_note: string | null;
+    totals: CashShiftTotals;
+    movements?: { kind: 'in' | 'out'; amount: string; reason: string; created_by: string | null; created_at: string }[];
 }

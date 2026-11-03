@@ -6,21 +6,6 @@ use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\SalesChannel;
-use Illuminate\Testing\TestResponse;
-
-function defaultChannel($tenant): SalesChannel
-{
-    return SalesChannel::withoutGlobalScopes()->where('tenant_id', $tenant->id)->firstOrFail();
-}
-
-function createSalesOrder($user, $tenant, array $lines, array $extra = []): TestResponse
-{
-    return actingInTenant($user, $tenant)->postJson('/api/v1/sales-orders', [
-        'channel_id' => defaultChannel($tenant)->ulid,
-        'lines' => array_map(fn ($l) => ['variant_id' => $l[0]->ulid, 'quantity' => $l[1], 'unit_price' => $l[2] ?? 100000], $lines),
-        ...$extra,
-    ]);
-}
 
 it('gives every new business a shop-counter channel', function () {
     [$tenant] = tenantWithOwner();

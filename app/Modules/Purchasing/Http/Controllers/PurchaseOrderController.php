@@ -17,6 +17,8 @@ use Illuminate\Validation\ValidationException;
 
 class PurchaseOrderController extends Controller
 {
+    private const COST_FIELDS = ['extra_cost', 'extra_cost_note', 'extra_cost_to_supplier', 'vat_in_cost'];
+
     use ResolvesLines;
 
     private const DETAIL = ['supplier', 'warehouse', 'creator', 'lines.variant.product', 'receipts.lines', 'receipts.creator', 'payments.creator', 'returns.creator'];
@@ -74,6 +76,7 @@ class PurchaseOrderController extends Controller
             'expected_at' => $data['expected_at'] ?? null,
             'note' => $data['note'] ?? null,
             'place' => $request->boolean('place'),
+            ...array_intersect_key($data, array_flip(self::COST_FIELDS)),
         ]);
 
         return (new PurchaseOrderResource($po->fresh(self::DETAIL)))->response()->setStatusCode(201);
@@ -91,7 +94,7 @@ class PurchaseOrderController extends Controller
             ...$this->costRules(),
         ]);
 
-        $payload = array_intersect_key($data, array_flip(['expected_at', 'note']));
+        $payload = array_intersect_key($data, array_flip(['expected_at', 'note', ...self::COST_FIELDS]));
         if (isset($data['supplier_id'])) {
             $payload['supplier'] = $this->findSupplier($data['supplier_id']);
         }
@@ -154,6 +157,10 @@ class PurchaseOrderController extends Controller
         return [
             'expected_at' => ['nullable', 'date'],
             'note' => ['nullable', 'string', 'max:1000'],
+            'extra_cost' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
+            'extra_cost_note' => ['nullable', 'string', 'max:255'],
+            'extra_cost_to_supplier' => ['boolean'],
+            'vat_in_cost' => ['boolean'],
         ];
     }
 
@@ -163,6 +170,7 @@ class PurchaseOrderController extends Controller
         return [
             'lines.*.quantity' => ['required', 'integer', 'min:1', 'max:1000000'],
             'lines.*.unit_cost' => ['required', 'numeric', 'min:0', 'max:9999999999'],
+            'lines.*.tax_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ];
     }
 }

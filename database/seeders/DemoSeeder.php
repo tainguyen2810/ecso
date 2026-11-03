@@ -29,6 +29,7 @@ use App\Modules\Purchasing\Services\SupplierService;
 use App\Modules\Sales\Models\CustomerGroup;
 use App\Modules\Sales\Models\CustomerNote;
 use App\Modules\Sales\Models\SalesChannel;
+use App\Modules\Sales\Services\CashShiftService;
 use App\Modules\Sales\Services\CustomerService;
 use App\Modules\Sales\Services\ManualOrderService;
 use App\Modules\Sales\Services\PaymentService;
@@ -137,8 +138,9 @@ class DemoSeeder extends Seeder
         $partial = $purchases->create(['supplier' => $anPhat, 'warehouse' => $warehouse, 'lines' => [$line(2, 50), $line(3, 20)], 'place' => true, 'expected_at' => now()->addDays(3)->toDateString()]);
         $purchases->receive($partial, [['variant_id' => $variants[2]->id, 'quantity' => 25]]);
 
-        // Ordered, nothing arrived yet; and a draft.
-        $purchases->create(['supplier' => $minhLong, 'warehouse' => $warehouse, 'lines' => [$line(1, 20), $line(4, 15)], 'place' => true, 'expected_at' => now()->addDays(7)->toDateString()]);
+        // Ordered with 10 % VAT and freight paid to a carrier, nothing arrived yet; and a draft.
+        $purchases->create(['supplier' => $minhLong, 'warehouse' => $warehouse, 'lines' => [[...$line(1, 20), 'tax_rate' => 10], [...$line(4, 15), 'tax_rate' => 10]], 'place' => true,
+            'expected_at' => now()->addDays(7)->toDateString(), 'extra_cost' => 150000, 'extra_cost_note' => 'Xe tải Minh Long → kho']);
         $purchases->create(['supplier' => $anPhat, 'warehouse' => $warehouse, 'lines' => [$line(3, 10)], 'note' => 'Chờ báo giá']);
     }
 
@@ -173,12 +175,21 @@ class DemoSeeder extends Seeder
         }
         $line = fn (int $i, int $qty) => ['variant_id' => $variants[$i % $variants->count()]->ulid, 'quantity' => $qty];
 
-        // Counter sales, paid at once.
+        // Counter sales, paid at once, in a closed cashier shift that came up 20 000 short.
+        $shifts = app(CashShiftService::class);
+        /** @var User $cashier */
+        $cashier = Auth::user();
+        $shift = $shifts->open($cashier, $pos->warehouse ?? Warehouse::query()->where('is_default', true)->first(), ['opening_cash' => 500000]);
         foreach ([[0, 1], [1, 2], [2, 1]] as $k => [$i, $qty]) {
             $price = (string) $variants[$i % $variants->count()]->ref_price;
             $orders->create(['channel_id' => $pos->ulid, 'stage' => 'completed', 'customer_id' => $k === 0 ? $people[3]->ulid : null, 'lines' => [$line($i, $qty)],
                 'payments' => [['method' => $k === 1 ? 'bank_transfer' : 'cash', 'amount' => bcmul($price, (string) $qty, 2)]]]);
         }
+        $shifts->move($shift, ['kind' => 'in', 'amount' => 200000, 'reason' => 'Đổi tiền lẻ']);
+        $expected = $shifts->totals($shift)['expected_cash'];
+        $shifts->close($shift, ['counted_cash' => bcsub($expected, '20000', 2), 'handed_over' => bcsub($expected, '520000', 2), 'closing_note' => 'Thối nhầm cho khách']);
+        $shift->forceFill(['opened_at' => now()->subDay()->setTime(8, 0), 'closed_at' => now()->subDay()->setTime(17, 30)])->save();
+
         // Online orders waiting to be processed.
         $orders->create(['channel_id' => $facebook->ulid, 'customer_id' => $people[0]->ulid, 'shipping_fee' => 30000, 'is_cod' => true, 'carrier' => 'GHN', 'lines' => [$line(0, 2), $line(3, 1)], 'note' => 'Gọi trước khi giao']);
         $orders->create(['channel_id' => $zalo->ulid, 'customer_id' => $people[2]->ulid, 'shipping_fee' => 25000, 'stage' => 'confirmed', 'lines' => [$line(4, 1)]]);

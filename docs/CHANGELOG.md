@@ -4,6 +4,20 @@
 
 ## [Unreleased]
 
+### Mua hàng: VAT đầu vào, chi phí nhập, in phiếu đặt hàng (2026-11-03)
+- Thuế GTGT theo từng dòng đơn nhập (0/5/8/10 %), VAT mặc định cho dòng mới. Công nợ NCC tính cả VAT; trả hàng NCC trả lại cả VAT.
+- Chi phí nhập hàng (vận chuyển, bốc xếp) trên đơn nhập, phân bổ vào giá vốn theo giá trị hàng (theo số lượng nếu hàng 0 đồng). Chọn trả cho NCC (cộng công nợ) hoặc trả bên khác.
+- Tùy chọn "Tính VAT vào giá vốn" cho doanh nghiệp không được khấu trừ thuế đầu vào; mặc định VAT không vào giá vốn.
+- Đơn nhập hiện giá vốn dự kiến mỗi dòng, tổng VAT và chi phí đã nhận. In phiếu đặt hàng A4 gửi NCC.
+- Đơn nhập cũ giữ 0 % VAT, không chi phí: số liệu không đổi.
+
+### Ca bán hàng và két tiền (2026-11-03)
+- Bán tại quầy yêu cầu mở ca: thu ngân đếm tiền đầu ca (gợi ý bằng số tiền ca trước để lại két). Mỗi thu ngân chỉ có một ca đang mở.
+- Trong ca: nộp tiền vào két (tiền lẻ) và rút tiền ra (nộp két sắt, ngân hàng), không rút quá số tiền mặt đang có.
+- Đóng ca: đếm theo mệnh giá hoặc nhập tổng, so với tiền mặt hệ thống (đầu ca + thu tiền mặt − hoàn tiền mặt + nộp − rút), bắt buộc ghi lý do khi lệch, ghi số nộp về và số để lại két. Số liệu được chốt khi đóng ca. In biên bản bàn giao ca K80.
+- Trang `/pos/shifts`: lịch sử ca. Thu ngân xem ca của mình; quyền mới `orders.shifts` (Quản lý vận hành, Kế toán) xem mọi ca và đóng hộ ca bị quên.
+- Nộp/rút tiền két là chuyển tiền nội bộ, không ghi vào sổ quỹ.
+
 ### Phase 19 — Tag đơn, ngày hẹn giao, đổi hàng (2026-11-03)
 - Tag và ngày hẹn giao trên mọi đơn (cả đơn sàn), lọc theo tag / ngày hẹn giao, có trong file Excel.
 - Đổi hàng: tạo đơn đổi từ phiếu trả, giá trị hàng trả được bù trừ vào đơn mới (hai bút toán "Bù trừ đổi hàng", không tính là tiền mặt, không vào sổ quỹ và báo cáo thanh toán).
