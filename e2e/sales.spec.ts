@@ -36,6 +36,7 @@ test('create a manual order for a new customer, then confirm, pack, hand over an
     await page.getByTestId('nc-name').fill('Hoàng Anh Thư');
     await page.getByTestId('nc-phone').fill('0938 123 456');
     await page.getByLabel('Địa chỉ', { exact: true }).fill('20 Pasteur, Quận 1, TP.HCM');
+    await page.getByTestId('nc-save').click();
     await page.getByLabel('Đơn vị vận chuyển').fill('GHN');
     await page.getByTestId('shipping-fee').fill('30000');
     await page.getByTestId('order-discount').fill('10000');

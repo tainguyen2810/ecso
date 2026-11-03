@@ -365,7 +365,7 @@ export interface OrderReturnData {
     note: string | null;
     expects_goods: boolean;
     next: string[];
-    order?: { id: string; external_order_id: string; status: string; marketplace: string };
+    order?: { id: string; external_order_id: string; status: string; marketplace: string; customer?: string | null };
     warehouse?: { id: string; code: string; name: string } | null;
     lines?: OrderReturnLineData[];
     lines_count?: number;

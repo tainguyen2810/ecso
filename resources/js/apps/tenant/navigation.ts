@@ -14,7 +14,6 @@ import {
     UsersRound,
     ShoppingCart,
     Truck,
-    Undo2,
     Users,
     Wallet,
 } from 'lucide-vue-next';
@@ -30,6 +29,16 @@ export interface NavItem {
     phase?: number;
     shortcut?: string;
     description?: string;
+    /** Sub-menu shown under the item when it is open (like Sapo's sidebar). */
+    children?: NavChild[];
+    /** Other route `meta.nav` values that belong to this item (e.g. returns under orders). */
+    alsoActive?: string[];
+}
+
+export interface NavChild {
+    label: string;
+    path: string;
+    permission?: string;
 }
 
 export const navGroups: { label: string; items: NavItem[] }[] = [
@@ -37,19 +46,38 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
         label: 'Vận hành',
         items: [
             { name: 'dashboard', label: 'Tổng quan', path: '/', icon: LayoutDashboard, permission: 'dashboard.view', shortcut: 'd' },
-            { name: 'orders', label: 'Đơn hàng', path: '/orders', icon: ShoppingCart, permission: 'orders.view', shortcut: 'o', description: 'Quản lý đơn tập trung từ mọi sàn: lọc, xử lý hàng loạt, in phiếu, theo dõi trạng thái.' },
-            { name: 'pos', label: 'Bán tại quầy', path: '/pos', icon: MonitorSmartphone, permission: 'orders.create', shortcut: 'b', description: 'Màn hình bán hàng nhanh: quét mã vạch, tính tiền thừa, in hóa đơn K80.' },
-            { name: 'customers', label: 'Khách hàng', path: '/customers', icon: UsersRound, permission: 'customers.view', shortcut: 'k', description: 'Danh bạ khách mua qua kênh riêng, lịch sử mua và công nợ.' },
-            { name: 'products', label: 'Sản phẩm', path: '/products', icon: Package, permission: 'products.view', shortcut: 'p', description: 'SKU, biến thể, mã vạch, mapping với listing trên sàn.' },
-            { name: 'inventory', label: 'Kho hàng', path: '/inventory', icon: Boxes, permission: 'inventory.view', shortcut: 'i', description: 'Tồn kho nhiều kho, sổ kho, giữ tồn, điều chỉnh và chuyển kho.' },
-            { name: 'purchasing', label: 'Mua hàng', path: '/purchasing', icon: Truck, permission: 'purchasing.view', shortcut: 'n', description: 'Nhà cung cấp, đơn nhập hàng, nhận hàng nhiều đợt, trả hàng và công nợ NCC.' },
-            { name: 'returns', label: 'Trả hàng', path: '/returns', icon: Undo2, permission: 'returns.view', description: 'Hàng hoàn từ khách, kiểm hàng và nhập kho lại.' },
+            { name: 'orders', label: 'Đơn hàng', path: '/orders', icon: ShoppingCart, permission: 'orders.view', shortcut: 'o', description: 'Quản lý đơn tập trung từ mọi sàn: lọc, xử lý hàng loạt, in phiếu, theo dõi trạng thái.',
+                alsoActive: ['returns'],
+                children: [
+                    { label: 'Tạo đơn và giao hàng', path: '/orders/new', permission: 'orders.create' },
+                    { label: 'Danh sách đơn hàng', path: '/orders' },
+                    { label: 'Khách trả hàng', path: '/returns', permission: 'returns.view' },
+                ] },
+            { name: 'pos', label: 'Bán tại quầy', path: '/pos', icon: MonitorSmartphone, permission: 'orders.create', shortcut: 'b', description: 'Màn hình bán hàng nhanh: quét mã vạch, tính tiền thừa, in hóa đơn K80.',
+                children: [{ label: 'Bán hàng', path: '/pos' }, { label: 'Ca bán hàng', path: '/pos/shifts' }] },
+            { name: 'customers', label: 'Khách hàng', path: '/customers', icon: UsersRound, permission: 'customers.view', shortcut: 'k', description: 'Danh bạ khách mua qua kênh riêng, lịch sử mua và công nợ.',
+                children: [{ label: 'Danh sách khách hàng', path: '/customers' }, { label: 'Nhóm khách hàng', path: '/customers/groups' }] },
+            { name: 'products', label: 'Sản phẩm', path: '/products', icon: Package, permission: 'products.view', shortcut: 'p', description: 'SKU, biến thể, mã vạch, mapping với listing trên sàn.',
+                children: [{ label: 'Danh sách sản phẩm', path: '/products' }, { label: 'Danh mục và thương hiệu', path: '/products/taxonomy' }, { label: 'In tem mã vạch', path: '/products/labels' }] },
+            { name: 'inventory', label: 'Kho hàng', path: '/inventory', icon: Boxes, permission: 'inventory.view', shortcut: 'i', description: 'Tồn kho nhiều kho, sổ kho, giữ tồn, điều chỉnh và chuyển kho.',
+                children: [
+                    { label: 'Tồn kho', path: '/inventory' },
+                    { label: 'Nhập kho', path: '/inventory/receipts' },
+                    { label: 'Điều chỉnh', path: '/inventory/adjustments' },
+                    { label: 'Kiểm kho', path: '/inventory/stocktake', permission: 'inventory.adjust' },
+                    { label: 'Chuyển kho', path: '/inventory/transfers' },
+                    { label: 'Điều chỉnh giá vốn', path: '/inventory/cost-adjustments' },
+                    { label: 'Danh sách kho', path: '/inventory/warehouses' },
+                ] },
+            { name: 'purchasing', label: 'Mua hàng', path: '/purchasing', icon: Truck, permission: 'purchasing.view', shortcut: 'n', description: 'Nhà cung cấp, đơn nhập hàng, nhận hàng nhiều đợt, trả hàng và công nợ NCC.',
+                children: [{ label: 'Đơn nhập hàng', path: '/purchasing' }, { label: 'Nhà cung cấp', path: '/purchasing/suppliers' }, { label: 'Trả hàng NCC', path: '/purchasing/returns' }, { label: 'Gợi ý nhập hàng', path: '/purchasing/reorder' }] },
         ],
     },
     {
         label: 'Phân tích',
         items: [
-            { name: 'cash', label: 'Thu chi', path: '/cash', icon: HandCoins, permission: 'finance.view', shortcut: 'q', description: 'Phiếu thu, phiếu chi, sổ quỹ và loại phiếu.' },
+            { name: 'cash', label: 'Thu chi', path: '/cash', icon: HandCoins, permission: 'finance.view', shortcut: 'q', description: 'Phiếu thu, phiếu chi, sổ quỹ và loại phiếu.',
+                children: [{ label: 'Phiếu thu, phiếu chi', path: '/cash' }, { label: 'Sổ quỹ', path: '/reports/cashbook' }, { label: 'Loại phiếu', path: '/cash/types' }] },
             { name: 'finance', label: 'Tài chính', path: '/finance', icon: Wallet, permission: 'finance.view', description: 'Doanh thu, phí sàn, đối soát, lợi nhuận ước tính và đã xác nhận.' },
             { name: 'reports', label: 'Báo cáo', path: '/reports', icon: BarChart3, permission: 'reports.view', description: 'Bán hàng, lãi lỗ, kho, nhập hàng, công nợ và khách hàng.' },
         ],
