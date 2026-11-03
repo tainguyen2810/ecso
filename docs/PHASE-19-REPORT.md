@@ -1,4 +1,4 @@
-# Phase 18 — Tag đơn hàng, ngày hẹn giao, đổi hàng, lưu bộ lọc đơn
+# Phase 19 — Tag đơn hàng, ngày hẹn giao, đổi hàng, lưu bộ lọc đơn
 
 > 2026-11-03
 
@@ -15,7 +15,7 @@
 
 ## Test
 - Pest `tests/Feature/Sales/OrderTagsExchangeTest.php` (3 test): tag + hẹn giao + lọc + tách tenant + phân quyền; đổi hàng bù trừ, tiền mặt ca không đổi, không hủy một phía, mỗi phiếu dùng một lần; giới hạn số bù trừ.
-- Playwright `e2e/order-tags-exchange.spec.ts`, ảnh trong `docs/screenshots/phase-18/`.
+- Playwright `e2e/order-tags-exchange.spec.ts`, ảnh trong `docs/screenshots/phase-19/`.
 
 ## Hạn chế
 - Hủy đơn đổi sau khi đã bù trừ: hệ thống cảnh báo cần hoàn tiền như đơn đã thu tiền thường; chưa tự gỡ bù trừ về phiếu trả.

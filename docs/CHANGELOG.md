@@ -4,7 +4,7 @@
 
 ## [Unreleased]
 
-### Phase 18 — Tag đơn, ngày hẹn giao, đổi hàng (2026-11-03)
+### Phase 19 — Tag đơn, ngày hẹn giao, đổi hàng (2026-11-03)
 - Tag và ngày hẹn giao trên mọi đơn (cả đơn sàn), lọc theo tag / ngày hẹn giao, có trong file Excel.
 - Đổi hàng: tạo đơn đổi từ phiếu trả, giá trị hàng trả được bù trừ vào đơn mới (hai bút toán "Bù trừ đổi hàng", không tính là tiền mặt).
 - Danh sách đơn: lưu bộ lọc, chọn cột hiển thị.

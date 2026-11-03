@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { login, shot as baseShot } from './helpers';
 
-const DIR = 'docs/screenshots/phase-18';
+const DIR = 'docs/screenshots/phase-19';
 async function shot(page: Page, name: string) {
     await page.evaluate(() => document.querySelectorAll<HTMLElement>('[role="status"]').forEach((t) => t.click()));
     await baseShot(page, name, DIR);
