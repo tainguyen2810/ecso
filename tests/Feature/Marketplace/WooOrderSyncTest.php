@@ -146,6 +146,7 @@ it('keeps an error per order until it syncs, and lets the user retry or dismiss 
         ->assertJsonPath('data.0.external_id', '904')->assertJsonPath('data.0.category', 'api')
         ->assertJsonPath('data.0.attempts', 2)->assertJsonPath('meta.open_by_category.api', 1);
     $id = $list->json('data.0.id');
+    $this->api->getJson("/api/v1/marketplace-accounts/{$this->account->ulid}")->assertJsonPath('overview.sync_errors', 1);
 
     // Still busy: the retry says so and the error stays open.
     $this->api->postJson("/api/v1/sync-errors/{$id}/retry")->assertUnprocessable();

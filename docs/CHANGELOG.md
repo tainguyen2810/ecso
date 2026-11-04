@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Đồng bộ đơn WooCommerce, vòng E: giao diện và hướng dẫn (2026-11-04)
+- **Trang website Woo**: nút "Đồng bộ đơn ngay"; chọn chu kỳ đối soát 5/15/30 phút; hiện mốc "Đồng bộ đơn từ"; công tắc "Trạng thái đơn hai chiều"; thẻ **Webhook trên website** (tình trạng, đã bật lại / tạo lại, nút Kiểm tra ngay); thẻ **Ánh xạ trạng thái** (trạng thái website → trạng thái ECSO, số đơn đang chưa ánh xạ, thêm mã trạng thái plugin). Ô "Lỗi đồng bộ" tính cả lỗi đơn đang mở và dẫn sang trang lỗi.
+- **Trang Lịch sử và lỗi đồng bộ** (`/marketplaces/sync`): lỗi đang mở theo nhóm, thử lại / bỏ qua từng đơn, lỗi đã xử lý, lịch sử từng lượt đối soát (kết quả, số đơn, thời gian chạy).
+- **Chi tiết đơn website**: số đơn website, trạng thái thanh toán, email, địa chỉ thanh toán khi khác địa chỉ giao, mã giao dịch, mã giảm giá, thuế, phí khác, tổng đã hoàn, số lượng đã hoàn từng dòng, danh sách hoàn tiền trên website (kèm phiếu trả hàng nếu có), nhãn "Đã xóa trên website".
+- Danh sách đơn: hiện số đơn website và nhãn "Đã xóa trên website"; ô tìm kiếm tìm được theo số đơn website.
+- Hướng dẫn: `docs/WOOCOMMERCE-ORDERS.md`.
+
 ### Đồng bộ đơn WooCommerce, vòng D: hoàn tiền (2026-11-04)
 - ECSO đọc **từng lần hoàn tiền** của đơn Woo (`orders/{id}/refunds`) và lưu vào `order_refunds`: số tiền, lý do, dòng hàng và số lượng. Mỗi lần hoàn chỉ lưu một lần, webhook gửi lặp không tạo trùng. Tổng đã hoàn cập nhật vào đơn.
 - Hoàn **một phần trước khi giao**: số lượng đã hoàn không còn được giữ hàng và không bị xuất kho (`order_items.refunded_quantity`).

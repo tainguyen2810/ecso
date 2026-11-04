@@ -56,6 +56,7 @@ class OrderQuery
         }
         if ($q = trim((string) ($filters['q'] ?? ''))) {
             $query->where(fn (Builder $w) => $w->where('external_order_id', 'like', "%{$q}%")
+                ->orWhere('external_number', $q)
                 ->orWhere('tracking_number', $q)
                 ->orWhereHas('customer', fn ($c) => $c->where('name', 'like', "%{$q}%")->orWhere('phone_hash', PhoneNumber::hash(PhoneNumber::normalize($q)) ?? '-'))
                 ->orWhereHas('items', fn ($i) => $i->where('seller_sku', $q)->orWhere('name', 'like', "%{$q}%")));

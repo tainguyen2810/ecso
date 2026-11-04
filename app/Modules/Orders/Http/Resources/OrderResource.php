@@ -56,6 +56,7 @@ class OrderResource extends JsonResource
             'deliver_on' => $this->deliver_on?->toDateString(),
             'handed_over_at' => $this->handed_over_at?->toIso8601String(),
             'cancelled_at' => $this->cancelled_at?->toIso8601String(),
+            'deleted_on_channel_at' => $this->deleted_on_channel_at?->toIso8601String(),
             'cancel_reason' => $this->cancel_reason,
             'external_updated_at' => $this->external_updated_at?->toIso8601String(),
             'flags' => [

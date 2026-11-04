@@ -70,6 +70,7 @@ const routes: RouteRecordRaw[] = [
             { path: 'marketplaces', name: 'marketplaces', component: () => import('./pages/marketplaces/Marketplaces.vue'), meta: { permission: 'marketplace.view', nav: 'marketplaces' } },
             { path: 'marketplaces/:marketplace/callback', name: 'marketplace-callback', component: () => import('./pages/marketplaces/MarketplaceCallback.vue'), meta: { permission: 'marketplace.connect', nav: 'marketplaces' } },
             { path: 'marketplaces/:id/store', name: 'marketplace-store', component: () => import('./pages/marketplaces/WooStore.vue'), meta: { permission: 'marketplace.view', nav: 'marketplaces' } },
+            { path: 'marketplaces/sync', name: 'marketplace-sync', component: () => import('./pages/marketplaces/SyncLog.vue'), meta: { permission: 'marketplace.view', nav: 'marketplaces' } },
             { path: 'marketplaces/prices', name: 'marketplace-prices', component: () => import('./pages/marketplaces/MarketplacePrices.vue'), meta: { permission: 'marketplace.view', nav: 'marketplaces' } },
             { path: 'marketplaces/:id/listings', name: 'marketplace-listings', component: () => import('./pages/marketplaces/Listings.vue'), meta: { permission: 'marketplace.view', nav: 'marketplaces' } },
             { path: 'cash', name: 'cash', component: () => import('./pages/cash/VoucherList.vue'), meta: { permission: 'finance.view', nav: 'cash' } },
