@@ -81,7 +81,7 @@ class ProductController extends Controller
             ->leftJoinSub($stock, 's', 's.product_id', '=', 'products.id')
             ->select('products.*', 's.on_hand', 's.reserved')
             // After select(): select() replaces the column list, which would drop the count.
-            ->withCount(['variants' => fn (Builder $v) => $v->when($trashed, fn ($t) => $t->withTrashed())])
+            ->withCount(['variants' => fn ($v) => $v->when($trashed, fn ($t) => $t->withTrashed())])
             ->when($filters['q'] ?? null, function (Builder $q, string $term) use ($trashed) {
                 $like = '%'.self::escapeLike($term).'%';
                 $q->where(fn (Builder $w) => $w->where('products.name', 'like', $like)
