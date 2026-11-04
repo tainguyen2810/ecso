@@ -6,7 +6,9 @@ use App\Modules\Marketplace\Connectors\ConnectorRegistry;
 use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Models\SyncCursor;
+use App\Modules\Marketplace\Models\SyncError;
 use App\Modules\Marketplace\Models\SyncRun;
+use App\Modules\Marketplace\Services\SyncErrorLog;
 use App\Modules\Orders\Models\Order;
 use Carbon\CarbonImmutable;
 
@@ -19,14 +21,39 @@ class OrderSync
     public function __construct(
         private readonly ConnectorRegistry $connectors,
         private readonly OrderIngestor $ingestor,
+        private readonly SyncErrorLog $errors,
     ) {}
 
-    /** @return array{result: string, order: Order|null}  order is null when the order is skipped */
+    /**
+     * Reads one order from the store and takes it in. A failure opens (or repeats) a sync error for the order; a
+     * later successful read closes it. An order gone from the store is flagged in ECSO, never deleted.
+     *
+     * @return array{result: string, order: Order|null} order is null when the order is skipped
+     */
     public function syncOne(MarketplaceAccount $account, string $externalOrderId, string $source, ?int $webhookEventId = null, ?int $actorId = null): array
     {
-        $data = $this->connectors->for($account->marketplace)->getOrder($account, $externalOrderId);
+        try {
+            $data = $this->connectors->for($account->marketplace)->getOrder($account, $externalOrderId);
+        } catch (ConnectorException $e) {
+            if ($e->notFound) {
+                $this->errors->resolve($account, 'order', $externalOrderId);
 
-        return $this->ingestor->ingest($account, $data, $source, $webhookEventId, $actorId);
+                return $this->ingestor->markDeletedOnChannel($account, $externalOrderId, $source, $webhookEventId)
+                    ?? ['result' => OrderIngestor::SKIPPED, 'order' => null];
+            }
+            $this->errors->fromException($account, 'order', $externalOrderId, $e);
+
+            throw $e;
+        }
+
+        $result = $this->ingestor->ingest($account, $data, $source, $webhookEventId, $actorId);
+        if ($result['result'] === OrderIngestor::IGNORED_TRANSITION) {
+            $this->errors->record($account, 'order', $externalOrderId, SyncError::CONFLICT, (string) $result['order']?->sync_warning);
+        } else {
+            $this->errors->resolve($account, 'order', $externalOrderId);
+        }
+
+        return $result;
     }
 
     /**

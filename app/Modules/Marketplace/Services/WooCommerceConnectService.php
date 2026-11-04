@@ -226,7 +226,7 @@ class WooCommerceConnectService
         $this->removeWebhooks($account, $client);
 
         $secret = Str::random(40);
-        $delivery = rtrim((string) config('app.url'), '/').'/api/v1/webhooks/'.WooCommerceConnector::MARKETPLACE;
+        $delivery = $this->deliveryUrl();
         $ids = [];
         // The secret must be stored before Woo pings / delivers, or the first deliveries would be refused.
         MarketplaceCredential::query()->where('marketplace_account_id', $account->id)->firstOrFail()->forceFill(['webhook_secret' => $secret])->save();
@@ -245,6 +245,57 @@ class WooCommerceConnectService
         $account->forceFill(['settings' => array_merge((array) $account->settings, ['webhook_ids' => array_values(array_filter($ids))])])->save();
 
         return WooCommerceConnector::WEBHOOK_TOPICS;
+    }
+
+    /**
+     * Woo turns a webhook off after several failed deliveries (and stores connected before a topic existed lack
+     * it). This finds ECSO's webhooks on the store, turns disabled/paused ones back on and creates missing topics
+     * with the stored secret. The outcome is kept on the account for the store page.
+     *
+     * @return array{ok: bool, checked_at: string, missing: array<int, string>, reactivated: array<int, string>, error: string|null}
+     */
+    public function checkWebhooks(MarketplaceAccount $account): array
+    {
+        $delivery = $this->deliveryUrl();
+        $health = ['ok' => false, 'checked_at' => now()->toIso8601String(), 'missing' => [], 'reactivated' => [], 'error' => null];
+
+        try {
+            $client = WooClient::forAccount($account);
+            $secret = MarketplaceCredential::query()->where('marketplace_account_id', $account->id)->first()?->webhook_secret;
+            if (blank($secret)) {
+                // No secret: nothing could be verified; registering again makes a fresh one.
+                $this->registerWebhooks($account, $client);
+                $health['missing'] = WooCommerceConnector::WEBHOOK_TOPICS;
+            } else {
+                $ours = collect((array) $client->get('webhooks', ['per_page' => 100]))
+                    ->filter(fn ($w) => rtrim((string) ($w['delivery_url'] ?? ''), '/') === $delivery)->keyBy('topic');
+                $ids = [];
+                foreach (WooCommerceConnector::WEBHOOK_TOPICS as $topic) {
+                    $hook = $ours->get($topic);
+                    if ($hook === null) {
+                        $hook = $client->post('webhooks', ['name' => "ECSO {$topic}", 'topic' => $topic, 'delivery_url' => $delivery, 'secret' => $secret, 'status' => 'active']);
+                        $health['missing'][] = $topic;
+                    } elseif (($hook['status'] ?? 'active') !== 'active') {
+                        $hook = $client->put('webhooks/'.(int) $hook['id'], ['status' => 'active']);
+                        $health['reactivated'][] = $topic;
+                    }
+                    $ids[] = (int) ($hook['id'] ?? 0);
+                }
+                $account->forceFill(['settings' => array_merge((array) $account->settings, ['webhook_ids' => array_values(array_filter($ids))])]);
+            }
+            $health['ok'] = true;
+        } catch (ConnectorException $e) {
+            $health['error'] = mb_substr($e->getMessage(), 0, 300);
+        }
+
+        $account->forceFill(['settings' => array_merge((array) $account->settings, ['webhook_health' => $health])])->save();
+
+        return $health;
+    }
+
+    private function deliveryUrl(): string
+    {
+        return rtrim((string) config('app.url'), '/').'/api/v1/webhooks/'.WooCommerceConnector::MARKETPLACE;
     }
 
     /** Best effort: a store that is gone or refuses must not block a disconnect. */

@@ -24,6 +24,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $handed_over_at
  * @property Carbon|null $delivered_at
  * @property Carbon|null $cancelled_at
+ * @property Carbon|null $deleted_on_channel_at
  * @property Carbon|null $packing_slip_printed_at
  * @property Carbon|null $deliver_on
  * @property array<int, string>|null $tags
@@ -75,6 +76,7 @@ class Order extends Model
             'handed_over_at' => 'datetime',
             'delivered_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'deleted_on_channel_at' => 'datetime',
             'packing_slip_printed_at' => 'datetime',
             'raw' => 'array',
             'tags' => 'array',

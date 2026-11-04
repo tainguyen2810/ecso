@@ -23,6 +23,7 @@ use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Validation\Rule;
 
 class MarketplaceAccountController extends Controller
 {
@@ -175,6 +176,7 @@ class MarketplaceAccountController extends Controller
             'sync_enabled' => ['sometimes', 'boolean'],
             'settings' => ['sometimes', 'array'],
             ...collect(MarketplaceAccount::SETTING_KEYS)->mapWithKeys(fn ($k) => ["settings.{$k}" => ['sometimes', 'boolean']])->all(),
+            'settings.order_sync_interval' => ['sometimes', 'integer', Rule::in(MarketplaceAccount::ORDER_SYNC_INTERVALS)],
         ]);
         if (isset($data['warehouse_id'])) {
             $data['warehouse_id'] = Warehouse::query()->where('ulid', $data['warehouse_id'])->where('status', 'active')->firstOrFail()->id;

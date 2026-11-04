@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Đồng bộ đơn WooCommerce, vòng B (2026-11-04)
+- **Đơn bị xóa trên website**: ECSO không xóa đơn. Đơn được đánh dấu "đã xóa trên website" (`orders.deleted_on_channel_at`). Đơn chưa ra khỏi kho thì chuyển Đã hủy và nhả hàng giữ. Đơn đã giao thì giữ nguyên, chỉ cảnh báo. Đơn chuyển vào thùng rác rồi được **khôi phục** thì mở lại và giữ hàng lại (nếu chưa giao). Website được đăng ký thêm webhook `order.deleted`, `order.restored`.
+- **Đơn sửa trên website** (đổi số lượng, thêm/bớt dòng) khi chưa ra khỏi kho: ECSO nhả hàng giữ cũ và giữ lại theo dòng mới. Sửa sau khi đã xuất kho thì ECSO giữ số đã xuất và báo cảnh báo trên đơn.
+- **Tự bật lại webhook**: lệnh `ecso:woo:check-webhooks` chạy mỗi giờ, bật lại webhook ECSO bị Woo tắt sau nhiều lần gửi lỗi và tạo lại webhook còn thiếu (cả website kết nối từ trước). Kết quả lần kiểm tra gần nhất lưu ở `settings.webhook_health`. Có API kiểm tra ngay `POST marketplace-accounts/{id}/check-webhooks`.
+- **Chu kỳ đối soát theo từng website**: 5, 15 (mặc định) hoặc 30 phút (`settings.order_sync_interval`). Lệnh đối soát chạy mỗi 5 phút và bỏ qua website chưa tới lượt. Nút "Đồng bộ ngay": `POST marketplace-accounts/{id}/sync-orders`.
+- **Lỗi đồng bộ** (`sync_errors`): mỗi đơn đồng bộ không được có một dòng lỗi theo nhóm (API, xác thực, dữ liệu, xung đột trạng thái), đếm số lần thử. Lần đồng bộ sau thành công thì lỗi tự đóng. API: `GET sync-errors`, `POST sync-errors/{id}/retry`, `POST sync-errors/{id}/resolve`, `GET sync-runs`.
+- Migration `2026_11_12_110000_add_order_sync_errors`. Chỉ thử với cửa hàng Woo giả lập.
+
 ### Đồng bộ đơn WooCommerce, vòng A (2026-11-04)
 - Chỉ lấy đơn **tạo sau lúc bật đồng bộ đơn** (`marketplace_accounts.orders_since`). Đơn cũ hơn bị bỏ qua cả khi website gửi cập nhật, không giữ hàng. Tắt rồi bật lại đồng bộ đơn thì tính lại từ lúc bật. Không nhập đơn lịch sử.
 - Đơn website lưu đủ: số đơn website, SĐT và email đầy đủ, địa chỉ thanh toán/giao hàng (mã hóa), mã khách trên Woo, mã giảm giá, thuế (đơn và từng dòng), phí khác, mã giao dịch, số đã hoàn. Bản `raw` không còn chứa billing/shipping.

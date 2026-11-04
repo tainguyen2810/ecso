@@ -54,7 +54,7 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
     ];
 
     /** Topics registered on the store when it is connected. */
-    public const WEBHOOK_TOPICS = ['order.created', 'order.updated', 'product.created', 'product.updated', 'product.deleted'];
+    public const WEBHOOK_TOPICS = ['order.created', 'order.updated', 'order.deleted', 'order.restored', 'product.created', 'product.updated', 'product.deleted'];
 
     /** Order statuses polled by the reconcile job (checkout drafts are carts, not orders). */
     private const ORDER_STATUSES = 'pending,processing,on-hold,completed,cancelled,refunded,failed';

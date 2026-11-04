@@ -61,6 +61,16 @@ class MarketplaceAccount extends Model
     /** @var array<int, string> */
     public const SETTING_KEYS = ['sync_orders', 'sync_stock', 'sync_prices', 'import_new_products'];
 
+    /** Minutes between two reconcile passes of this shop's orders. */
+    public const ORDER_SYNC_INTERVALS = [5, 15, 30];
+
+    public function orderSyncInterval(): int
+    {
+        $minutes = (int) ($this->settings['order_sync_interval'] ?? 15);
+
+        return in_array($minutes, self::ORDER_SYNC_INTERVALS, true) ? $minutes : 15;
+    }
+
     public function syncs(string $what): bool
     {
         return (bool) ($this->settings[$what] ?? self::SYNC_DEFAULTS[$what] ?? true);

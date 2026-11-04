@@ -144,8 +144,9 @@ it('logs every reconcile pass; a busy order does not stop the others and keeps t
         ->and(Order::withoutGlobalScopes()->pluck('external_order_id')->all())->toBe(['821'])
         ->and(SyncCursor::withoutGlobalScopes()->where('marketplace_account_id', $this->account->id)->value('last_synced_at'))->toBeNull();
 
-    // Next pass: the store answers again, the missed order comes in and the cursor moves.
+    // Next pass (15 minutes later, the default interval): the store answers again, the missed order comes in.
     $this->store->failOrders = [];
+    $this->travel(15)->minutes();
     Artisan::call('ecso:orders:reconcile');
     expect(SyncRun::withoutGlobalScopes()->latest('id')->first()->status)->toBe(SyncRun::OK)
         ->and(Order::withoutGlobalScopes()->count())->toBe(2)
@@ -153,6 +154,7 @@ it('logs every reconcile pass; a busy order does not stop the others and keeps t
 
     // The store cannot even list orders: the pass is logged as failed.
     $this->store->failList = true;
+    $this->travel(15)->minutes();
     Artisan::call('ecso:orders:reconcile');
     $failed = SyncRun::withoutGlobalScopes()->latest('id')->first();
     expect($failed->status)->toBe(SyncRun::FAILED)->and($failed->error)->not->toBeEmpty();

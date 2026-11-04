@@ -134,6 +134,8 @@ class FakeWooStore
             (bool) preg_match('#^orders/(\d+)$#', $path, $m) && $method === 'PUT' => $this->updateOrder((int) $m[1], $request->data()),
             (bool) preg_match('#^orders/(\d+)$#', $path, $m) => Http::response($this->orders[(int) $m[1]] ?? ['code' => 'woocommerce_rest_shop_order_invalid_id', 'message' => 'Invalid ID.'], isset($this->orders[(int) $m[1]]) ? 200 : 404),
             $path === 'webhooks' && $method === 'POST' => $this->createWebhook($request->data()),
+            $path === 'webhooks' && $method === 'GET' => $this->page(array_values($this->webhooks), $query),
+            (bool) preg_match('#^webhooks/(\d+)$#', $path, $m) && $method === 'PUT' => $this->updateWebhook((int) $m[1], $request->data()),
             (bool) preg_match('#^webhooks/(\d+)$#', $path, $m) && $method === 'DELETE' => $this->deleteWebhook((int) $m[1]),
             default => Http::response(['code' => 'rest_no_route', 'message' => 'No route'], 404),
         };
@@ -199,6 +201,13 @@ class FakeWooStore
         $this->webhooks[$id] = $data + ['id' => $id];
 
         return Http::response($this->webhooks[$id], 201);
+    }
+
+    private function updateWebhook(int $id, array $data)
+    {
+        $this->webhooks[$id] = array_merge($this->webhooks[$id], $data);
+
+        return Http::response($this->webhooks[$id]);
     }
 
     private function deleteWebhook(int $id)

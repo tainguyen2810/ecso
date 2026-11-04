@@ -67,7 +67,7 @@ class AccountService
         $pricesWereOn = $account->syncs('sync_prices');
         $ordersWereOn = $account->syncs('sync_orders');
         if (isset($data['settings'])) {
-            $data['settings'] = array_merge((array) $account->settings, array_intersect_key($data['settings'], MarketplaceAccount::SYNC_DEFAULTS));
+            $data['settings'] = array_merge((array) $account->settings, array_intersect_key($data['settings'], MarketplaceAccount::SYNC_DEFAULTS + ['order_sync_interval' => 15]));
             $account->forceFill(['settings' => $data['settings']]);
             unset($data['settings']);
         }

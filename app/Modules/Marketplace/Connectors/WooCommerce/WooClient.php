@@ -77,7 +77,7 @@ class WooClient
                 temporary: false, authExpired: true,
             ),
             $response->status() === 404 && $code === 'rest_no_route' => new ConnectorException('Website chưa bật WooCommerce REST API (không tìm thấy /wp-json/wc/v3).', temporary: false),
-            $response->status() === 404 => new ConnectorException('Không tìm thấy trên website'.($message !== '' ? ': '.strip_tags($message) : '.'), temporary: false),
+            $response->status() === 404 => new ConnectorException('Không tìm thấy trên website'.($message !== '' ? ': '.strip_tags($message) : '.'), temporary: false, notFound: true),
             $response->status() === 429 || $response->serverError() => new ConnectorException("Website đang bận (HTTP {$response->status()}), sẽ thử lại."),
             default => new ConnectorException('Website trả lỗi'.($message !== '' ? ': '.strip_tags($message) : " HTTP {$response->status()}"), temporary: false),
         };

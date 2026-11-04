@@ -2,6 +2,7 @@
 
 namespace App\Modules\Orders\Services;
 
+use App\Modules\Inventory\Services\ReservationLedger;
 use App\Modules\Marketplace\Connectors\Data\OrderData;
 use App\Modules\Marketplace\Connectors\Data\OrderItemData;
 use App\Modules\Marketplace\Models\ListingVariant;
@@ -38,10 +39,14 @@ class OrderIngestor
     /** Created before the store's "orders since" moment: not synced (the seller chose to start from that moment). */
     public const SKIPPED = 'skipped';
 
+    /** The order is gone from the store: kept in ECSO, flagged, and cancelled if it had not shipped. */
+    public const DELETED = 'deleted_on_channel';
+
     public function __construct(
         private readonly StatusMapper $statuses,
         private readonly OrderStockSync $stock,
         private readonly CustomerService $customers,
+        private readonly ReservationLedger $ledger,
     ) {}
 
     /**
@@ -66,6 +71,10 @@ class OrderIngestor
                 $status = OrderStatus::CANCELLED;
             }
 
+            // An order deleted (trashed) on the store and then restored: it may open again, if it had not shipped.
+            $restoring = ! $isNew && $order->deleted_on_channel_at !== null && $order->status === OrderStatus::CANCELLED
+                && OrderStatus::policy($status) === OrderStatus::RESERVE && ! $order->returns()->exists();
+
             if (! $isNew) {
                 if ($order->external_updated_at && $data->updatedAt->lessThan($order->external_updated_at)) {
                     return ['result' => self::STALE, 'order' => $order];
@@ -76,7 +85,7 @@ class OrderIngestor
                     return ['result' => self::UNCHANGED, 'order' => $order];
                 }
 
-                if (! OrderStatus::canMove($order->status, $status)) {
+                if (! $restoring && ! OrderStatus::canMove($order->status, $status)) {
                     $order->forceFill(['sync_warning' => "Bỏ qua chuyển trạng thái {$order->status} → {$status} (không hợp lệ theo quy trình)."])->save();
 
                     return ['result' => self::IGNORED_TRANSITION, 'order' => $order];
@@ -84,8 +93,17 @@ class OrderIngestor
             }
 
             $from = $isNew ? null : $order->status;
+            $wasOpen = $from !== null && OrderStatus::policy($from) === OrderStatus::RESERVE;
             $this->fill($order, $data, $status);
-            $this->upsertItems($account, $order, $data->items);
+            $order->forceFill(['deleted_on_channel_at' => $data->rawStatus === 'trash' ? ($order->deleted_on_channel_at ?? now()) : null]);
+            if ($restoring) {
+                $order->forceFill(['cancelled_at' => null, 'cancel_reason' => null]);
+            }
+            $order->save();
+            $this->upsertItems($account, $order, $data->items, rebuild: $restoring
+                // Only the seller's own store edits orders; a snapshot without lines never empties an order.
+                || ($data->ownsCustomer && $data->items !== [] && $wasOpen && OrderStatus::policy($status) === OrderStatus::RESERVE
+                    && $this->linesChanged($order, $data->items)));
 
             if ($from !== $status) {
                 OrderStatusHistory::query()->create([
@@ -241,8 +259,18 @@ class OrderIngestor
     /**
      * @param  array<int, OrderItemData>  $items
      */
-    private function upsertItems(MarketplaceAccount $account, Order $order, array $items): void
+    private function upsertItems(MarketplaceAccount $account, Order $order, array $items, bool $rebuild = false): void
     {
+        if ($rebuild) {
+            // The store changed the lines of an order that has not shipped (or restored a deleted one): give back
+            // what was held and take the lines again, so the stock held follows the new quantities. New item rows
+            // get new reservation keys; the old reservations stay in the ledger as released.
+            $ids = $order->items()->pluck('id')->map(fn ($id) => (int) $id)->all();
+            $this->ledger->releaseAll(Order::STOCK_REFERENCE, $ids, "Đơn {$order->external_order_id} đổi trên website");
+            $order->items()->delete();
+        } elseif ($items !== [] && ! $order->wasRecentlyCreated && OrderStatus::isShipped($order->status) && $this->linesChanged($order, $items)) {
+            $order->forceFill(['sync_warning' => 'Đơn đã sửa số lượng hoặc dòng hàng trên website sau khi ra khỏi kho; ECSO giữ số lượng đã xuất, cần kiểm tra.'])->save();
+        }
         $existing = $order->items()->get()->keyBy('external_item_id');
 
         foreach ($items as $data) {
@@ -269,6 +297,52 @@ class OrderIngestor
             $item->mapping_status = $item->product_variant_id ? ListingVariant::MAPPED : ListingVariant::UNMAPPED;
             $item->save();
         }
+    }
+
+    /**
+     * Whether the store's lines differ from the order's (a line added, removed, or its quantity changed).
+     *
+     * @param  array<int, OrderItemData>  $items
+     */
+    private function linesChanged(Order $order, array $items): bool
+    {
+        $now = collect($items)->mapWithKeys(fn (OrderItemData $i) => [$i->externalItemId => $i->quantity])->sortKeys()->all();
+        $before = $order->items()->pluck('quantity', 'external_item_id')->map(fn ($q) => (int) $q)->sortKeys()->all();
+
+        return $now != $before;
+    }
+
+    /**
+     * The order no longer exists on the store (deleted for good). ECSO never deletes it: the order is flagged, and if
+     * it had not left the warehouse it is cancelled so its held stock is free again. Returns null when ECSO does
+     * not have the order. Must run inside the tenant context of $account.
+     *
+     * @return array{result: string, order: Order}|null
+     */
+    public function markDeletedOnChannel(MarketplaceAccount $account, string $externalOrderId, string $source, ?int $webhookEventId = null): ?array
+    {
+        return DB::transaction(function () use ($account, $externalOrderId, $source, $webhookEventId) {
+            $id = Order::query()->where('marketplace_account_id', $account->id)->where('external_order_id', $externalOrderId)->value('id');
+            if (! $id) {
+                return null;
+            }
+            $order = Order::query()->whereKey($id)->lockForUpdate()->firstOrFail();
+            $order->deleted_on_channel_at ??= now();
+
+            if (OrderStatus::policy($order->status) === OrderStatus::RESERVE || $order->status === OrderStatus::UNKNOWN_STATUS) {
+                OrderStatusHistory::query()->create([
+                    'order_id' => $order->id, 'from_status' => $order->status, 'to_status' => OrderStatus::CANCELLED,
+                    'raw_status' => 'deleted', 'source' => $source, 'webhook_event_id' => $webhookEventId, 'occurred_at' => now(),
+                ]);
+                $order->forceFill(['status' => OrderStatus::CANCELLED, 'cancelled_at' => $order->cancelled_at ?? now(), 'cancel_reason' => 'Đơn đã bị xóa trên website']);
+            } elseif (! in_array($order->status, [OrderStatus::CANCELLED, OrderStatus::RETURNED], true)) {
+                $order->sync_warning = 'Đơn đã bị xóa trên website sau khi ra khỏi kho; ECSO giữ nguyên đơn.';
+            }
+            $order->save();
+            $this->stock->apply($order);
+
+            return ['result' => self::DELETED, 'order' => $order];
+        }, 5);
     }
 
     private function listingVariant(MarketplaceAccount $account, OrderItemData $data): ListingVariant
