@@ -6,6 +6,7 @@ use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Tenancy\Support\TenantContext;
+use App\Shared\Support\ReportRange;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -141,7 +142,7 @@ class TradeReports
         $grouped = match ($by) {
             'staff' => (clone $base)->leftJoin('users as u', 'u.id', '=', 'op.created_by')
                 ->groupBy('op.created_by', 'u.name')->selectRaw("COALESCE(u.name, 'Không rõ') as label, {$metrics}")->orderByDesc('received')->get(),
-            'day' => (clone $base)->groupByRaw('DATE(op.paid_at)')->selectRaw("DATE(op.paid_at) as label, {$metrics}")->orderBy('label')->get(),
+            'day' => (clone $base)->groupByRaw(ReportRange::day('op.paid_at', $from))->selectRaw(ReportRange::day('op.paid_at', $from)." as label, {$metrics}")->orderBy('label')->get(),
             'warehouse' => (clone $base)->join('orders as o', 'o.id', '=', 'op.order_id')->leftJoin('warehouses as w', 'w.id', '=', 'o.warehouse_id')
                 ->groupBy('o.warehouse_id', 'w.name')->selectRaw("COALESCE(w.name, 'Chưa gán kho') as label, {$metrics}")->orderByDesc('received')->get(),
             default => (clone $base)->groupBy('op.method')->selectRaw("op.method as label, {$metrics}")->orderByDesc('received')->get(),
@@ -176,7 +177,7 @@ class TradeReports
                 ->groupBy('sp.created_by', 'u.name')->selectRaw("COALESCE(u.name, 'Không rõ') as label, NULL as id, {$metrics}")->orderByDesc('paid')->get(),
             'supplier' => (clone $base)->join('suppliers as s', 's.id', '=', 'sp.supplier_id')
                 ->groupBy('sp.supplier_id', 's.ulid', 's.name')->selectRaw("s.name as label, s.ulid as id, {$metrics}")->orderByDesc('paid')->get(),
-            'day' => (clone $base)->groupByRaw('DATE(sp.paid_at)')->selectRaw("DATE(sp.paid_at) as label, NULL as id, {$metrics}")->orderBy('label')->get(),
+            'day' => (clone $base)->groupByRaw(ReportRange::day('sp.paid_at', $from))->selectRaw(ReportRange::day('sp.paid_at', $from)." as label, NULL as id, {$metrics}")->orderBy('label')->get(),
             default => (clone $base)->groupBy('sp.method')->selectRaw("sp.method as label, NULL as id, {$metrics}")->orderByDesc('paid')->get(),
         };
 
@@ -219,8 +220,8 @@ class TradeReports
             $ids = DB::table('product_variants')->whereIn('ulid', $rows->pluck('id'))->pluck('id', 'ulid');
             $key = fn ($r) => $ids[$r->id] ?? null;
         } elseif ($by === 'day') {
-            $rows = (clone $base)->groupByRaw('DATE(r.created_at)')->selectRaw("DATE(r.created_at) as label, NULL as id, NULL as sku, {$metrics}")->orderBy('label')->get();
-            $returned = (clone $returns)->groupByRaw('DATE(sr.created_at)')->selectRaw('DATE(sr.created_at) as k, SUM(sr.total) as value')->pluck('value', 'k');
+            $rows = (clone $base)->groupByRaw(ReportRange::day('r.created_at', $from))->selectRaw(ReportRange::day('r.created_at', $from)." as label, NULL as id, NULL as sku, {$metrics}")->orderBy('label')->get();
+            $returned = (clone $returns)->groupByRaw(ReportRange::day('sr.created_at', $from))->selectRaw(ReportRange::day('sr.created_at', $from).' as k, SUM(sr.total) as value')->pluck('value', 'k');
             $key = fn ($r) => $r->label;
         } else {
             $rows = (clone $base)->leftJoin('suppliers as s', 's.id', '=', 'po.supplier_id')
@@ -279,8 +280,8 @@ class TradeReports
             ])->all();
 
         $byDay = $placed()->leftJoinSub($first, 'f', 'f.customer_id', '=', 'o.customer_id')
-            ->groupByRaw('DATE(o.placed_at)')
-            ->selectRaw('DATE(o.placed_at) as day, COUNT(DISTINCT CASE WHEN o.customer_id IS NOT NULL AND f.first_at >= ? THEN o.customer_id END) as new_customers, '
+            ->groupByRaw(ReportRange::day('o.placed_at', $from))
+            ->selectRaw(ReportRange::day('o.placed_at', $from).' as day, COUNT(DISTINCT CASE WHEN o.customer_id IS NOT NULL AND f.first_at >= ? THEN o.customer_id END) as new_customers, '
                 .'COUNT(DISTINCT CASE WHEN o.customer_id IS NOT NULL AND f.first_at < ? THEN o.customer_id END) as returning_customers, '
                 .'SUM(CASE WHEN o.customer_id IS NULL THEN 1 ELSE 0 END) as anonymous_orders', [$from, $from])
             ->orderBy('day')->get()->keyBy('day');

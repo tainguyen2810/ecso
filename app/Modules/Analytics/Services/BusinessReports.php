@@ -5,6 +5,7 @@ namespace App\Modules\Analytics\Services;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Tenancy\Support\TenantContext;
+use App\Shared\Support\ReportRange;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -80,8 +81,8 @@ class BusinessReports
                 ->selectRaw("COALESCE(warehouses.name, 'Chưa gán kho') as label, NULL as kind, {$metrics}")
                 ->orderByDesc('revenue')->get(),
             default => (clone $base)
-                ->groupByRaw('DATE(orders.placed_at)')
-                ->selectRaw("DATE(orders.placed_at) as label, NULL as kind, {$metrics}")
+                ->groupByRaw(ReportRange::day('orders.placed_at', $from))
+                ->selectRaw(ReportRange::day('orders.placed_at', $from)." as label, NULL as kind, {$metrics}")
                 ->orderBy('label')->get(),
         };
 

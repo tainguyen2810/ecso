@@ -2,8 +2,8 @@
 
 namespace App\Modules\Analytics\Services;
 
+use App\Modules\Analytics\Support\ReturnValues;
 use App\Modules\Orders\Domain\OrderStatus;
-use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Purchasing\Models\Supplier;
 use App\Modules\Sales\Services\CustomerDebt;
 use App\Modules\Tenancy\Support\TenantContext;
@@ -18,7 +18,7 @@ class LedgerReports
     /**
      * Profit and loss for the range and for the period of the same length just before it. Revenue is goods sold on
      * orders placed in the period (cancelled ones excluded) less returns opened in the period; cost of goods is the
-     * ledger cost captured at shipping less the cost of goods put back on the shelf from returns. Other income and
+     * ledger cost captured at shipping less the cost (as shipped) of goods put back on the shelf from approved returns. Other income and
      * expenses are the receipt and payment vouchers whose type counts in profit and loss. Marketplace fees are not in
      * the system yet, so they are not here.
      *
@@ -127,12 +127,14 @@ class LedgerReports
             ->where('o.tenant_id', $this->tenant())->whereBetween('o.placed_at', [$from, $to])->where('o.status', '!=', OrderStatus::CANCELLED)
             ->selectRaw('COALESCE(SUM(i.cost_snapshot * i.quantity), 0) as cogs, COALESCE(SUM(CASE WHEN i.cost_snapshot IS NULL AND i.mapping_status <> \'service\' AND o.status IN (\''.implode("','", OrderStatus::SHIPPED).'\') THEN 1 ELSE 0 END), 0) as missing')
             ->first();
-        // Marketplace returns often carry no refund amount: count the goods value of their lines instead.
-        $lineValue = DB::table('order_return_lines as l')->join('order_items as i', 'i.id', '=', 'l.order_item_id')
-            ->groupBy('l.order_return_id')->selectRaw('l.order_return_id, SUM(l.quantity * i.unit_price) as value');
-        $returns = (float) DB::table('order_returns as r')->leftJoinSub($lineValue, 'lv', 'lv.order_return_id', '=', 'r.id')
-            ->where('r.tenant_id', $this->tenant())->where('r.status', '!=', OrderReturn::REJECTED)->whereBetween('r.created_at', [$from, $to])
-            ->selectRaw('COALESCE(SUM(COALESCE(r.refund_amount, lv.value, 0)), 0) as v')->value('v');
+        // Returns of orders still in revenue (an order cancelled after shipping is out of revenue and cost already).
+        // Marketplace returns often carry no refund amount: their goods value counts instead (ReturnValues).
+        $returnRows = fn () => DB::table('order_returns as r')->join('orders as ro', 'ro.id', '=', 'r.order_id')
+            ->leftJoinSub(ReturnValues::lines(), 'rv', 'rv.order_return_id', '=', 'r.id')
+            ->where('r.tenant_id', $this->tenant())->whereIn('r.status', ReturnValues::COUNTED)->where('ro.status', '!=', OrderStatus::CANCELLED);
+        $returns = (float) $returnRows()->whereBetween('r.created_at', [$from, $to])->selectRaw('COALESCE(SUM('.ReturnValues::valueSql().'), 0) as v')->value('v');
+        // Goods put back on the shelf, at the cost captured when they shipped.
+        $cogsBack = (float) $returnRows()->whereBetween('r.inspected_at', [$from, $to])->selectRaw('COALESCE(SUM(rv.cost_back), 0) as v')->value('v');
 
         $value = fn (array $types, ?string $extra = null) => (float) DB::table('stock_movements as m')->join('product_variants as v', 'v.id', '=', 'm.product_variant_id')
             ->where('m.tenant_id', $this->tenant())->whereBetween('m.created_at', [$from, $to])->whereIn('m.type', $types)
@@ -140,7 +142,6 @@ class LedgerReports
             ->selectRaw('COALESCE(SUM(m.on_hand_delta * COALESCE(m.unit_cost, v.cost_price)), 0) as v')->value('v');
         $writeOffReasons = "m.reason IN ('".implode("','", BusinessReports::WRITE_OFF_REASONS)."')";
 
-        $cogsBack = $value(BusinessReports::STOCK_COLUMNS['return_in']);
         $writeOff = -$value(BusinessReports::STOCK_COLUMNS['damage_out']) - $value(['ADJUSTMENT_OUT'], $writeOffReasons);
         $stocktake = -$value(['ADJUSTMENT_OUT'], "(m.reason IS NULL OR NOT {$writeOffReasons})") - $value(BusinessReports::STOCK_COLUMNS['adjust_in']);
 
