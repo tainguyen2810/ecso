@@ -4,9 +4,9 @@ namespace App\Modules\Cashbook\Services;
 
 use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Tenancy\Support\TenantContext;
+use App\Shared\Support\ReportRange;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -30,8 +30,8 @@ class VoucherLedger
             ->when($filters['direction'] ?? null, fn ($q, $d) => $q->where('direction', $d))
             ->when(($filters['status'] ?? null) === 'active', fn ($q) => $q->whereNull('voided_at'))
             ->when(($filters['status'] ?? null) === 'voided', fn ($q) => $q->whereNotNull('voided_at'))
-            ->when($filters['from'] ?? null, fn ($q, $d) => $q->where('paid_at', '>=', Carbon::parse($d)->startOfDay()))
-            ->when($filters['to'] ?? null, fn ($q, $d) => $q->where('paid_at', '<=', Carbon::parse($d)->endOfDay()))
+            ->when($filters['from'] ?? null, fn ($q, $d) => $q->where('paid_at', '>=', ReportRange::date($d)))
+            ->when($filters['to'] ?? null, fn ($q, $d) => $q->where('paid_at', '<=', ReportRange::date($d)->endOfDay()))
             ->when($filters['method'] ?? null, fn ($q, $m) => $q->where('method', $m))
             ->when($filters['party_kind'] ?? null, fn ($q, $k) => $q->where('party_kind', $k))
             ->when($filters['type'] ?? null, fn ($q, $t) => in_array($t, self::SOURCES, true) ? $q->where('source', $t) : $q->where('type_id', $t))

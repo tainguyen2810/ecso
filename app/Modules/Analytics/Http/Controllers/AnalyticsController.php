@@ -9,6 +9,7 @@ use App\Modules\Analytics\Services\SalesReport;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Tenancy\Support\TenantContext;
+use App\Shared\Support\ReportRange;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -79,11 +80,6 @@ class AnalyticsController extends Controller
     /** @return array{0: CarbonImmutable, 1: CarbonImmutable} */
     private function range(Request $request): array
     {
-        $data = $request->validate(['from' => ['nullable', 'date'], 'to' => ['nullable', 'date', 'after_or_equal:from']]);
-        $from = isset($data['from']) ? CarbonImmutable::parse($data['from'])->startOfDay() : CarbonImmutable::now()->startOfMonth();
-        $to = isset($data['to']) ? CarbonImmutable::parse($data['to'])->endOfDay() : CarbonImmutable::now()->endOfDay();
-        abort_if($from->diffInDays($to) > 366, 422, 'Khoảng thời gian tối đa 1 năm.');
-
-        return [$from, $to];
+        return ReportRange::fromRequest($request);
     }
 }
