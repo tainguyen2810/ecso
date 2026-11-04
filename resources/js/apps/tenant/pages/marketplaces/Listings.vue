@@ -110,6 +110,11 @@ async function confirmAll() {
     }
 }
 
+/** "Product title · variant name · SKU sàn: X" without the empty parts (simple Woo products have no variant name). */
+function pickingLabel(r: ListingVariantData): string {
+    return [r.title, r.name, r.seller_sku ? `SKU trên sàn: ${r.seller_sku}` : 'Sản phẩm trên sàn chưa có SKU'].filter(Boolean).join(' · ');
+}
+
 function pickVariant(v: Variant) {
     if (picking.value) map(picking.value, v);
 }
@@ -180,8 +185,8 @@ function pickVariant(v: Variant) {
         <Pagination :page="meta.current_page" :last-page="meta.last_page" :total="meta.total" @go="(p) => ((page = p), load())" />
     </Card>
 
-    <Dialog :open="picking !== null" title="Chọn SKU nội bộ" :description="picking ? `${picking.title} · ${picking.name} (SKU sàn: ${picking.seller_sku ?? '—'})` : ''" @update:open="(v) => !v && (picking = null)">
-        <SkuPicker placeholder="Tìm SKU, mã vạch, tên sản phẩm…" @pick="pickVariant" />
+    <Dialog :open="picking !== null" size="lg" title="Chọn SKU nội bộ" :description="picking ? pickingLabel(picking) : ''" @update:open="(v) => !v && (picking = null)">
+        <SkuPicker v-if="picking" :key="picking.id" inline :initial-query="picking.seller_sku ?? ''" placeholder="Tìm SKU, mã vạch, tên sản phẩm…" @pick="pickVariant" />
         <p class="mt-3 text-xs text-muted-foreground">Sau khi liên kết, tồn khả dụng của SKU nội bộ sẽ được đẩy lên sàn và các đơn đang mở có sản phẩm này sẽ được giữ tồn.</p>
     </Dialog>
 </template>
