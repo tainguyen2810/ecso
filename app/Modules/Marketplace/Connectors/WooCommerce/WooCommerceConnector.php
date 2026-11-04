@@ -152,7 +152,11 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
             'modified_after' => $from->utc()->format('Y-m-d\TH:i:s'),
             'modified_before' => $to->utc()->format('Y-m-d\TH:i:s'),
             'dates_are_gmt' => 'true',
-            'status' => self::ORDER_STATUSES,
+            // Plus the statuses a plugin added that the seller mapped on the store page.
+            'status' => implode(',', array_unique([...explode(',', self::ORDER_STATUSES), ...array_filter(
+                array_map(fn ($raw) => explode(':', (string) $raw)[0], array_keys($account->statusMap())),
+                fn ($raw) => (bool) preg_match('/^[a-z0-9_-]+$/', $raw),
+            )])),
             'per_page' => self::PAGE,
             'page' => $page,
             'orderby' => 'id',

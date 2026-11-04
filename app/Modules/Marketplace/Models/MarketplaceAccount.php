@@ -56,13 +56,20 @@ class MarketplaceAccount extends Model
     }
 
     /** Per-store sync switches (WooCommerce store page); a missing switch means the default below. */
-    public const SYNC_DEFAULTS = ['sync_orders' => true, 'sync_stock' => true, 'sync_prices' => false, 'import_new_products' => true];
+    /** push_status: ECSO's order actions (confirm, pack, hand over, cancel) are written to the store ("hai chiều"). */
+    public const SYNC_DEFAULTS = ['sync_orders' => true, 'sync_stock' => true, 'sync_prices' => false, 'import_new_products' => true, 'push_status' => true];
 
     /** @var array<int, string> */
-    public const SETTING_KEYS = ['sync_orders', 'sync_stock', 'sync_prices', 'import_new_products'];
+    public const SETTING_KEYS = ['sync_orders', 'sync_stock', 'sync_prices', 'import_new_products', 'push_status'];
 
     /** Minutes between two reconcile passes of this shop's orders. */
     public const ORDER_SYNC_INTERVALS = [5, 15, 30];
+
+    /** @return array<string, string> this store's own raw status => internal status */
+    public function statusMap(): array
+    {
+        return (array) ($this->settings['status_map'] ?? []);
+    }
 
     public function orderSyncInterval(): int
     {

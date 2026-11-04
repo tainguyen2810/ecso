@@ -64,7 +64,7 @@ class OrderIngestor
 
             $order = $this->lockOrCreate($account, $data);
             $isNew = $order->wasRecentlyCreated;
-            $status = $this->statuses->map($account->marketplace, $data->rawStatus);
+            $status = $this->statuses->map($account->marketplace, $data->rawStatus, $account);
             if ($status === OrderStatus::RETURNED && ($isNew || ! in_array($order->status, OrderStatus::SHIPPED, true))) {
                 // Refunded/returned before the goods ever left (e.g. Woo "refunded" on an unpacked order): it is a
                 // cancel, which gives the held stock back, not a return of goods that never shipped.
@@ -85,6 +85,11 @@ class OrderIngestor
                     return ['result' => self::UNCHANGED, 'order' => $order];
                 }
 
+                // One-way store: ECSO moved the order on by itself (packed, handed over, cancelled) and the store still
+                // shows an earlier status. ECSO's status stays; the rest of the snapshot is still taken in.
+                if (! $account->syncs('push_status') && ! OrderStatus::canMove($order->status, $status) && OrderStatus::canMove($status, $order->status)) {
+                    $status = $order->status;
+                }
                 if (! $restoring && ! OrderStatus::canMove($order->status, $status)) {
                     $order->forceFill(['sync_warning' => "Bỏ qua chuyển trạng thái {$order->status} → {$status} (không hợp lệ theo quy trình)."])->save();
 
@@ -310,6 +315,37 @@ class OrderIngestor
         $before = $order->items()->pluck('quantity', 'external_item_id')->map(fn ($q) => (int) $q)->sortKeys()->all();
 
         return $now != $before;
+    }
+
+    /**
+     * Moves an order in ECSO only: an action on a one-way store (nothing is written to the store), or an order
+     * whose raw status got a mapping. Records the history and applies the stock policy, like a store update.
+     */
+    public function applyLocal(Order $order, string $status, string $source, ?int $actorId = null, ?string $reason = null): Order
+    {
+        return DB::transaction(function () use ($order, $status, $source, $actorId, $reason) {
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+            if ($order->status === $status) {
+                return $order;
+            }
+            if (! OrderStatus::canMove($order->status, $status)) {
+                throw ValidationException::withMessages(['action' => 'Đơn đang ở trạng thái không cho phép thao tác này.']);
+            }
+            OrderStatusHistory::query()->create([
+                'order_id' => $order->id, 'from_status' => $order->status, 'to_status' => $status,
+                'raw_status' => $order->raw_status, 'source' => $source, 'actor_id' => $actorId, 'occurred_at' => now(),
+            ]);
+            $order->forceFill([
+                'status' => $status,
+                'handed_over_at' => OrderStatus::isShipped($status) ? ($order->handed_over_at ?? now()) : $order->handed_over_at,
+                'cancelled_at' => $status === OrderStatus::CANCELLED ? ($order->cancelled_at ?? now()) : $order->cancelled_at,
+                'cancel_reason' => $status === OrderStatus::CANCELLED ? ($reason ?? $order->cancel_reason) : $order->cancel_reason,
+                'sync_warning' => null,
+            ])->save();
+            $this->stock->apply($order);
+
+            return $order;
+        }, 5);
     }
 
     /**

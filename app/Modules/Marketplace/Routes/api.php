@@ -44,6 +44,8 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::post('sync-errors/{error}/retry', [SyncLogController::class, 'retry'])->middleware('throttle:30,1,marketplace.sync-errors.x.retry');
     Route::post('sync-errors/{error}/resolve', [SyncLogController::class, 'resolve']);
     Route::post('marketplace-accounts/{account}/sync-orders', [SyncLogController::class, 'syncNow'])->middleware('throttle:6,1,marketplace.marketplace-accounts.x.sync-orders');
+    Route::get('marketplace-accounts/{account}/status-map', [SyncLogController::class, 'statusMap']);
+    Route::put('marketplace-accounts/{account}/status-map', [SyncLogController::class, 'saveStatusMap']);
     Route::post('marketplace-accounts/{account}/check-webhooks', [SyncLogController::class, 'checkWebhooks'])->middleware('throttle:6,1,marketplace.marketplace-accounts.x.check-webhooks');
 
     Route::get('marketplace-accounts/{account}/price-changes', [PriceController::class, 'pending']);

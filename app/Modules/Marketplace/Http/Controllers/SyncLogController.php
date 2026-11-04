@@ -3,6 +3,7 @@
 namespace App\Modules\Marketplace\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Marketplace\Connectors\WooCommerce\WooCommerceConnector;
 use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
@@ -10,7 +11,11 @@ use App\Modules\Marketplace\Models\SyncError;
 use App\Modules\Marketplace\Models\SyncRun;
 use App\Modules\Marketplace\Services\SyncErrorLog;
 use App\Modules\Marketplace\Services\WooCommerceConnectService;
+use App\Modules\Orders\Domain\OrderStatus;
+use App\Modules\Orders\Models\Order;
+use App\Modules\Orders\Services\OrderIngestor;
 use App\Modules\Orders\Services\OrderSync;
+use App\Modules\Orders\Services\StatusMapper;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -19,6 +24,8 @@ use Illuminate\Validation\ValidationException;
 /** Sync history (one row per pass) and sync errors (one row per order that could not be synced). */
 class SyncLogController extends Controller
 {
+    public function __construct(private readonly AuditLogger $audit) {}
+
     public function runs(Request $request): JsonResponse
     {
         $this->authorize('viewAny', MarketplaceAccount::class);
@@ -125,6 +132,58 @@ class SyncLogController extends Controller
         abort_unless($account->isActive() && $account->marketplace === WooCommerceConnector::MARKETPLACE, 422, 'Chỉ kiểm tra được webhook của website WooCommerce đang kết nối.');
 
         return response()->json(['data' => $service->checkWebhooks($account)]);
+    }
+
+    /** The store's status map: shared defaults, the store's own entries, and the raw statuses its orders came with. */
+    public function statusMap(MarketplaceAccount $account, StatusMapper $mapper): JsonResponse
+    {
+        $this->authorize('viewAny', MarketplaceAccount::class);
+
+        return response()->json(['data' => $this->mapData($account, $mapper)]);
+    }
+
+    /** Saves the store's own entries (null removes one) and moves the orders still waiting on an unmapped status. */
+    public function saveStatusMap(Request $request, MarketplaceAccount $account, StatusMapper $mapper, OrderIngestor $ingestor): JsonResponse
+    {
+        $this->authorize('connect', MarketplaceAccount::class);
+        $data = $request->validate([
+            'map' => ['present', 'array', 'max:50'],
+            'map.*' => ['nullable', Rule::in(array_values(array_diff(OrderStatus::ALL, [OrderStatus::UNKNOWN_STATUS])))],
+        ]);
+        foreach (array_keys($data['map']) as $raw) {
+            if (! preg_match('/^[a-z0-9_-]{1,40}(:[a-z_]{1,20})?$/', (string) $raw)) {
+                throw ValidationException::withMessages(['map' => "Mã trạng thái \"{$raw}\" không hợp lệ (chữ thường, số, gạch ngang)."]);
+            }
+        }
+
+        $map = array_filter(array_merge($account->statusMap(), $data['map']), fn ($v) => $v !== null);
+        $account->forceFill(['settings' => array_merge((array) $account->settings, ['status_map' => $map])])->save();
+        $this->audit->record('marketplace.status_map', $account, ['map' => $map]);
+
+        $moved = 0;
+        Order::query()->where('marketplace_account_id', $account->id)->where('status', OrderStatus::UNKNOWN_STATUS)
+            ->whereIn('raw_status', array_keys($map))->orderBy('id')->limit(500)->get()
+            ->each(function (Order $order) use ($ingestor, $mapper, $account, $request, &$moved) {
+                $ingestor->applyLocal($order, $mapper->map($account->marketplace, (string) $order->raw_status, $account), 'status_map', $request->user()->id);
+                $moved++;
+            });
+
+        return response()->json(['data' => $this->mapData($account, $mapper) + ['orders_moved' => $moved]]);
+    }
+
+    /** @return array<string, mixed> */
+    private function mapData(MarketplaceAccount $account, StatusMapper $mapper): array
+    {
+        $seen = Order::query()->where('marketplace_account_id', $account->id)->whereNotNull('raw_status')
+            ->selectRaw('raw_status, count(*) as orders, sum(status = ?) as unknown', [OrderStatus::UNKNOWN_STATUS])
+            ->groupBy('raw_status')->get();
+
+        return [
+            'defaults' => (object) $mapper->defaults($account->marketplace),
+            'custom' => (object) $account->statusMap(),
+            'seen' => $seen->map(fn ($r) => ['raw_status' => $r->raw_status, 'orders' => (int) $r->orders, 'unknown' => (int) $r->unknown])->values(),
+            'statuses' => array_values(array_diff(OrderStatus::ALL, [OrderStatus::UNKNOWN_STATUS])),
+        ];
     }
 
     /** @return array<string, mixed> */
