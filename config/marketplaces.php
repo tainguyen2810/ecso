@@ -5,6 +5,7 @@ use App\Modules\Marketplace\Connectors\Lazada\LazadaConnector;
 use App\Modules\Marketplace\Connectors\Shopee\ShopeeConnector;
 use App\Modules\Marketplace\Connectors\Tiki\TikiConnector;
 use App\Modules\Marketplace\Connectors\TikTok\TikTokConnector;
+use App\Modules\Marketplace\Connectors\WooCommerce\WooCommerceConnector;
 
 return [
     // Marketplaces shown in the UI. Without a connector class below they are listed as "not available yet".
@@ -13,11 +14,14 @@ return [
         'tiktok' => 'TikTok Shop',
         'lazada' => 'Lazada',
         'tiki' => 'Tiki',
+        'woocommerce' => 'WooCommerce',
         'fake' => 'Sàn giả lập (Fake)',
     ],
 
     'connectors' => [
         'fake' => FakeConnector::class,
+        // Verified against the WooCommerce REST API v3 docs; a store connects with its own API keys (no partner app).
+        'woocommerce' => WooCommerceConnector::class,
         // Skeleton: all capabilities UNKNOWN until verified with official docs and partner credentials.
         'shopee' => ShopeeConnector::class,
         'tiktok' => TikTokConnector::class,
@@ -69,6 +73,15 @@ return [
         // Consecutive failed pushes that open the circuit breaker of a shop, and for how long.
         'circuit_threshold' => 5,
         'circuit_open_seconds' => 300,
+    ],
+
+    'woocommerce' => [
+        'timeout' => (int) env('WOOCOMMERCE_TIMEOUT', 25),
+        // Development only: allow http:// stores and stores on private networks. Never enable on production.
+        'allow_http' => (bool) env('WOOCOMMERCE_ALLOW_HTTP', false),
+        'allow_private_hosts' => (bool) env('WOOCOMMERCE_ALLOW_PRIVATE_HOSTS', false),
+        // Lifetime of a "Phê duyệt trên website" attempt (Woo posts the keys to ECSO, then sends the user back).
+        'authorize_ttl' => 900,
     ],
 
     // Polling window overlap so an order updated during a sync is not missed.

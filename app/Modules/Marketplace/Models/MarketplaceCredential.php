@@ -16,15 +16,16 @@ class MarketplaceCredential extends Model
 {
     use BelongsToTenant;
 
-    protected $fillable = ['marketplace_account_id', 'access_token', 'refresh_token', 'access_expires_at', 'refresh_expires_at', 'scopes'];
+    protected $fillable = ['marketplace_account_id', 'access_token', 'refresh_token', 'webhook_secret', 'access_expires_at', 'refresh_expires_at', 'scopes'];
 
-    protected $hidden = ['access_token', 'refresh_token'];
+    protected $hidden = ['access_token', 'refresh_token', 'webhook_secret'];
 
     protected function casts(): array
     {
         return [
             'access_token' => 'encrypted',
             'refresh_token' => 'encrypted',
+            'webhook_secret' => 'encrypted',
             'access_expires_at' => 'datetime',
             'refresh_expires_at' => 'datetime',
             'scopes' => 'array',

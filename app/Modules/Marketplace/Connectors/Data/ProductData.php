@@ -6,7 +6,7 @@ namespace App\Modules\Marketplace\Connectors\Data;
 final class ProductData
 {
     /**
-     * @param  array<int, array{external_sku_id: string, seller_sku: ?string, name: ?string, price: string, stock: ?int}>  $variants
+     * @param  array<int, array{external_sku_id: string, seller_sku: ?string, name: ?string, price: string, stock: ?int, regular_price?: ?string, sale_price?: ?string}>  $variants
      */
     public function __construct(
         public readonly string $externalProductId,

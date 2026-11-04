@@ -25,7 +25,7 @@ class ReconcileOrdersCommand extends Command
             ->when($this->option('account'), fn ($q, $ulid) => $q->where('ulid', $ulid))->get();
 
         foreach ($accounts as $account) {
-            if (! $connectors->has($account->marketplace)
+            if (! $account->syncs('sync_orders') || ! $connectors->has($account->marketplace)
                 || ($connectors->for($account->marketplace)->capabilities()[Capability::ORDERS_LIST] ?? null) !== Capability::SUPPORTED) {
                 continue;
             }

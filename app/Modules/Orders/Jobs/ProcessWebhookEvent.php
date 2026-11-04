@@ -6,6 +6,7 @@ use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Exceptions\UnsupportedCapability;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Models\WebhookEvent;
+use App\Modules\Marketplace\Services\ListingService;
 use App\Modules\Orders\Services\OrderSync;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Support\TenantContext;
@@ -37,7 +38,7 @@ class ProcessWebhookEvent implements ShouldQueue
         return array_map(fn (int $s) => $s + random_int(0, (int) ceil($s / 5)), config('marketplaces.inventory_push.backoff'));
     }
 
-    public function handle(OrderSync $sync): void
+    public function handle(OrderSync $sync, ListingService $listings): void
     {
         $event = WebhookEvent::query()->find($this->webhookEventId);
         if (! $event || in_array($event->status, [WebhookEvent::PROCESSED, WebhookEvent::IGNORED], true)) {
@@ -55,8 +56,13 @@ class ProcessWebhookEvent implements ShouldQueue
 
         $event->forceFill(['tenant_id' => $account->tenant_id, 'marketplace_account_id' => $account->id, 'attempts' => $event->attempts + 1])->save();
 
-        if ($event->external_order_id === null) {
+        if ($event->external_order_id === null && $event->external_product_id === null) {
             $this->finish($event, WebhookEvent::IGNORED, "Loại sự kiện chưa xử lý: {$event->event_type}");
+
+            return;
+        }
+        if ($event->external_order_id !== null && ! $account->syncs('sync_orders')) {
+            $this->finish($event, WebhookEvent::IGNORED, 'Gian hàng đang tắt đồng bộ đơn hàng');
 
             return;
         }
@@ -64,8 +70,14 @@ class ProcessWebhookEvent implements ShouldQueue
         $tenant = Tenant::query()->findOrFail($account->tenant_id);
 
         try {
-            $result = TenantContext::run($tenant, function () use ($sync, $event) {
+            $result = TenantContext::run($tenant, function () use ($sync, $listings, $event) {
                 $account = MarketplaceAccount::query()->findOrFail($event->marketplace_account_id);
+
+                if ($event->external_order_id === null) {
+                    $counts = $listings->syncProduct($account, (string) $event->external_product_id);
+
+                    return ['result' => $counts['listings'] > 0 ? 'product_synced' : 'product_removed'];
+                }
 
                 return $sync->syncOne($account, $event->external_order_id, 'webhook', $event->id);
             });
