@@ -10,6 +10,8 @@ const row = (over: Partial<VoucherRow> = {}): VoucherRow => ({
     counts_in_pnl: true,
     party: { kind: 'supplier', id: 's1', name: 'Google <Ads>' },
     method: 'bank_transfer',
+    account: { id: 'f1', name: 'Vietcombank' },
+    counter_account: null,
     amount: 1250000,
     paid_at: '2026-11-03T08:00:00+07:00',
     document: null,
@@ -53,5 +55,15 @@ describe('voucher print', () => {
         const html = voucherHtml(auto, 'Shop A');
         expect(html).toContain('PHIẾU THU');
         expect(html).toContain('ĐÃ HỦY: Nhầm');
+    });
+});
+
+describe('transfer rows', () => {
+    it('prints a transfer slip without a payment method and links nowhere', () => {
+        const t = row({ source: 'transfer', direction: 'transfer', number: 'CQ-000001', method: 'transfer', party: { kind: 'other', id: null, name: 'Tiền mặt → Vietcombank' }, document: { kind: 'transfer', id: '01T', number: 'CQ-000001' } });
+        expect(documentLink(t)).toBeNull();
+        const html = voucherHtml(t, 'Shop');
+        expect(html).toContain('PHIẾU CHUYỂN QUỸ');
+        expect(html).toContain('Tiền mặt → Vietcombank');
     });
 });

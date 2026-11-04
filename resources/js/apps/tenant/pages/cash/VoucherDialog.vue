@@ -11,7 +11,7 @@ import { useToast } from '@/shared/composables/useToast';
 import { cn, formatDate, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { paymentMethods } from '../orders/labels';
-import { amountInWords, directionLabels, partyKinds, type Direction, type PartyKind, type VoucherRow, type VoucherType } from './voucher';
+import { amountInWords, defaultFund, directionLabels, partyKinds, type Direction, type Fund, type PartyKind, type VoucherRow, type VoucherType } from './voucher';
 
 interface Party {
     id: string;
@@ -32,7 +32,7 @@ const emit = defineEmits<{ saved: [voucher: VoucherRow | null] }>();
 const toast = useToast();
 const tenant = useTenantStore();
 
-const blank = () => ({ party_kind: 'other' as PartyKind, party_name: '', type: '', method: 'cash', amount: '', counts_in_pnl: true, reference: '', note: '', paid_at: '' });
+const blank = () => ({ party_kind: 'other' as PartyKind, party_name: '', type: '', method: 'cash', account: '', amount: '', counts_in_pnl: true, reference: '', note: '', paid_at: '' });
 const form = reactive(blank());
 const party = ref<Party | null>(null);
 const types = ref<VoucherType[]>([]);
@@ -58,6 +58,10 @@ const debtAllowed = computed(() =>
 const kinds = computed(() => (Object.keys(partyKinds) as PartyKind[]).filter((k) => (k === 'customer' ? tenant.can('customers.view') : k === 'supplier' ? tenant.can('purchasing.view') : true)));
 const amount = computed(() => Number(form.amount || 0));
 const supplierMethods = ['cash', 'bank_transfer', 'card', 'other'];
+const funds = ref<Fund[]>([]);
+const fundOptions = computed(() => funds.value.filter((f) => f.is_active).map((f) => ({ value: f.id, label: `${f.name} · ${formatMoney(f.balance)}` })));
+// The fund follows the payment method (its default fund) until the user picks one.
+watch(() => form.method, (m) => (form.account = defaultFund(funds.value, m)?.id ?? form.account));
 const methodOptions = computed(() =>
     Object.entries(paymentMethods)
         .filter(([v]) => (debtMode.value && form.party_kind === 'supplier' ? supplierMethods.includes(v) : receipt.value || v !== 'cod'))
@@ -88,7 +92,10 @@ watch(open, async (v) => {
     debtMode.value = false;
     key = newIdempotencyKey();
     try {
-        types.value = (await api.get('/cash-voucher-types', { params: { direction: props.direction } })).data.data;
+        const [t, f] = await Promise.all([api.get('/cash-voucher-types', { params: { direction: props.direction } }), api.get('/cash-accounts').catch(() => ({ data: { data: [] as Fund[] } }))]);
+        types.value = t.data.data;
+        funds.value = f.data.data;
+        form.account = defaultFund(funds.value, form.method)?.id ?? '';
         form.type = activeTypes.value[0]?.id ?? '';
     } catch (e) {
         error.value = e as ApiError;
@@ -145,7 +152,7 @@ function onAmount(e: Event) {
 async function save(again = false) {
     saving.value = true;
     error.value = null;
-    const common = { method: form.method, amount: form.amount, reference: form.reference || null, note: form.note || null, paid_at: form.paid_at ? new Date(form.paid_at).toISOString() : null };
+    const common = { method: form.method, account: form.account || null, amount: form.amount, reference: form.reference || null, note: form.note || null, paid_at: form.paid_at ? new Date(form.paid_at).toISOString() : null };
     try {
         let saved: VoucherRow | null = null;
         if (debtMode.value && party.value && form.party_kind === 'customer') {
@@ -242,6 +249,9 @@ async function save(again = false) {
             </FormField>
             <FormField label="Hình thức" for="v-method" :error="error?.field('method')">
                 <Select id="v-method" v-model="form.method" :options="methodOptions" data-testid="v-method" />
+            </FormField>
+            <FormField :label="receipt ? 'Vào quỹ' : 'Chi từ quỹ'" for="v-account" class="sm:col-span-2" :error="error?.field('account')">
+                <Select id="v-account" v-model="form.account" :options="fundOptions" data-testid="v-account" />
             </FormField>
 
             <FormField v-if="!debtMode" :label="receipt ? 'Loại phiếu thu' : 'Loại phiếu chi'" for="v-type" :error="error?.field('type')">

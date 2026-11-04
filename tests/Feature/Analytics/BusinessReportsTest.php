@@ -5,6 +5,9 @@ use App\Modules\Inventory\Notifications\LowStockNotification;
 use App\Modules\Sales\Models\SalesChannel;
 use Illuminate\Support\Facades\Notification;
 
+// 05:00 UTC is midday in the tenant's timezone, so dates built from now() are the same calendar day there.
+beforeEach(fn () => $this->travelTo(now()->setTime(5, 0)));
+
 function reportSale($user, $tenant, array $lines, array $extra = [])
 {
     $channel = $extra['channel'] ?? SalesChannel::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('name', SalesChannel::DEFAULT_NAME)->firstOrFail()->ulid;

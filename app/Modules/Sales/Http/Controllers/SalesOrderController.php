@@ -94,6 +94,7 @@ class SalesOrderController extends Controller
         $data = $request->validate([
             'kind' => ['nullable', Rule::in([OrderPayment::PAYMENT, OrderPayment::REFUND])],
             'method' => ['required', Rule::in(OrderPayment::METHODS)],
+            'account' => ['nullable', 'string', 'max:40'],
             'amount' => ['required', 'numeric', 'min:1', 'max:9999999999'],
             'reference' => ['nullable', 'string', 'max:100'],
             'note' => ['nullable', 'string', 'max:500'],

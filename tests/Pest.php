@@ -183,6 +183,31 @@ function wooWebhook($test, string $topic, array $payload, ?string $secret = null
         ->mapWithKeys(fn ($v, $k) => ['HTTP_'.strtoupper(str_replace('-', '_', $k)) => $v])->all() + ['CONTENT_TYPE' => 'application/json'], $body);
 }
 
+/** A voucher type id by name. */
+function cashType($user, $tenant, string $direction, string $name): string
+{
+    return collect(actingInTenant($user, $tenant)->getJson("/api/v1/cash-voucher-types?direction={$direction}")->assertOk()->json('data'))->firstWhere('name', $name)['id'];
+}
+
+/** A completed counter sale on credit for a customer. */
+function cashSale($user, $tenant, $variant, int $price, string $customer): string
+{
+    return actingInTenant($user, $tenant)->postJson('/api/v1/sales-orders', [
+        'channel_id' => defaultChannel($tenant)->ulid, 'stage' => 'completed', 'customer_id' => $customer,
+        'lines' => [['variant_id' => $variant->ulid, 'quantity' => 1, 'unit_price' => $price]],
+    ])->assertCreated()->json('data.id');
+}
+
+/** POST with an Idempotency-Key header. */
+function postOnce($user, $tenant, string $url, array $body, string $key)
+{
+    $test = actingInTenant($user, $tenant)->withHeader('Idempotency-Key', $key);
+    $response = $test->postJson($url, $body);
+    $test->flushHeaders(); // the next request of the test sends no key unless it asks for one
+
+    return $response;
+}
+
 /** Takes one permission away from a system role, as a business tightening its staff rights would. */
 function revoke(string $role, string $permission): void
 {

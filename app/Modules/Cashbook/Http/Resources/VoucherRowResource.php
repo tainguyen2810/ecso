@@ -8,7 +8,8 @@ use Illuminate\Support\Carbon;
 
 /**
  * A row of the voucher ledger (VoucherLedger): a hand-entered voucher or an automatic one from an order payment,
- * refund or supplier payment.
+ * refund or supplier payment, or a transfer between funds (direction "transfer", or one side of it when the list is
+ * filtered to a fund).
  *
  * @property object $resource
  */
@@ -27,6 +28,8 @@ class VoucherRowResource extends JsonResource
             'counts_in_pnl' => (bool) $r->counts_in_pnl,
             'party' => ['kind' => $r->party_kind, 'id' => $r->party_id, 'name' => $r->party_name],
             'method' => $r->method,
+            'account' => $r->account_id ? ['id' => $r->account_id, 'name' => $r->account_name] : null,
+            'counter_account' => $r->counter_account_name,
             'amount' => (float) $r->amount,
             'paid_at' => Carbon::parse($r->paid_at)->toIso8601String(),
             'document' => $r->document_kind ? ['kind' => $r->document_kind, 'id' => $r->document_id, 'number' => $r->document_number] : null,
