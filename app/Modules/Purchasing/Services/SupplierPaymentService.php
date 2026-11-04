@@ -4,9 +4,11 @@ namespace App\Modules\Purchasing\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Cashbook\Services\CashAccountService;
+use App\Modules\Cashbook\Support\PeriodLock;
 use App\Modules\Purchasing\Models\PurchaseOrder;
 use App\Modules\Purchasing\Models\Supplier;
 use App\Modules\Purchasing\Models\SupplierPayment;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -39,6 +41,9 @@ class SupplierPaymentService
                 }
             }
 
+            $paidAt = isset($data['paid_at']) ? Carbon::parse($data['paid_at']) : now();
+            PeriodLock::assertOpen($paidAt);
+
             $payment = new SupplierPayment([
                 'supplier_id' => $supplier->id,
                 'purchase_order_id' => $po?->id,
@@ -46,7 +51,7 @@ class SupplierPaymentService
                 'amount' => $amount,
                 'reference' => $data['reference'] ?? null,
                 'note' => $data['note'] ?? null,
-                'paid_at' => $data['paid_at'] ?? now(),
+                'paid_at' => $paidAt,
             ]);
             $payment->forceFill(['created_by' => Auth::id(), 'cash_account_id' => $this->accounts->resolve($data['account'] ?? null, $data['method'])])->save();
             if ($po) {
@@ -67,6 +72,7 @@ class SupplierPaymentService
             if ($payment->voided_at) {
                 throw ValidationException::withMessages(['payment' => 'Phiếu chi đã hủy.']);
             }
+            PeriodLock::assertOpen($payment->paid_at, 'payment', 'hủy');
             $payment->forceFill(['voided_at' => now(), 'voided_by' => Auth::id(), 'void_reason' => $reason])->save();
             if ($po) {
                 $this->recompute($po);

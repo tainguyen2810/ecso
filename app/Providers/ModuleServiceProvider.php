@@ -6,6 +6,8 @@ use App\Modules\Billing\Console\BillingSweepCommand;
 use App\Modules\Billing\Listeners\CountOrderUsage;
 use App\Modules\Billing\Payments\GatewayRegistry;
 use App\Modules\Cashbook\Models\CashAccount;
+use App\Modules\Cashbook\Models\CashClosing;
+use App\Modules\Cashbook\Models\CashCount;
 use App\Modules\Cashbook\Models\CashTransfer;
 use App\Modules\Cashbook\Models\CashVoucher;
 use App\Modules\Cashbook\Models\CashVoucherType;
@@ -117,7 +119,7 @@ class ModuleServiceProvider extends ServiceProvider
             Gate::policy($model, PurchasingPolicy::class);
         }
 
-        foreach ([CashVoucher::class, CashVoucherType::class, CashAccount::class, CashTransfer::class] as $model) {
+        foreach ([CashVoucher::class, CashVoucherType::class, CashAccount::class, CashTransfer::class, CashClosing::class, CashCount::class] as $model) {
             Gate::policy($model, CashbookPolicy::class);
         }
 

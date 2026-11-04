@@ -7,7 +7,8 @@ use App\Modules\Tenancy\Policies\PermissionPolicy;
 
 /**
  * Receipt and payment vouchers, their types and funds: anyone with finance access reads them (fund balances too),
- * finance.vouchers writes vouchers, finance.accounts manages funds and transfers.
+ * finance.vouchers writes vouchers and finance.vouchers.void voids them, finance.close counts funds and closes the
+ * books, finance.accounts manages funds and transfers.
  */
 class CashbookPolicy extends PermissionPolicy
 {
@@ -33,7 +34,13 @@ class CashbookPolicy extends PermissionPolicy
 
     public function void(User $user): bool
     {
-        return $this->allows('finance.vouchers');
+        return $this->allows('finance.vouchers.void');
+    }
+
+    /** Counting funds, closing and reopening the books. */
+    public function close(User $user): bool
+    {
+        return $this->allows('finance.close');
     }
 
     /** Funds and transfers between them. */

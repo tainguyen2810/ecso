@@ -26,7 +26,7 @@ watch(open, () => ((voiding.value = false), (reason.value = ''), (error.value = 
 
 const v = computed(() => props.voucher);
 const isTransfer = computed(() => v.value?.source === 'transfer');
-const canVoid = computed(() => !!v.value && !v.value.voided_at && (isTransfer.value ? tenant.can('finance.accounts') : v.value.source === 'voucher' && tenant.can('finance.vouchers')));
+const canVoid = computed(() => !!v.value && !v.value.voided_at && (isTransfer.value ? tenant.can('finance.accounts') : v.value.source === 'voucher' && tenant.can('finance.vouchers.void')));
 /** Sign and colour of the amount: a transfer in the list of every fund is neither money in nor out. */
 const tone = computed(() => (v.value?.direction === 'receipt' ? { sign: '+', cls: 'text-success' } : v.value?.direction === 'payment' ? { sign: '−', cls: 'text-destructive' } : { sign: '', cls: '' }));
 const rows = computed(() => {
