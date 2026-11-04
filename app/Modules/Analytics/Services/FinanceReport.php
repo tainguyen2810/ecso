@@ -3,6 +3,7 @@
 namespace App\Modules\Analytics\Services;
 
 use App\Modules\Analytics\Support\ReturnValues;
+use App\Modules\Analytics\Support\RevenuePolicy;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Tenancy\Support\TenantContext;
@@ -12,7 +13,8 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Tenant finance overview. Separates what is known from what is not:
- *  - ordered / completed revenue are what buyers paid on the marketplace (not money received);
+ *  - ordered revenue is what buyers ordered; completed revenue follows RevenuePolicy (marketplaces at completion, own
+ *    channels at delivery). Neither is money received;
  *  - cost of goods comes from the stock ledger cost captured when goods left the warehouse;
  *  - marketplace fees and the actual payout need settlement data from the marketplace API, which no connector
  *    provides yet, so they are reported as UNKNOWN (null) instead of being estimated;
@@ -31,28 +33,25 @@ class FinanceReport
             ->selectRaw('COUNT(*) as n, COALESCE(SUM(total), 0) as total, COALESCE(SUM(subtotal - discount), 0) as goods')->first();
         $cancelled = (clone $placed)->where('status', OrderStatus::CANCELLED)->toBase()->selectRaw('COUNT(*) as n, COALESCE(SUM(total), 0) as total')->first();
 
-        // Delivered orders, including those with a return request still open: they stay in revenue until the return
-        // is approved, and the approved return is then subtracted below.
-        $completedStatuses = [OrderStatus::DELIVERED, OrderStatus::COMPLETED, OrderStatus::RETURN_REQUESTED];
-        $completed = $orders()->whereIn('status', $completedStatuses)->whereBetween('delivered_at', [$from, $to])->toBase()
+        // Revenue recognised in the period (RevenuePolicy): marketplace orders at completion, own channels and the
+        // website at delivery. Orders with an open return request stay in; the approved return is subtracted below.
+        $recognized = fn () => RevenuePolicy::recognized(DB::table('orders')->where('orders.tenant_id', $this->tenantId()), 'orders', $from, $to)
+            ->when($accountId, fn ($q) => $q->where('orders.marketplace_account_id', $accountId));
+        $completed = $recognized()
+            ->selectRaw('COUNT(*) as n, COALESCE(SUM(total), 0) as total, COALESCE(SUM(subtotal - discount), 0) as goods, COALESCE(SUM(shipping_fee), 0) as shipping')->first();
+        $awaiting = RevenuePolicy::awaitingCompletion(DB::table('orders')->where('orders.tenant_id', $this->tenantId()), 'orders', $from, $to)
+            ->when($accountId, fn ($q) => $q->where('orders.marketplace_account_id', $accountId))
             ->selectRaw('COUNT(*) as n, COALESCE(SUM(total), 0) as total, COALESCE(SUM(subtotal - discount), 0) as goods')->first();
 
-        $cogs = (float) DB::table('order_items')->join('orders', 'orders.id', '=', 'order_items.order_id')
-            ->where('orders.tenant_id', $this->tenantId())
-            ->when($accountId, fn ($q) => $q->where('orders.marketplace_account_id', $accountId))
-            ->whereIn('orders.status', $completedStatuses)->whereBetween('orders.delivered_at', [$from, $to])
-            ->selectRaw('COALESCE(SUM(order_items.cost_snapshot * order_items.quantity), 0) as cogs')->value('cogs');
-        $missingCost = (int) DB::table('order_items')->join('orders', 'orders.id', '=', 'order_items.order_id')
-            ->where('orders.tenant_id', $this->tenantId())
-            ->when($accountId, fn ($q) => $q->where('orders.marketplace_account_id', $accountId))
-            ->whereIn('orders.status', $completedStatuses)->whereBetween('orders.delivered_at', [$from, $to])
-            ->whereNull('order_items.cost_snapshot')->where('order_items.mapping_status', '!=', 'service')->count();
+        $lines = fn () => $recognized()->join('order_items', 'order_items.order_id', '=', 'orders.id');
+        $cogs = (float) $lines()->selectRaw('COALESCE(SUM(order_items.cost_snapshot * order_items.quantity), 0) as cogs')->value('cogs');
+        $missingCost = (int) $lines()->whereNull('order_items.cost_snapshot')->where('order_items.mapping_status', '!=', 'service')->count();
 
-        // Returns of the orders counted above only: an order that ended RETURNED or CANCELLED is already out of revenue
-        // and cost, so subtracting its return again would count it twice.
-        $returns = fn () => DB::table('order_returns as r')->join('orders as ro', 'ro.id', '=', 'r.order_id')
+        // Returns of recognised orders only: an order that ended RETURNED or CANCELLED, or is not recognised yet, is
+        // not in revenue and cost, so subtracting its return would count it twice.
+        $returns = fn () => RevenuePolicy::recognized(DB::table('order_returns as r')->join('orders as ro', 'ro.id', '=', 'r.order_id'), 'ro')
             ->leftJoinSub(ReturnValues::lines(), 'rv', 'rv.order_return_id', '=', 'r.id')
-            ->where('r.tenant_id', $this->tenantId())->whereIn('r.status', ReturnValues::COUNTED)->whereIn('ro.status', $completedStatuses)
+            ->where('r.tenant_id', $this->tenantId())->whereIn('r.status', ReturnValues::COUNTED)
             ->when($accountId, fn ($q) => $q->where('ro.marketplace_account_id', $accountId));
         $refunds = (float) $returns()->whereBetween('r.created_at', [$from, $to])->selectRaw('COALESCE(SUM('.ReturnValues::valueSql().'), 0) as v')->value('v');
         // Cost of returned goods put back on the shelf, at the cost captured when they shipped.
@@ -87,7 +86,10 @@ class FinanceReport
         return [
             'range' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
             'ordered' => ['orders' => (int) $ordered->n, 'revenue' => (float) $ordered->total, 'goods' => (float) $ordered->goods],
-            'completed' => ['orders' => (int) $completed->n, 'revenue' => (float) $completed->total, 'goods' => $completedGoods],
+            // Recognised revenue. goods = goods after discounts (net of shipping); shipping = charged to the buyer, apart.
+            'completed' => ['orders' => (int) $completed->n, 'revenue' => (float) $completed->total, 'goods' => $completedGoods, 'shipping' => (float) $completed->shipping],
+            // Marketplace orders delivered in the period, not completed by the marketplace yet: provisional, not in profit.
+            'awaiting_completion' => ['orders' => (int) $awaiting->n, 'revenue' => (float) $awaiting->total, 'goods' => (float) $awaiting->goods],
             'cancelled' => ['orders' => (int) $cancelled->n, 'revenue' => (float) $cancelled->total],
             'refunds' => $refunds,
             'cogs' => $cogs,

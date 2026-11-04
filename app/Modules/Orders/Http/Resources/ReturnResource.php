@@ -46,6 +46,9 @@ class ReturnResource extends JsonResource
             ])),
             'lines_count' => $this->whenCounted('lines'),
             'goods_value' => $this->whenLoaded('lines', fn () => $this->goodsValue()),
+            // Refunds booked from this return, and what may still be refunded (own-channel orders only).
+            'refunded' => $this->whenLoaded('lines', fn () => $this->refunded()),
+            'refundable' => $this->whenLoaded('lines', fn () => $this->order?->isManual() ? $this->refundable() : '0.00'),
             'created_by' => $this->whenLoaded('creator', fn () => $this->creator?->name),
             'inspected_by' => $this->whenLoaded('inspector', fn () => $this->inspector?->name),
             'received_at' => $this->received_at?->toIso8601String(),

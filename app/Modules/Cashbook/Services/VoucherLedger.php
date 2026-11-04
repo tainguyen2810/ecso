@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\DB;
  */
 class VoucherLedger
 {
-    public const SOURCES = ['voucher', 'order_payment', 'supplier_payment'];
+    public const SOURCES = ['voucher', 'order_payment', 'supplier_payment', 'shift_movement'];
 
     public function __construct(private readonly TenantContext $context) {}
 
@@ -94,6 +94,17 @@ class VoucherLedger
                 ."CASE WHEN po.id IS NULL THEN NULL ELSE 'purchase' END as document_kind, po.ulid as document_id, po.number as document_number, "
                 .'sp.reference, sp.note, u.name as created_by, sp.voided_at, sp.void_reason, sp.created_at');
 
-        return DB::query()->fromSub($vouchers->unionAll($orders)->unionAll($suppliers), 'all_vouchers')->selectRaw("source, {$columns}");
+        // Cash put into or taken out of a cashier's drawer during a shift (POS "Thu/chi trong ca").
+        $shiftMoves = DB::table('cash_shift_movements as m')
+            ->join('cash_shifts as cs', 'cs.id', '=', 'm.cash_shift_id')
+            ->leftJoin('users as u', 'u.id', '=', 'm.created_by')
+            ->where('m.tenant_id', $tenant)
+            ->selectRaw("'shift_movement' as source, CAST(m.id AS CHAR) as id, NULL as number, CASE WHEN m.kind = 'out' THEN 'payment' ELSE 'receipt' END as direction, "
+                ."NULL as type_id, CASE WHEN m.kind = 'out' THEN 'Chi tiền trong ca' ELSE 'Thu tiền vào ca' END as type_name, 0 as counts_in_pnl, "
+                ."'staff' as party_kind, NULL as party_id, u.name as party_name, 'cash' as method, m.amount, m.created_at as paid_at, "
+                ."'shift' as document_kind, cs.ulid as document_id, cs.number as document_number, NULL as reference, m.reason as note, u.name as created_by, "
+                .'NULL as voided_at, NULL as void_reason, m.created_at');
+
+        return DB::query()->fromSub($vouchers->unionAll($orders)->unionAll($suppliers)->unionAll($shiftMoves), 'all_vouchers')->selectRaw("source, {$columns}");
     }
 }

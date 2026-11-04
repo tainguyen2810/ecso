@@ -26,6 +26,28 @@ export interface Cart {
     tier?: 'retail' | 'wholesale';
     groupPercent?: number;
     discountAuto?: boolean;
+    /** Paid with several methods ("Chia nhiều hình thức"): one row per method; null = one method (`method`). */
+    split?: SplitRow[] | null;
+}
+
+export interface SplitRow {
+    method: Cart['method'];
+    amount: number | string;
+}
+
+/**
+ * Payments sent for a split sale: rows with an amount, same method merged. Returns an error when the rows add up to
+ * more than the total (no change is given on a split payment).
+ */
+export function splitPayments(rows: SplitRow[], total: number): { payments: { method: Cart['method']; amount: number }[]; paid: number; error: string | null } {
+    const byMethod = new Map<Cart['method'], number>();
+    for (const r of rows) {
+        const amount = Math.round(Number(r.amount) || 0);
+        if (amount > 0) byMethod.set(r.method, (byMethod.get(r.method) ?? 0) + amount);
+    }
+    const payments = [...byMethod].map(([method, amount]) => ({ method, amount }));
+    const paid = payments.reduce((s, p) => s + p.amount, 0);
+    return { payments, paid, error: paid > total ? 'Tổng các hình thức thanh toán lớn hơn số khách phải trả.' : null };
 }
 
 export function emptyCart(no: number): Cart {

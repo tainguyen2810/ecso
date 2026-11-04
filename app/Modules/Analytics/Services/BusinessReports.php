@@ -35,6 +35,9 @@ class BusinessReports
 
     private const EXCLUDED = [OrderStatus::CANCELLED, OrderStatus::RETURNED];
 
+    /** Rows listed in the cash book; totals and balances always cover the whole period. */
+    public const CASHBOOK_ROWS = 5000;
+
     public function __construct(private readonly TenantContext $context) {}
 
     /**
@@ -202,7 +205,7 @@ class BusinessReports
      *
      * @return array<string, mixed>
      */
-    public function cashbook(CarbonImmutable $from, CarbonImmutable $to, ?string $method = null): array
+    public function cashbook(CarbonImmutable $from, CarbonImmutable $to, ?string $method = null, int $maxRows = self::CASHBOOK_ROWS): array
     {
         $customer = DB::table('order_payments as op')
             ->join('orders as o', 'o.id', '=', 'op.order_id')
@@ -231,23 +234,26 @@ class BusinessReports
 
         $all = DB::query()->fromSub($customer->unionAll($supplier)->unionAll($vouchers), 'e');
         $opening = (float) (clone $all)->where('paid_at', '<', $from)->sum('amount');
-        $entries = (clone $all)->whereBetween('paid_at', [$from, $to])->orderBy('paid_at')->limit(5000)->get();
 
-        $balance = $opening;
+        // Totals come from SQL over the whole period; only the list of rows is capped. Capping the rows before
+        // adding them up gave a wrong closing balance on busy periods.
+        $period = (clone $all)->whereBetween('paid_at', [$from, $to]);
+        $methods = (clone $period)->groupBy('method')
+            ->selectRaw('method, COUNT(*) as n, COALESCE(SUM(CASE WHEN amount >= 0 THEN amount ELSE 0 END), 0) as total_in, COALESCE(SUM(CASE WHEN amount < 0 THEN -amount ELSE 0 END), 0) as total_out')
+            ->orderBy('method')->get();
+        $in = (float) $methods->sum('total_in');
+        $out = (float) $methods->sum('total_out');
+        $count = (int) $methods->sum('n');
+        $closing = round($opening + $in - $out, 2);
+
+        // Only the newest rows are listed. Their balances start from the closing balance less what they add up to,
+        // so each row shows the money in the fund right after it even when older rows are left out.
+        $entries = (clone $period)->orderBy('paid_at')->offset(max(0, $count - $maxRows))->limit($maxRows)->get();
+        $balance = $closing - (float) $entries->sum(fn ($e) => (float) $e->amount);
         $rows = [];
-        $byMethod = [];
-        $in = 0.0;
-        $out = 0.0;
         foreach ($entries as $e) {
             $amount = (float) $e->amount;
             $balance += $amount;
-            if ($amount >= 0) {
-                $in += $amount;
-            } else {
-                $out -= $amount;
-            }
-            $byMethod[$e->method] ??= ['method' => $e->method, 'in' => 0.0, 'out' => 0.0];
-            $byMethod[$e->method][$amount >= 0 ? 'in' : 'out'] += abs($amount);
             $rows[] = [
                 'paid_at' => CarbonImmutable::parse($e->paid_at)->toIso8601String(),
                 'type' => $e->type,
@@ -268,8 +274,10 @@ class BusinessReports
             'opening' => round($opening, 2),
             'in' => round($in, 2),
             'out' => round($out, 2),
-            'closing' => round($balance, 2),
-            'by_method' => array_values($byMethod),
+            'closing' => $closing,
+            'by_method' => $methods->map(fn ($m) => ['method' => $m->method, 'in' => round((float) $m->total_in, 2), 'out' => round((float) $m->total_out, 2)])->values()->all(),
+            'count' => $count,
+            'truncated' => $count > count($rows),
             'rows' => array_reverse($rows), // newest first
         ];
     }

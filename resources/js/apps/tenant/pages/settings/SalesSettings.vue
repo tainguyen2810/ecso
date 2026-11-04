@@ -57,6 +57,7 @@ function cancel() {
             <SettingsSection title="Bán tại quầy" description="Áp dụng riêng cho màn hình bán tại quầy.">
                 <div class="divide-y">
                     <Switch v-model="sales.form.value.pos_require_cash" label="Bắt buộc nhập tiền khách đưa khi trả tiền mặt" hint="Để tính tiền thừa và đối chiếu két cuối ca." data-testid="pos-require-cash" />
+                    <Switch v-model="sales.form.value.pos_require_shift" label="Bắt buộc mở ca khi bán tại quầy" hint="Mọi đơn bán tại quầy và tiền thu đều được ghi vào ca của thu ngân để đối chiếu két." data-testid="pos-require-shift" />
                     <Switch v-model="sales.form.value.pos_auto_print" label="Tự in hóa đơn sau khi thanh toán" hint="In theo khổ mặc định ở Mẫu in." data-testid="pos-auto-print" />
                 </div>
             </SettingsSection>

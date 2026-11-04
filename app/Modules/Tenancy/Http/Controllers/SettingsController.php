@@ -157,6 +157,7 @@ class SettingsController extends Controller
                 'allow_change_sale_time' => ['sometimes', 'boolean'],
                 'invoice_copies' => ['sometimes', 'integer', 'between:1,3'],
                 'pos_require_cash' => ['sometimes', 'boolean'],
+                'pos_require_shift' => ['sometimes', 'boolean'],
                 'pos_auto_print' => ['sometimes', 'boolean'],
             ],
             'reasons' => [

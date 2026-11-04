@@ -15,7 +15,7 @@ import { paymentMethods } from '../orders/labels';
 import { printInvoice } from '../orders/invoice';
 import { printShopFrom } from '../orders/printShop';
 import { useSettingsStore } from '@/shared/stores/settings';
-import { addToCart, applyGroup, cartTotals, emptyCart, quickCash, syncGroupDiscount, type Cart } from './pos';
+import { addToCart, applyGroup, cartTotals, emptyCart, quickCash, splitPayments, syncGroupDiscount, type Cart } from './pos';
 import ShiftPanel from './ShiftPanel.vue';
 import type { CashShift, Customer, OrderDetail, SalesChannel, Variant, Warehouse } from '@/shared/types';
 
@@ -177,7 +177,13 @@ function closeCart(i: number) {
     active.value = Math.min(active.value, carts.value.length - 1);
 }
 
-const received = computed(() => (cart.value.received === '' ? totals.value.total : Number(cart.value.received) || 0));
+const split = computed(() => (cart.value.split ? splitPayments(cart.value.split, totals.value.total) : null));
+const received = computed(() => (split.value ? split.value.paid : cart.value.received === '' ? totals.value.total : Number(cart.value.received) || 0));
+
+/** "Chia nhiều hình thức": e.g. part cash, part bank transfer. Starts with the whole amount on the current method. */
+function toggleSplit() {
+    cart.value.split = cart.value.split ? null : [{ method: cart.value.method, amount: totals.value.total }, { method: posMethods.value.find((m) => m !== cart.value.method) ?? 'bank_transfer', amount: '' }];
+}
 const change = computed(() => Math.max(0, received.value - totals.value.total));
 const shortfall = computed(() => Math.max(0, totals.value.total - received.value));
 
@@ -191,6 +197,10 @@ async function pay() {
     }
     if (settings.data?.sales.pos_require_cash && cart.value.method === 'cash' && cart.value.received === '' && totals.value.total > 0) {
         error.value = 'Nhập số tiền khách đưa trước khi thanh toán.';
+        return;
+    }
+    if (split.value?.error) {
+        error.value = split.value.error;
         return;
     }
     if (shortfall.value > 0 && !cart.value.customer) {
@@ -207,10 +217,11 @@ async function pay() {
             channel_id: channelId.value,
             warehouse_id: warehouseId.value,
             stage: 'completed',
+            counter: true,
             customer_id: cart.value.customer?.id ?? null,
             discount: Number(cart.value.discount) || 0,
             lines: cart.value.lines.map((l) => ({ variant_id: l.variant_id, quantity: l.quantity, unit_price: l.unit_price, discount: l.discount })),
-            payments: collected > 0 ? [{ method: cart.value.method, amount: collected }] : [],
+            payments: split.value ? split.value.payments : collected > 0 ? [{ method: cart.value.method, amount: collected }] : [],
         }, idempotent(key));
         toast.success(`Đã bán ${data.data.external_order_id}${change.value > 0 ? ` · trả lại khách ${formatMoney(change.value)}` : ''}`);
         if (autoPrint.value) {
@@ -361,7 +372,20 @@ const quick = computed(() => quickCash(totals.value.total));
                 <div class="flex items-center justify-between"><span class="text-muted-foreground">Giảm giá<template v-if="cart.discountAuto"> (nhóm {{ cart.groupPercent }}%)</template><template v-if="cart.tier === 'wholesale'"> · giá buôn</template></span><input v-model="cart.discount" type="number" min="0" :disabled="!canEditPrice" class="h-7 w-28 rounded-md border bg-card px-2 text-right tabular-nums disabled:bg-muted/50" data-testid="pos-discount" @input="cart.discountAuto = false" /></div>
                 <div class="flex justify-between text-lg font-semibold"><span>Khách phải trả</span><span class="tabular-nums" data-testid="pos-total">{{ formatMoney(totals.total) }}</span></div>
 
-                <div class="grid gap-1" :style="{ gridTemplateColumns: `repeat(${Math.max(posMethods.length, 1)}, minmax(0, 1fr))` }">
+                <div v-if="cart.split" class="space-y-1.5 rounded-md border p-2" data-testid="pos-split">
+                    <div v-for="(r, i) in cart.split" :key="i" class="flex items-center gap-2">
+                        <select v-model="r.method" class="h-8 flex-1 rounded-md border bg-card px-2 text-sm" :data-testid="`pos-split-method-${i}`">
+                            <option v-for="m in posMethods" :key="m" :value="m">{{ paymentMethods[m] }}</option>
+                        </select>
+                        <input v-model="r.amount" type="number" min="0" class="h-8 w-32 rounded-md border bg-card px-2 text-right tabular-nums" :data-testid="`pos-split-amount-${i}`" />
+                        <Button v-if="cart.split.length > 1" variant="ghost" size="icon" class="size-7" title="Bỏ dòng" @click="cart.split.splice(i, 1)"><X /></Button>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <button type="button" class="text-xs font-medium text-primary hover:underline" @click="cart.split.push({ method: posMethods[0] ?? 'cash', amount: '' })">+ Thêm hình thức</button>
+                        <button type="button" class="text-xs text-muted-foreground hover:underline" data-testid="pos-split-off" @click="toggleSplit">Một hình thức</button>
+                    </div>
+                </div>
+                <div v-else class="grid gap-1" :style="{ gridTemplateColumns: `repeat(${Math.max(posMethods.length, 1)}, minmax(0, 1fr))` }">
                     <button
                         v-for="m in posMethods"
                         :key="m"
@@ -373,11 +397,12 @@ const quick = computed(() => quickCash(totals.value.total));
                         <component :is="methodIcons[m]" class="size-4" />{{ paymentMethods[m] }}
                     </button>
                 </div>
-                <div class="flex items-center justify-between gap-2">
+                <button v-if="!cart.split && posMethods.length > 1" type="button" class="text-xs font-medium text-primary hover:underline" data-testid="pos-split-on" @click="toggleSplit">Chia nhiều hình thức thanh toán</button>
+                <div v-if="!cart.split" class="flex items-center justify-between gap-2">
                     <span class="text-muted-foreground">Khách đưa</span>
                     <input v-model="cart.received" type="number" min="0" :placeholder="String(totals.total)" class="h-8 w-36 rounded-md border bg-card px-2 text-right text-base tabular-nums" data-testid="pos-received" />
                 </div>
-                <div v-if="cart.method === 'cash' && totals.total > 0" class="flex flex-wrap gap-1">
+                <div v-if="!cart.split && cart.method === 'cash' && totals.total > 0" class="flex flex-wrap gap-1">
                     <button v-for="q in quick" :key="q" type="button" class="rounded border px-2 py-0.5 text-xs tabular-nums hover:bg-muted" @click="cart.received = q">{{ formatNumber(q) }}</button>
                 </div>
                 <div v-if="change > 0" class="flex justify-between font-medium text-success"><span>Trả lại khách</span><span class="tabular-nums" data-testid="pos-change">{{ formatMoney(change) }}</span></div>

@@ -25,4 +25,5 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::get('returns/{return}', [ReturnController::class, 'show']);
     Route::post('returns/{return}/status', [ReturnController::class, 'move']);
     Route::post('returns/{return}/inspect', [ReturnController::class, 'inspect']);
+    Route::post('returns/{return}/refund', [ReturnController::class, 'refund'])->middleware('idempotent');
 });
