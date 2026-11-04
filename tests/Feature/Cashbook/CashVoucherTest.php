@@ -89,8 +89,11 @@ it('records receipt and payment vouchers, lists them with automatic ones and voi
     expect($finance['other_income'])->toEqual(30000)->and($finance['other_expenses'])->toEqual(1000000);
     $pl = collect(actingInTenant($owner, $tenant)->getJson('/api/v1/reports/profit-loss')->assertOk()->json('data.lines'))->keyBy('key');
     expect($pl['other_income']['current'])->toEqual(30000)
-        ->and($pl['other_expenses']['current'])->toEqual(1000000)
-        ->and($pl['profit']['current'])->toEqual($pl['gross_profit']['current'] - $pl['stock_loss']['current'] + 30000 - 1000000);
+        // Advertising is a selling expense: it lowers contribution profit.
+        ->and($pl['selling_expenses']['current'])->toEqual(1000000)
+        ->and($pl['operating_expenses']['current'])->toEqual(0)
+        ->and($pl['contribution_profit']['current'])->toEqual($pl['gross_profit']['current'] - $pl['marketplace_fees']['current'] + $pl['shipping']['current'] - 1000000)
+        ->and($pl['profit']['current'])->toEqual($pl['contribution_profit']['current'] - $pl['stock_loss']['current'] + 30000);
 
     actingInTenant($owner, $tenant)->postJson("/api/v1/cash-vouchers/{$first['id']}/void", [])->assertUnprocessable();
     actingInTenant($owner, $tenant)->postJson("/api/v1/cash-vouchers/{$first['id']}/void", ['reason' => 'Nhập nhầm'])
