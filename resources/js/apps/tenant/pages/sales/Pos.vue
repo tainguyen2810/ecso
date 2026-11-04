@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Banknote, Clock, CreditCard, History, Minus, Plus, Printer, QrCode, Trash2, UserRound, Wallet, X } from 'lucide-vue-next';
+import { Banknote, ChevronDown, Clock, CreditCard, History, Minus, Plus, Printer, QrCode, Trash2, UserRound, Wallet, X } from 'lucide-vue-next';
 import { RouterLink } from 'vue-router';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -36,6 +36,8 @@ const active = ref(0);
 const cart = computed(() => carts.value[active.value]!);
 const taxRule = computed(() => ({ rate: Number(settings.data?.tax.sale_rate) || 0, included: settings.data?.tax.prices_include_tax ?? true }));
 const totals = computed(() => cartTotals(cart.value, taxRule.value));
+// Phones and small tablets: the cart is a sheet over the products, opened from the bar at the bottom.
+const cartOpen = ref(false);
 
 const search = ref('');
 const results = ref<Variant[]>([]);
@@ -215,6 +217,7 @@ async function pay() {
             lines: cart.value.lines.map((l) => ({ variant_id: l.variant_id, quantity: l.quantity, unit_price: l.unit_price, discount: l.discount })),
             payments: split.value ? split.value.payments : collected > 0 ? [{ method: cart.value.method, amount: collected }] : [],
         }, idempotent(key));
+        cartOpen.value = false;
         toast.success(`Đã bán ${data.data.external_order_id}${change.value > 0 ? ` · trả lại khách ${formatMoney(change.value)}` : ''}`);
         if (autoPrint.value) {
             const detail = await api.get(`/orders/${data.data.id}`);
@@ -274,13 +277,13 @@ const quick = computed(() => quickCash(totals.value.total));
         <!-- Products -->
         <div class="flex min-h-0 flex-1 flex-col gap-3">
             <div class="flex flex-wrap items-center gap-2">
-                <Input ref="searchInput" v-model="search" class="min-w-64 flex-1 text-base" placeholder="Quét mã vạch hoặc tìm sản phẩm (F2)…" data-testid="pos-search" @keydown.enter.prevent="onSearchEnter" />
-                <Select v-model="channelId" class="w-48" :options="channels.map((c) => ({ value: c.id, label: c.name }))" aria-label="Kênh bán" />
-                <Select v-model="warehouseId" class="w-40" :options="warehouses.filter((w) => w.status === 'active').map((w) => ({ value: w.id, label: w.name }))" aria-label="Kho" />
+                <Input ref="searchInput" v-model="search" class="w-full min-w-0 flex-1 text-base sm:w-auto sm:min-w-64" placeholder="Quét mã vạch hoặc tìm sản phẩm (F2)…" data-testid="pos-search" @keydown.enter.prevent="onSearchEnter" />
+                <Select v-model="channelId" class="w-[calc(50%-0.25rem)] sm:w-48" :options="channels.map((c) => ({ value: c.id, label: c.name }))" aria-label="Kênh bán" />
+                <Select v-model="warehouseId" class="w-[calc(50%-0.25rem)] sm:w-40" :options="warehouses.filter((w) => w.status === 'active').map((w) => ({ value: w.id, label: w.name }))" aria-label="Kho" />
                 <Button :variant="shift ? 'outline' : 'default'" data-testid="pos-shift" @click="openShiftDialog"><Clock /> {{ shift ? `Ca ${shift.number}` : 'Mở ca' }}</Button>
                 <RouterLink to="/pos/shifts" class="inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground hover:bg-muted" title="Lịch sử ca" data-testid="pos-shift-history"><History class="size-4" /></RouterLink>
             </div>
-            <div class="grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3 xl:grid-cols-4" data-testid="pos-products">
+            <div class="grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto pb-20 sm:grid-cols-3 lg:pb-0 xl:grid-cols-4" data-testid="pos-products">
                 <button
                     v-for="v in results"
                     :key="v.id"
@@ -301,8 +304,20 @@ const quick = computed(() => quickCash(totals.value.total));
         </div>
 
         <!-- Cart -->
-        <Card class="flex min-h-0 w-full flex-col lg:w-[26rem]">
+        <button
+            v-if="!cartOpen"
+            type="button"
+            class="fixed inset-x-0 bottom-0 z-30 flex items-center justify-between gap-3 border-t bg-card px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] lg:hidden"
+            data-testid="pos-cart-bar"
+            @click="cartOpen = true"
+        >
+            <span class="text-sm">Đơn {{ cart.no }} · {{ totals.quantity }} sp</span>
+            <span class="flex items-center gap-2 text-base font-semibold">{{ formatMoney(totals.total) }} <span class="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground">Thanh toán</span></span>
+        </button>
+        <div v-if="cartOpen" class="fixed inset-0 z-30 bg-black/30 lg:hidden" @click="cartOpen = false" />
+        <Card :class="cn('flex min-h-0 w-full flex-col lg:w-[26rem]', 'max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-40 max-lg:max-h-[88vh] max-lg:rounded-b-none max-lg:shadow-2xl', !cartOpen && 'max-lg:hidden')" data-testid="pos-cart-panel">
             <div class="flex items-center gap-1 overflow-x-auto border-b px-2 py-1.5">
+                <Button variant="ghost" size="icon" class="size-7 lg:hidden" title="Đóng giỏ hàng" data-testid="pos-cart-close" @click="cartOpen = false"><ChevronDown /></Button>
                 <button
                     v-for="(c, i) in carts"
                     :key="c.no"

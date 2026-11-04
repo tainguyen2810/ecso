@@ -20,9 +20,12 @@ const toast = useToast();
 const configured = computed(() => settings.data?.print.defaults.sale);
 const size = ref<InvoiceSize>(defaultInvoiceSize(tenant.current?.id, configured.value));
 const remember = ref(false);
+// Which paper: the sales invoice, or the delivery slip the shipper takes along (no prices, COD to collect, signatures).
+const doc = ref<'invoice' | 'delivery'>('invoice');
 watch(open, async (v) => {
     if (!v) return;
     remember.value = false;
+    doc.value = 'invoice';
     await settings.load().catch(() => null);
     size.value = defaultInvoiceSize(tenant.current?.id, configured.value);
 });
@@ -34,14 +37,19 @@ async function print() {
         if (tenant.can('settings.manage')) await settings.save('print', { defaults: { sale: size.value } }).catch(() => toast.error('Không lưu được mẫu mặc định.'));
         else setDefaultInvoiceSize(tenant.current?.id, size.value);
     }
-    printInvoice(props.orders.length === 1 ? props.orders[0]! : props.orders, printShopFrom(settings.data, tenant.current?.name ?? ''), size.value);
+    printInvoice(props.orders.length === 1 ? props.orders[0]! : props.orders, printShopFrom(settings.data, tenant.current?.name ?? ''), size.value, doc.value);
     open.value = false;
 }
 </script>
 
 <template>
     <Dialog v-model:open="open" title="Chọn thông tin bạn muốn in" size="lg">
-        <p class="mb-3 text-sm"><span class="font-medium">Hóa đơn bán hàng</span> · {{ orders.length }} đơn<span v-if="copies > 1"> · {{ copies }} liên mỗi đơn</span></p>
+        <div class="mb-3 flex flex-wrap items-center gap-2 text-sm" data-testid="print-docs">
+            <button type="button" :class="cn('rounded-full border px-3 py-1', doc === 'invoice' ? 'border-blue-300 bg-blue-50 font-medium text-blue-700' : 'hover:bg-muted')" @click="doc = 'invoice'">Hóa đơn bán hàng</button>
+            <button type="button" :class="cn('rounded-full border px-3 py-1', doc === 'delivery' ? 'border-blue-300 bg-blue-50 font-medium text-blue-700' : 'hover:bg-muted')" data-testid="print-delivery" @click="doc = 'delivery'">Phiếu giao hàng</button>
+            <span class="text-muted-foreground">· {{ orders.length }} đơn<span v-if="doc === 'invoice' && copies > 1"> · {{ copies }} liên mỗi đơn</span></span>
+        </div>
+        <p v-if="doc === 'delivery'" class="mb-2 text-xs text-muted-foreground">Phiếu cho người giao: không in giá, in số tiền cần thu hộ (COD) và chỗ ký nhận. Mẫu K80/K57 in theo khổ A5.</p>
         <p class="mb-2 text-sm text-muted-foreground">Chọn mẫu in phiếu</p>
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-4" data-testid="print-sizes">
             <button

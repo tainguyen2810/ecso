@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Ban, Banknote, Bookmark, ChevronDown, ChevronsRight, Clock, Columns3, Download, Filter, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingCart, UserPlus, X } from 'lucide-vue-next';
+import { Ban, Banknote, Bookmark, FilePen, Trash2, ChevronDown, ChevronsRight, Clock, Columns3, Download, Filter, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingCart, UserPlus, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
@@ -41,6 +41,28 @@ const loadError = ref<string | null>(null);
 const accounts = ref<MarketplaceAccountData[]>([]);
 const channels = ref<SalesChannel[]>([]);
 const warehouses = ref<Warehouse[]>([]);
+
+// Đơn nháp: forms saved without creating an order (no number, no stock held).
+interface DraftRow { id: string; title: string; total: string; lines_count: number; created_by: string | null; updated_at: string | null }
+const drafts = ref<DraftRow[]>([]);
+const draftsOpen = ref(false);
+async function loadDrafts() {
+    if (!tenant.can('orders.create')) return;
+    try {
+        drafts.value = (await api.get('/order-drafts')).data.data;
+    } catch {
+        drafts.value = [];
+    }
+}
+async function removeDraft(id: string) {
+    try {
+        await api.delete(`/order-drafts/${id}`);
+        drafts.value = drafts.value.filter((d) => d.id !== id);
+        toast.success('Đã xóa nháp.');
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    }
+}
 const assignees = ref<Ref[]>([]);
 const tags = ref<string[]>([]);
 const pipeline = ref<InstanceType<typeof OrderPipeline> | null>(null);
@@ -150,6 +172,7 @@ function refresh() {
 
 onMounted(async () => {
     load();
+    loadDrafts();
     const [a, m, c, t, w] = await Promise.allSettled([api.get('/marketplace-accounts'), api.get('/orders/assignees'), api.get('/sales-channels'), api.get('/orders/tags'), api.get('/warehouses')]);
     if (w.status === 'fulfilled') warehouses.value = w.value.data.data;
     if (t.status === 'fulfilled') tags.value = t.value.data.data;
@@ -357,8 +380,22 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
     <PageHeader title="Đơn hàng" description="Đơn từ các sàn (cập nhật theo webhook, thao tác gửi lên sàn qua API) và đơn của kênh bán riêng (xử lý ngay trên ECSO).">
         <Button variant="outline" :loading="loading" @click="refresh"><RefreshCw /> Làm mới</Button>
         <Button variant="outline" :loading="busy === 'export'" data-testid="export-orders" @click="exportOrders"><Download /> Xuất Excel</Button>
+        <Button v-if="tenant.can('orders.create') && drafts.length" variant="outline" data-testid="open-drafts" @click="draftsOpen = true"><FilePen /> Đơn nháp ({{ drafts.length }})</Button>
         <Button v-if="tenant.can('orders.create')" data-testid="create-order" @click="$router.push('/orders/new')"><Plus /> Tạo đơn</Button>
     </PageHeader>
+
+    <Dialog v-model:open="draftsOpen" title="Đơn nháp" description="Đơn đang soạn dở: chưa có mã đơn, chưa giữ hàng trong kho. Mở ra để sửa tiếp và tạo đơn." size="lg">
+        <ul class="divide-y rounded-md border" data-testid="draft-list">
+            <li v-for="d in drafts" :key="d.id" class="flex items-center gap-3 px-3 py-2.5 text-sm">
+                <RouterLink :to="{ path: '/orders/new', query: { draft: d.id } }" class="min-w-0 flex-1 hover:underline">
+                    <div class="truncate font-medium">{{ d.title }}</div>
+                    <div class="text-xs text-muted-foreground">{{ d.lines_count }} dòng · {{ d.updated_at ? formatDateTime(d.updated_at) : '' }}<span v-if="d.created_by"> · {{ d.created_by }}</span></div>
+                </RouterLink>
+                <span class="tabular-nums">{{ formatMoney(d.total) }}</span>
+                <Button variant="ghost" size="icon" class="size-7" title="Xóa nháp" @click="removeDraft(d.id)"><Trash2 class="size-3.5" /></Button>
+            </li>
+        </ul>
+    </Dialog>
 
     <OrderPipeline ref="pipeline" :active="activeQueue" @select="selectQueue" />
 
