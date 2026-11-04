@@ -41,7 +41,7 @@ class ReturnController extends Controller
     {
         $this->authorize('view', $return);
 
-        return new ReturnResource($return->load(['order', 'exchangeOrder', 'warehouse', 'lines.item', 'lines.variant', 'creator', 'inspector']));
+        return new ReturnResource($return->load(['order', 'exchangeOrder', 'warehouse', 'damagedWarehouse', 'lines.item', 'lines.variant', 'creator', 'inspector']));
     }
 
     public function store(Request $request, Order $order, ReturnService $returns): JsonResponse
@@ -99,6 +99,6 @@ class ReturnController extends Controller
         ]);
         $warehouse = Warehouse::query()->where('ulid', $data['warehouse_id'])->where('status', 'active')->firstOrFail();
 
-        return new ReturnResource($returns->inspect($return, $warehouse, $data['lines'], $data['note'] ?? null)->load(['order', 'warehouse', 'lines.item', 'lines.variant', 'inspector']));
+        return new ReturnResource($returns->inspect($return, $warehouse, $data['lines'], $data['note'] ?? null)->load(['order', 'warehouse', 'damagedWarehouse', 'lines.item', 'lines.variant', 'inspector']));
     }
 }

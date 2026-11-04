@@ -18,6 +18,7 @@ class WarehouseResource extends JsonResource
             'address' => $this->address,
             'is_default' => (bool) $this->is_default,
             'status' => $this->status,
+            'purpose' => $this->purpose ?? Warehouse::PURPOSE_SALE,
             'sku_count' => $this->when(isset($this->sku_count), fn () => (int) $this->sku_count),
             'on_hand' => $this->when(isset($this->total_on_hand), fn () => (int) $this->total_on_hand),
         ];

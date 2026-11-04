@@ -91,7 +91,7 @@ async function load() {
 }
 onMounted(async () => {
     await load();
-    warehouses.value = (await api.get('/warehouses')).data.data.filter((w: Warehouse) => w.status === 'active');
+    warehouses.value = (await api.get('/warehouses')).data.data.filter((w: Warehouse) => w.status === 'active' && w.purpose !== 'defective');
     connectForm.value.warehouse_id = warehouses.value.find((w) => w.is_default)?.id ?? '';
 });
 

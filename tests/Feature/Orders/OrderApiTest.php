@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Identity\Models\User;
+use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Services\StockVerifier;
 use App\Modules\Marketplace\Connectors\Fake\FakeMarketplace;
 use App\Modules\Marketplace\Models\ListingVariant;
@@ -136,6 +137,15 @@ it('records a customer return and restocks only what is inspected as sellable', 
 
     expect(balanceOf(defaultWarehouse($this->tenant), $this->shirt)->on_hand)->toBe(18);
     $api->getJson('/api/v1/returns')->assertOk()->assertJsonCount(1, 'data');
+    // The damaged unit stays on the books in the defective-goods warehouse, which never sells.
+    $defective = Warehouse::withoutGlobalScopes()->where('tenant_id', $this->tenant->id)->where('purpose', Warehouse::PURPOSE_DEFECTIVE)->sole();
+    expect(balanceOf($defective, $this->shirt)->on_hand)->toBe(1)
+        ->and($defective->is_default)->toBeFalse();
+    $api->getJson("/api/v1/returns/{$id}")->assertJsonPath('data.damaged_warehouse.code', 'HANGLOI');
+    $api->getJson('/api/v1/warehouses')->assertJsonPath('meta.used', 1);
+    $api->postJson('/api/v1/sales-orders', ['channel_id' => defaultChannel($this->tenant)->ulid, 'warehouse_id' => $defective->ulid, 'lines' => [['variant_id' => $this->shirt->ulid, 'quantity' => 1, 'unit_price' => 1000]]])
+        ->assertStatus(422)->assertJsonValidationErrors('warehouse_id');
+    $api->patchJson("/api/v1/warehouses/{$defective->ulid}", ['is_default' => true])->assertStatus(422);
 });
 
 it('maps listings through the API and lets the simulator create orders', function () {

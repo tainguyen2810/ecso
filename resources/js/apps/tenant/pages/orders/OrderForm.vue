@@ -117,7 +117,7 @@ onMounted(async () => {
             if (payOptions.value.some((o) => o.value === s.payments.default_online)) form.pay_method = s.payments.default_online;
         }
         channels.value = c.data.data;
-        warehouses.value = w.data.data;
+        warehouses.value = (w.data.data as Warehouse[]).filter((x) => x.purpose !== 'defective');
         if (editId.value) {
             await loadOrder(editId.value);
         } else {

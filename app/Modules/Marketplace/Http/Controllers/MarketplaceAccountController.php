@@ -141,7 +141,7 @@ class MarketplaceAccountController extends Controller
             'shop_name' => ['required', 'string', 'max:100'],
             'warehouse_id' => ['nullable', 'string'],
         ]);
-        $warehouse = isset($data['warehouse_id']) ? Warehouse::query()->where('ulid', $data['warehouse_id'])->firstOrFail() : null;
+        $warehouse = isset($data['warehouse_id']) ? Warehouse::query()->where('ulid', $data['warehouse_id'])->where('purpose', Warehouse::PURPOSE_SALE)->firstOrFail() : null;
 
         $account = $service->connectFake($data['shop_name'], $warehouse);
 
@@ -177,7 +177,7 @@ class MarketplaceAccountController extends Controller
             ...collect(MarketplaceAccount::SETTING_KEYS)->mapWithKeys(fn ($k) => ["settings.{$k}" => ['sometimes', 'boolean']])->all(),
         ]);
         if (isset($data['warehouse_id'])) {
-            $data['warehouse_id'] = Warehouse::query()->where('ulid', $data['warehouse_id'])->where('status', 'active')->firstOrFail()->id;
+            $data['warehouse_id'] = Warehouse::query()->where('ulid', $data['warehouse_id'])->where('status', 'active')->where('purpose', Warehouse::PURPOSE_SALE)->firstOrFail()->id;
         }
 
         return new AccountResource($service->update($account, $data)->load('warehouse'));

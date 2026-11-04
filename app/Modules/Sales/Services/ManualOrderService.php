@@ -542,6 +542,9 @@ class ManualOrderService
         if (! $warehouse || ! $warehouse->isActive()) {
             throw ValidationException::withMessages(['warehouse_id' => 'Kho xuất không tồn tại hoặc đã ngừng hoạt động.']);
         }
+        if (! $warehouse->sells()) {
+            throw ValidationException::withMessages(['warehouse_id' => 'Kho hàng lỗi không dùng để bán hàng.']);
+        }
 
         return $warehouse;
     }

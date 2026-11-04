@@ -34,7 +34,7 @@ async function load() {
     try {
         const [c, w] = await Promise.all([api.get('/sales-channels'), api.get('/warehouses')]);
         rows.value = c.data.data;
-        warehouses.value = w.data.data;
+        warehouses.value = (w.data.data as Warehouse[]).filter((x) => x.purpose !== 'defective');
     } finally {
         loading.value = false;
     }

@@ -50,7 +50,7 @@ async function load() {
         overview.value = a.data.overview;
         pending.value = p.data.data;
         prices.value = pr.data.data;
-        warehouses.value = w.data.data.filter((x: Warehouse) => x.status === 'active');
+        warehouses.value = w.data.data.filter((x: Warehouse) => x.status === 'active' && x.purpose !== 'defective');
     } catch (e) {
         loadError.value = (e as ApiError).message;
     } finally {

@@ -83,7 +83,7 @@ onMounted(async () => {
     // Empty carts start on the counter's default method.
     carts.value.forEach((ct) => !ct.lines.length && posMethods.value.includes(s.payments.default_pos as never) && (ct.method = s.payments.default_pos as Cart['method']));
     channels.value = (c.data.data as SalesChannel[]).filter((ch) => ch.is_active);
-    warehouses.value = w.data.data;
+    warehouses.value = (w.data.data as Warehouse[]).filter((x) => x.purpose !== 'defective');
     const pos = channels.value.find((ch) => ch.type === 'pos') ?? channels.value[0];
     channelId.value = pos?.id ?? '';
     warehouseId.value = pos?.warehouse?.id ?? warehouses.value.find((x) => x.is_default)?.id ?? warehouses.value[0]?.id ?? '';

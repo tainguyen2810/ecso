@@ -61,7 +61,7 @@ class OrderReturn extends Model
 
     protected $guarded = ['id', 'ulid', 'tenant_id'];
 
-    protected $hidden = ['id', 'tenant_id', 'order_id', 'warehouse_id'];
+    protected $hidden = ['id', 'tenant_id', 'order_id', 'warehouse_id', 'damaged_warehouse_id'];
 
     protected function casts(): array
     {
@@ -150,6 +150,12 @@ class OrderReturn extends Model
     public function warehouse(): BelongsTo
     {
         return $this->belongsTo(Warehouse::class)->withTrashed();
+    }
+
+    /** @return BelongsTo<Warehouse, $this> */
+    public function damagedWarehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class, 'damaged_warehouse_id')->withTrashed();
     }
 
     /** @return BelongsTo<User, $this> */
