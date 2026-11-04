@@ -84,6 +84,9 @@ class ManualOrderService
                 'sales_channel_id' => $channel->id,
                 'warehouse_id' => $warehouse->id,
                 'cash_shift_id' => $shift?->id,
+                // The tax rate in force when the order is made stays with the order.
+                'tax_rate' => (float) TenantSettings::current()->get('tax.sale_rate'),
+                'prices_include_tax' => (bool) TenantSettings::current()->get('tax.prices_include_tax'),
                 'created_by' => Auth::id(),
                 'assigned_to' => Auth::id(),
                 'placed_at' => isset($data['placed_at']) ? now()->parse($data['placed_at']) : now(),
@@ -146,6 +149,10 @@ class ManualOrderService
             $order = $this->lock($order);
             if (! in_array($order->status, self::EDITABLE, true)) {
                 throw ValidationException::withMessages(['order' => 'Chỉ sửa được đơn chưa đóng gói.']);
+            }
+            // Two people editing the same order: the later save would silently overwrite the first one.
+            if (isset($data['version']) && (int) $data['version'] !== (int) $order->version) {
+                throw ValidationException::withMessages(['version' => 'Đơn vừa được người khác sửa hoặc đổi trạng thái. Tải lại trang để xem bản mới nhất rồi sửa lại.']);
             }
 
             $customer = array_key_exists('customer_id', $data) || isset($data['customer']) ? $this->customer($data) : $order->customer;
@@ -383,7 +390,29 @@ class ManualOrderService
             throw ValidationException::withMessages(['discount' => 'Giảm giá lớn hơn tổng tiền đơn.']);
         }
 
-        $order->forceFill(['subtotal' => $subtotal, 'total' => $total])->save();
+        // VAT on the goods after the order discount (not on shipping), at the rate the order was created with.
+        $tax = self::saleTax(bcsub($subtotal, (string) $order->discount, 2), (string) $order->tax_rate, (bool) $order->prices_include_tax);
+        if (! $order->prices_include_tax) {
+            $total = bcadd($total, $tax, 2);
+        }
+
+        $order->forceFill(['subtotal' => $subtotal, 'tax_amount' => $tax, 'total' => $total])->save();
+    }
+
+    /**
+     * Sale tax on an amount, rounded to the đồng. Prices that include tax hold it inside (amount × r / (100 + r));
+     * prices before tax get it added on top (amount × r / 100). Mirrored by saleTax() in resources/js/shared/lib/tax.ts.
+     */
+    public static function saleTax(string $amount, string $rate, bool $included): string
+    {
+        if (bccomp($rate, '0', 2) <= 0 || bccomp($amount, '0', 2) <= 0) {
+            return '0.00';
+        }
+        $tax = $included
+            ? bcdiv(bcmul($amount, $rate, 8), bcadd('100', $rate, 8), 8)
+            : bcdiv(bcmul($amount, $rate, 8), '100', 8);
+
+        return number_format(round((float) $tax), 2, '.', '');
     }
 
     /** @param array<string, mixed> $data */

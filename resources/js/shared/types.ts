@@ -204,6 +204,10 @@ export interface OrderSummary {
     balance_due?: string | null;
     external_order_id: string;
     status: string;
+    version?: number;
+    tax_rate?: string;
+    prices_include_tax?: boolean;
+    tax_amount?: string;
     raw_status: string;
     payment_method: string | null;
     is_cod: boolean;

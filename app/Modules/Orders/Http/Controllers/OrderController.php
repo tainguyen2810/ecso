@@ -139,6 +139,9 @@ class OrderController extends Controller
     public function action(Request $request, Order $order, string $action, OrderActions $actions): OrderResource
     {
         $this->authorize('update', $order);
+        if ($action === 'cancel') {
+            $this->authorize('cancel', $order);
+        }
         $params = $request->validate(['reason' => ['nullable', 'string', 'max:255']]);
 
         return new OrderResource($actions->perform($order, $action, $params)->load(['account', 'channel', 'assignee']));
@@ -159,6 +162,9 @@ class OrderController extends Controller
             'pay' => 'pay',
             default => 'update',
         }, Order::class);
+        if ($data['action'] === 'cancel') {
+            $this->authorize('cancel', Order::class);
+        }
         $orders = Order::query()->with(['account', 'channel'])->whereIn('ulid', $data['ids'])->get();
 
         if ($data['action'] === 'assign') {

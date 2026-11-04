@@ -22,6 +22,17 @@ class OrderPolicy extends PermissionPolicy
         return $this->allows('orders.update');
     }
 
+    public function cancel(User $user): bool
+    {
+        return $this->allows('orders.cancel');
+    }
+
+    /** Void a payment or refund typed by mistake. */
+    public function voidPayment(User $user): bool
+    {
+        return $this->allows('orders.payment.void');
+    }
+
     public function assign(User $user): bool
     {
         return $this->allows('orders.assign');
