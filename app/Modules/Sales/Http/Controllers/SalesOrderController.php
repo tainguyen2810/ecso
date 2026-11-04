@@ -10,6 +10,7 @@ use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\ReturnService;
 use App\Modules\Orders\Support\OrderTags;
 use App\Modules\Sales\Http\Resources\PaymentResource;
+use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Sales\Services\ManualOrderService;
 use App\Modules\Sales\Services\PaymentService;
@@ -127,11 +128,17 @@ class SalesOrderController extends Controller
         if ($settings->get('pricing.staff_edit_price') || $request->user()->can('changePrice', Order::class)) {
             return;
         }
-        if ((float) ($data['discount'] ?? 0) > 0) {
-            throw ValidationException::withMessages(['discount' => 'Bạn không có quyền chiết khấu đơn hàng.']);
-        }
         $lines = $data['lines'] ?? [];
         $variants = ProductVariant::query()->whereIn('ulid', array_filter(array_column($lines, 'variant_id')))->get()->keyBy('ulid');
+        $subtotal = '0';
+        foreach ($lines as $line) {
+            $price = $line['unit_price'] ?? ($variants[$line['variant_id'] ?? '']->ref_price ?? 0);
+            $subtotal = bcadd($subtotal, bcmul((string) $price, (string) ($line['quantity'] ?? 0), 2), 2);
+        }
+        // The customer group's discount is a shop policy, so it applies even for staff who may not discount by hand.
+        if ((float) ($data['discount'] ?? 0) > 0 && bccomp((string) $data['discount'], $this->groupDiscount($data, $subtotal), 2) > 0) {
+            throw ValidationException::withMessages(['discount' => 'Bạn không có quyền chiết khấu đơn hàng.']);
+        }
         foreach ($lines as $i => $line) {
             if ((float) ($line['discount'] ?? 0) > 0) {
                 throw ValidationException::withMessages(["lines.{$i}.discount" => 'Bạn không có quyền chiết khấu.']);
@@ -145,6 +152,19 @@ class SalesOrderController extends Controller
                 throw ValidationException::withMessages(["lines.{$i}.unit_price" => "Bạn không có quyền sửa giá {$variant->sku}."]);
             }
         }
+    }
+
+    /**
+     * Largest order discount the customer's group gives on this subtotal (rounded to the đồng), 0 without a group.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function groupDiscount(array $data, string $subtotal): string
+    {
+        $percent = empty($data['customer_id']) ? null
+            : Customer::query()->where('ulid', $data['customer_id'])->first()?->customerGroup?->discount_percent;
+
+        return $percent ? (string) round((float) bcdiv(bcmul($subtotal, (string) $percent, 4), '100', 4)) : '0';
     }
 
     /** @return array<string, array<int, mixed>> */

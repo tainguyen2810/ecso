@@ -22,7 +22,7 @@ import { useTenantStore } from '@/shared/stores/tenant';
 import { useSettingsStore } from '@/shared/stores/settings';
 import { enabledMethods } from '@/shared/lib/paymentMethods';
 import { channelTypes, paymentMethods } from './labels';
-import type { Customer, OrderDetail, OrderReturnData, SalesChannel, Variant, Warehouse } from '@/shared/types';
+import type { Customer, CustomerSummary, OrderDetail, OrderReturnData, SalesChannel, Variant, Warehouse } from '@/shared/types';
 
 /** A SKU line (stock is held) or a service line (own name and price, no stock). */
 interface Line {
@@ -61,8 +61,11 @@ const loading = ref(true);
 const channels = ref<SalesChannel[]>([]);
 const warehouses = ref<Warehouse[]>([]);
 const lines = ref<Line[]>([]);
-const customer = ref<Pick<Customer, 'id' | 'code' | 'name' | 'phone' | 'address'> | null>(null);
+const customer = ref<(Pick<Customer, 'id' | 'code' | 'name' | 'phone' | 'address'> & { group?: Customer['group'] }) | null>(null);
 const newCustomer = reactive({ enabled: false, name: '', phone: '', address: '' });
+// Group terms of the chosen customer (loaded with its detail).
+const customerTerms = ref<{ group: Customer['group']; debt: number; summary: CustomerSummary | null } | null>(null);
+const groupDiscountAuto = ref(false);
 const customerQuery = ref('');
 const customerResults = ref<Customer[]>([]);
 const phoneMatch = ref<Customer | null>(null);
@@ -353,15 +356,6 @@ watch(
 // Saved delivery addresses of the chosen customer (Khách hàng › Sổ địa chỉ), offered under "Địa chỉ giao".
 interface SavedAddress { id: string; label: string | null; recipient: string | null; phone: string | null; address: string }
 const savedAddresses = ref<SavedAddress[]>([]);
-async function loadAddresses(id: string) {
-    savedAddresses.value = [];
-    try {
-        const { data } = await api.get(`/customers/${id}`);
-        if (customer.value?.id === id) savedAddresses.value = data.data.addresses ?? [];
-    } catch {
-        // No access to customer details: the field stays a plain input.
-    }
-}
 function useAddress(a: SavedAddress) {
     form.shipping_address = a.address;
     if (a.recipient) form.buyer_name = a.recipient;
@@ -369,7 +363,7 @@ function useAddress(a: SavedAddress) {
 }
 watch(
     () => customer.value?.id,
-    (id) => (id ? loadAddresses(id) : (savedAddresses.value = [])),
+    (id) => (id ? loadTerms(id) : ((savedAddresses.value = []), (customerTerms.value = null))),
 );
 
 function chooseCustomer(c: Customer) {
@@ -380,12 +374,47 @@ function chooseCustomer(c: Customer) {
     form.buyer_name = c.name;
     form.buyer_phone = c.phone ?? '';
     form.shipping_address = c.address ?? form.shipping_address;
-    // The customer's group decides the starting price policy (retail / wholesale).
+    // The customer's group decides the starting price policy (retail / wholesale), discount and payment method.
     if (c.group?.price_tier) priceTier.value = c.group.price_tier;
+    applyGroup(c.group);
 }
+
+function applyGroup(group: Customer['group']) {
+    if (editId.value) return;
+    groupDiscountAuto.value = Number(group?.discount_percent ?? 0) > 0;
+    if (groupDiscountAuto.value) form.discount = groupDiscount.value;
+    if (group?.payment_method && payOptions.value.some((o) => o.value === group.payment_method)) form.pay_method = group.payment_method;
+}
+const groupDiscount = computed(() => Math.round((subtotal.value * Number(customerTerms.value?.group?.discount_percent ?? customer.value?.group?.discount_percent ?? 0)) / 100));
+// The group discount follows the subtotal until someone types another discount.
+watch(groupDiscount, (d) => groupDiscountAuto.value && (form.discount = d));
+
+/** Group, debt, terms and saved addresses of the chosen customer (one request). */
+async function loadTerms(id: string) {
+    customerTerms.value = null;
+    savedAddresses.value = [];
+    try {
+        const { data } = await api.get(`/customers/${id}`);
+        if (customer.value?.id !== id) return;
+        customerTerms.value = { group: data.data.group, debt: Number(data.data.debt ?? 0), summary: data.data.summary ?? null };
+        savedAddresses.value = data.data.addresses ?? [];
+    } catch {
+        // No access to customer details: the order can still be made, the address stays a plain input.
+    }
+}
+/** Credit limit warning: what the customer would owe after this order, against the limit of the customer or group. */
+const creditWarning = computed(() => {
+    const limit = Number(customerTerms.value?.summary?.credit_limit ?? 0);
+    if (!limit || editId.value || form.is_cod) return null;
+    const after = customerTerms.value!.debt + remaining.value;
+    return after > limit ? `Khách đang nợ ${formatMoney(customerTerms.value!.debt)}, thêm đơn này sẽ là ${formatMoney(after)}, vượt hạn mức ${formatMoney(limit)}.` : null;
+});
 
 function clearCustomer() {
     customer.value = null;
+    customerTerms.value = null;
+    if (groupDiscountAuto.value) form.discount = 0;
+    groupDiscountAuto.value = false;
 }
 
 watch(
@@ -587,10 +616,15 @@ async function saveDraft() {
                             <div>
                                 <p><span class="font-medium text-primary">{{ customer.name }}</span> <span class="font-mono text-xs text-muted-foreground">{{ customer.code }}</span></p>
                                 <p class="text-xs text-muted-foreground">{{ customer.phone ?? form.buyer_phone }}<template v-if="customer.address ?? form.shipping_address"> · {{ customer.address ?? form.shipping_address }}</template></p>
+                                <p v-if="customerTerms?.group" class="text-xs text-muted-foreground" data-testid="customer-group-terms">
+                                    Nhóm {{ customerTerms.group.name }}<template v-if="Number(customerTerms.group.discount_percent)"> · chiết khấu {{ Number(customerTerms.group.discount_percent) }}%</template><template v-if="customerTerms.debt > 0"> · đang nợ {{ formatMoney(customerTerms.debt) }}</template>
+                                </p>
+                                <p v-else-if="customerTerms && customerTerms.debt > 0" class="text-xs text-muted-foreground">Đang nợ {{ formatMoney(customerTerms.debt) }}</p>
                             </div>
                         </div>
                         <Button variant="ghost" size="icon" class="size-7" title="Bỏ chọn" @click="clearCustomer"><X /></Button>
                     </div>
+                    <p v-if="customer && creditWarning" class="flex items-start gap-1.5 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800" data-testid="credit-warning"><AlertTriangle class="mt-px size-3.5 shrink-0" /> {{ creditWarning }}</p>
                     <template v-else-if="!newCustomer.enabled">
                         <div class="relative">
                             <Search class="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground" />
@@ -763,7 +797,8 @@ async function saveDraft() {
                     <dt>Tổng tiền ({{ totalQty }} sản phẩm)</dt>
                     <dd class="text-right tabular-nums">{{ formatMoney(subtotal) }}</dd>
                     <dt>Chiết khấu <kbd class="text-[10px] text-muted-foreground">F6</kbd></dt>
-                    <dd><input v-model="form.discount" type="number" min="0" :disabled="!canEditPrice" class="h-8 w-full rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums disabled:bg-muted/50" data-testid="order-discount" /></dd>
+                    <dd><input v-model="form.discount" type="number" min="0" :disabled="!canEditPrice" class="h-8 w-full rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums disabled:bg-muted/50" data-testid="order-discount" @input="groupDiscountAuto = false" /></dd>
+                    <p v-if="groupDiscountAuto" class="col-span-2 -mt-1.5 text-right text-xs text-muted-foreground">Chiết khấu nhóm {{ Number(customerTerms?.group?.discount_percent ?? customer?.group?.discount_percent ?? 0) }}%</p>
                     <p v-if="error?.field('discount')" class="col-span-2 text-right text-xs text-destructive">{{ error.field('discount') }}</p>
                     <dt class="text-primary">Phí giao hàng <kbd class="text-[10px] text-muted-foreground">F7</kbd></dt>
                     <dd><input v-model="form.shipping_fee" type="number" min="0" class="h-8 w-full rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" data-testid="shipping-fee" /></dd>

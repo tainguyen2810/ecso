@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Đơn WooCommerce nhận diện khách như các kênh khác (2026-11-04)
+- Đơn website tìm thẻ khách theo thứ tự: **mã khách trên website** (khách có tài khoản), rồi **số điện thoại**, rồi **email** (chỉ khi đúng một khách có email đó). Không bao giờ ghép theo tên. Khách có tài khoản đổi số điện thoại hay email vẫn về đúng một thẻ.
+- Đơn sau không ghi đè thẻ khách: chỉ điền các ô thẻ đang trống. Đơn vẫn giữ thông tin liên hệ của chính nó.
+- Đơn không có số điện thoại hợp lệ, email hay tài khoản thì không tạo thẻ khách mới.
+
 ### Đồng bộ đơn WooCommerce, vòng E: giao diện và hướng dẫn (2026-11-04)
 - **Trang website Woo**: nút "Đồng bộ đơn ngay"; chọn chu kỳ đối soát 5/15/30 phút; hiện mốc "Đồng bộ đơn từ"; công tắc "Trạng thái đơn hai chiều"; thẻ **Webhook trên website** (tình trạng, đã bật lại / tạo lại, nút Kiểm tra ngay); thẻ **Ánh xạ trạng thái** (trạng thái website → trạng thái ECSO, số đơn đang chưa ánh xạ, thêm mã trạng thái plugin). Ô "Lỗi đồng bộ" tính cả lỗi đơn đang mở và dẫn sang trang lỗi.
 - **Trang Lịch sử và lỗi đồng bộ** (`/marketplaces/sync`): lỗi đang mở theo nhóm, thử lại / bỏ qua từng đơn, lỗi đã xử lý, lịch sử từng lượt đối soát (kết quả, số đơn, thời gian chạy).
@@ -70,6 +75,34 @@
 - **Nhập Excel đi qua model**: giá đổi bằng file được đẩy lên website và ghi lịch sử giá như sửa tay.
 - **SKU từ website có dấu cách, #, +**: sản phẩm vẫn sửa và lưu được khi giữ nguyên SKU đó; SKU mới hoặc SKU đổi vẫn theo quy tắc chữ, số và . _ - /.
 - **Duyệt sản phẩm mới từ website an toàn**: so SKU không phân biệt hoa thường; SKU đang nằm trong thùng rác được khôi phục và liên kết, không còn lỗi 500. Sản phẩm tạo mới lấy thêm mô tả (dạng chữ), danh mục đầu tiên, cân nặng (kg → gram), thuộc tính biến thể và barcode (`global_unique_id`) nếu chưa bị SKU khác dùng. Ảnh chưa được tải về ECSO.
+
+### Khách hàng, đợt E: chăm sóc khách, phân khúc, tự xếp nhóm (2026-11-04)
+- **Việc cần làm với khách** (bảng `customer_tasks`): hẹn gọi lại, gửi báo giá, nhắc thanh toán… có hạn và người phụ trách (mặc định người tạo); đánh dấu xong, việc trễ hẹn hiện màu đỏ. `GET /customer-tasks?mine=1&due=late|today|week|all` cho danh sách việc của mình.
+- **Ghi chú có loại liên hệ**: Ghi chú, Cuộc gọi, Tin nhắn, Gặp mặt, Khiếu nại.
+- **Phân khúc khách** trong danh sách (tính lại từ đơn thật mỗi lần): Cần liên hệ (việc đến hạn/trễ), Lâu không mua (90 ngày), Mua thường xuyên (≥ 3 đơn trong 180 ngày), Giá trị cao (10% khách chi tiêu nhiều nhất), Khách mới (30 ngày). Xuất Excel theo phân khúc đang chọn.
+- **Tự xếp khách vào nhóm**: nhóm có thể đặt ngưỡng tổng chi tiêu và/hoặc số đơn; lệnh `ecso:customers:auto-group` chạy mỗi đêm lúc 03:30, chỉ xếp khách **chưa có nhóm** (khách đã xếp tay không bị đổi), ghi nhật ký từng khách.
+- Trang khách: thẻ **Sản phẩm hay mua** (5 sản phẩm mua nhiều nhất, theo số lượng, từ đơn không hủy/hoàn).
+
+### Khách hàng, đợt D: một khách trên mọi kênh, khách trùng và gộp khách (2026-11-04)
+- **Nhận diện khách từ kênh** (`App\Modules\Sales\Services\CustomerResolver`): tìm thẻ khách theo thứ tự chắc chắn — mã khách trên gian hàng (bảng mới `customer_identities`), số điện thoại đầy đủ, email (không phân biệt hoa thường; hai thẻ cùng email thì không chọn thẻ nào). **Không bao giờ ghép theo tên.** Kênh chỉ điền vào ô còn trống của thẻ, không xóa dữ liệu đang có. Mã khách trên gian hàng được nhớ để lần sau vẫn nhận ra dù khách đổi số.
+- **Khách trùng** (Khách hàng → Khách trùng, quyền mới `customers.merge`): liệt kê các thẻ trùng email, trùng mã số thuế, và trùng tên (chỉ là gợi ý). ECSO không tự gộp.
+- **Gộp khách**: xem trước số đơn, phiếu thu, chứng từ công nợ, phiếu sổ quỹ, địa chỉ, ghi chú sẽ chuyển; chọn từng trường giữ giá trị của thẻ nào. Số điện thoại/địa chỉ không được chọn vẫn giữ làm địa chỉ giao hàng; tags cộng lại; ô trống được điền từ thẻ kia. Thẻ bị gộp được lưu đầy đủ (mã hóa) trong `customer_merges`, lịch sử hoạt động của nó hiện tiếp ở thẻ được giữ. Chỉ gộp được khách cùng cửa hàng. Công nợ sau gộp vẫn tính một lần từ chứng từ gốc.
+- Trang khách có thẻ "Kênh liên kết và lịch sử gộp" và nút **Gộp khách**.
+
+### Khách hàng, đợt C: nhóm áp vào đơn, hạn mức, hồ sơ doanh nghiệp, danh sách (2026-11-04)
+- **Nhóm khách áp vào đơn và POS**: chọn khách thì đơn lấy chính sách giá (lẻ/buôn), **chiết khấu % của nhóm** (tự tính lại khi giỏ đổi, dừng khi người bán tự nhập chiết khấu) và hình thức thanh toán quen dùng. Nhân viên không có quyền sửa giá vẫn được cho đúng chiết khấu nhóm, không hơn (kiểm tra ở máy chủ).
+- **Cảnh báo hạn mức nợ** khi tạo đơn: nợ hiện tại + phần chưa thu của đơn vượt hạn mức của khách/nhóm thì hiện cảnh báo (không chặn).
+- Tạo đơn: chọn nhanh **địa chỉ giao đã lưu** của khách (người nhận, số điện thoại, địa chỉ).
+- Khách có **loại** (Cá nhân/Doanh nghiệp), **nguồn** (loại kênh của đơn đầu tiên, Giới thiệu, Nhập từ file…) và **thông tin xuất hóa đơn** (tên đơn vị, địa chỉ — mã hóa khi lưu, email). Lọc danh sách theo loại và nguồn.
+- Nhóm khách **ngừng sử dụng**: không xếp thêm khách vào, khách đang trong nhóm giữ nguyên.
+- Danh sách: bấm tiêu đề cột để sắp xếp tăng/giảm; **Xuất Excel theo đúng bộ lọc đang xem** (nhật ký ghi bộ lọc đã dùng); trên điện thoại hiện dạng thẻ thay cho bảng.
+
+### Khách hàng, đợt B: hồ sơ 7 tab, nợ đầu kỳ, hạn thanh toán (2026-11-04)
+- **Trang khách 7 tab**: Tổng quan (thói quen mua: đơn đầu tiên, giá trị trung bình, chu kỳ mua, số ngày chưa mua lại, giá trị hàng trả; thẻ công nợ có hạn mức đã dùng), Đơn hàng, Công nợ, Thanh toán, Trả hàng, Địa chỉ, Ghi chú và hoạt động. Đơn, thanh toán, trả hàng và lịch sử hoạt động phân trang ở máy chủ (`/customers/{id}/orders|payments|returns|activity`), không còn giới hạn 50 đơn.
+- **Nợ đầu kỳ và phiếu điều chỉnh công nợ** (bảng `customer_debt_entries`, số chứng từ NDK-/DCN-): mỗi khách một chứng từ đầu kỳ, điều chỉnh tăng/giảm phải có lý do, không sửa được, chỉ hủy kèm lý do. Quyền mới `customers.debt_adjust` (Quản lý, Kế toán; vai trò riêng nào có quyền xóa khách được cấp thêm khi cập nhật).
+- **Thu nợ** trả nợ đầu kỳ/điều chỉnh trước (ghi một phiếu thu "Thu nợ khách hàng" trong Sổ quỹ, không tính vào lãi lỗ), phần còn lại trả các đơn cũ nhất. Hủy phiếu thu ở Sổ quỹ thì khoản nợ được trả lại.
+- **Hạn thanh toán và hạn mức nợ** cho từng khách và từng nhóm (khách đặt riêng thì ưu tiên hơn nhóm). Đơn quá hạn thanh toán và chứng từ quá hạn trả được tính là **nợ quá hạn**: hiện ở trang khách, cột và tab "Nợ quá hạn" trong danh sách, cột "Quá hạn" trong báo cáo Công nợ khách hàng.
+- Sổ công nợ xuất được ra Excel. Lịch sử hoạt động của khách ghi các lần sửa, nhập file, chứng từ công nợ và thu nợ.
 
 ### Tài chính, vòng C–E: phí sàn, lợi nhuận nhiều tầng, lọc theo shop (2026-11-04)
 - **Một nguồn số liệu lợi nhuận** (`App\Modules\Analytics\Support\ProfitFigures`) cho trang Tài chính và Báo cáo lãi lỗ: doanh thu thuần, giá vốn, lợi nhuận gộp, **lợi nhuận đóng góp** (gộp − phí sàn + phí ship khách trả − chi phí bán hàng) và **lợi nhuận quản trị ước tính** (đóng góp − hao hụt kho − chi phí vận hành, chi phí khác + thu nhập khác). Ghi rõ là số ước tính, chưa phải lợi nhuận kế toán.

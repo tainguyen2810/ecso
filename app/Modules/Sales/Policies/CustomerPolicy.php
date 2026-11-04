@@ -37,6 +37,16 @@ class CustomerPolicy extends PermissionPolicy
         return $this->allows('customers.import');
     }
 
+    public function adjustDebt(User $user): bool
+    {
+        return $this->allows('customers.debt_adjust');
+    }
+
+    public function merge(User $user): bool
+    {
+        return $this->allows('customers.merge');
+    }
+
     public function export(User $user): bool
     {
         return $this->allows('customers.export');

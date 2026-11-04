@@ -32,12 +32,16 @@ final class CustomerDebt
 
     /**
      * SQL value of one return (alias of an `order_returns` row): the refund agreed on it, or else what was paid for the
-     * returned quantities, each line's discount spread over its units. Same rule as OrderReturn::goodsValue().
+     * returned quantities, the line and order discounts and VAT added on top spread over the goods. Same rule as OrderReturn::goodsValue().
      */
     public static function returnValueSql(string $return = 'r'): string
     {
-        return "COALESCE({$return}.refund_amount, (SELECT SUM(TRUNCATE(rl.quantity * (ri.unit_price * ri.quantity - ri.discount) / ri.quantity, 2))"
-            .' FROM order_return_lines rl JOIN order_items ri ON ri.id = rl.order_item_id'
+        // Same as OrderReturn::goodsValue(): the order discount and VAT added on top are spread over the goods.
+        $share = 'CASE WHEN ro.subtotal > 0 THEN GREATEST(TRUNCATE((ro.subtotal - ro.discount'
+            .' + CASE WHEN ro.prices_include_tax THEN 0 ELSE ro.tax_amount END) / ro.subtotal, 8), 0) ELSE 1 END';
+
+        return "COALESCE({$return}.refund_amount, (SELECT SUM(TRUNCATE(TRUNCATE((ri.unit_price * ri.quantity - ri.discount) * {$share}, 8) * rl.quantity / ri.quantity, 2))"
+            .' FROM order_return_lines rl JOIN order_items ri ON ri.id = rl.order_item_id JOIN orders ro ON ro.id = ri.order_id'
             ." WHERE rl.order_return_id = {$return}.id AND ri.quantity > 0), 0)";
     }
 
@@ -78,13 +82,68 @@ final class CustomerDebt
             ->where("{$order}.is_cod", false);
     }
 
+    /**
+     * SQL balance of the customer's debt entries (opening balances, adjustments, their receipts), voided entries and
+     * entries whose cash voucher was voided left out.
+     */
+    public static function entriesSql(string $customerId = 'customers.id'): string
+    {
+        return '(SELECT COALESCE(SUM(de.amount), 0) FROM customer_debt_entries de LEFT JOIN cash_vouchers dv ON dv.id = de.cash_voucher_id'
+            ." WHERE de.customer_id = {$customerId} AND de.voided_at IS NULL AND dv.voided_at IS NULL)";
+    }
+
+    /** SQL payment terms of a customer (alias of a `customers` row): its own, else its group's, else null. */
+    public static function termsSql(string $customer = 'customers'): string
+    {
+        return "COALESCE({$customer}.payment_terms_days, (SELECT tg.payment_terms_days FROM customer_groups tg WHERE tg.id = {$customer}.customer_group_id))";
+    }
+
+    /**
+     * SQL debt of a customer (alias of a `customers` row), never below 0. Usable as a select or in a where.
+     */
+    public static function customerDebtSql(string $customer = 'customers'): string
+    {
+        return 'GREATEST((SELECT COALESCE(SUM('.self::dueSql('dco').'), 0) FROM orders dco WHERE dco.customer_id = '.$customer.'.id'
+            .self::constrainSql('dco').') + '.self::entriesSql("{$customer}.id").', 0)';
+    }
+
+    /**
+     * SQL overdue part of a customer's debt: what is still owed on orders older than the payment terms, and on
+     * entries past their due date. Never more than the debt itself; 0 when the customer has no terms.
+     */
+    public static function customerOverdueSql(string $customer = 'customers'): string
+    {
+        $terms = self::termsSql($customer);
+        $orders = 'SELECT COALESCE(SUM(GREATEST('.self::dueSql('doo').', 0)), 0) FROM orders doo WHERE doo.customer_id = '.$customer.'.id'
+            .self::constrainSql('doo')." AND {$terms} IS NOT NULL AND doo.placed_at < DATE_SUB(NOW(), INTERVAL {$terms} DAY)";
+        $entries = 'SELECT COALESCE(SUM(oe.amount), 0) FROM customer_debt_entries oe WHERE oe.customer_id = '.$customer.'.id'
+            .' AND oe.voided_at IS NULL AND oe.amount > 0 AND oe.due_date IS NOT NULL AND oe.due_date < CURDATE()';
+
+        return "LEAST(({$orders}) + ({$entries}), ".self::customerDebtSql($customer).')';
+    }
+
+    /** constrain() as SQL conditions, for raw subqueries (starts with " AND"). */
+    private static function constrainSql(string $order): string
+    {
+        $excluded = "'".implode("','", self::EXCLUDED_STATUSES)."'";
+
+        return " AND {$order}.marketplace = '".Order::SOURCE_MANUAL."' AND {$order}.status NOT IN ({$excluded}) AND {$order}.is_cod = 0";
+    }
+
     /** What the customer owes now. */
     public function forCustomer(Customer $customer): string
     {
-        $sum = self::constrain(Order::query()->where('orders.customer_id', $customer->id))
-            ->selectRaw('COALESCE(SUM('.self::dueSql().'), 0) as debt')->value('debt');
+        $sum = Customer::query()->whereKey($customer->id)->selectRaw(self::customerDebtSql().' as debt')->value('debt');
 
-        return bccomp((string) $sum, '0', 2) > 0 ? bcadd((string) $sum, '0', 2) : '0.00';
+        return bcadd((string) ($sum ?? 0), '0', 2);
+    }
+
+    /** What the customer's debt entries (opening balances, adjustments, their receipts) leave owing, may be < 0. */
+    public function entriesBalance(Customer $customer): string
+    {
+        $sum = Customer::query()->whereKey($customer->id)->selectRaw(self::entriesSql().' as balance')->value('balance');
+
+        return bcadd((string) ($sum ?? 0), '0', 2);
     }
 
     /**

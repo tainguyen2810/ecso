@@ -5,6 +5,7 @@ import PageHeader from '../../PageHeader.vue';
 import CustomersNav from './CustomersNav.vue';
 import { priceTierLabels } from './labels';
 import { paymentMethods } from '../orders/labels';
+import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
@@ -15,7 +16,7 @@ import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
-import { formatDate, formatNumber } from '@/shared/lib/utils';
+import { formatDate, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
 import type { CustomerGroup } from '@/shared/types';
@@ -29,7 +30,7 @@ const loadError = ref<string | null>(null);
 
 const dialog = ref(false);
 const editing = ref<CustomerGroup | null>(null);
-const form = reactive({ name: '', code: '', description: '', price_tier: 'retail', discount_percent: '0', payment_method: '' });
+const form = reactive({ name: '', code: '', description: '', price_tier: 'retail', discount_percent: '0', payment_method: '', payment_terms_days: '', credit_limit: '', is_active: true, auto_min_spent: '', auto_min_orders: '' });
 const saving = ref(false);
 const error = ref<ApiError | null>(null);
 
@@ -52,6 +53,8 @@ function edit(g: CustomerGroup | null) {
     Object.assign(form, {
         name: g?.name ?? '', code: g?.code ?? '', description: g?.description ?? '', price_tier: g?.price_tier ?? 'retail',
         discount_percent: g ? String(Number(g.discount_percent)) : '0', payment_method: g?.payment_method ?? '',
+        payment_terms_days: g?.payment_terms_days != null ? String(g.payment_terms_days) : '', credit_limit: g?.credit_limit != null ? String(Number(g.credit_limit)) : '', is_active: g?.is_active !== false,
+        auto_min_spent: g?.auto_min_spent != null ? String(Number(g.auto_min_spent)) : '', auto_min_orders: g?.auto_min_orders != null ? String(g.auto_min_orders) : '',
     });
     dialog.value = true;
 }
@@ -104,6 +107,8 @@ async function remove(g: CustomerGroup) {
                         <th class="px-4 py-2.5 font-medium">Giá áp dụng</th>
                         <th class="px-4 py-2.5 text-right font-medium">Chiết khấu</th>
                         <th class="px-4 py-2.5 font-medium">Thanh toán quen dùng</th>
+                        <th class="px-4 py-2.5 font-medium">Hạn thanh toán</th>
+                        <th class="px-4 py-2.5 text-right font-medium">Hạn mức nợ</th>
                         <th class="px-4 py-2.5 text-right font-medium">Số khách</th>
                         <th class="px-4 py-2.5 font-medium">Ngày tạo</th>
                         <th v-if="canManage" class="px-4 py-2.5" />
@@ -112,12 +117,15 @@ async function remove(g: CustomerGroup) {
                 <tbody class="divide-y">
                     <tr v-for="g in rows" :key="g.id" class="hover:bg-muted/30">
                         <td class="px-4 py-3">
-                            <div class="font-medium">{{ g.name }}</div>
+                            <div class="font-medium">{{ g.name }} <Badge v-if="g.is_active === false" tone="muted">Ngừng sử dụng</Badge></div>
+                            <div v-if="g.auto_min_spent != null || g.auto_min_orders != null" class="text-xs text-muted-foreground">Tự xếp khi {{ [g.auto_min_spent != null ? `chi tiêu từ ${formatMoney(g.auto_min_spent)}` : '', g.auto_min_orders != null ? `từ ${g.auto_min_orders} đơn` : ''].filter(Boolean).join(' và ') }}</div>
                             <div class="text-xs text-muted-foreground"><span class="font-mono">{{ g.code }}</span><span v-if="g.description"> · {{ g.description }}</span></div>
                         </td>
                         <td class="px-4 py-3">{{ priceTierLabels[g.price_tier] }}</td>
                         <td class="px-4 py-3 text-right tabular-nums">{{ Number(g.discount_percent) ? `${Number(g.discount_percent)}%` : '—' }}</td>
                         <td class="px-4 py-3">{{ g.payment_method ? paymentMethods[g.payment_method] : '—' }}</td>
+                        <td class="px-4 py-3">{{ g.payment_terms_days != null ? `${g.payment_terms_days} ngày` : '—' }}</td>
+                        <td class="px-4 py-3 text-right tabular-nums">{{ g.credit_limit != null ? formatMoney(g.credit_limit) : '—' }}</td>
                         <td class="px-4 py-3 text-right tabular-nums">
                             <RouterLink :to="{ path: '/customers', query: { group: g.id } }" class="text-primary hover:underline">{{ formatNumber(g.customers_count) }}</RouterLink>
                         </td>
@@ -140,9 +148,20 @@ async function remove(g: CustomerGroup) {
                 <Select id="g-tier" v-model="form.price_tier" :options="Object.entries(priceTierLabels).map(([value, label]) => ({ value, label }))" />
             </FormField>
             <FormField label="Chiết khấu (%)" for="g-discount" :error="error?.field('discount_percent')"><Input id="g-discount" v-model="form.discount_percent" type="number" min="0" max="100" step="0.5" /></FormField>
+            <FormField label="Hạn thanh toán (ngày)" for="g-terms" :error="error?.field('payment_terms_days')" hint="Đơn quá số ngày này thì tính là nợ quá hạn."><Input id="g-terms" v-model="form.payment_terms_days" type="number" min="0" max="365" /></FormField>
+            <FormField label="Hạn mức nợ" for="g-credit" :error="error?.field('credit_limit')"><Input id="g-credit" v-model="form.credit_limit" type="number" min="0" step="any" /></FormField>
             <FormField label="Thanh toán quen dùng" for="g-pay" class="sm:col-span-2">
                 <Select id="g-pay" v-model="form.payment_method" :options="[{ value: '', label: 'Không đặt' }, ...Object.entries(paymentMethods).map(([value, label]) => ({ value, label }))]" />
             </FormField>
+            <fieldset class="rounded-md border px-3 py-2 sm:col-span-2">
+                <legend class="px-1 text-sm font-medium">Tự xếp khách vào nhóm</legend>
+                <p class="mb-2 text-xs text-muted-foreground">Mỗi đêm, khách chưa có nhóm đạt ngưỡng dưới đây được xếp vào nhóm này (đặt cả hai thì phải đạt cả hai). Khách đã được xếp nhóm bằng tay không bị đổi. Để trống để tắt.</p>
+                <div class="grid gap-3 sm:grid-cols-2">
+                    <FormField label="Tổng chi tiêu từ" for="g-auto-spent" :error="error?.field('auto_min_spent')"><Input id="g-auto-spent" v-model="form.auto_min_spent" type="number" min="0" step="any" data-testid="g-auto-spent" /></FormField>
+                    <FormField label="Số đơn từ" for="g-auto-orders" :error="error?.field('auto_min_orders')"><Input id="g-auto-orders" v-model="form.auto_min_orders" type="number" min="1" step="1" /></FormField>
+                </div>
+            </fieldset>
+            <label class="flex items-center gap-2 text-sm sm:col-span-2"><input v-model="form.is_active" type="checkbox" class="size-4" data-testid="g-active" /> Đang sử dụng (bỏ chọn để không xếp thêm khách mới vào nhóm; khách đang trong nhóm giữ nguyên)</label>
             <FormField label="Mô tả" for="g-desc" class="sm:col-span-2"><Input id="g-desc" v-model="form.description" /></FormField>
             <p v-if="error && !error.body.errors" class="text-sm text-destructive sm:col-span-2">{{ error.message }}</p>
         </form>

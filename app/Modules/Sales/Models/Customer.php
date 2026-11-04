@@ -22,6 +22,7 @@ use Illuminate\Support\Carbon;
  * @property-read int|string|null $orders_count
  * @property-read int|string|null $total_spent
  * @property-read int|string|null $debt
+ * @property-read int|string|null $overdue
  * @property-read string|null $last_order_at
  * @property list<string>|null $tags
  * @property Carbon|null $birthday
@@ -34,15 +35,46 @@ class Customer extends Model
 
     public const GENDERS = ['male', 'female', 'other'];
 
+    public const TYPES = ['individual', 'company'];
+
+    /** Segments of the customer list; the figures they use are below. */
+    public const SEGMENTS = [
+        'lapsed' => 'Lâu không mua', 'frequent' => 'Mua thường xuyên', 'high_value' => 'Giá trị cao', 'new' => 'Khách mới', 'follow_up' => 'Cần liên hệ',
+    ];
+
+    public const LAPSED_DAYS = 90;
+
+    public const FREQUENT_DAYS = 180;
+
+    public const FREQUENT_ORDERS = 3;
+
+    public const NEW_DAYS = 30;
+
+    /** Where the customer came from: the type of the sales channel of their first order, a referral, or a file import. */
+    public const SOURCES = [...SalesChannel::TYPES, 'referral', 'import'];
+
     protected $attributes = ['status' => 'active'];
 
-    protected $fillable = ['name', 'email', 'address', 'note', 'birthday', 'gender', 'tax_code', 'tags', 'status'];
+    protected $fillable = ['name', 'type', 'source', 'email', 'address', 'note', 'birthday', 'gender', 'tax_code', 'invoice_name', 'invoice_address', 'invoice_email', 'tags', 'status', 'payment_terms_days', 'credit_limit'];
 
-    protected $hidden = ['id', 'tenant_id', 'phone_hash', 'created_by', 'customer_group_id', 'assigned_user_id'];
+    protected $hidden = ['id', 'tenant_id', 'phone_hash', 'email_key', 'created_by', 'customer_group_id', 'assigned_user_id'];
+
+    protected static function booted(): void
+    {
+        // The email as a lookup key, so a buyer from another channel is found by it whatever its case.
+        static::saving(fn (Customer $c) => $c->email_key = self::emailKey($c->email));
+    }
+
+    public static function emailKey(?string $email): ?string
+    {
+        $email = mb_strtolower(trim((string) $email));
+
+        return $email !== '' ? mb_substr($email, 0, 150) : null;
+    }
 
     protected function casts(): array
     {
-        return ['phone' => 'encrypted', 'address' => 'encrypted', 'birthday' => 'date', 'tags' => 'array'];
+        return ['phone' => 'encrypted', 'address' => 'encrypted', 'invoice_address' => 'encrypted', 'birthday' => 'date', 'tags' => 'array', 'credit_limit' => 'decimal:2'];
     }
 
     public function setPhone(?string $phone): void
@@ -55,7 +87,7 @@ class Customer extends Model
 
     /**
      * Adds orders_count, total_spent, last_order_at (cancelled and returned orders do not count, as in the sales
-     * reports) and debt, which follows CustomerDebt: own-channel orders less their returns and net payments.
+     * reports), debt and its overdue part, which follow CustomerDebt.
      *
      * @param  Builder<Customer>  $query
      * @return Builder<Customer>
@@ -65,13 +97,12 @@ class Customer extends Model
         $excluded = "'".OrderStatus::CANCELLED."','".OrderStatus::RETURNED."'";
         $base = fn (string $select) => Order::query()->selectRaw($select)
             ->whereColumn('orders.customer_id', 'customers.id')->whereRaw("orders.status NOT IN ({$excluded})");
-        $debt = CustomerDebt::constrain(Order::query()->whereColumn('orders.customer_id', 'customers.id'))
-            ->selectRaw('GREATEST(COALESCE(SUM('.CustomerDebt::dueSql().'), 0), 0)');
 
         return $query->select('customers.*')
             ->selectSub($base('COUNT(*)'), 'orders_count')
             ->selectSub($base('COALESCE(SUM(total), 0)'), 'total_spent')
-            ->selectSub($debt, 'debt')
+            ->selectRaw(CustomerDebt::customerDebtSql().' as debt')
+            ->selectRaw(CustomerDebt::customerOverdueSql().' as overdue')
             ->selectSub($base('MAX(placed_at)'), 'last_order_at');
     }
 
@@ -103,6 +134,18 @@ class Customer extends Model
     public function orders(): HasMany
     {
         return $this->hasMany(Order::class);
+    }
+
+    /** @return HasMany<CustomerDebtEntry, $this> */
+    public function debtEntries(): HasMany
+    {
+        return $this->hasMany(CustomerDebtEntry::class);
+    }
+
+    /** @return HasMany<CustomerIdentity, $this> */
+    public function identities(): HasMany
+    {
+        return $this->hasMany(CustomerIdentity::class);
     }
 
     /** @return HasMany<OrderPayment, $this> */
