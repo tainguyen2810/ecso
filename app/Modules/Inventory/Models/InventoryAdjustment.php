@@ -12,6 +12,7 @@ use Illuminate\Support\Carbon;
 
 /**
  * @property Carbon|null $decided_at
+ * @property Carbon|null $counted_at
  */
 class InventoryAdjustment extends Model
 {
@@ -34,7 +35,7 @@ class InventoryAdjustment extends Model
 
     protected function casts(): array
     {
-        return ['decided_at' => 'datetime'];
+        return ['decided_at' => 'datetime', 'counted_at' => 'datetime'];
     }
 
     /** @return BelongsTo<Warehouse, $this> */

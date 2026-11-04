@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { ClipboardCheck, ScanBarcode, Search } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Tabs from '../../components/Tabs.vue';
+import Alert from '@/shared/ui/Alert.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -16,6 +17,7 @@ import { api, ApiError } from '@/shared/lib/api';
 import { cn, formatDateTime, formatNumber } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
+import { useIdempotencyKey } from '@/shared/composables/useIdempotencyKey';
 import { applyScan, stocktakeLines, variance, varianceReasons, type CountRow, type LineNotes } from './stocktake';
 import type { InventoryDocument, Warehouse } from '@/shared/types';
 
@@ -27,6 +29,7 @@ import type { InventoryDocument, Warehouse } from '@/shared/types';
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
+const idempotency = useIdempotencyKey();
 const tenant = useTenantStore();
 const draftId = ref<string | null>(route.params.id ? String(route.params.id) : null);
 const doc = ref<InventoryDocument | null>(null);
@@ -76,7 +79,9 @@ async function loadStock() {
             all.push(...data.data.map((r: { variant: { id: string; sku: string; name: string | null; barcode: string | null }; product: { name: string }; on_hand: number }) => ({ id: r.variant.id, sku: r.variant.sku, barcode: r.variant.barcode, name: `${r.product.name}${r.variant.name ? ' · ' + r.variant.name : ''}`, on_hand: r.on_hand })));
             if (page >= data.meta.last_page) break;
         }
-        rows.value = all;
+        // A saved line is compared with the stock seen when it was counted, not with today's stock.
+        const saved = new Map((doc.value?.lines ?? []).filter((l) => l.system_qty !== undefined).map((l) => [l.variant.id, l.system_qty!]));
+        rows.value = all.map((r) => (saved.has(r.id) && saved.get(r.id) !== r.on_hand ? { ...r, on_hand: saved.get(r.id)!, on_hand_now: r.on_hand } : r));
         if (doc.value) {
             counts.value = Object.fromEntries((doc.value.lines ?? []).map((l) => [l.variant.id, l.quantity]));
             notes.value = Object.fromEntries((doc.value.lines ?? []).map((l) => [l.variant.id, { reason: l.reason, note: l.line_note }]));
@@ -139,6 +144,7 @@ const shown = computed(() => {
         return true;
     });
 });
+const movedSince = computed(() => rows.value.filter((r) => r.on_hand_now !== undefined && isCounted(r)));
 const lines = computed(() => stocktakeLines(rows.value, counts.value, zeroUncounted.value, notes.value));
 function noteOf(id: string) {
     return (notes.value[id] ??= {});
@@ -158,7 +164,8 @@ async function save(): Promise<string> {
     if (draftId.value) {
         doc.value = (await api.put(`/inventory/adjustments/${draftId.value}`, body)).data.data;
     } else {
-        doc.value = (await api.post('/inventory/adjustments', { ...body, warehouse_id: warehouse.value, reason: 'stocktake', draft: true })).data.data;
+        doc.value = (await api.post('/inventory/adjustments', { ...body, warehouse_id: warehouse.value, reason: 'stocktake', draft: true }, idempotency.config())).data.data;
+        idempotency.renew();
         draftId.value = doc.value!.id;
         clearLocal();
         await router.replace(`/inventory/stocktake/${draftId.value}`);
@@ -243,6 +250,9 @@ function reset() {
                 <Input v-model="q" class="pl-8" placeholder="Lọc SKU, tên…" />
             </div>
         </div>
+        <Alert v-if="movedSince.length" tone="amber" class="m-3" data-testid="stocktake-moved">
+            {{ formatNumber(movedSince.length) }} SKU đã có nhập hoặc xuất sau khi đếm. Khi cân bằng, ECSO chỉ cộng hoặc trừ phần lệch lúc đếm và giữ nguyên các giao dịch đó.
+        </Alert>
         <div v-if="loading" class="space-y-3 p-4"><Skeleton v-for="i in 6" :key="i" class="h-9" /></div>
         <EmptyState v-else-if="!rows.length" :icon="ClipboardCheck" title="Kho chưa có SKU" description="Chọn kho khác hoặc tạo sản phẩm trước." />
         <div v-else class="max-h-[65vh] overflow-auto">
@@ -251,7 +261,7 @@ function reset() {
                     <tr>
                         <th class="w-12 px-4 py-2 font-medium">STT</th>
                         <th class="px-3 py-2 font-medium">Tên sản phẩm</th>
-                        <th class="px-3 py-2 text-right font-medium">Tồn hệ thống</th>
+                        <th class="px-3 py-2 text-right font-medium" title="Tồn hệ thống lúc đếm">Tồn hệ thống</th>
                         <th class="px-3 py-2 text-right font-medium">Tồn thực tế</th>
                         <th class="px-3 py-2 text-right font-medium">Lệch</th>
                         <th class="px-3 py-2 font-medium">Lý do</th>
@@ -262,7 +272,10 @@ function reset() {
                     <tr v-for="(r, i) in shown" :key="r.id" :class="cn(lastScanned === r.id && 'bg-primary/5', (variance(r, counts) ?? 0) !== 0 && 'bg-amber-50/40')">
                         <td class="px-4 py-2 text-muted-foreground">{{ i + 1 }}</td>
                         <td class="px-3 py-2"><p class="max-w-80 truncate font-medium text-primary">{{ r.name }}</p><p class="font-mono text-xs text-muted-foreground">{{ r.sku }}</p></td>
-                        <td class="px-3 py-2 text-right tabular-nums">{{ formatNumber(r.on_hand) }}</td>
+                        <td class="px-3 py-2 text-right tabular-nums">
+                            {{ formatNumber(r.on_hand) }}
+                            <p v-if="r.on_hand_now !== undefined && isCounted(r)" class="text-[11px] text-amber-600" title="Tồn hiện tại khác tồn lúc đếm">Hiện tại {{ formatNumber(r.on_hand_now) }}</p>
+                        </td>
                         <td class="px-3 py-2 text-right">
                             <input :id="`count-${r.id}`" v-model.number="counts[r.id]" type="number" min="0" placeholder="Chưa kiểm" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right tabular-nums placeholder:text-xs" :data-testid="`count-${r.sku}`" />
                         </td>

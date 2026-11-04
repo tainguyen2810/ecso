@@ -3,6 +3,8 @@
 namespace App\Modules\Inventory\Http\Resources;
 
 use App\Modules\Inventory\Models\InventoryAdjustment;
+use App\Modules\Inventory\Models\InventoryAdjustmentLine;
+use App\Modules\Inventory\Models\StockBalance;
 use App\Modules\Inventory\Models\StockReceipt;
 use App\Modules\Inventory\Models\StockTransfer;
 use Illuminate\Http\Request;
@@ -19,6 +21,14 @@ class DocumentResource extends JsonResource
     {
         $doc = $this->resource;
         $warehouse = fn ($w) => $w ? ['id' => $w->ulid, 'code' => $w->code, 'name' => $w->name] : null;
+
+        // A count not applied yet shows today's stock next to the stock seen when counting: the difference is what
+        // was sold or received in between, which approval keeps.
+        $onHandNow = null;
+        if ($doc instanceof InventoryAdjustment && in_array($doc->status, [InventoryAdjustment::DRAFT, InventoryAdjustment::PENDING], true) && $doc->relationLoaded('lines')) {
+            $onHandNow = StockBalance::query()->where('warehouse_id', $doc->warehouse_id)
+                ->whereIn('product_variant_id', $doc->lines->pluck('product_variant_id'))->pluck('on_hand', 'product_variant_id');
+        }
 
         $base = [
             'id' => $doc->ulid,
@@ -37,6 +47,8 @@ class DocumentResource extends JsonResource
                 'quantity' => $line->quantity,
                 'unit_cost' => $line->unit_cost ?? null,
                 'mode' => $line->mode ?? null,
+                'system_qty' => $line->system_qty ?? null,
+                'on_hand_now' => $line instanceof InventoryAdjustmentLine && $line->mode === InventoryAdjustmentLine::MODE_COUNT && $onHandNow !== null ? (int) ($onHandNow[$line->product_variant_id] ?? 0) : null,
                 'on_hand_before' => $line->on_hand_before ?? null,
                 'applied_delta' => $line->applied_delta ?? null,
                 'reason' => $line->reason ?? null,
@@ -60,6 +72,7 @@ class DocumentResource extends JsonResource
                 'decided_by' => $doc->decider?->name,
                 'decided_at' => $doc->decided_at?->toIso8601String(),
                 'decision_note' => $doc->decision_note,
+                'counted_at' => $doc->counted_at?->toIso8601String(),
             ],
             $doc instanceof StockTransfer => [
                 'kind' => 'transfer',

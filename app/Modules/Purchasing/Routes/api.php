@@ -7,7 +7,8 @@ use App\Modules\Purchasing\Http\Controllers\SupplierPaymentController;
 use App\Modules\Purchasing\Http\Controllers\SupplierReturnController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
+// idempotent: a repeated POST with the same Idempotency-Key replays the first answer (no second document).
+Route::middleware(['auth:sanctum', 'verified', 'tenant', 'idempotent'])->group(function () {
     Route::get('suppliers/export', [SupplierController::class, 'export'])->middleware('throttle:10,1,purchasing.suppliers.export');
     Route::apiResource('suppliers', SupplierController::class);
     Route::post('suppliers/{supplier}/payments', [SupplierPaymentController::class, 'store'])->middleware('idempotent');

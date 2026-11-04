@@ -91,7 +91,7 @@ class ProductImporter
 
     /**
      * @param  array<int, array<string, string>>  $rows  keyed by file line number
-     * @return array{created: int, updated: int, products: int, errors: array<int, array{row: int, message: string}>, opening_receipt: string|null}
+     * @return array{created: int, updated: int, products: int, errors: array<int, array{row: int, message: string}>, opening_receipt: string|null, dry_run: bool, zero_cost_rows: array<int, int>}
      */
     public function import(array $rows, bool $dryRun = false, ?Warehouse $openingWarehouse = null): array
     {
@@ -106,11 +106,19 @@ class ProductImporter
             isset($existing[mb_strtolower($row['sku'])]) ? $updates++ : $creates++;
         }
 
-        if ($errors || $dryRun) {
-            return ['created' => $errors ? 0 : $creates, 'updated' => $errors ? 0 : $updates, 'products' => 0, 'errors' => $errors, 'opening_receipt' => null, 'dry_run' => $dryRun];
+        // Opening stock without a cost starts the average at 0 ₫ (gross profit too high): not an error, but reported.
+        $zeroCost = [];
+        foreach ($rows as $line => $row) {
+            if ((int) $row['opening_qty'] > 0 && ! ((float) $row['opening_cost'] > 0) && ! isset($existing[mb_strtolower($row['sku'])])) {
+                $zeroCost[] = (int) $line;
+            }
         }
 
-        return DB::transaction(function () use ($rows, $existing, $openingWarehouse, $creates, $updates) {
+        if ($errors || $dryRun) {
+            return ['created' => $errors ? 0 : $creates, 'updated' => $errors ? 0 : $updates, 'products' => 0, 'errors' => $errors, 'opening_receipt' => null, 'dry_run' => $dryRun, 'zero_cost_rows' => $zeroCost];
+        }
+
+        return DB::transaction(function () use ($rows, $existing, $openingWarehouse, $creates, $updates, $zeroCost) {
             $categories = Category::query()->whereNull('parent_id')->pluck('id', 'name')->mapWithKeys(fn ($id, $n) => [mb_strtolower($n) => $id]);
             $brands = Brand::query()->pluck('id', 'name')->mapWithKeys(fn ($id, $n) => [mb_strtolower($n) => $id]);
             $productsByKey = [];
@@ -163,7 +171,7 @@ class ProductImporter
 
             $this->audit->record('product.imported', null, ['created' => $creates, 'updated' => $updates, 'products' => $productCount]);
 
-            return ['created' => $creates, 'updated' => $updates, 'products' => $productCount, 'errors' => [], 'opening_receipt' => $receipt?->number, 'dry_run' => false];
+            return ['created' => $creates, 'updated' => $updates, 'products' => $productCount, 'errors' => [], 'opening_receipt' => $receipt?->number, 'dry_run' => false, 'zero_cost_rows' => $zeroCost];
         });
     }
 
