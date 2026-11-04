@@ -34,7 +34,8 @@ const warehouseId = ref('');
 const carts = ref<Cart[]>([emptyCart(1)]);
 const active = ref(0);
 const cart = computed(() => carts.value[active.value]!);
-const totals = computed(() => cartTotals(cart.value));
+const taxRule = computed(() => ({ rate: Number(settings.data?.tax.sale_rate) || 0, included: settings.data?.tax.prices_include_tax ?? true }));
+const totals = computed(() => cartTotals(cart.value, taxRule.value));
 
 const search = ref('');
 const results = ref<Variant[]>([]);
@@ -361,6 +362,7 @@ const quick = computed(() => quickCash(totals.value.total));
             <div class="space-y-2 border-t p-3 text-sm">
                 <div class="flex justify-between"><span class="text-muted-foreground">Tiền hàng ({{ totals.quantity }} sp)</span><span class="tabular-nums">{{ formatMoney(totals.subtotal) }}</span></div>
                 <div class="flex items-center justify-between"><span class="text-muted-foreground">Giảm giá</span><input v-model="cart.discount" type="number" min="0" :disabled="!canEditPrice" class="h-7 w-28 rounded-md border bg-card px-2 text-right tabular-nums disabled:bg-muted/50" data-testid="pos-discount" /></div>
+                <div v-if="taxRule.rate > 0" class="flex justify-between text-muted-foreground" data-testid="pos-tax"><span>{{ taxRule.included ? 'Trong đó' : 'Cộng' }} thuế GTGT {{ taxRule.rate }}%</span><span class="tabular-nums">{{ formatMoney(totals.tax) }}</span></div>
                 <div class="flex justify-between text-lg font-semibold"><span>Khách phải trả</span><span class="tabular-nums" data-testid="pos-total">{{ formatMoney(totals.total) }}</span></div>
 
                 <div v-if="cart.split" class="space-y-1.5 rounded-md border p-2" data-testid="pos-split">

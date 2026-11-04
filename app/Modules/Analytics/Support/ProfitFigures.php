@@ -11,7 +11,8 @@ use Illuminate\Support\Facades\DB;
 /**
  * The one place profit is computed, for the finance page and the profit and loss report alike.
  *
- *   Net revenue          = goods of orders recognised in the period (RevenuePolicy) − discounts − approved returns
+ *   Net revenue          = goods of orders recognised in the period (RevenuePolicy) − discounts − VAT inside the prices
+ *                          − approved returns (without the VAT they give back). VAT added on top is never revenue.
  *   Cost of goods        = cost captured at shipping − cost (as shipped) of returned goods put back on the shelf
  *   Gross profit         = net revenue − cost of goods
  *   Contribution profit  = gross profit − marketplace fees (confirmed + estimated) + shipping charged to buyers
@@ -73,6 +74,18 @@ final class ProfitFigures
         return 'CASE WHEN s.id IS NULL AND '.self::isMarketplaceSql().' AND cr.id IS NULL THEN 1 ELSE 0 END';
     }
 
+    /** SQL: VAT inside an order's prices (VAT added on top of the prices is not in subtotal). */
+    public static function priceTaxSql(string $orders = 'o'): string
+    {
+        return "CASE WHEN {$orders}.prices_include_tax = 1 THEN {$orders}.tax_amount ELSE 0 END";
+    }
+
+    /** SQL: what an order's goods bring in, after discounts and without VAT (shipping apart). */
+    public static function netGoodsSql(string $orders = 'o'): string
+    {
+        return "({$orders}.subtotal - {$orders}.discount - ".self::priceTaxSql($orders).')';
+    }
+
     public static function isMarketplaceSql(string $orders = 'o'): string
     {
         return "{$orders}.marketplace NOT IN ('".implode("','", RevenuePolicy::AT_DELIVERY)."')";
@@ -95,7 +108,7 @@ final class ProfitFigures
     public function period(CarbonInterface $from, CarbonInterface $to, ?array $scope = null): array
     {
         $orders = $this->recognized($from, $to, $scope)
-            ->selectRaw('COUNT(*) as n, COALESCE(SUM(o.subtotal), 0) as goods, COALESCE(SUM(o.discount), 0) as discount, COALESCE(SUM(o.shipping_fee), 0) as shipping')->first();
+            ->selectRaw('COUNT(*) as n, COALESCE(SUM(o.subtotal), 0) as goods, COALESCE(SUM(o.discount), 0) as discount, COALESCE(SUM('.self::priceTaxSql().'), 0) as sales_tax, COALESCE(SUM(o.shipping_fee), 0) as shipping')->first();
         $cost = $this->recognized($from, $to, $scope)->join('order_items as i', 'i.order_id', '=', 'o.id')
             ->selectRaw('COALESCE(SUM(i.cost_snapshot * i.quantity), 0) as cogs, COALESCE(SUM(CASE WHEN i.cost_snapshot IS NULL AND i.mapping_status <> \'service\' THEN 1 ELSE 0 END), 0) as missing')
             ->first();
@@ -104,13 +117,14 @@ final class ProfitFigures
                 .'COALESCE(SUM('.self::estimatedFeeSql().'), 0) as estimated, COUNT('.self::estimatedFeeSql().') as estimated_orders, '
                 .'COALESCE(SUM('.self::unknownFeeSql().'), 0) as unknown_orders')
             ->first();
-        $returns = (float) $this->returns($scope)->whereBetween('r.created_at', [$from, $to])->selectRaw('COALESCE(SUM('.ReturnValues::valueSql().'), 0) as v')->value('v');
+        $returns = (float) $this->returns($scope)->whereBetween('r.created_at', [$from, $to])->selectRaw('COALESCE(SUM('.ReturnValues::netValueSql().'), 0) as v')->value('v');
         $cogsBack = (float) $this->returns($scope)->whereBetween('r.inspected_at', [$from, $to])->selectRaw('COALESCE(SUM(rv.cost_back), 0) as v')->value('v');
 
         $p = [
             'orders' => (int) $orders->n,
             'goods' => (float) $orders->goods,
             'discount' => (float) $orders->discount,
+            'sales_tax' => (float) $orders->sales_tax,
             'returns' => $returns,
             'shipping' => (float) $orders->shipping,
             'cogs_out' => (float) $cost->cogs,
@@ -118,7 +132,7 @@ final class ProfitFigures
             'fees_confirmed' => (float) $fees->confirmed,
             'fees_estimated' => (float) $fees->estimated,
         ];
-        $p['revenue'] = $p['goods'] - $p['discount'] - $p['returns'];
+        $p['revenue'] = $p['goods'] - $p['discount'] - $p['sales_tax'] - $p['returns'];
         $p['cogs'] = $p['cogs_out'] - $p['cogs_back'];
         $p['gross_profit'] = $p['revenue'] - $p['cogs'];
         $p['marketplace_fees'] = $p['fees_confirmed'] + $p['fees_estimated'];

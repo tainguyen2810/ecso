@@ -11,6 +11,7 @@ use App\Modules\Orders\Events\OrderImported;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
 use App\Modules\Orders\Models\OrderStatusHistory;
+use App\Modules\Sales\Support\PhoneNumber;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 
@@ -146,6 +147,8 @@ class OrderIngestor
             'total' => $data->total,
             'buyer_name' => $data->buyerName,
             'buyer_phone_masked' => self::maskPhone($data->buyerPhone),
+            // Marketplaces that send the full number can be searched by it; a masked one gives no lookup key.
+            'buyer_phone_hash' => str_contains((string) $data->buyerPhone, '*') ? null : PhoneNumber::hash(PhoneNumber::normalize($data->buyerPhone)),
             'shipping_address' => $data->shippingAddress,
             'shipping_carrier' => $data->carrier,
             'tracking_number' => $data->trackingNumber,

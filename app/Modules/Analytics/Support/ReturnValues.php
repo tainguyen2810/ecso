@@ -12,7 +12,9 @@ use Illuminate\Support\Facades\DB;
  *
  *  - A return counts once it is approved: requested (not yet accepted) and rejected returns are left out.
  *  - Its value is the refund agreed on it, or else what the buyer paid for the returned quantities (each line's
- *    discount spread over its units), the same rule as OrderReturn::goodsValue().
+ *    discount spread over its units, then the order discount and any VAT added on top spread over the goods by their
+ *    value), the same rule as OrderReturn::goodsValue(). Shipping is not refunded.
+ *  - For revenue, the VAT inside that value is taken out (netValueSql): a refund gives back the VAT with the goods.
  *  - The cost put back is the cost captured when the goods shipped (order_items.cost_snapshot) times the quantity
  *    inspected as sellable, so returning goods never revalues them at today's cost. Damaged goods stay in cost.
  */
@@ -23,10 +25,15 @@ final class ReturnValues
     /** Per return: goods value of its lines and shipped cost of the quantity put back on the shelf. */
     public static function lines(): Builder
     {
+        // Share of the order's goods value the buyer paid: (subtotal − order discount + VAT added on top) / subtotal.
+        $share = 'CASE WHEN ro2.subtotal > 0 AND (ro2.discount > 0 OR (ro2.prices_include_tax = 0 AND ro2.tax_amount > 0)) '
+            .'THEN GREATEST(0, (ro2.subtotal - ro2.discount + CASE WHEN ro2.prices_include_tax = 0 THEN ro2.tax_amount ELSE 0 END) / ro2.subtotal) ELSE 1 END';
+
         return DB::table('order_return_lines as rl')->join('order_items as ri', 'ri.id', '=', 'rl.order_item_id')
+            ->join('orders as ro2', 'ro2.id', '=', 'ri.order_id')
             ->groupBy('rl.order_return_id')
             ->selectRaw('rl.order_return_id, '
-                .'SUM(CASE WHEN ri.quantity > 0 THEN rl.quantity * (ri.unit_price * ri.quantity - ri.discount) / ri.quantity ELSE 0 END) as goods_value, '
+                ."SUM(CASE WHEN ri.quantity > 0 THEN rl.quantity * (ri.unit_price * ri.quantity - ri.discount) * ({$share}) / ri.quantity ELSE 0 END) as goods_value, "
                 .'SUM(COALESCE(rl.sellable_qty, 0) * COALESCE(ri.cost_snapshot, 0)) as cost_back');
     }
 
@@ -34,5 +41,11 @@ final class ReturnValues
     public static function valueSql(string $return = 'r', string $lines = 'rv'): string
     {
         return "COALESCE({$return}.refund_amount, {$lines}.goods_value, 0)";
+    }
+
+    /** SQL for a return's value without the VAT it gives back, given also the alias of the returned order. */
+    public static function netValueSql(string $return = 'r', string $lines = 'rv', string $order = 'ro'): string
+    {
+        return '('.self::valueSql($return, $lines).") * 100 / (100 + COALESCE({$order}.tax_rate, 0))";
     }
 }

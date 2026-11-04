@@ -17,6 +17,7 @@ Schedule::command('horizon:snapshot')->everyFiveMinutes();
 Schedule::command('ecso:inventory:low-stock-digest')->dailyAt('07:30')->withoutOverlapping()->onOneServer();
 
 Schedule::command('ecso:inventory:verify')->dailyAt('02:30')->withoutOverlapping()->onOneServer();
+Schedule::command('ecso:orders:verify-money')->dailyAt('02:45')->withoutOverlapping()->onOneServer();
 
 // Inventory outbox: retries and debounced pushes to marketplaces (INVENTORY-ENGINE.md §7).
 Schedule::command('ecso:marketplace:push-due')->everyMinute()->withoutOverlapping()->onOneServer();

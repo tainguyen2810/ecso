@@ -157,6 +157,63 @@ class ReturnService
     }
 
     /**
+     * "Hủy hóa đơn": undoes a completed sale of the seller's own channel in one step, for a sale rung up by mistake.
+     * Nothing is deleted: a return of everything still returnable is recorded and inspected (all goods back on the
+     * shelf of the order's warehouse) and what the buyer paid is refunded in the methods they paid with. Any part they
+     * still owed stays on the return, which lowers their debt.
+     */
+    public function voidSale(Order $order, string $reason): OrderReturn
+    {
+        return DB::transaction(function () use ($order, $reason) {
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+            if (! $order->isManual() || $order->status !== OrderStatus::COMPLETED) {
+                throw ValidationException::withMessages(['order' => 'Chỉ hủy được hóa đơn bán đã hoàn tất của kênh bán riêng.']);
+            }
+            if (OrderReturn::query()->where('order_id', $order->id)->where('status', '!=', OrderReturn::REJECTED)->exists()) {
+                throw ValidationException::withMessages(['order' => 'Đơn đã có phiếu trả hàng. Hãy xử lý tiếp trên phiếu trả.']);
+            }
+            $paid = OrderPayment::query()->where('order_id', $order->id)->whereNull('voided_at')->get();
+            if ($paid->contains('method', OrderPayment::EXCHANGE)) {
+                throw ValidationException::withMessages(['order' => 'Đơn đổi hàng: hãy làm phiếu trả hàng thay vì hủy hóa đơn.']);
+            }
+
+            $lines = collect($this->returnableQuantities($order))->filter(fn ($qty) => $qty > 0)
+                ->map(fn ($qty, $id) => ['order_item_id' => (int) $id, 'quantity' => (int) $qty])->values()->all();
+            if ($lines === []) {
+                throw ValidationException::withMessages(['order' => 'Không còn hàng nào để trả lại kho.']);
+            }
+
+            $return = $this->create($order, ['type' => OrderReturn::TYPE_RETURN, 'reason' => "Hủy hóa đơn: {$reason}", 'lines' => $lines]);
+            $this->move($return, OrderReturn::APPROVED);
+            $this->move($return, OrderReturn::RECEIVED);
+            $warehouse = Warehouse::query()->findOrFail($order->warehouse_id);
+            $this->inspect($return, $warehouse, $return->lines()->get()->map(fn (OrderReturnLine $l) => [
+                'line_id' => (int) $l->id, 'received_qty' => (int) $l->quantity, 'sellable_qty' => (int) $l->quantity, 'damaged_qty' => 0,
+            ])->all(), "Hủy hóa đơn: {$reason}");
+
+            // Pay back in each method the buyer used, never more than the return is worth.
+            $left = $return->refresh()->refundable();
+            $net = [];
+            foreach ($paid as $p) {
+                $net[$p->method] = bcadd($net[$p->method] ?? '0', $p->kind === OrderPayment::REFUND ? bcmul((string) $p->amount, '-1', 2) : (string) $p->amount, 2);
+            }
+            foreach ($net as $method => $amount) {
+                $amount = bccomp($amount, $left, 2) > 0 ? $left : $amount;
+                if (bccomp($amount, '0', 2) <= 0) {
+                    continue;
+                }
+                $this->refund($return, ['method' => $method, 'amount' => $amount, 'note' => "Hủy hóa đơn {$order->external_order_id}"]);
+                $left = bcsub($left, $amount, 2);
+            }
+            $this->move($return->refresh(), OrderReturn::CLOSED);
+
+            $this->audit->record('order.sale_voided', $order, ['order' => $order->external_order_id, 'reason' => $reason, 'return' => $return->number]);
+
+            return $return->refresh();
+        });
+    }
+
+    /**
      * How much of what left the warehouse has come back on returns: none, partial or full. Rejected returns do not
      * count; a return counts from when it is recorded.
      */

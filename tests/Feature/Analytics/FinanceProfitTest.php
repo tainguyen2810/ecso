@@ -139,3 +139,33 @@ it('hides cost and profit in the summary and the drill-down from members without
     $rows = $api->getJson('/api/v1/finance/details?metric=revenue')->assertOk()->json('data');
     expect($rows['rows'][0])->not->toHaveKey('cogs')->and($rows['total'])->not->toHaveKey('cogs');
 });
+
+it('keeps VAT out of net revenue, whether prices include it or it is added on top, and out of returns', function () {
+    [$tenant, $owner] = tenantWithOwner();
+    $variant = makeVariant($tenant, 'SKU-VAT');
+    stockIn($tenant, $variant, 10); // unit cost 50,000
+    $api = actingInTenant($owner, $tenant);
+
+    // Prices include VAT 10%: 110,000 is 100,000 of goods and 10,000 of VAT.
+    $api->putJson('/api/v1/tenant/settings/tax', ['sale_rate' => 10, 'purchase_rate' => 0, 'prices_include_tax' => true])->assertOk();
+    createSalesOrder($owner, $tenant, [[$variant, 1, 110000]], ['stage' => 'completed', 'payments' => [['method' => 'cash', 'amount' => 110000]]])->assertCreated();
+    // Prices before VAT 10%: 200,000 of goods, 20,000 of VAT added on top.
+    $api->putJson('/api/v1/tenant/settings/tax', ['sale_rate' => 10, 'purchase_rate' => 0, 'prices_include_tax' => false])->assertOk();
+    $onTop = createSalesOrder($owner, $tenant, [[$variant, 2, 100000]], ['stage' => 'completed', 'payments' => [['method' => 'cash', 'amount' => 220000]]])->assertCreated()->json('data');
+
+    $data = $api->getJson('/api/v1/finance/summary')->json('data');
+    expect($data['completed']['goods'])->toEqual(300000.0)
+        ->and($data['net_revenue'])->toEqual(300000.0)
+        ->and($data['estimated_gross_profit'])->toEqual(150000.0);
+    $pl = collect($api->getJson('/api/v1/reports/profit-loss')->json('data.lines'))->keyBy('key');
+    expect($pl['sales_tax']['current'])->toEqual(10000)->and($pl['revenue']['current'])->toEqual(300000);
+
+    // Voiding the sale with VAT on top refunds 220,000: 200,000 comes off revenue, not the VAT given back.
+    $api->postJson("/api/v1/sales-orders/{$onTop['id']}/void-sale", ['reason' => 'Bấm nhầm'])->assertCreated();
+    $after = $api->getJson('/api/v1/finance/summary')->json('data');
+    expect($after['refunds'])->toEqual(200000.0)
+        ->and($after['net_revenue'])->toEqual(100000.0)
+        ->and($api->getJson('/api/v1/finance/details?metric=returns')->json('data.total.value'))->toEqual(200000.0);
+    $revenue = $api->getJson('/api/v1/finance/details?metric=revenue')->json('data');
+    expect($revenue['total']['goods'])->toEqual(300000.0)->and(collect($revenue['rows'])->sum('tax'))->toEqual(30000);
+});

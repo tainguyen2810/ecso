@@ -47,6 +47,33 @@ const returnReasons = computed(() => (settingsStore.data?.reasons ?? []).filter(
 const returnOpen = ref(false);
 // Same rule as the API: order handling staff, or warehouse staff receiving a parcel back.
 const canCreateReturn = computed(() => tenant.can('orders.update') || tenant.can('returns.inspect'));
+
+// "Hủy hóa đơn": a completed sale rung up by mistake goes back to stock and the money back to the buyer in one step.
+const canVoidSale = computed(
+    () => isManual.value && order.value?.status === 'COMPLETED' && order.value?.return_state === 'none' && tenant.can('orders.cancel') && tenant.can('orders.payment'),
+);
+const voidSaleOpen = ref(false);
+const voidSaleReason = ref('');
+let voidSaleKey = '';
+function openVoidSale() {
+    voidSaleReason.value = '';
+    voidSaleKey = newIdempotencyKey();
+    voidSaleOpen.value = true;
+}
+async function voidSale() {
+    busy.value = 'void-sale';
+    try {
+        const { data } = await api.post(`/sales-orders/${order.value!.id}/void-sale`, { reason: voidSaleReason.value }, idempotent(voidSaleKey));
+        toast.success(`Đã hủy hóa đơn: hàng về kho, hoàn tiền theo phiếu trả ${data.data.number}.`);
+        voidSaleOpen.value = false;
+        await load();
+    } catch (e) {
+        const err = e as ApiError;
+        toast.error(err.field('reason') ?? err.field('order') ?? err.message);
+    } finally {
+        busy.value = null;
+    }
+}
 const returnForm = ref({ type: 'return', reason: '', refund_amount: '', lines: {} as Record<number, number> });
 const returnErrors = ref<ApiError | null>(null);
 
@@ -86,7 +113,7 @@ async function saveMeta() {
 
 const isManual = computed(() => order.value?.source === 'manual');
 const actionList = computed(() => {
-    const entries = Object.entries(order.value?.actions ?? {}).filter(([, a]) => a.allowed);
+    const entries = Object.entries(order.value?.actions ?? {}).filter(([action, a]) => a.allowed && (action !== 'cancel' || tenant.can('orders.cancel')));
     return isManual.value ? entries.sort(([a], [b]) => manualActionOrder.indexOf(a) - manualActionOrder.indexOf(b)) : entries;
 });
 
@@ -131,15 +158,25 @@ async function pay() {
     }
 }
 
-async function voidPayment(id: string) {
-    const reason = window.prompt('Lý do hủy phiếu thu/chi này?');
-    if (!reason) return;
+// Void a payment typed by mistake: asks for the reason in a dialog (the audit log keeps it).
+const voidPaymentId = ref<string | null>(null);
+const voidPaymentReason = ref('');
+function voidPayment(id: string) {
+    voidPaymentId.value = id;
+    voidPaymentReason.value = '';
+}
+async function confirmVoidPayment() {
+    busy.value = 'void-payment';
     try {
-        await api.post(`/payments/${id}/void`, { reason });
+        await api.post(`/payments/${voidPaymentId.value}/void`, { reason: voidPaymentReason.value.trim() });
         toast.success('Đã hủy phiếu.');
+        voidPaymentId.value = null;
         await load();
     } catch (e) {
-        toast.error((e as ApiError).message);
+        const err = e as ApiError;
+        toast.error(err.field('payment') ?? err.field('reason') ?? err.message);
+    } finally {
+        busy.value = null;
     }
 }
 const workflow = computed(() => (order.value ? orderWorkflow(order.value) : []));
@@ -271,6 +308,7 @@ async function createReturn() {
                     <Button v-if="isManual && order.editable && tenant.can('orders.create') && tenant.can('orders.update')" variant="outline" size="sm" data-testid="edit-order" @click="$router.push(`/orders/${order.id}/edit`)"><Pencil /> Sửa đơn</Button>
                     <Button v-if="isManual" variant="outline" size="sm" data-testid="print-invoice" @click="printOpen = true"><ReceiptText /> In đơn hàng</Button>
                     <Button v-if="tenant.can('orders.print')" variant="outline" size="sm" :loading="busy === 'print'" @click="print"><Printer /> In phiếu</Button>
+                    <Button v-if="canVoidSale" variant="outline" size="sm" class="text-rose-600 hover:text-rose-700" data-testid="void-sale" @click="openVoidSale"><Ban /> Hủy hóa đơn</Button>
                     <Button v-if="tenant.can('orders.create')" variant="outline" size="sm" data-testid="copy-order" @click="$router.push({ path: '/orders/new', query: { copy: order.id } })"><Copy /> Sao chép</Button>
                 </div>
             </div>
@@ -362,6 +400,9 @@ async function createReturn() {
                             <dt class="text-muted-foreground">Tiền hàng</dt><dd class="text-right tabular-nums">{{ formatMoney(order.subtotal) }}</dd>
                             <dt class="text-muted-foreground">Phí vận chuyển</dt><dd class="text-right tabular-nums">{{ formatMoney(order.shipping_fee) }}</dd>
                             <dt class="text-muted-foreground">Giảm giá</dt><dd class="text-right tabular-nums">−{{ formatMoney(order.discount) }}</dd>
+                            <template v-if="Number(order.tax_amount ?? 0) > 0">
+                                <dt class="text-muted-foreground">{{ order.prices_include_tax === false ? 'Thuế GTGT' : 'Trong đó thuế GTGT' }} {{ Number(order.tax_rate) }}%</dt><dd class="text-right tabular-nums" data-testid="order-tax">{{ formatMoney(order.tax_amount!) }}</dd>
+                            </template>
                             <dt class="mt-1 border-t pt-2 font-semibold">Khách trả</dt><dd class="mt-1 border-t pt-2 text-right text-lg font-bold tabular-nums text-blue-600">{{ formatMoney(order.total) }}</dd>
                         </dl>
                     </div>
@@ -383,6 +424,18 @@ async function createReturn() {
                             </div>
                         </li>
                     </ol>
+                </Card>
+
+                <Card v-if="order.edits?.length" caps title="Lịch sử sửa đơn">
+                    <ul class="divide-y text-sm" data-testid="order-edits">
+                        <li v-for="(e, idx) in order.edits" :key="idx" class="px-5 py-3">
+                            <div class="text-xs text-muted-foreground">{{ e.at ? formatDateTime(e.at) : '' }}<span v-if="e.actor"> · {{ e.actor }}</span></div>
+                            <ul v-if="e.changes.length" class="mt-1 space-y-0.5">
+                                <li v-for="(c, i) in e.changes" :key="i">{{ c }}</li>
+                            </ul>
+                            <p v-else class="mt-1 text-muted-foreground">Lưu lại, không đổi nội dung.</p>
+                        </li>
+                    </ul>
                 </Card>
 
                 <Card caps title="Ghi chú nội bộ">
@@ -466,7 +519,7 @@ async function createReturn() {
                             </div>
                             <div class="flex items-center gap-1">
                                 <span class="whitespace-nowrap tabular-nums" :class="p.kind === 'refund' ? 'text-rose-600' : ''">{{ p.kind === 'refund' ? '−' : '' }}{{ formatMoney(p.amount) }}</span>
-                                <Button v-if="!p.voided_at && p.method !== 'exchange' && tenant.can('orders.payment')" variant="ghost" size="icon" class="size-7" title="Hủy phiếu (nhập nhầm)" @click="voidPayment(p.id)"><Ban class="size-3.5" /></Button>
+                                <Button v-if="!p.voided_at && p.method !== 'exchange' && tenant.can('orders.payment.void')" variant="ghost" size="icon" class="size-7" title="Hủy phiếu (nhập nhầm)" @click="voidPayment(p.id)"><Ban class="size-3.5" /></Button>
                             </div>
                         </li>
                     </ul>
@@ -550,6 +603,22 @@ async function createReturn() {
             <template #footer>
                 <Button variant="outline" @click="cancelOpen = false">Đóng</Button>
                 <Button variant="destructive" :loading="busy === 'cancel'" @click="act('cancel', { reason: cancelReason || null })">Hủy đơn</Button>
+            </template>
+        </Dialog>
+
+        <Dialog :open="voidPaymentId !== null" title="Hủy phiếu thu/chi" description="Chỉ hủy phiếu nhập nhầm. Phiếu đã hủy vẫn được lưu và không còn tính vào số đã thu." @update:open="(v: boolean) => !v && (voidPaymentId = null)">
+            <FormField label="Lý do hủy"><Input v-model="voidPaymentReason" placeholder="Ví dụ: nhập nhầm số tiền" data-testid="void-payment-reason" /></FormField>
+            <template #footer>
+                <Button variant="outline" @click="voidPaymentId = null">Đóng</Button>
+                <Button variant="destructive" :disabled="!voidPaymentReason.trim()" :loading="busy === 'void-payment'" data-testid="void-payment-submit" @click="confirmVoidPayment">Hủy phiếu</Button>
+            </template>
+        </Dialog>
+
+        <Dialog v-model:open="voidSaleOpen" title="Hủy hóa đơn" description="Toàn bộ hàng được nhập lại kho của đơn, tiền khách đã trả được hoàn theo đúng hình thức đã trả. Hệ thống lập một phiếu trả hàng để lưu vết, không xóa đơn.">
+            <FormField label="Lý do" :hint="'Ví dụ: bấm nhầm, khách đổi ý tại quầy'"><Input v-model="voidSaleReason" data-testid="void-sale-reason" /></FormField>
+            <template #footer>
+                <Button variant="outline" @click="voidSaleOpen = false">Đóng</Button>
+                <Button variant="destructive" :disabled="!voidSaleReason.trim()" :loading="busy === 'void-sale'" data-testid="void-sale-submit" @click="voidSale">Hủy hóa đơn</Button>
             </template>
         </Dialog>
 

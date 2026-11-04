@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Tài chính: doanh thu không gồm thuế GTGT (2026-11-04)
+- Doanh thu thuần trên trang Tài chính và Báo cáo lãi lỗ **không gồm thuế GTGT bán ra**. Giá đã gồm thuế: trừ phần thuế nằm trong giá (dòng mới "3. Thuế GTGT nằm trong giá bán"). Giá chưa gồm thuế: thuế cộng thêm không bao giờ vào doanh thu.
+- Hàng trả lại trừ khỏi doanh thu theo giá trị chưa gồm thuế (tiền hoàn đã gồm cả thuế trả lại cho khách). Giá trị hàng trả khi không nhập số tiền hoàn giờ chia cả chiết khấu đơn và thuế cộng thêm theo tỷ lệ, giống `OrderReturn::goodsValue()`.
+- Xem chi tiết đơn có thêm cột VAT.
+
 ### Thông tin sản phẩm, đợt E kiểm toán sản phẩm (2026-11-04)
 - **Lọc theo tồn kho** ở danh sách sản phẩm (Bộ lọc khác → Tồn kho): Còn hàng, Sắp hết (tồn khả dụng ≤ tồn an toàn), Hết hàng. Thêm sắp xếp theo giá bán tăng/giảm.
 - **Thùng rác "Đã xóa"**: tab mới liệt kê sản phẩm đã xóa, nút **Khôi phục** đưa sản phẩm về cùng các SKU bị xóa cùng lúc, ghi nhật ký và đẩy lại tồn thật lên sàn đã liên kết.
