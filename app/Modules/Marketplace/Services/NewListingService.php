@@ -128,7 +128,7 @@ class NewListingService
      * Variant ids by lower-case SKU, restoring a soft-deleted match (and its product) so it can be linked again.
      *
      * @param  array<int, string>  $skus
-     * @return Collection<string, int>
+     * @return Collection<string, int<0, max>>
      */
     private function existingSkus(array $skus): Collection
     {
@@ -140,7 +140,7 @@ class NewListingService
             $variant->restore();
         }
 
-        return $found->toBase()->mapWithKeys(fn (ProductVariant $v) => [mb_strtolower($v->sku) => (int) $v->id]);
+        return $found->toBase()->mapWithKeys(fn (ProductVariant $v) => [mb_strtolower($v->sku) => $v->id]);
     }
 
     /** The store's first category, found by name (top level) or created. */
