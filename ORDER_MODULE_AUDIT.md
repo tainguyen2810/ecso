@@ -193,7 +193,7 @@ Không đề xuất đổi sidebar.
 - B3 Woo `refunded`: phối hợp với luồng WooCommerce (đề xuất: chưa xuất kho → coi như hủy, nhả hàng; đã xuất kho → mở phiếu hàng hoàn, chờ kiểm).
 
 **P1: nghiệp vụ sai hoặc thiếu kiểm soát**
-- B4 Trả hàng giảm công nợ và doanh thu; trạng thái trả một phần/toàn bộ (M10).
+- B4 Trả hàng giảm công nợ và doanh thu: **công nợ do luồng "Kiểm toán module khách hàng" sửa (hàm công nợ dùng chung), doanh thu/lãi lỗ do luồng "Kiểm toán module tài chính" sửa**; luồng này chỉ làm trạng thái trả một phần/toàn bộ trên đơn (M10) và dùng lại kết quả của hai luồng kia.
 - PA7/U8 Hoàn tiền ngay trong phiếu trả, có kiểm tra không hoàn vượt.
 - M2 + PA12 Bắt buộc ca mở khi bán tại quầy (server), gắn `cash_shift_id` cho đơn POS và phiếu thu.
 - PA11 Thu/chi trong ca vào Sổ quỹ.
@@ -236,9 +236,11 @@ Mỗi đợt: một PR riêng, có test tự động (Pest) cho từng tình hu�
 |---|---|---|---|
 | **1 (P0, an toàn dữ liệu)** | B1, B2, B8, M1 idempotency (tạo đơn + thu tiền), B5/B6 quyền trả hàng/sửa đơn, B9 | Rất ít (ẩn nút, điền đúng số lượng): **không cần mockup** | trả đơn chưa xuất kho bị chặn; kiểm trùng dòng bị chặn; gửi lại cùng khóa không tạo đơn/thu tiền thứ hai; nhân viên không quyền bị chặn |
 | **1b (P0, Woo)** | B3: gửi phát hiện + đề xuất cho luồng WooCommerce, họ sửa hoặc giao lại cho tôi | Không | hoàn tiền trước giao → nhả kho; sau giao → mở phiếu hàng hoàn |
-| **2 (P1, trả hàng & tiền)** | B4, M10, PA7/U8 hoàn tiền trong phiếu trả, PA8, PA14, B11 | **Có, gửi mockup** (phiếu trả có bước hoàn tiền, huy hiệu trạng thái) | trả một phần nhiều lần; hoàn vượt bị chặn; công nợ/doanh thu giảm đúng; không hoàn hai lần |
+| **2 (P1, trả hàng & tiền)** | M10 (B4 phần công nợ/báo cáo do luồng Khách hàng và Tài chính làm), PA7/U8 hoàn tiền trong phiếu trả, PA8, PA14, B11 | **Có, gửi mockup** (phiếu trả có bước hoàn tiền, huy hiệu trạng thái) | trả một phần nhiều lần; hoàn vượt bị chặn; công nợ/doanh thu giảm đúng; không hoàn hai lần |
 | **3 (P1, ca & POS)** | M2, PA12, PA11, PA3/U1, U2, M8, M9 | **Có, gửi mockup** (thanh toán kết hợp, mở lại ca, hủy hóa đơn) | bán khi chưa mở ca bị chặn; tiền két đúng khi hoàn/hủy phiếu; thanh toán kết hợp; mở lại ca chỉ quản lý |
 | **4 (P1, thuế & kiểm soát)** | PA1 thuế, M5 version, M7 quyền hủy | **Có, gửi mockup** (dòng thuế trên form/hóa đơn) | làm tròn thuế, giá đã/chưa gồm thuế; sửa đồng thời bị báo |
 | **5 (P2)** | M3 nháp, M4 lọc kho, M6 xem đơn theo nhân viên, PA2, PA5/U6, PA13, M11, M12, U3/U4 điện thoại, U9, U10, PA10 | **Có, gửi mockup** | theo từng mục |
 
 Bộ test Phase 10 sẽ được bổ sung dần theo từng đợt: tạo đơn thành công/thiếu thông tin, vượt tồn, hai người đặt cùng món, thanh toán trùng, hủy sau xuất kho, trả một phần, trả nhiều lần, đơn đồng bộ trùng, webhook trùng/sai thứ tự, API ngoài lỗi, nhân viên không quyền, truy cập tenant khác. Phần lớn nhóm đồng bộ/webhook/tenant đã có test và đang đạt; nhóm trả hàng, thanh toán trùng và ca sẽ thêm mới. Không chạy thử nghiệm nào trên dữ liệu thật (erp.itso.vn).
+
+**Phân công giữa các luồng (để không làm trùng):** công nợ khi trả hàng → luồng Khách hàng; doanh thu/lãi lỗ khi trả hàng → luồng Tài chính; kiểm kê kho (stocktake) → luồng Sản phẩm, kho và nhập hàng; Woo hoàn tiền (B3) → luồng WooCommerce. Luồng này giữ: idempotency POS/tạo đơn/thu tiền, chặn trả hàng chưa xuất kho (B1), kiểm hàng trả trùng dòng (B2, khác với kiểm kê kho), ca bán hàng, quyền.
