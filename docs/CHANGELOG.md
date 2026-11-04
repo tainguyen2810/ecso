@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Đơn WooCommerce nhận diện khách như các kênh khác (2026-11-04)
+- Đơn website tìm thẻ khách theo thứ tự: **mã khách trên website** (khách có tài khoản), rồi **số điện thoại**, rồi **email** (chỉ khi đúng một khách có email đó). Không bao giờ ghép theo tên. Khách có tài khoản đổi số điện thoại hay email vẫn về đúng một thẻ.
+- Đơn sau không ghi đè thẻ khách: chỉ điền các ô thẻ đang trống. Đơn vẫn giữ thông tin liên hệ của chính nó.
+- Đơn không có số điện thoại hợp lệ, email hay tài khoản thì không tạo thẻ khách mới.
+
 ### Đồng bộ đơn WooCommerce, vòng E: giao diện và hướng dẫn (2026-11-04)
 - **Trang website Woo**: nút "Đồng bộ đơn ngay"; chọn chu kỳ đối soát 5/15/30 phút; hiện mốc "Đồng bộ đơn từ"; công tắc "Trạng thái đơn hai chiều"; thẻ **Webhook trên website** (tình trạng, đã bật lại / tạo lại, nút Kiểm tra ngay); thẻ **Ánh xạ trạng thái** (trạng thái website → trạng thái ECSO, số đơn đang chưa ánh xạ, thêm mã trạng thái plugin). Ô "Lỗi đồng bộ" tính cả lỗi đơn đang mở và dẫn sang trang lỗi.
 - **Trang Lịch sử và lỗi đồng bộ** (`/marketplaces/sync`): lỗi đang mở theo nhóm, thử lại / bỏ qua từng đơn, lỗi đã xử lý, lịch sử từng lượt đối soát (kết quả, số đơn, thời gian chạy).

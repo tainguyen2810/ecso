@@ -98,12 +98,44 @@ it('puts the orders of one buyer on one customer card, found by phone', function
         ->assertJsonPath('data.orders_count', 2)
         ->assertJsonPath('data.debt', fn ($v) => (float) $v === 0.0);
 
-    // A phone that is not a number does not stop the order; it just gets no customer card.
+    // A phone that is not a number does not stop the order: the email still finds the card.
     $o = $this->store->addOrder(805, 'processing', [[11, 1, 'G304-BK', 499000]]);
     $o['billing']['phone'] = 'gọi zalo';
     $this->store->orders[805] = $o;
     wooWebhook($this, 'order.created', $o)->assertOk();
-    expect(wooOrder('805')->customer_id)->toBeNull();
+    expect(wooOrder('805')->customer_id)->toBe($customers[0]->id);
+
+    // Nothing to know the buyer by again (no phone, no email, guest checkout): the order keeps its details, no card.
+    $o = $this->store->addOrder(806, 'processing', [[11, 1, 'G304-BK', 499000]]);
+    $o['billing']['phone'] = 'gọi zalo';
+    $o['billing']['email'] = '';
+    $o['shipping']['phone'] = '';
+    $this->store->orders[806] = $o;
+    wooWebhook($this, 'order.created', $o)->assertOk();
+    expect(wooOrder('806')->customer_id)->toBeNull()
+        ->and(Customer::withoutGlobalScopes()->where('tenant_id', $this->tenant->id)->count())->toBe(1);
+});
+
+it('finds a website account holder by their store customer id after they change phone and email', function () {
+    $first = $this->store->addOrder(807, 'processing', [[11, 1, 'G304-BK', 499000]]);
+    $first['customer_id'] = 42;
+    $this->store->orders[807] = $first;
+    wooWebhook($this, 'order.created', $first)->assertOk();
+
+    $later = $this->store->addOrder(808, 'processing', [[11, 1, 'G304-BK', 499000]]);
+    $later['customer_id'] = 42;
+    $later['billing'] = ['first_name' => 'Lan', 'last_name' => 'N.', 'phone' => '0912345678', 'email' => 'lan.moi@example.vn', 'address_1' => '9 Hùng Vương', 'city' => 'Huế'];
+    $later['shipping'] = ['first_name' => 'Lan', 'last_name' => 'N.', 'address_1' => '9 Hùng Vương', 'city' => 'Huế', 'phone' => '0912345678'];
+    $this->store->orders[808] = $later;
+    wooWebhook($this, 'order.created', $later)->assertOk();
+
+    $customers = Customer::withoutGlobalScopes()->where('tenant_id', $this->tenant->id)->get();
+    expect($customers)->toHaveCount(1)
+        ->and(wooOrder('808')->customer_id)->toBe($customers[0]->id)
+        // The card is never overwritten by what a later order says; the order keeps its own contact.
+        ->and($customers[0]->name)->toBe('Lan Nguyễn')
+        ->and($customers[0]->email)->toBe('lan@example.vn')
+        ->and(wooOrder('808')->buyer_email)->toBe('lan.moi@example.vn');
 });
 
 it('skips orders created before order sync started, by webhook and by reconcile', function () {

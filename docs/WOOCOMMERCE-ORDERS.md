@@ -27,8 +27,9 @@ Tài liệu cho chủ shop và người vận hành. Phần kỹ thuật chi ti�
 
 ## 4. Khách hàng
 
-- Đơn website tự gắn vào thẻ khách hàng theo số điện thoại. Chưa có thẻ thì ECSO tạo thẻ mới.
-- Số điện thoại không hợp lệ (ví dụ "gọi zalo") thì đơn vẫn vào ECSO nhưng không gắn khách.
+- Đơn website tự gắn vào thẻ khách hàng, tìm theo thứ tự: mã khách trên website (khách có tài khoản), số điện thoại, rồi email (chỉ khi đúng một khách có email đó). ECSO không ghép khách theo tên. Chưa có thẻ thì ECSO tạo thẻ mới.
+- Đơn sau chỉ điền các ô còn trống trên thẻ khách, không ghi đè thông tin đã có.
+- Đơn không có số điện thoại hợp lệ (ví dụ "gọi zalo"), không email và không tài khoản thì vẫn vào ECSO nhưng không gắn khách.
 - Đơn website đã thanh toán qua website nên **không tính vào công nợ** của khách.
 
 ## 5. Trạng thái và ánh xạ

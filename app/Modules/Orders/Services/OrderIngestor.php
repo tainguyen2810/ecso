@@ -15,7 +15,7 @@ use App\Modules\Orders\Models\OrderRefund;
 use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Orders\Models\OrderStatusHistory;
 use App\Modules\Sales\Models\Customer;
-use App\Modules\Sales\Services\CustomerService;
+use App\Modules\Sales\Services\CustomerResolver;
 use App\Modules\Sales\Support\PhoneNumber;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -48,7 +48,7 @@ class OrderIngestor
     public function __construct(
         private readonly StatusMapper $statuses,
         private readonly OrderStockSync $stock,
-        private readonly CustomerService $customers,
+        private readonly CustomerResolver $resolver,
         private readonly ReservationLedger $ledger,
         private readonly ReturnService $returns,
     ) {}
@@ -251,22 +251,27 @@ class OrderIngestor
             $order->payment_status = Order::PAYMENT_UNPAID;
         }
 
-        $phone = PhoneNumber::normalize($data->buyerPhone);
-        if ($order->customer_id === null && $phone !== null && PhoneNumber::isValid($phone)) {
-            $order->customer_id = $this->customer($data)?->id;
+        if ($order->customer_id === null) {
+            $order->customer_id = $this->customer($order, $data)?->id;
         }
     }
 
-    /** Finds the customer by phone or creates one; two orders of a new buyer at once both end on the same card. */
-    private function customer(OrderData $data): ?Customer
+    /**
+     * Finds the buyer's customer card (store customer id, then full phone, then a unique email; never by name) or
+     * makes one. Only empty fields of an existing card are filled. Two orders of a new buyer at once end on one card.
+     */
+    private function customer(Order $order, OrderData $data): ?Customer
     {
-        $fields = ['name' => mb_substr($data->buyerName ?? 'Khách website', 0, 150), 'phone' => $data->buyerPhone, 'email' => $data->buyerEmail, 'address' => $data->shippingAddress];
+        // A phone that is not a number ("gọi zalo") cannot find the buyer again, so it does not count as a contact.
+        $phone = PhoneNumber::normalize($data->buyerPhone);
+        $buyer = ['name' => filled($data->buyerName) ? mb_substr((string) $data->buyerName, 0, 150) : null, 'phone' => $phone !== null && PhoneNumber::isValid($phone) ? $phone : null, 'email' => $data->buyerEmail, 'address' => $data->shippingAddress];
+        $identity = ['source' => $order->marketplace, 'account_id' => $order->marketplace_account_id, 'external_id' => $data->externalCustomerId];
         try {
-            return $this->customers->findOrCreate($fields);
+            return $this->resolver->resolve($buyer, $identity, 'website');
         } catch (UniqueConstraintViolationException) {
-            return $this->customers->findByPhone($data->buyerPhone);
+            return $this->resolver->resolve($buyer, $identity, 'website'); // the other order made the card a moment ago
         } catch (ValidationException) {
-            return null; // a phone that is not a valid number: the order keeps it, no customer card is made
+            return null; // the buyer details cannot make a card: the order keeps them
         }
     }
 
