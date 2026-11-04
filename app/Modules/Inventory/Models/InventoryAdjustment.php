@@ -12,6 +12,7 @@ use Illuminate\Support\Carbon;
 
 /**
  * @property Carbon|null $decided_at
+ * @property Carbon|null $counted_at
  */
 class InventoryAdjustment extends Model
 {
