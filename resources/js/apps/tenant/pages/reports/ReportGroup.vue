@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
+import { Info } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import RangePicker from './RangePicker.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -37,6 +38,7 @@ function target(l: ReportLink, by?: string): RouteLocationRaw {
 // Sales dashboard figures.
 const overview = ref<any>(null);
 const days = ref<any[]>([]);
+const awaiting = ref<{ orders: number; goods: number } | null>(null);
 const error = ref<string | null>(null);
 const loading = ref(false);
 async function load() {
@@ -47,6 +49,7 @@ async function load() {
         const [o, s] = await Promise.all([api.get('/reports/overview', { params: range.value }), api.get('/reports/sales', { params: { ...range.value, by: 'day' } })]);
         overview.value = o.data.data;
         days.value = s.data.data.rows;
+        awaiting.value = s.data.data.awaiting ?? null;
     } catch (e) {
         error.value = (e as ApiError).message;
     } finally {
@@ -61,20 +64,27 @@ watch(() => [key.value, range.value.from, range.value.to], load);
  * is drawn up to the revenue and the loss goes below 0, so the bars still add up to the figure in the header.
  */
 const dayLabel = (d: string) => d.slice(8, 10) + '/' + d.slice(5, 7);
+// Without "xem giá vốn & lợi nhuận" the API leaves cost and profit out: one series, the day's goods revenue.
+const canProfit = computed(() => overview.value?.recognized?.gross_profit != null);
 const chart = computed(() => ({
     labels: days.value.map((d) => dayLabel(d.label)),
-    series: [
+    series: !canProfit.value ? [{ key: 'goods', label: 'Tiền hàng', color: '#60a5fa', values: days.value.map((d) => d.goods) }] : [
         { key: 'cogs', label: 'Giá vốn', color: '#60a5fa', values: days.value.map((d) => (d.gross_profit >= 0 ? d.cogs : Math.max(0, d.goods))) },
         { key: 'profit', label: 'Lãi gộp', color: '#34d399', values: days.value.map((d) => Math.max(0, d.gross_profit)) },
         ...(days.value.some((d) => d.gross_profit < 0) ? [{ key: 'loss', label: 'Lỗ (giá vốn vượt doanh thu)', color: '#f87171', values: days.value.map((d) => Math.min(0, d.gross_profit)) }] : []),
     ],
     tips: days.value.map((d) =>
-        [`${dayLabel(d.label)} · ${formatNumber(d.orders)} đơn`, `Doanh thu thuần: ${formatMoney(d.goods)}`, `Giá vốn: ${formatMoney(d.cogs)}`, `Lãi gộp: ${formatMoney(d.gross_profit)}`, 'Bấm để xem đơn của ngày này'].join('\n'),
+        [
+            `${dayLabel(d.label)} · ${formatNumber(d.orders)} đơn`,
+            `Tiền hàng: ${formatMoney(d.goods)}`,
+            ...(canProfit.value ? [`Giá vốn: ${formatMoney(d.cogs)}`, `Lãi gộp: ${formatMoney(d.gross_profit)}`] : []),
+            'Bấm để xem đơn của ngày này',
+        ].join('\n'),
     ),
 }));
 function openDay(i: number) {
     const day = days.value[i]?.label;
-    if (day) router.push({ name: 'report-detail', params: { report: 'orders' }, query: { from: day, to: day } });
+    if (day) router.push({ name: 'report-detail', params: { report: 'orders' }, query: { from: day, to: day, basis: 'completed' } });
 }
 
 const deliveryColors: Record<string, string> = { delivered: '#16a34a', shipping: '#22c55e', waiting: '#86efac', return_requested: '#fbbf24', failed: '#cbd5e1', unknown: '#f1f5f9' };
@@ -90,6 +100,7 @@ const delivery = computed(() =>
 );
 // When revenue counts (ngày đặt hay ngày hoàn thành) comes from the API, so the labels always match the figures.
 const basisShort = computed(() => (overview.value?.sales.basis === 'completed' ? 'ghi nhận khi hoàn thành' : 'theo ngày đặt hàng'));
+const rec = computed(() => overview.value?.recognized);
 const basisNote = computed(() =>
     overview.value?.sales.basis === 'completed'
         ? 'Tính trên đơn đã hoàn thành trong kỳ (sàn: hoàn thành; kênh riêng: đã giao; POS: lúc bán).'
@@ -110,26 +121,38 @@ const orderLinks = computed(() => links.value.filter((l) => !['Thanh toán', 'Tr
         <div v-else-if="!overview" class="grid gap-5 lg:grid-cols-[1fr_22rem]"><Skeleton class="h-72" /><Skeleton class="h-72" /></div>
         <template v-else>
             <div class="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4" :class="loading && 'opacity-60'" data-testid="sales-dashboard-kpis">
-                <KpiCard label="Doanh thu thuần" tone="blue" :value="formatMoney(overview.sales.goods)">
-                    <template #label>Doanh thu thuần <InfoTip title="Doanh thu thuần = tiền hàng − chiết khấu">{{ basisNote }} Không gồm phí giao hàng thu của khách.</InfoTip></template>
-                    {{ formatNumber(overview.sales.orders) }} đơn · {{ basisShort }}
+                <KpiCard label="Doanh thu thuần" tone="blue" :value="formatMoney(rec.revenue)">
+                    <template #label
+                        >Doanh thu thuần
+                        <InfoTip title="Doanh thu thuần = tiền hàng − chiết khấu − hàng trả lại">{{ basisNote }} Cùng con số với trang Tài chính và Báo cáo lãi lỗ. Không gồm phí giao hàng thu của khách.</InfoTip></template
+                    >
+                    {{ formatNumber(overview.sales.orders) }} đơn<template v-if="rec.returns"> · đã trừ trả hàng {{ formatMoney(rec.returns) }}</template>
                 </KpiCard>
-                <KpiCard v-if="overview.sales.cogs !== undefined" label="Giá vốn hàng bán" :value="formatMoney(overview.sales.cogs)">
-                    <template #label>Giá vốn hàng bán <InfoTip title="Giá vốn = giá vốn lúc hàng xuất kho × số lượng">Lấy từ sổ kho lúc bàn giao. Dòng hàng chưa có giá vốn không được tính là 0 mà đếm riêng.</InfoTip></template>
-                    <span v-if="overview.sales.missing_cost_lines" class="text-amber-600">{{ overview.sales.missing_cost_lines }} dòng chưa có giá vốn</span>
+                <KpiCard v-if="rec.cogs != null" label="Giá vốn hàng bán" :value="formatMoney(rec.cogs)">
+                    <template #label
+                        >Giá vốn hàng bán
+                        <InfoTip title="Giá vốn = giá vốn lúc xuất kho − giá vốn hàng trả lại nhập kho">Lấy từ sổ kho lúc bàn giao. Dòng hàng chưa có giá vốn không được tính là 0 mà đếm riêng.</InfoTip></template
+                    >
+                    <span v-if="rec.missing_cost_lines" class="text-amber-600">{{ rec.missing_cost_lines }} dòng chưa có giá vốn</span>
                     <template v-else>theo giá vốn lúc xuất kho</template>
                 </KpiCard>
-                <KpiCard v-if="overview.sales.gross_profit !== undefined" label="Lãi gộp" :tone="overview.sales.gross_profit < 0 ? 'red' : 'green'" :value="formatMoney(overview.sales.gross_profit)">
-                    <template #label>Lãi gộp <InfoTip title="Lãi gộp = Doanh thu thuần − Giá vốn hàng bán">{{ basisNote }} Chưa trừ phí sàn, phí thanh toán (xem Báo cáo lãi lỗ). Truy xuất ở Thống kê theo đơn hàng.</InfoTip></template>
-                    {{ overview.sales.margin === null ? '—' : `biên ${overview.sales.margin.toLocaleString('vi-VN')}%` }} · chưa trừ phí sàn
+                <KpiCard v-if="rec.gross_profit != null" label="Lãi gộp" :tone="rec.gross_profit < 0 ? 'red' : 'green'" :value="formatMoney(rec.gross_profit)">
+                    <template #label
+                        >Lãi gộp <InfoTip title="Lãi gộp = Doanh thu thuần − Giá vốn hàng bán">{{ basisNote }} Chưa trừ phí sàn, phí thanh toán (xem Báo cáo lãi lỗ). Truy xuất ở Bán hàng theo sản phẩm.</InfoTip></template
+                    >
+                    {{ rec.margin == null ? '—' : `biên ${rec.margin.toLocaleString('vi-VN')}%` }} · chưa trừ phí sàn
                 </KpiCard>
-                <KpiCard label="Phí giao hàng thu khách" :value="formatMoney(overview.sales.shipping ?? 0)">
+                <KpiCard label="Phí giao hàng thu khách" :value="formatMoney(rec.shipping ?? 0)">
                     <template #label>Phí giao hàng thu khách <InfoTip title="Phí ship khách trả trên đơn">Dòng riêng, không cộng vào doanh thu thuần.</InfoTip></template>
                     dòng riêng, ngoài doanh thu thuần
                 </KpiCard>
             </div>
+            <p v-if="awaiting?.orders" class="-mt-2 mb-5 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800" data-testid="sales-awaiting">
+                <Info class="mt-0.5 size-3.5 shrink-0" />
+                <span>{{ formatNumber(awaiting.orders) }} đơn sàn đã giao trong kỳ nhưng sàn chưa báo hoàn thành ({{ formatMoney(awaiting.goods) }} tiền hàng): chưa tính vào doanh thu, sẽ được tính khi sàn hoàn thành đơn.</span>
+            </p>
             <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]" :class="loading && 'opacity-60'">
-                <Card caps title="Doanh thu cửa hàng" :description="`${basisShort[0]!.toUpperCase()}${basisShort.slice(1)} · cột = doanh thu thuần (giá vốn + lãi gộp)`">
+                <Card caps title="Tiền hàng theo ngày" :description="`${basisShort[0]!.toUpperCase()}${basisShort.slice(1)} · tiền hàng sau chiết khấu, chưa trừ trả hàng${canProfit ? ' (giá vốn + lãi gộp)' : ''}`">
                     <template #actions><span class="text-xl font-semibold text-primary" data-testid="sales-revenue">{{ formatMoney(overview.sales.goods) }}</span></template>
                     <div class="p-5"><StackedBarChart :labels="chart.labels" :series="chart.series" :tips="chart.tips" :height="220" clickable @select="openDay" /></div>
                 </Card>
@@ -142,7 +165,7 @@ const orderLinks = computed(() => links.value.filter((l) => !['Thanh toán', 'Tr
                 </Card>
             </div>
             <div class="mt-5 grid gap-5 lg:grid-cols-3">
-                <Card caps title="Đơn hàng" :description="`Lãi gộp ${formatMoney(overview.sales.gross_profit)}`">
+                <Card caps title="Đơn hàng" :description="rec.gross_profit != null ? `Lãi gộp ${formatMoney(rec.gross_profit)}` : 'Đơn đã ghi nhận doanh thu'">
                     <template #actions><span class="text-xl font-semibold text-primary">{{ formatNumber(overview.sales.orders) }}</span></template>
                     <ul class="space-y-0.5 p-3 text-sm" data-testid="report-group-sales">
                         <li v-for="l in orderLinks" :key="l.title">

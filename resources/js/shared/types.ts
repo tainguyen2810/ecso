@@ -159,6 +159,10 @@ export interface DocumentLine {
     quantity: number;
     unit_cost?: string;
     mode?: 'delta' | 'count';
+    /** Count lines: system quantity seen when the SKU was counted. */
+    system_qty?: number;
+    /** Count lines not applied yet: stock now. */
+    on_hand_now?: number;
     on_hand_before?: number;
     applied_delta?: number;
     reason?: string;
@@ -182,6 +186,7 @@ export interface InventoryDocument {
     decided_by?: string | null;
     decided_at?: string | null;
     decision_note?: string | null;
+    counted_at?: string | null;
     dispatched_at?: string | null;
     received_at?: string | null;
     lines_count?: number;
@@ -204,6 +209,10 @@ export interface OrderSummary {
     balance_due?: string | null;
     external_order_id: string;
     status: string;
+    version?: number;
+    tax_rate?: string;
+    prices_include_tax?: boolean;
+    tax_amount?: string;
     raw_status: string;
     payment_method: string | null;
     is_cod: boolean;
@@ -254,6 +263,7 @@ export interface OrderItemDetail {
 export interface OrderDetail extends OrderSummary {
     items: OrderItemDetail[];
     history: { from: string | null; to: string; raw_status: string | null; source: string; actor: string | null; note: string | null; occurred_at: string | null; created_at: string }[];
+    edits?: { at: string | null; actor: string | null; changes: string[] }[];
     notes: { id: number; body: string; user: string | null; created_at: string | null }[];
     returns: OrderReturnData[];
     actions: Record<string, { allowed: boolean; capability: string }>;

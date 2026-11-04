@@ -128,3 +128,13 @@ it('logs what changed on a customer without writing personal data, and every exp
         ->and(json_encode($update->changes))->not->toContain('0907777777');
     expect(AuditLog::query()->where('action', 'customer.exported')->where('actor_user_id', $this->owner->id)->exists())->toBeTrue();
 });
+
+it('spreads the order discount over returned goods, as the return itself does', function () {
+    // 2 × 100 000 with 20 000 off the order: each unit cost 90 000; one unit back leaves 90 000 owed.
+    $order = ($this->sale)(2, 100000, ['discount' => 20000]);
+    $return = ($this->returnOne)($order);
+
+    expect(($this->as)()->getJson("/api/v1/returns/{$return}")->json('data.goods_value'))->toBe('90000.00')
+        ->and(($this->debt)())->toBe('90000.00')
+        ->and(($this->as)()->getJson("/api/v1/customers/{$this->customer}/ledger")->json('data.0.balance'))->toBe('90000.00');
+});

@@ -15,6 +15,7 @@ import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { formatDate, formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
+import { useIdempotencyKey } from '@/shared/composables/useIdempotencyKey';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { owed, poStatus, receiveStatus, supplierPaymentMethods, tradeStatus } from './labels';
 import { REORDER_DRAFT_KEY, type ReorderDraft } from './reorder';
@@ -23,6 +24,7 @@ import type { PurchaseOrderData } from '@/shared/types';
 
 const route = useRoute();
 const toast = useToast();
+const idempotency = useIdempotencyKey();
 const tenant = useTenantStore();
 const po = ref<PurchaseOrderData | null>(null);
 const loading = ref(true);
@@ -121,7 +123,8 @@ async function receive() {
         const lines = (po.value?.lines ?? [])
             .filter((l) => Number(receiveQty.value[l.variant!.id]) > 0)
             .map((l) => ({ variant_id: l.variant!.id, quantity: Number(receiveQty.value[l.variant!.id]), ...(canPrice ? { unit_cost: Number(receiveCost.value[l.variant!.id]) } : {}) }));
-        const { data } = await api.post(`/purchase-orders/${po.value!.id}/receive`, { lines, note: receiveNote.value || null });
+        const { data } = await api.post(`/purchase-orders/${po.value!.id}/receive`, { lines, note: receiveNote.value || null }, idempotency.config());
+        idempotency.renew();
         po.value = data.data;
         receiveOpen.value = false;
         toast.success(`Đã nhập kho phiếu ${data.receipt.number}.`);
@@ -148,7 +151,8 @@ async function submitReturn() {
     returnError.value = null;
     try {
         const lines = returnable.value.filter((l) => Number(returnQty.value[l.variant!.id]) > 0).map((l) => ({ variant_id: l.variant!.id, quantity: Number(returnQty.value[l.variant!.id]) }));
-        const { data } = await api.post('/supplier-returns', { purchase_order_id: po.value!.id, reason: returnReason.value || null, lines });
+        const { data } = await api.post('/supplier-returns', { purchase_order_id: po.value!.id, reason: returnReason.value || null, lines }, idempotency.config());
+        idempotency.renew();
         returnOpen.value = false;
         toast.success(`Đã xuất trả ${data.data.number} · ${formatMoney(data.data.total)}.`);
         await load();

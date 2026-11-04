@@ -3,7 +3,10 @@ export interface CountRow {
     sku: string;
     barcode: string | null;
     name: string;
+    /** System quantity the count is compared with: the one saved with the line, else stock when the page loaded. */
     on_hand: number;
+    /** Stock now, when it differs from on_hand (goods sold or received since the line was counted). */
+    on_hand_now?: number;
 }
 
 type Counts = Record<string, number | ''>;
@@ -35,15 +38,16 @@ export function stocktakeLines(
     counts: Counts,
     zeroUncounted: boolean,
     notes: LineNotes = {},
-): { variant_id: string; mode: 'count'; quantity: number; reason?: string; note?: string }[] {
+): { variant_id: string; mode: 'count'; quantity: number; system_qty: number; reason?: string; note?: string }[] {
     // Reason and note only travel with a line that differs from the system.
     const extra = (r: CountRow, qty: number) => (qty === r.on_hand ? {} : { ...(notes[r.id]?.reason ? { reason: notes[r.id]!.reason } : {}), ...(notes[r.id]?.note ? { note: notes[r.id]!.note } : {}) });
     return rows.flatMap((r) => {
         const c = counts[r.id];
         if (c === undefined || c === '') {
-            return zeroUncounted && r.on_hand !== 0 ? [{ variant_id: r.id, mode: 'count' as const, quantity: 0, ...extra(r, 0) }] : [];
+            return zeroUncounted && r.on_hand !== 0 ? [{ variant_id: r.id, mode: 'count' as const, quantity: 0, system_qty: r.on_hand, ...extra(r, 0) }] : [];
         }
         const qty = Math.max(0, Math.floor(Number(c)));
-        return [{ variant_id: r.id, mode: 'count' as const, quantity: qty, ...extra(r, qty) }];
+        // The system quantity seen while counting travels with the line: approval applies only count − system_qty.
+        return [{ variant_id: r.id, mode: 'count' as const, quantity: qty, system_qty: r.on_hand, ...extra(r, qty) }];
     });
 }

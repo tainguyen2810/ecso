@@ -33,6 +33,7 @@ class OrderResource extends JsonResource
             'balance_due' => $this->isManual() && $this->status !== OrderStatus::CANCELLED ? $this->balanceDue() : null,
             'external_order_id' => $this->external_order_id,
             'status' => $this->status,
+            'version' => (int) $this->version,
             'raw_status' => $this->raw_status,
             'payment_method' => $this->payment_method,
             'is_cod' => $this->is_cod,
@@ -40,6 +41,9 @@ class OrderResource extends JsonResource
             'subtotal' => $this->subtotal,
             'shipping_fee' => $this->shipping_fee,
             'discount' => $this->discount,
+            'tax_rate' => $this->tax_rate,
+            'prices_include_tax' => (bool) ($this->prices_include_tax ?? true),
+            'tax_amount' => $this->tax_amount,
             'total' => $this->total,
             'buyer_name' => $this->buyer_name,
             // Manual orders: the seller entered the phone and needs it for delivery; marketplace orders: masked only.

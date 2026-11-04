@@ -32,7 +32,7 @@ it('gives the owner everything and keeps billing.manage owner-only', function ()
 
 it('keeps viewer read-only', function () {
     foreach (PermissionRegistry::systemRoles()[Role::VIEWER]['permissions'] as $permission) {
-        expect($permission)->toEndWith('.view');
+        expect($permission)->toMatch('/\.view(\.all)?$/'); // orders.view.all is read-only too
     }
 });
 

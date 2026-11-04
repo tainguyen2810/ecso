@@ -56,6 +56,7 @@ class StockMovement extends Model
             'on_hand_after' => 'integer',
             'reserved_after' => 'integer',
             'unit_cost' => 'decimal:4',
+            'avg_cost_after' => 'decimal:4',
             'created_at' => 'datetime',
         ];
     }

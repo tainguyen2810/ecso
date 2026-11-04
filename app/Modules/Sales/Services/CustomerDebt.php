@@ -32,12 +32,16 @@ final class CustomerDebt
 
     /**
      * SQL value of one return (alias of an `order_returns` row): the refund agreed on it, or else what was paid for the
-     * returned quantities, each line's discount spread over its units. Same rule as OrderReturn::goodsValue().
+     * returned quantities, the line and order discounts and VAT added on top spread over the goods. Same rule as OrderReturn::goodsValue().
      */
     public static function returnValueSql(string $return = 'r'): string
     {
-        return "COALESCE({$return}.refund_amount, (SELECT SUM(TRUNCATE(rl.quantity * (ri.unit_price * ri.quantity - ri.discount) / ri.quantity, 2))"
-            .' FROM order_return_lines rl JOIN order_items ri ON ri.id = rl.order_item_id'
+        // Same as OrderReturn::goodsValue(): the order discount and VAT added on top are spread over the goods.
+        $share = 'CASE WHEN ro.subtotal > 0 THEN GREATEST(TRUNCATE((ro.subtotal - ro.discount'
+            .' + CASE WHEN ro.prices_include_tax THEN 0 ELSE ro.tax_amount END) / ro.subtotal, 8), 0) ELSE 1 END';
+
+        return "COALESCE({$return}.refund_amount, (SELECT SUM(TRUNCATE(TRUNCATE((ri.unit_price * ri.quantity - ri.discount) * {$share}, 8) * rl.quantity / ri.quantity, 2))"
+            .' FROM order_return_lines rl JOIN order_items ri ON ri.id = rl.order_item_id JOIN orders ro ON ro.id = ri.order_id'
             ." WHERE rl.order_return_id = {$return}.id AND ri.quantity > 0), 0)";
     }
 

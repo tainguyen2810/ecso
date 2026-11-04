@@ -55,7 +55,8 @@ class InventoryService
 
             foreach ($lines as $i => $line) {
                 $balance = $balances[$line['variant_id']];
-                $unitCost = $updatesCost ? $this->money($line['unit_cost'] ?? '0') : null;
+                // A restock may carry the cost the goods left at (the order line's cost): recorded, not averaged.
+                $unitCost = $updatesCost ? $this->money($line['unit_cost'] ?? '0') : (isset($line['unit_cost']) ? $this->money($line['unit_cost']) : null);
 
                 if ($updatesCost) {
                     $this->updateAverageCost($line['variant_id'], $line['quantity'], $unitCost);
@@ -70,8 +71,10 @@ class InventoryService
 
     /**
      * Returned goods inspected as sellable come back into stock (RETURN_RESTOCK; does not change the average cost).
+     * A line's unit_cost, when given, is the cost the goods were sold at; it is kept on the movement so the cost of
+     * returned goods matches the cost of goods sold.
      *
-     * @param  array<int, array{variant_id: int, quantity: int}>  $lines
+     * @param  array<int, array{variant_id: int, quantity: int, unit_cost?: string|float|int|null}>  $lines
      */
     public function restockReturn(Warehouse $warehouse, array $lines, string $key, ?Model $reference = null, ?string $reason = null): OperationResult
     {
@@ -136,11 +139,13 @@ class InventoryService
     }
 
     /**
-     * Applies an approved adjustment. Each line is either a signed delta or a physical count (delta computed under lock).
+     * Applies an approved adjustment. Each line is either a signed delta or a physical count. A count that carries the
+     * system quantity seen when it was counted (system_qty) applies count − system_qty, so goods sold or received
+     * between counting and approval are kept; a count without it sets on hand to the count (delta computed under lock).
      * on_hand may not go below zero unless the warehouse allows negative stock. It may go below reserved:
      * that is the physical truth and shows up as negative available ("thiếu hàng") for the order team.
      *
-     * @param  array<int, array{variant_id: int, mode: string, quantity: int}>  $lines
+     * @param  array<int, array{variant_id: int, mode: string, quantity: int, system_qty?: int|null}>  $lines
      * @return array<int, array{variant_id: int, on_hand_before: int, applied_delta: int}>|null null when already applied
      */
     public function adjust(Warehouse $warehouse, array $lines, string $key, ?Model $reference, ?string $reason = null): ?array
@@ -157,7 +162,12 @@ class InventoryService
             foreach ($lines as $line) {
                 $balance = $balances[(int) $line['variant_id']];
                 $before = $balance->on_hand;
-                $delta = $line['mode'] === 'count' ? (int) $line['quantity'] - $before : (int) $line['quantity'];
+                $snapshot = $line['mode'] === 'count' && isset($line['system_qty']) ? (int) $line['system_qty'] : null;
+                $delta = match (true) {
+                    $snapshot !== null => (int) $line['quantity'] - $snapshot,
+                    $line['mode'] === 'count' => (int) $line['quantity'] - $before,
+                    default => (int) $line['quantity'],
+                };
 
                 if ($line['mode'] === 'count' && (int) $line['quantity'] < 0) {
                     throw new InvalidStockOperation('Số lượng kiểm kê không được âm.');
@@ -539,6 +549,14 @@ class InventoryService
 
         $balance->forceFill(['on_hand' => $onHand, 'reserved' => $reserved, 'version' => $balance->version + 1])->save();
 
+        // A quantity change keeps the average cost of that moment: the unit cost of goods out (or in, when the
+        // caller gave none) and the average after the movement, so values of a past date never use today's cost.
+        $averageAfter = null;
+        if ($onHandDelta !== 0) {
+            $averageAfter = $this->money(ProductVariant::query()->withTrashed()->whereKey($balance->product_variant_id)->value('cost_price') ?? '0');
+            $unitCost ??= $averageAfter;
+        }
+
         $movement = new StockMovement;
         $movement->forceFill([
             'warehouse_id' => $balance->warehouse_id,
@@ -549,6 +567,7 @@ class InventoryService
             'on_hand_after' => $onHand,
             'reserved_after' => $reserved,
             'unit_cost' => $unitCost,
+            'avg_cost_after' => $averageAfter,
             'reference_type' => $reference ? class_basename($reference) : null,
             'reference_id' => $reference?->getKey(),
             'idempotency_key' => $key,

@@ -14,6 +14,7 @@ import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError, idempotent, newIdempotencyKey } from '@/shared/lib/api';
+import { saleTax, type TaxRule } from '@/shared/lib/tax';
 import { cn, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useAuthStore } from '@/shared/stores/auth';
@@ -21,7 +22,7 @@ import { useTenantStore } from '@/shared/stores/tenant';
 import { useSettingsStore } from '@/shared/stores/settings';
 import { enabledMethods } from '@/shared/lib/paymentMethods';
 import { channelTypes, paymentMethods } from './labels';
-import type { Customer, CustomerAddress, CustomerSummary, OrderDetail, OrderReturnData, SalesChannel, Variant, Warehouse } from '@/shared/types';
+import type { Customer, CustomerSummary, OrderDetail, OrderReturnData, SalesChannel, Variant, Warehouse } from '@/shared/types';
 
 /** A SKU line (stock is held) or a service line (own name and price, no stock). */
 interface Line {
@@ -59,8 +60,8 @@ const warehouses = ref<Warehouse[]>([]);
 const lines = ref<Line[]>([]);
 const customer = ref<(Pick<Customer, 'id' | 'code' | 'name' | 'phone' | 'address'> & { group?: Customer['group'] }) | null>(null);
 const newCustomer = reactive({ enabled: false, name: '', phone: '', address: '' });
-// Group terms and delivery addresses of the chosen customer (loaded with its detail).
-const customerTerms = ref<{ group: Customer['group']; debt: number; addresses: CustomerAddress[]; summary: CustomerSummary | null } | null>(null);
+// Group terms of the chosen customer (loaded with its detail).
+const customerTerms = ref<{ group: Customer['group']; debt: number; summary: CustomerSummary | null } | null>(null);
 const groupDiscountAuto = ref(false);
 const customerQuery = ref('');
 const customerResults = ref<Customer[]>([]);
@@ -96,7 +97,11 @@ const error = ref<ApiError | null>(null);
 const num = (v: number | string) => Number(v) || 0;
 const lineTotal = (l: Line) => Math.max(0, num(l.quantity) * num(l.unit_price) - num(l.discount));
 const subtotal = computed(() => lines.value.reduce((s, l) => s + lineTotal(l), 0));
-const total = computed(() => Math.max(0, subtotal.value + num(form.shipping_fee) - num(form.discount)));
+// VAT: the rate of Cấu hình for a new order, the order's own rate when editing (changing Cấu hình never re-taxes it).
+const orderTax = ref<TaxRule | null>(null);
+const taxRule = computed<TaxRule>(() => orderTax.value ?? { rate: Number(settings.data?.tax.sale_rate) || 0, included: settings.data?.tax.prices_include_tax ?? true });
+const taxAmount = computed(() => saleTax(Math.max(0, subtotal.value - num(form.discount)), taxRule.value));
+const total = computed(() => Math.max(0, subtotal.value + num(form.shipping_fee) - num(form.discount)) + (taxRule.value.included ? 0 : taxAmount.value));
 /** Estimate shown while typing; the server caps it at what the buyer actually paid on the original order. */
 const totalQty = computed(() => lines.value.reduce((s, l) => s + num(l.quantity), 0));
 const exchangeCredit = computed(() => (exchange.value ? Math.min(Number(exchange.value.goods_value ?? 0), total.value) : 0));
@@ -131,6 +136,9 @@ onMounted(async () => {
     }
 });
 
+// The version of the order the form was filled from: the server refuses the save if someone changed it since.
+const loadedVersion = ref<number | null>(null);
+
 /** Fills the form from an order: to edit it, or ("Sao chép") as the start of a new order. */
 async function loadOrder(id: string, asCopy = false) {
     const { data } = await api.get(`/orders/${id}`);
@@ -143,6 +151,8 @@ async function loadOrder(id: string, asCopy = false) {
     if (!asCopy || o.channel) form.channel_id = o.channel?.id ?? '';
     if (!asCopy || o.warehouse) form.warehouse_id = o.warehouse?.id ?? form.warehouse_id;
     copiedFrom.value = asCopy ? o.external_order_id : null;
+    loadedVersion.value = asCopy ? null : (o.version ?? null);
+    orderTax.value = asCopy || o.tax_rate === undefined ? null : { rate: Number(o.tax_rate) || 0, included: o.prices_include_tax ?? true };
     // A marketplace line without an internal SKU cannot be sold again from here.
     const skipped = o.items.filter((i) => !i.variant && i.mapping_status !== 'service').length;
     if (asCopy && skipped) toast.info(`Bỏ qua ${skipped} dòng chưa liên kết SKU nội bộ.`);
@@ -339,6 +349,19 @@ watch(
     },
 );
 
+// Saved delivery addresses of the chosen customer (Khách hàng › Sổ địa chỉ), offered under "Địa chỉ giao".
+interface SavedAddress { id: string; label: string | null; recipient: string | null; phone: string | null; address: string }
+const savedAddresses = ref<SavedAddress[]>([]);
+function useAddress(a: SavedAddress) {
+    form.shipping_address = a.address;
+    if (a.recipient) form.buyer_name = a.recipient;
+    if (a.phone) form.buyer_phone = a.phone;
+}
+watch(
+    () => customer.value?.id,
+    (id) => (id ? loadTerms(id) : ((savedAddresses.value = []), (customerTerms.value = null))),
+);
+
 function chooseCustomer(c: Customer) {
     customer.value = c;
     newCustomer.enabled = false;
@@ -350,7 +373,6 @@ function chooseCustomer(c: Customer) {
     // The customer's group decides the starting price policy (retail / wholesale), discount and payment method.
     if (c.group?.price_tier) priceTier.value = c.group.price_tier;
     applyGroup(c.group);
-    loadTerms(c.id);
 }
 
 function applyGroup(group: Customer['group']) {
@@ -363,34 +385,18 @@ const groupDiscount = computed(() => Math.round((subtotal.value * Number(custome
 // The group discount follows the subtotal until someone types another discount.
 watch(groupDiscount, (d) => groupDiscountAuto.value && (form.discount = d));
 
+/** Group, debt, terms and saved addresses of the chosen customer (one request). */
 async function loadTerms(id: string) {
     customerTerms.value = null;
+    savedAddresses.value = [];
     try {
         const { data } = await api.get(`/customers/${id}`);
         if (customer.value?.id !== id) return;
-        customerTerms.value = { group: data.data.group, debt: Number(data.data.debt ?? 0), addresses: data.data.addresses ?? [], summary: data.data.summary ?? null };
+        customerTerms.value = { group: data.data.group, debt: Number(data.data.debt ?? 0), summary: data.data.summary ?? null };
+        savedAddresses.value = data.data.addresses ?? [];
     } catch {
-        // The order can still be made without them.
+        // No access to customer details: the order can still be made, the address stays a plain input.
     }
-}
-const addressOptions = computed(() => [
-    ...(customer.value?.address ? [{ value: 'main', label: `Địa chỉ chính: ${customer.value.address}` }] : []),
-    ...(customerTerms.value?.addresses ?? []).map((a) => ({ value: a.id, label: `${a.label || 'Địa chỉ giao'}: ${a.address}` })),
-]);
-const addressChoice = ref('');
-function chooseAddress(value: string) {
-    addressChoice.value = value;
-    if (value === 'main') {
-        form.buyer_name = customer.value!.name;
-        form.buyer_phone = customer.value!.phone ?? form.buyer_phone;
-        form.shipping_address = customer.value!.address ?? '';
-        return;
-    }
-    const a = customerTerms.value?.addresses.find((x) => x.id === value);
-    if (!a) return;
-    form.buyer_name = a.recipient || customer.value!.name;
-    form.buyer_phone = a.phone || customer.value!.phone || form.buyer_phone;
-    form.shipping_address = a.address;
 }
 /** Credit limit warning: what the customer would owe after this order, against the limit of the customer or group. */
 const creditWarning = computed(() => {
@@ -403,7 +409,6 @@ const creditWarning = computed(() => {
 function clearCustomer() {
     customer.value = null;
     customerTerms.value = null;
-    addressChoice.value = '';
     if (groupDiscountAuto.value) form.discount = 0;
     groupDiscountAuto.value = false;
 }
@@ -497,7 +502,7 @@ async function submit() {
     };
     try {
         if (editId.value) {
-            await api.put(`/sales-orders/${editId.value}`, body);
+            await api.put(`/sales-orders/${editId.value}`, { ...body, ...(loadedVersion.value !== null ? { version: loadedVersion.value } : {}) });
             toast.success('Đã lưu đơn.');
             await router.push(`/orders/${editId.value}`);
         } else {
@@ -509,7 +514,7 @@ async function submit() {
         }
     } catch (e) {
         error.value = e as ApiError;
-        if (!error.value.body.errors || error.value.field('stock') || error.value.field('order')) toast.error(error.value.field('stock') ?? error.value.message);
+        if (!error.value.body.errors || error.value.field('stock') || error.value.field('order') || error.value.field('version')) toast.error(error.value.field('stock') ?? error.value.field('version') ?? error.value.message);
     } finally {
         saving.value = false;
     }
@@ -756,6 +761,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
                     <p v-if="error?.field('discount')" class="col-span-2 text-right text-xs text-destructive">{{ error.field('discount') }}</p>
                     <dt class="text-primary">Phí giao hàng <kbd class="text-[10px] text-muted-foreground">F7</kbd></dt>
                     <dd><input v-model="form.shipping_fee" type="number" min="0" class="h-8 w-full rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" data-testid="shipping-fee" /></dd>
+                    <template v-if="taxRule.rate > 0">
+                        <dt class="text-muted-foreground">{{ taxRule.included ? 'Trong đó' : 'Cộng' }} thuế GTGT {{ taxRule.rate }}%</dt>
+                        <dd class="text-right tabular-nums text-muted-foreground" data-testid="order-tax">{{ formatMoney(taxAmount) }}</dd>
+                    </template>
                     <div class="col-span-2 border-t" />
                     <dt class="font-semibold">Khách phải trả</dt>
                     <dd class="text-right text-xl font-bold tabular-nums text-blue-600" data-testid="order-total">{{ formatMoney(total) }}</dd>
@@ -801,10 +810,21 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
                 <div v-if="editId || form.stage !== 'completed'" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <FormField label="Người nhận" for="o-name"><Input id="o-name" v-model="form.buyer_name" /></FormField>
                     <FormField label="Điện thoại" for="o-phone"><Input id="o-phone" v-model="form.buyer_phone" inputmode="tel" /></FormField>
-                    <FormField v-if="addressOptions.length > 1" label="Chọn địa chỉ đã lưu" for="o-saved-address" class="sm:col-span-2 lg:col-span-4">
-                        <Select id="o-saved-address" :model-value="addressChoice" :options="[{ value: '', label: 'Chọn địa chỉ giao hàng của khách…' }, ...addressOptions]" data-testid="saved-address" @update:model-value="(v?: string) => chooseAddress(v ?? '')" />
+                    <FormField label="Địa chỉ giao" for="o-address" class="sm:col-span-2">
+                        <Input id="o-address" v-model="form.shipping_address" />
+                        <div v-if="savedAddresses.length" class="mt-1.5 flex flex-wrap gap-1.5" data-testid="saved-addresses">
+                            <button
+                                v-for="a in savedAddresses"
+                                :key="a.id"
+                                type="button"
+                                :class="['max-w-full truncate rounded-full border px-2.5 py-1 text-xs', form.shipping_address === a.address ? 'border-blue-300 bg-blue-50 text-blue-700' : 'hover:bg-muted']"
+                                :title="a.address"
+                                @click="useAddress(a)"
+                            >
+                                {{ a.label || a.recipient || 'Địa chỉ' }} · {{ a.address }}
+                            </button>
+                        </div>
                     </FormField>
-                    <FormField label="Địa chỉ giao" for="o-address" class="sm:col-span-2"><Input id="o-address" v-model="form.shipping_address" /></FormField>
                     <FormField label="Đơn vị vận chuyển" for="o-carrier"><Input id="o-carrier" v-model="form.carrier" placeholder="GHN, GHTK, tự giao…" /></FormField>
                     <label class="flex items-center gap-2 self-end pb-2 text-sm"><input v-model="form.is_cod" type="checkbox" class="size-4" /> Thu hộ (COD) khi giao</label>
                 </div>
