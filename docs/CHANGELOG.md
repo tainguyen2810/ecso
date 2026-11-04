@@ -11,6 +11,12 @@
 - **Hạn thanh toán và hạn mức nợ** cho từng khách và từng nhóm (khách đặt riêng thì ưu tiên hơn nhóm). Đơn quá hạn thanh toán và chứng từ quá hạn trả được tính là **nợ quá hạn**: hiện ở trang khách, cột và tab "Nợ quá hạn" trong danh sách, cột "Quá hạn" trong báo cáo Công nợ khách hàng.
 - Sổ công nợ xuất được ra Excel. Lịch sử hoạt động của khách ghi các lần sửa, nhập file, chứng từ công nợ và thu nợ.
 
+### Tài chính, vòng B: ghi nhận doanh thu lúc hoàn thành (2026-11-04)
+- Chính sách đã duyệt (`App\Modules\Analytics\Support\RevenuePolicy`): đơn sàn TMĐT ghi nhận doanh thu khi sàn báo **hoàn thành**, theo cột mới `orders.completed_at`. Đơn kênh riêng, POS và website WooCommerce ghi nhận khi **giao thành công**. Đơn sàn đã giao nhưng chưa hoàn thành hiện riêng ở mục "Chờ sàn hoàn thành", là số tạm tính và không tính vào lợi nhuận.
+- Trang Tài chính và Báo cáo lãi lỗ (cả thẻ Tài chính ở Tổng quan báo cáo) dùng chung chính sách này. Báo cáo lãi lỗ không còn tính đơn mới đặt hoặc chưa giao.
+- **Phí ship khách trả tính riêng**: không nằm trong doanh thu thuần. Báo cáo lãi lỗ có dòng V riêng, vẫn được cộng vào lợi nhuận.
+- Quyền mới **`finance.profit`** (Xem giá vốn và lợi nhuận, xuất báo cáo tài chính). Mặc định có ở các vai trò Chủ, Quản trị, Quản lý vận hành và Kế toán. Vai trò tùy chỉnh đang có quyền `finance.view` được thêm quyền này để giữ nguyên quyền xem cũ. Người không có quyền này không thấy giá vốn và lãi trên trang Tài chính và Tổng quan báo cáo, và không mở được Báo cáo lãi lỗ.
+
 ### Khách hàng, đợt A: công nợ thống nhất (2026-11-04)
 - **Một quy tắc công nợ dùng chung** (`App\Modules\Sales\Services\CustomerDebt`): trang khách, danh sách khách, sổ công nợ, báo cáo Công nợ phải thu, màn hình thu nợ ở Sổ quỹ và tóm tắt khách trong chi tiết đơn giờ cùng một con số. Nợ một đơn = tổng đơn − giá trị trả hàng đã duyệt − (đã thu − đã hoàn). Chỉ tính đơn kênh riêng; không tính đơn sàn, đơn COD, đơn hủy, đơn hoàn toàn bộ, đơn giao thất bại. Không lưu số cộng dồn nên đơn đồng bộ/sửa lại không bao giờ bị cộng nợ hai lần.
 - Trả hàng một phần (đã duyệt trở đi) giờ giảm công nợ. Sổ công nợ có thêm dòng **Trả hàng** và **Hoàn tiền**, mỗi dòng trỏ về đơn gốc.

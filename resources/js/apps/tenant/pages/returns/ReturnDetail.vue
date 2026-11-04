@@ -1,21 +1,22 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import { ArrowLeft, ClipboardCheck, Repeat } from 'lucide-vue-next';
+import { ArrowLeft, ClipboardCheck, Repeat, Undo2 } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
+import Dialog from '@/shared/ui/Dialog.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import FormField from '@/shared/ui/FormField.vue';
 import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
-import { api, ApiError } from '@/shared/lib/api';
+import { api, ApiError, idempotent, newIdempotencyKey } from '@/shared/lib/api';
 import { formatDateTime, formatMoney } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
-import { orderStatus, returnStatus, returnTypes } from '../orders/labels';
+import { orderStatus, paymentMethods, returnStatus, returnTypes } from '../orders/labels';
 import type { OrderReturnData, Warehouse } from '@/shared/types';
 
 const route = useRoute();
@@ -66,6 +67,37 @@ async function move(status: string) {
         toast.success('Đã cập nhật phiếu.');
     } catch (e) {
         toast.error((e as ApiError).message);
+    } finally {
+        busy.value = null;
+    }
+}
+
+// "Hoàn tiền": pays the buyer back from this return (own-channel orders); one key per opening of the dialog.
+const refundOpen = ref(false);
+const refundForm = ref({ method: 'cash', amount: 0 as number | string, note: '' });
+const refundError = ref<string | null>(null);
+let refundKey = '';
+const canRefund = computed(() => Number(ret.value?.refundable ?? 0) > 0 && ret.value?.status !== 'rejected' && tenant.can('orders.payment'));
+
+function openRefund() {
+    refundError.value = null;
+    refundForm.value = { method: 'cash', amount: Number(ret.value?.refundable ?? 0), note: '' };
+    refundKey = newIdempotencyKey();
+    refundOpen.value = true;
+}
+
+async function submitRefund() {
+    refundError.value = null;
+    busy.value = 'refund';
+    try {
+        const f = refundForm.value;
+        const { data } = await api.post(`/returns/${ret.value!.id}/refund`, { method: f.method, amount: Number(f.amount), note: f.note || null }, idempotent(refundKey));
+        ret.value = data.data;
+        refundOpen.value = false;
+        toast.success('Đã ghi nhận hoàn tiền cho khách.');
+    } catch (e) {
+        const err = e as ApiError;
+        refundError.value = Object.values(err.body.errors ?? {})[0]?.[0] ?? err.message;
     } finally {
         busy.value = null;
     }
@@ -158,6 +190,10 @@ async function submitInspect() {
                     <div><dt class="text-xs text-muted-foreground">Đơn hàng</dt><dd><RouterLink :to="`/orders/${ret.order?.id}`" class="font-mono text-xs hover:underline">{{ ret.order?.external_order_id }}</RouterLink> <Badge class="ml-1" :tone="orderStatus[ret.order?.status ?? '']?.tone">{{ orderStatus[ret.order?.status ?? '']?.label }}</Badge></dd></div>
                     <div><dt class="text-xs text-muted-foreground">Lý do</dt><dd>{{ ret.reason ?? '—' }}</dd></div>
                     <div><dt class="text-xs text-muted-foreground">Giá trị hàng trả</dt><dd>{{ formatMoney(ret.goods_value ?? ret.refund_amount) }}</dd></div>
+                    <div data-testid="return-refund"><dt class="text-xs text-muted-foreground">Hoàn tiền</dt><dd class="flex flex-wrap items-center gap-2">
+                        <span>Đã hoàn {{ formatMoney(ret.refunded ?? 0) }}<template v-if="Number(ret.refundable ?? 0) > 0"> · còn được hoàn {{ formatMoney(ret.refundable) }}</template></span>
+                        <Button v-if="canRefund" size="sm" variant="outline" data-testid="open-refund" @click="openRefund"><Undo2 /> Hoàn tiền</Button>
+                    </dd></div>
                     <div data-testid="return-exchange"><dt class="text-xs text-muted-foreground">Đổi hàng</dt><dd>
                         <template v-if="ret.exchange_order">Đơn <RouterLink :to="`/orders/${ret.exchange_order.id}`" class="font-mono text-xs text-primary hover:underline">{{ ret.exchange_order.external_order_id }}</RouterLink><span v-if="Number(ret.exchange_credit) > 0"> · bù trừ {{ formatMoney(ret.exchange_credit) }}</span></template>
                         <RouterLink v-else-if="ret.expects_goods && ret.status !== 'rejected' && tenant.can('orders.create')" :to="{ path: '/orders/new', query: { exchange: ret.id } }" data-testid="return-create-exchange"><Button size="sm" variant="outline"><Repeat /> Tạo đơn đổi hàng</Button></RouterLink>
@@ -171,5 +207,18 @@ async function submitInspect() {
                 </dl>
             </Card>
         </div>
+
+        <Dialog v-model:open="refundOpen" title="Hoàn tiền cho khách" description="Ghi nhận số tiền trả lại khách cho phiếu này. Sổ quỹ và công nợ được cập nhật theo phương thức đã chọn.">
+            <div class="grid gap-3 sm:grid-cols-2">
+                <FormField label="Phương thức"><Select v-model="refundForm.method" :options="Object.entries(paymentMethods).filter(([m]) => m !== 'cod').map(([value, label]) => ({ value, label }))" /></FormField>
+                <FormField label="Số tiền" :hint="`Tối đa ${formatMoney(ret.refundable ?? 0)}`"><Input v-model="refundForm.amount" type="number" min="1" :max="Number(ret.refundable ?? 0)" class="text-right" data-testid="refund-amount" /></FormField>
+                <FormField label="Ghi chú" class="sm:col-span-2"><Input v-model="refundForm.note" /></FormField>
+                <p v-if="refundError" class="text-sm text-destructive sm:col-span-2" data-testid="refund-error">{{ refundError }}</p>
+            </div>
+            <template #footer>
+                <Button variant="outline" @click="refundOpen = false">Hủy</Button>
+                <Button :loading="busy === 'refund'" :disabled="Number(refundForm.amount) <= 0" data-testid="submit-refund" @click="submitRefund">Xác nhận hoàn tiền</Button>
+            </template>
+        </Dialog>
     </template>
 </template>

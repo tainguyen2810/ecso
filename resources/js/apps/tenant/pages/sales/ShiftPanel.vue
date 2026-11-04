@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
-import { ArrowDownToLine, ArrowUpFromLine, Printer } from 'lucide-vue-next';
+import { ArrowDownToLine, ArrowUpFromLine, Printer, RotateCcw } from 'lucide-vue-next';
 import Button from '@/shared/ui/Button.vue';
 import Input from '@/shared/ui/Input.vue';
 import { api, ApiError } from '@/shared/lib/api';
@@ -20,7 +20,8 @@ const emit = defineEmits<{ changed: [shift: CashShift] }>();
 const toast = useToast();
 const tenant = useTenantStore();
 
-const mode = ref<'view' | 'move' | 'close'>('view');
+const mode = ref<'view' | 'move' | 'close' | 'reopen'>('view');
+const reopenReason = ref('');
 const busy = ref(false);
 const error = ref<string | null>(null);
 const openForm = reactive({ opening_cash: '', opening_note: '' });
@@ -105,6 +106,23 @@ async function close() {
     }
 }
 
+/** Shift supervisors: open a closed shift again to correct it (reason kept in the log). */
+async function reopen() {
+    busy.value = true;
+    error.value = null;
+    try {
+        const { data } = await api.post(`/pos/shifts/${props.shift!.id}/reopen`, { reason: reopenReason.value });
+        toast.success('Đã mở lại ca.');
+        reopenReason.value = '';
+        mode.value = 'view';
+        emit('changed', data.data);
+    } catch (e) {
+        fail(e);
+    } finally {
+        busy.value = false;
+    }
+}
+
 function print() {
     if (props.shift) printShiftReport(props.shift, tenant.current?.name ?? '');
 }
@@ -155,7 +173,17 @@ function print() {
                 </template>
             </dl>
         </div>
-        <p v-if="shift.closing_note" class="rounded-md bg-muted/50 px-3 py-2 text-xs">Ghi chú đóng ca: {{ shift.closing_note }}<span v-if="shift.closed_by"> · đóng bởi {{ shift.closed_by }}</span></p>
+        <p v-if="shift.closing_note" class="whitespace-pre-line rounded-md bg-muted/50 px-3 py-2 text-xs">Ghi chú đóng ca: {{ shift.closing_note }}<span v-if="shift.closed_by"> · đóng bởi {{ shift.closed_by }}</span></p>
+
+        <div v-if="shift.status === 'closed' && tenant.can('orders.shifts')" class="rounded-md border border-dashed p-3" data-testid="shift-reopen-box">
+            <Button v-if="mode !== 'reopen'" variant="outline" size="sm" data-testid="shift-reopen-start" @click="mode = 'reopen'"><RotateCcw /> Mở lại ca để điều chỉnh</Button>
+            <form v-else class="space-y-2" @submit.prevent="reopen">
+                <p class="text-xs text-muted-foreground">Chỉ mở lại được ca gần nhất của thu ngân. Số liệu đóng ca cũ được lưu trong nhật ký thao tác.</p>
+                <Input v-model="reopenReason" placeholder="Lý do mở lại (bắt buộc)" required data-testid="shift-reopen-reason" />
+                <p v-if="error" class="text-xs text-destructive">{{ error }}</p>
+                <div class="flex justify-end gap-2"><Button variant="ghost" type="button" @click="mode = 'view'">Hủy</Button><Button type="submit" :loading="busy" :disabled="!reopenReason.trim()" data-testid="shift-reopen">Mở lại ca</Button></div>
+            </form>
+        </div>
 
         <div v-if="shift.movements?.length">
             <p class="mb-1 font-medium">Nộp / rút tiền trong ca</p>

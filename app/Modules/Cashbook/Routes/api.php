@@ -9,10 +9,10 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
 
     Route::get('cash-vouchers/staff', [CashVoucherController::class, 'staff']);
     Route::get('cash-vouchers', [CashVoucherController::class, 'index']);
-    Route::post('cash-vouchers', [CashVoucherController::class, 'store']);
+    Route::post('cash-vouchers', [CashVoucherController::class, 'store'])->middleware('idempotent');
     Route::post('cash-vouchers/{cashVoucher}/void', [CashVoucherController::class, 'void']);
     Route::get('cash-vouchers/{source}/{id}', [CashVoucherController::class, 'show']);
 
     Route::get('customers/{customer}/debt', [CashVoucherController::class, 'customerDebt']);
-    Route::post('customers/{customer}/debt-receipts', [CashVoucherController::class, 'collectCustomerDebt']);
+    Route::post('customers/{customer}/debt-receipts', [CashVoucherController::class, 'collectCustomerDebt'])->middleware('idempotent');
 });

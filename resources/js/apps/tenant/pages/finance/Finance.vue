@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { Banknote, CircleCheck, CircleX, HelpCircle, Info, Package, TrendingUp, Undo2 } from 'lucide-vue-next';
+import { Banknote, CircleCheck, Clock, CircleX, HelpCircle, Info, Package, TrendingUp, Undo2 } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Card from '@/shared/ui/Card.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
@@ -15,13 +15,15 @@ import { marginPercent } from '../billing/labels';
 interface FinanceData {
     range: { from: string; to: string };
     ordered: { orders: number; revenue: number; goods: number };
-    completed: { orders: number; revenue: number; goods: number };
+    completed: { orders: number; revenue: number; goods: number; shipping: number };
+    awaiting_completion: { orders: number; revenue: number; goods: number };
     cancelled: { orders: number; revenue: number };
     refunds: number;
-    cogs: number;
-    cogs_returned: number;
-    cogs_missing_lines: number;
-    estimated_gross_profit: number;
+    can_view_profit: boolean;
+    cogs: number | null;
+    cogs_returned: number | null;
+    cogs_missing_lines: number | null;
+    estimated_gross_profit: number | null;
     other_income: number | null;
     other_expenses: number | null;
     estimated_profit: number | null;
@@ -51,7 +53,7 @@ async function load() {
 onMounted(load);
 watch([from, to], load);
 
-const margin = computed(() => (data.value ? marginPercent(data.value.estimated_gross_profit, data.value.completed.goods) : null));
+const margin = computed(() => (data.value?.estimated_gross_profit != null ? marginPercent(data.value.estimated_gross_profit, data.value.completed.goods) : null));
 const maxRevenue = computed(() => Math.max(1, ...(data.value?.daily.map((d) => d.revenue) ?? [1])));
 const hovered = computed(() => (hover.value === null ? null : (data.value?.daily[hover.value] ?? null)));
 
@@ -76,20 +78,26 @@ function shortDay(day: string): string {
         <div class="mb-4 flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
             <Info class="mt-0.5 size-4 shrink-0" />
             <p>
-                Doanh thu là số tiền người mua trả trên sàn, <strong>không phải tiền thực nhận</strong>. Phí sàn và tiền sàn đã chuyển về chưa có vì cần dữ liệu đối soát từ API sàn
+                Doanh thu hoàn thành tính khi sàn báo đơn <strong>hoàn thành</strong> (đơn website, đơn tự tạo và POS: khi giao thành công), không gồm phí ship khách trả,
+                và <strong>không phải tiền thực nhận</strong>. Phí sàn và tiền sàn đã chuyển về chưa có vì cần dữ liệu đối soát từ API sàn
                 (chưa tích hợp), nên hiển thị “Chưa xác định” thay vì ước đoán.
             </p>
         </div>
 
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="finance-kpis">
             <KpiCard label="Doanh thu đặt hàng" :icon="Banknote" tone="blue" :value="formatMoney(data.ordered.revenue)">{{ formatNumber(data.ordered.orders) }} đơn (trừ đơn hủy)</KpiCard>
-            <KpiCard label="Doanh thu hoàn thành" :icon="CircleCheck" tone="green" :value="formatMoney(data.completed.revenue)">{{ formatNumber(data.completed.orders) }} đơn đã giao trong kỳ</KpiCard>
-            <KpiCard label="Giá vốn hàng đã giao" :icon="Package" :value="formatMoney(data.cogs)">
+            <KpiCard label="Doanh thu hoàn thành" :icon="CircleCheck" tone="green" :value="formatMoney(data.completed.goods)">
+                {{ formatNumber(data.completed.orders) }} đơn<template v-if="data.completed.shipping > 0"> · phí ship khách trả {{ formatMoney(data.completed.shipping) }} tính riêng</template>
+            </KpiCard>
+            <KpiCard v-if="data.can_view_profit" label="Giá vốn hàng đã giao" :icon="Package" :value="formatMoney(data.cogs)">
                 <span v-if="data.cogs_missing_lines" class="text-amber-600">{{ data.cogs_missing_lines }} dòng hàng chưa có giá vốn</span>
-                <template v-else-if="data.cogs_returned > 0">−{{ formatMoney(data.cogs_returned) }} hàng trả đã nhập lại kho</template>
+                <template v-else-if="(data.cogs_returned ?? 0) > 0">−{{ formatMoney(data.cogs_returned) }} hàng trả đã nhập lại kho</template>
                 <template v-else>Theo giá vốn bình quân lúc xuất kho</template>
             </KpiCard>
-            <KpiCard label="Lợi nhuận gộp ước tính" :icon="TrendingUp" :tone="Number(data.estimated_gross_profit) < 0 ? 'red' : 'green'" :value="formatMoney(data.estimated_gross_profit)"><template #value><span data-testid="gross-profit">{{ formatMoney(data.estimated_gross_profit) }}</span></template>{{ margin === null ? '—' : margin + '%' }} · chưa trừ phí sàn</KpiCard>
+            <KpiCard v-if="data.can_view_profit" label="Lợi nhuận gộp ước tính" :icon="TrendingUp" :tone="Number(data.estimated_gross_profit) < 0 ? 'red' : 'green'" :value="formatMoney(data.estimated_gross_profit)"><template #value><span data-testid="gross-profit">{{ formatMoney(data.estimated_gross_profit) }}</span></template>{{ margin === null ? '—' : margin + '%' }} · chưa trừ phí sàn</KpiCard>
+            <KpiCard label="Chờ sàn hoàn thành" :icon="Clock" tone="amber" :value="formatMoney(data.awaiting_completion.goods)" data-testid="awaiting-completion">
+                {{ formatNumber(data.awaiting_completion.orders) }} đơn đã giao, tạm tính, chưa vào lợi nhuận
+            </KpiCard>
             <KpiCard label="Hoàn tiền" :icon="Undo2" :value="formatMoney(data.refunds)">Phiếu trả đã duyệt (không tính phiếu chờ duyệt)</KpiCard>
             <KpiCard label="Đơn hủy" :icon="CircleX" :tone="data.cancelled.orders > 0 ? 'red' : 'slate'" :value="formatNumber(data.cancelled.orders)">{{ formatMoney(data.cancelled.revenue) }}</KpiCard>
             <Card v-if="data.estimated_profit !== null" class="p-4 sm:col-span-2" data-testid="other-pnl">

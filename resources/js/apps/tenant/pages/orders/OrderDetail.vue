@@ -18,7 +18,7 @@ import { api, ApiError, idempotent, newIdempotencyKey } from '@/shared/lib/api';
 import { cn, formatDateTime, formatMoney, initials } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
-import { actionLabels, capabilityLabels, deadlineLabel, historySource, manualActionOrder, mappingStatus, marketplaceNames, orderStatus, paymentMethodNames, paymentMethods, paymentStatus, returnStatus, returnTypes } from './labels';
+import { actionLabels, capabilityLabels, deadlineLabel, historySource, manualActionOrder, mappingStatus, marketplaceNames, orderStatus, paymentMethodNames, paymentMethods, paymentStatus, refundStatus, returnState, returnStatus, returnTypes } from './labels';
 import PrintDialog from './PrintDialog.vue';
 import { downloadPackingSlips } from './packingSlip';
 import { orderWorkflow } from './workflow';
@@ -257,6 +257,8 @@ async function createReturn() {
                         <h1 class="font-mono text-xl font-semibold tracking-tight">Đơn {{ order.external_order_id }}</h1>
                         <Badge :tone="orderStatus[order.status]?.tone" data-testid="order-status">{{ orderStatus[order.status]?.label ?? order.status }}</Badge>
                         <Badge v-if="isManual && order.payment_status" :tone="paymentStatus[order.payment_status]?.tone" data-testid="payment-status">{{ paymentStatus[order.payment_status]?.label }}</Badge>
+                        <Badge v-if="order.refund_status && refundStatus[order.refund_status]" :tone="refundStatus[order.refund_status]!.tone" data-testid="refund-status">{{ refundStatus[order.refund_status]!.label }}</Badge>
+                        <Badge v-if="order.return_state && returnState[order.return_state]" :tone="returnState[order.return_state]!.tone" data-testid="return-state">{{ returnState[order.return_state]!.label }}</Badge>
                         <span v-for="t in order.tags ?? []" :key="t" class="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">#{{ t }}</span>
                     </div>
                     <p class="mt-1 text-sm text-muted-foreground">
