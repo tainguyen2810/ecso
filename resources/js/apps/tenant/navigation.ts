@@ -78,7 +78,14 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
             { name: 'cash', label: 'Thu chi', path: '/cash', icon: HandCoins, permission: 'finance.view', shortcut: 'q', description: 'Phiếu thu, phiếu chi, sổ quỹ và loại phiếu.',
                 children: [{ label: 'Phiếu thu, phiếu chi', path: '/cash' }, { label: 'Sổ quỹ', path: '/reports/cashbook' }, { label: 'Loại phiếu', path: '/cash/types' }] },
             { name: 'finance', label: 'Tài chính', path: '/finance', icon: Wallet, permission: 'finance.view', description: 'Doanh thu, phí sàn, đối soát, lợi nhuận ước tính và đã xác nhận.' },
-            { name: 'reports', label: 'Báo cáo', path: '/reports', icon: BarChart3, permission: 'reports.view', description: 'Bán hàng, lãi lỗ, kho, nhập hàng, công nợ và khách hàng.' },
+            { name: 'reports', label: 'Báo cáo', path: '/reports', icon: BarChart3, permission: 'reports.view', description: 'Bán hàng, lãi lỗ, kho, nhập hàng, công nợ và khách hàng.',
+                children: [
+                    { label: 'Báo cáo bán hàng', path: '/reports/group/sales' },
+                    { label: 'Báo cáo nhập hàng', path: '/reports/group/purchases', permission: 'purchasing.view' },
+                    { label: 'Báo cáo kho', path: '/reports/group/stock', permission: 'inventory.view' },
+                    { label: 'Báo cáo tài chính', path: '/reports/group/finance', permission: 'finance.view' },
+                    { label: 'Báo cáo khách hàng', path: '/reports/group/customers' },
+                ] },
         ],
     },
     {

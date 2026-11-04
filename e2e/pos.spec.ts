@@ -14,7 +14,7 @@ test('POS: open a shift, scan, change for cash, pay, count the drawer and close'
     await login(page, 'owner@demo.test');
     await page.evaluate(() => localStorage.removeItem('ecso.pos.carts'));
     // Counter sales sit in the Đơn hàng group.
-    await page.getByRole('link', { name: 'Đơn hàng' }).first().click();
+    await page.getByRole('button', { name: 'Đơn hàng', exact: true }).click();
     await page.getByRole('link', { name: 'Bán tại quầy' }).first().click();
     await expect(page.getByTestId('pos-products').locator('button').first()).toBeVisible();
 

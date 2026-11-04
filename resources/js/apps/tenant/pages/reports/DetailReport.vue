@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
-import { ChevronLeft, Download, FileBarChart, Info, PackagePlus, Search } from 'lucide-vue-next';
+import { Download, FileBarChart, Info, PackagePlus, Printer, Search } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
+import HeaderLink from '../../components/HeaderLink.vue';
+import ReportsNav from './ReportsNav.vue';
+import { useTenantStore } from '@/shared/stores/tenant';
 import RangePicker from './RangePicker.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -21,12 +24,16 @@ import { useReportQuery } from './useReportQuery';
 
 const route = useRoute();
 const router = useRouter();
+const tenant = useTenantStore();
 const report = computed(() => reports[route.params.report as string]!);
 const { range, param, today } = useReportQuery();
 const by = param('by');
 const tab = computed(() => by.value || Object.keys(report.value.tabs ?? { '': '' })[0]!);
 const date = param('date', today);
 const warehouse = param('warehouse');
+const channel = param('channel');
+const channels = ref<{ id: string; name: string }[]>([]);
+const tableEl = ref<HTMLTableElement | null>(null);
 const q = ref(typeof route.query.q === 'string' ? route.query.q : '');
 
 const warehouses = ref<Warehouse[]>([]);
@@ -42,6 +49,7 @@ async function load() {
         const params: Record<string, string | undefined> = {
             by: r.tabs ? tab.value : undefined,
             warehouse: r.warehouse ? warehouse.value || undefined : undefined,
+            channel: r.channel ? channel.value || undefined : undefined,
             q: r.search ? q.value || undefined : undefined,
             ...(r.period === 'range' ? range.value : {}),
             ...(r.period === 'date' ? { date: date.value } : {}),
@@ -56,10 +64,11 @@ async function load() {
 onMounted(async () => {
     load();
     if (report.value.warehouse) warehouses.value = (await api.get('/warehouses')).data.data;
+    if (report.value.channel) channels.value = (await api.get('/sales-channels').catch(() => ({ data: { data: [] } }))).data.data;
 });
 // A different report or tab has different columns: drop the old rows instead of showing them under new headers.
 watch(() => [route.params.report, tab.value], () => (data.value = null));
-watch(() => [route.params.report, tab.value, range.value.from, range.value.to, date.value, warehouse.value], load);
+watch(() => [route.params.report, tab.value, range.value.from, range.value.to, date.value, warehouse.value, channel.value], load);
 let timer: ReturnType<typeof setTimeout> | undefined;
 watch(q, () => {
     clearTimeout(timer);
@@ -98,6 +107,31 @@ function total(c: Column): string {
 const numeric = (c: Column) => ['money', 'number', 'pct'].includes(c.type ?? '');
 const toneClass = { danger: 'text-destructive', success: 'text-success', muted: 'text-muted-foreground' } as const;
 
+/** "In báo cáo": the table as shown, with the title and period, in its own print job (A4 landscape). */
+function printReport() {
+    if (!tableEl.value) return;
+    const r = report.value;
+    const period = r.period === 'range' ? `${formatDate(range.value.from)} – ${formatDate(range.value.to)}` : r.period === 'date' ? `Đến hết ${formatDate(date.value)}` : `Ngày ${formatDate(today)}`;
+    const shop = tenant.current?.name ?? '';
+    const frame = document.createElement('iframe');
+    frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+    document.body.appendChild(frame);
+    const doc = frame.contentDocument!;
+    doc.open();
+    doc.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${r.title}</title><style>
+@page { size: A4 landscape; margin: 10mm; } body { font-family: Arial, sans-serif; font-size: 11px; color: #000; }
+h1 { font-size: 16px; margin: 0; } .muted { color: #444; margin: 2px 0 8px; } table { width: 100%; border-collapse: collapse; }
+th, td { border: 1px solid #999; padding: 3px 5px; text-align: left; } th { background: #eee; } a { color: inherit; text-decoration: none; }
+.text-right { text-align: right; } span.block { display: block; color: #555; font-size: 10px; }
+</style></head><body><h1>${r.title}</h1><p class="muted">${shop} · ${period}${r.tabs ? ' · ' + (r.tabs[tab.value] ?? '') : ''}</p>${tableEl.value.outerHTML}</body></html>`);
+    doc.close();
+    setTimeout(() => {
+        frame.contentWindow!.focus();
+        frame.contentWindow!.print();
+        setTimeout(() => frame.remove(), 1000);
+    }, 100);
+}
+
 function exportCsv() {
     if (!data.value) return;
     const r = report.value;
@@ -113,10 +147,12 @@ function exportCsv() {
 </script>
 
 <template>
-    <RouterLink :to="{ name: 'reports', query: report.period === 'range' ? range : {} }" class="-mt-2 mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground" data-testid="back-to-reports">
-        <ChevronLeft class="size-4" /> Tất cả báo cáo
-    </RouterLink>
+    <div class="mt-3"><ReportsNav /></div>
     <PageHeader :title="report.title" :description="report.description">
+        <template #links>
+            <HeaderLink :icon="Download" :disabled="!rows.length" data-testid="export-csv" @click="exportCsv">Xuất file Excel</HeaderLink>
+            <HeaderLink :icon="Printer" :disabled="!rows.length" data-testid="print-report" @click="printReport">In báo cáo</HeaderLink>
+        </template>
         <RangePicker v-if="report.period === 'range'" :from="range.from" :to="range.to" @update:from="(v) => (range = { ...range, from: v })" @update:to="(v) => (range = { ...range, to: v })" />
         <label v-else-if="report.period === 'date'" class="flex items-center gap-2 text-sm">
             <span class="text-muted-foreground">Tồn đến hết ngày</span>
@@ -151,8 +187,15 @@ function exportCsv() {
             </div>
             <div v-if="report.search" class="relative w-full sm:w-64">
                 <Search class="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                <Input v-model="q" placeholder="Tìm SKU, tên sản phẩm" class="pl-8" aria-label="Tìm sản phẩm" />
+                <Input v-model="q" :placeholder="report.searchPlaceholder ?? 'Tìm SKU, tên sản phẩm'" class="pl-8" aria-label="Tìm kiếm" />
             </div>
+            <Select
+                v-if="report.channel && channels.length > 1"
+                v-model="channel"
+                class="w-48"
+                aria-label="Kênh bán"
+                :options="[{ value: '', label: 'Mọi kênh bán riêng' }, ...channels.map((c) => ({ value: c.id, label: c.name }))]"
+            />
             <Select
                 v-if="report.warehouse && warehouses.length > 1"
                 v-model="warehouse"
@@ -162,14 +205,13 @@ function exportCsv() {
             />
             <span v-if="data" class="text-xs text-muted-foreground">{{ formatNumber(rows.length) }} dòng</span>
             <Button v-if="report.action && rows.length" size="sm" class="ml-auto" @click="router.push(report.action.to)"><PackagePlus /> {{ report.action.label }}</Button>
-            <Button variant="outline" size="sm" :class="report.action && rows.length ? undefined : 'ml-auto'" :disabled="!rows.length" data-testid="export-csv" @click="exportCsv"><Download /> Xuất Excel (CSV)</Button>
         </div>
 
         <ErrorState v-if="error" :message="error" @retry="load" />
         <div v-else-if="!data" class="space-y-2 p-5"><Skeleton v-for="i in 6" :key="i" class="h-6" /></div>
         <EmptyState v-else-if="!rows.length" :icon="FileBarChart" title="Chưa có số liệu" :description="report.empty" />
         <div v-else class="overflow-x-auto" :class="loading && 'opacity-60'">
-            <table class="w-full text-sm" data-testid="report-table">
+            <table ref="tableEl" class="w-full text-sm" data-testid="report-table">
                 <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                     <tr>
                         <th v-for="c in columns" :key="c.key" :class="cn('whitespace-nowrap px-4 py-2.5 font-medium', numeric(c) && 'text-right')">{{ c.label }}</th>
