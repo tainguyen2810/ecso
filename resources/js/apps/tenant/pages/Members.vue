@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
-import { MailPlus, Search, Trash2, UserMinus, UserCheck, Users } from 'lucide-vue-next';
+import { MailPlus, Search, Trash2, UserMinus, UserCheck, Users, Warehouse as WarehouseIcon } from 'lucide-vue-next';
 import PageHeader from '../PageHeader.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
@@ -16,7 +16,7 @@ import { api, ApiError } from '@/shared/lib/api';
 import { cn, formatDateTime, initials } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
-import type { Invitation, Member, Role } from '@/shared/types';
+import type { Invitation, Member, Role, Warehouse } from '@/shared/types';
 
 const tenant = useTenantStore();
 const toast = useToast();
@@ -26,6 +26,8 @@ const tab = ref<'members' | 'invitations'>('members');
 const members = ref<Member[]>([]);
 const invitations = ref<Invitation[]>([]);
 const roles = ref<Role[]>([]);
+const warehouses = ref<Warehouse[]>([]);
+const warehouseName = (id: string) => warehouses.value.find((w) => w.id === id)?.name ?? id;
 const loading = ref(true);
 const loadError = ref<string | null>(null);
 const search = ref('');
@@ -46,7 +48,11 @@ async function load() {
             api.get('/members'),
             api.get('/roles'),
             canManage.value ? api.get('/members/invitations') : Promise.resolve({ data: { data: [] } }),
-        ]);
+            tenant.can('inventory.view') ? api.get('/warehouses') : Promise.resolve({ data: { data: [] } }),
+        ]).then(([m, r, i, w]) => {
+            warehouses.value = (w.data.data as Warehouse[]).filter((x) => x.status === 'active');
+            return [m, r, i] as const;
+        });
         members.value = m.data.data;
         roles.value = r.data.data;
         invitations.value = i.data.data;
@@ -80,7 +86,7 @@ async function sendInvite() {
     }
 }
 
-async function updateMember(member: Member, payload: { role?: string; status?: string }) {
+async function updateMember(member: Member, payload: { role?: string; status?: string; warehouses?: string[] }) {
     try {
         const { data } = await api.patch(`/members/${member.id}`, payload);
         Object.assign(member, data.data);
@@ -110,6 +116,22 @@ async function revoke(inv: Invitation) {
     } catch (e) {
         toast.error((e as ApiError).message);
     }
+}
+
+// Warehouses a member moves stock in (receipts, counts, transfers, returns). None ticked = every warehouse.
+const scopeFor = ref<Member | null>(null);
+const scopeIds = ref<string[]>([]);
+const scopeSaving = ref(false);
+function openScope(m: Member) {
+    scopeFor.value = m;
+    scopeIds.value = [...(m.warehouses ?? [])];
+}
+async function saveScope() {
+    if (!scopeFor.value) return;
+    scopeSaving.value = true;
+    await updateMember(scopeFor.value, { warehouses: scopeIds.value });
+    scopeSaving.value = false;
+    scopeFor.value = null;
 }
 
 function manageable(m: Member): boolean {
@@ -154,6 +176,7 @@ const statusLabel = { pending: 'Đang chờ', accepted: 'Đã nhận', revoked: 
                         <tr>
                             <th class="px-4 py-2.5 font-medium">Thành viên</th>
                             <th class="px-4 py-2.5 font-medium">Vai trò</th>
+                            <th v-if="warehouses.length > 1" class="px-4 py-2.5 font-medium">Kho thao tác</th>
                             <th class="px-4 py-2.5 font-medium">Trạng thái</th>
                             <th class="px-4 py-2.5 font-medium">Tham gia</th>
                             <th class="px-4 py-2.5" />
@@ -179,6 +202,19 @@ const statusLabel = { pending: 'Đang chờ', accepted: 'Đã nhận', revoked: 
                                     @update:model-value="(v) => v && updateMember(m, { role: v })"
                                 />
                                 <span v-else>{{ m.role.name }}</span>
+                            </td>
+                            <td v-if="warehouses.length > 1" class="px-4 py-3">
+                                <button
+                                    v-if="manageable(m)"
+                                    type="button"
+                                    class="inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-left hover:bg-muted"
+                                    :data-testid="`member-warehouses-${m.email}`"
+                                    @click="openScope(m)"
+                                >
+                                    <WarehouseIcon class="size-3.5 text-muted-foreground" />
+                                    <span :class="!m.warehouses?.length && 'text-muted-foreground'">{{ m.warehouses?.length ? m.warehouses.map(warehouseName).join(', ') : 'Tất cả kho' }}</span>
+                                </button>
+                                <span v-else :class="!m.warehouses?.length && 'text-muted-foreground'">{{ m.warehouses?.length ? m.warehouses.map(warehouseName).join(', ') : 'Tất cả kho' }}</span>
                             </td>
                             <td class="px-4 py-3">
                                 <Badge :tone="m.status === 'active' ? 'success' : 'muted'">{{ m.status === 'active' ? 'Hoạt động' : 'Đã khóa' }}</Badge>
@@ -236,6 +272,20 @@ const statusLabel = { pending: 'Đang chờ', accepted: 'Đã nhận', revoked: 
             </div>
         </template>
     </Card>
+
+    <Dialog :open="!!scopeFor" :title="`Kho thao tác của ${scopeFor?.name ?? ''}`" description="Nhân viên chỉ nhập kho, kiểm kho, xuất chuyển, nhận hàng và nhận hàng hoàn ở các kho được chọn. Không chọn kho nào là được thao tác ở mọi kho. Xem tồn kho vẫn như cũ." @update:open="(v) => !v && (scopeFor = null)">
+        <div class="space-y-2" data-testid="member-warehouse-dialog">
+            <label v-for="w in warehouses" :key="w.id" class="flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-muted/40">
+                <input v-model="scopeIds" type="checkbox" :value="w.id" class="size-4 rounded border-input" />
+                <span class="font-mono text-xs text-muted-foreground">{{ w.code }}</span>
+                <span>{{ w.name }}</span>
+            </label>
+        </div>
+        <template #footer>
+            <Button variant="outline" @click="scopeFor = null">Hủy</Button>
+            <Button :loading="scopeSaving" data-testid="member-warehouses-save" @click="saveScope">Lưu</Button>
+        </template>
+    </Dialog>
 
     <Dialog v-model:open="inviteOpen" title="Mời nhân viên" description="Người được mời cần đăng nhập đúng email này để tham gia.">
         <form id="invite-form" class="space-y-4" @submit.prevent="sendInvite">

@@ -3,6 +3,7 @@
 namespace App\Modules\Inventory\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Access\Support\DataAccess;
 use App\Modules\Catalog\Models\Product;
 use App\Modules\Catalog\Models\ProductComponent;
 use App\Modules\Catalog\Models\ProductVariant;
@@ -84,7 +85,7 @@ class StockController extends Controller
             'available' => (int) $v->on_hand - (int) $v->reserved,
             'safety_stock' => (int) $v->safety_stock,
             'sellable' => max(0, (int) $v->on_hand - (int) $v->reserved - (int) $v->safety_stock),
-            'cost_price' => $v->cost_price,
+            'cost_price' => app(DataAccess::class)->cost($v->cost_price),
             'ref_price' => $v->ref_price,
             'wholesale_price' => $v->wholesale_price,
             'created_at' => $v->created_at?->toIso8601String(),
@@ -129,7 +130,7 @@ class StockController extends Controller
             'skus' => $skus,
             'on_hand' => (int) ($totals->on_hand ?? 0),
             'reserved' => (int) ($totals->reserved ?? 0),
-            'inventory_value' => number_format((float) ($totals->value ?? 0), 0, '.', ''),
+            'inventory_value' => app(DataAccess::class)->cost(number_format((float) ($totals->value ?? 0), 0, '.', '')),
             // SKUs without any balance row count as out of stock too.
             'out_of_stock' => max(0, $skus - (int) ($states->in_stock ?? 0)),
             'low_stock' => (int) ($states->low_stock ?? 0),
@@ -226,7 +227,7 @@ class StockController extends Controller
                     'max_stock' => $b?->max_stock,
                     'bin_location' => $b?->bin_location,
                     'incoming' => $incoming[$variant->id][$warehouse->id] ?? 0,
-                    'cost_price' => $variant->cost_price,
+                    'cost_price' => app(DataAccess::class)->cost($variant->cost_price),
                 ];
             }
         }
@@ -263,7 +264,7 @@ class StockController extends Controller
                 'available' => $available,
                 'safety_stock' => 0,
                 'incoming' => 0,
-                'cost_price' => $cost,
+                'cost_price' => app(DataAccess::class)->cost($cost),
             ];
         })->values()->all();
     }

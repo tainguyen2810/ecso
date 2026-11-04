@@ -52,6 +52,7 @@ const toast = useToast();
 const idempotency = useIdempotencyKey();
 const tenant = useTenantStore();
 const canManage = computed(() => tenant.can('products.manage'));
+const canCost = computed(() => tenant.can('products.cost.view'));
 const canReceive = computed(() => tenant.can('inventory.receive'));
 const productId = computed(() => (route.params.id as string | undefined) ?? null);
 const copyFrom = computed(() => (route.query.copy as string | undefined) ?? null);
@@ -390,7 +391,7 @@ async function removeImage(id: number) {
                             <tr>
                                 <th class="px-5 py-2 font-medium">SKU thành phần</th>
                                 <th class="px-3 py-2 text-right font-medium">Số lượng / combo</th>
-                                <th class="px-3 py-2 text-right font-medium">Giá vốn BQ</th>
+                                <th v-if="canCost" class="px-3 py-2 text-right font-medium">Giá vốn BQ</th>
                                 <th class="w-10" />
                             </tr>
                         </thead>
@@ -404,7 +405,7 @@ async function removeImage(id: number) {
                                 <td class="px-3 py-2 text-right">
                                     <input v-model.number="c.quantity" type="number" min="1" max="10000" :disabled="!canManage" :data-testid="`component-qty-${i}`" aria-label="Số lượng mỗi combo" class="h-8 w-20 rounded-md border border-input bg-card px-2 text-right tabular-nums" />
                                 </td>
-                                <td class="px-3 py-2 text-right tabular-nums text-muted-foreground">{{ c.variant.cost_price ? formatMoney(Number(c.variant.cost_price) * c.quantity) : '—' }}</td>
+                                <td v-if="canCost" class="px-3 py-2 text-right tabular-nums text-muted-foreground">{{ c.variant.cost_price ? formatMoney(Number(c.variant.cost_price) * c.quantity) : '—' }}</td>
                                 <td class="px-2 text-right">
                                     <Button v-if="canManage" variant="ghost" size="icon" class="size-8" title="Bỏ thành phần" @click="components.splice(i, 1)"><Trash2 class="text-muted-foreground" /></Button>
                                 </td>
@@ -413,7 +414,7 @@ async function removeImage(id: number) {
                         <tfoot class="border-t text-xs text-muted-foreground">
                             <tr>
                                 <td class="px-5 py-2" colspan="2">Tổng giá bán lẻ nếu mua lẻ: <span class="font-medium text-foreground">{{ formatMoney(componentPrice) }}</span></td>
-                                <td class="px-3 py-2 text-right">Giá vốn combo: <span class="font-medium text-foreground">{{ formatMoney(componentCost) }}</span></td>
+                                <td v-if="canCost" class="px-3 py-2 text-right">Giá vốn combo: <span class="font-medium text-foreground">{{ formatMoney(componentCost) }}</span></td>
                                 <td />
                             </tr>
                         </tfoot>
@@ -451,7 +452,7 @@ async function removeImage(id: number) {
                                     <th class="px-3 py-2 text-right font-medium">Giá bán lẻ</th>
                                     <th class="px-3 py-2 text-right font-medium">Giá bán buôn</th>
                                     <th class="px-3 py-2 text-right font-medium">KL (g)</th>
-                                    <th v-if="!isNew" class="px-4 py-2 text-right font-medium">Giá vốn BQ</th>
+                                    <th v-if="!isNew && canCost" class="px-4 py-2 text-right font-medium">Giá vốn BQ</th>
                                     <th class="px-2 py-2" />
                                 </tr>
                             </thead>
@@ -478,7 +479,7 @@ async function removeImage(id: number) {
                                     <td class="px-3 py-2 text-right"><input v-model="v.ref_price" type="number" min="0" :disabled="!canManage" aria-label="Giá bán lẻ" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
                                     <td class="px-3 py-2 text-right"><input v-model="v.wholesale_price" type="number" min="0" :disabled="!canManage" aria-label="Giá bán buôn" :data-testid="`wholesale-${i}`" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
                                     <td class="px-3 py-2 text-right"><input v-model="v.weight_gram" type="number" min="0" :disabled="!canManage" class="h-8 w-16 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
-                                    <td v-if="!isNew" class="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                                    <td v-if="!isNew && canCost" class="px-4 py-2 text-right tabular-nums text-muted-foreground">
                                         {{ v.cost_price ? formatMoney(v.cost_price) : '—' }}
                                         <RouterLink v-if="v.id" :to="`/inventory/sku/${v.id}`" class="block text-xs text-primary hover:underline">Thẻ kho</RouterLink>
                                     </td>

@@ -15,6 +15,12 @@ export const useTenantStore = defineStore('tenant', () => {
         return permissions.value.has(permission);
     }
 
+    /** Whether the member may move stock in this warehouse (no warehouses assigned = every warehouse). */
+    function worksIn(warehouseId: string | null | undefined): boolean {
+        const assigned = context.value?.warehouses;
+        return !assigned || !warehouseId || assigned.includes(warehouseId);
+    }
+
     async function fetchTenants(): Promise<Tenant[]> {
         const { data } = await api.get('/tenants');
         tenants.value = data.data;
@@ -60,5 +66,5 @@ export const useTenantStore = defineStore('tenant', () => {
         context.value = null;
     }
 
-    return { tenants, context, current, permissions, can, fetchTenants, restore, select, create, reset };
+    return { tenants, context, current, permissions, can, worksIn, fetchTenants, restore, select, create, reset };
 });

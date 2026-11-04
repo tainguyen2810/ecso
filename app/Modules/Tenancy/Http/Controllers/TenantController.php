@@ -3,7 +3,9 @@
 namespace App\Modules\Tenancy\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Access\Support\DataAccess;
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Tenancy\Http\Resources\TenantResource;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Services\TenantService;
@@ -43,9 +45,10 @@ class TenantController extends Controller
         return (new TenantResource($tenant))->response()->setStatusCode(201);
     }
 
-    public function current(TenantContext $context): JsonResponse
+    public function current(TenantContext $context, DataAccess $access): JsonResponse
     {
         $membership = $context->membership();
+        $warehouses = $access->warehouseIds();
 
         return response()->json([
             'data' => [
@@ -53,6 +56,8 @@ class TenantController extends Controller
                 'role' => ['key' => $membership->role->key, 'name' => $membership->role->name],
                 'permissions' => $context->permissions(),
                 'entitlements' => $context->entitlements()->toArray(),
+                // Warehouses this member moves stock in; null = every warehouse.
+                'warehouses' => $warehouses === null ? null : Warehouse::query()->whereIn('id', $warehouses)->pluck('ulid')->all(),
             ],
         ]);
     }

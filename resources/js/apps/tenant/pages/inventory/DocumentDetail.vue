@@ -22,6 +22,7 @@ import { varianceReasons } from './stocktake';
 
 const route = useRoute();
 const tenant = useTenantStore();
+const canCost = computed(() => tenant.can('products.cost.view'));
 const toast = useToast();
 const kindKey = computed(() => route.meta.kind as DocumentKindKey);
 const kind = computed(() => documentKinds[kindKey.value]);
@@ -124,8 +125,8 @@ const steps = computed(() => {
                                 <th class="px-4 py-2.5 font-medium">SKU</th>
                                 <th v-if="doc.kind === 'adjustment'" class="px-4 py-2.5 font-medium">Cách nhập</th>
                                 <th class="px-4 py-2.5 text-right font-medium">Số lượng</th>
-                                <th v-if="doc.kind === 'receipt'" class="px-4 py-2.5 text-right font-medium">Đơn giá</th>
-                                <th v-if="doc.kind === 'receipt'" class="px-4 py-2.5 text-right font-medium">Thành tiền</th>
+                                <th v-if="doc.kind === 'receipt' && canCost" class="px-4 py-2.5 text-right font-medium">Đơn giá</th>
+                                <th v-if="doc.kind === 'receipt' && canCost" class="px-4 py-2.5 text-right font-medium">Thành tiền</th>
                                 <th v-if="hasSnapshot" class="px-4 py-2.5 text-right font-medium">Tồn lúc đếm</th>
                                 <th v-if="showNow" class="px-4 py-2.5 text-right font-medium">Tồn hiện tại</th>
                                 <th v-if="doc.kind === 'adjustment' && !showNow" class="px-4 py-2.5 text-right font-medium">Tồn trước</th>
@@ -142,8 +143,8 @@ const steps = computed(() => {
                                 </td>
                                 <td v-if="doc.kind === 'adjustment'" class="px-4 py-2.5 text-muted-foreground">{{ l.mode === 'count' ? 'Số đếm thực tế' : 'Chênh lệch' }}</td>
                                 <td class="px-4 py-2.5 text-right tabular-nums">{{ l.mode === 'delta' && l.quantity > 0 ? '+' : '' }}{{ formatNumber(l.quantity) }}</td>
-                                <td v-if="doc.kind === 'receipt'" class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(l.unit_cost) }}</td>
-                                <td v-if="doc.kind === 'receipt'" class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(l.quantity * Number(l.unit_cost)) }}</td>
+                                <td v-if="doc.kind === 'receipt' && canCost" class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(l.unit_cost) }}</td>
+                                <td v-if="doc.kind === 'receipt' && canCost" class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(l.quantity * Number(l.unit_cost)) }}</td>
                                 <td v-if="hasSnapshot" class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ l.system_qty === undefined ? '—' : formatNumber(l.system_qty) }}</td>
                                 <td v-if="showNow" :class="cn('px-4 py-2.5 text-right tabular-nums', l.on_hand_now !== l.system_qty ? 'font-medium text-amber-600' : 'text-muted-foreground')">{{ l.on_hand_now === undefined ? '—' : formatNumber(l.on_hand_now) }}</td>
                                 <td v-if="doc.kind === 'adjustment' && !showNow" class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ l.on_hand_before ?? '—' }}</td>
@@ -161,7 +162,7 @@ const steps = computed(() => {
                 </div>
                 <div v-if="doc.kind === 'receipt'" class="flex justify-end gap-8 border-t px-4 py-3 text-sm">
                     <span class="text-muted-foreground">Tổng số lượng <b class="ml-1 text-foreground tabular-nums">{{ formatNumber(doc.total_quantity) }}</b></span>
-                    <span class="text-muted-foreground">Tổng giá trị <b class="ml-1 text-foreground tabular-nums">{{ formatMoney(doc.total_value) }}</b></span>
+                    <span v-if="canCost" class="text-muted-foreground">Tổng giá trị <b class="ml-1 text-foreground tabular-nums">{{ formatMoney(doc.total_value) }}</b></span>
                 </div>
             </Card>
 

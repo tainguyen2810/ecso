@@ -52,6 +52,7 @@ const router = useRouter();
 const toast = useToast();
 const tenant = useTenantStore();
 const canManage = computed(() => tenant.can('products.manage'));
+const canCost = computed(() => tenant.can('products.cost.view'));
 const canStock = computed(() => tenant.can('inventory.view'));
 const canLocate = computed(() => tenant.can('inventory.adjust'));
 const canSetMax = computed(() => tenant.can('inventory.adjust.approve'));
@@ -251,7 +252,7 @@ async function remove() {
                     <div><dt class="text-muted-foreground">Có thể bán</dt><dd :class="cn('text-lg font-semibold tabular-nums', stockTotals.available <= 0 && 'text-destructive')">{{ formatNumber(stockTotals.available) }}</dd></div>
                     <div><dt class="text-muted-foreground">Đang giữ cho đơn</dt><dd class="font-medium tabular-nums">{{ formatNumber(stockTotals.reserved) }}</dd></div>
                     <div><dt class="text-muted-foreground">Hàng đang về</dt><dd class="font-medium tabular-nums">{{ formatNumber(stockTotals.incoming) }}</dd></div>
-                    <div class="col-span-2"><dt class="text-muted-foreground">Giá trị tồn (giá vốn BQ)</dt><dd class="font-medium tabular-nums">{{ formatMoney(stockTotals.value) }}</dd></div>
+                    <div v-if="canCost" class="col-span-2"><dt class="text-muted-foreground">Giá trị tồn (giá vốn BQ)</dt><dd class="font-medium tabular-nums">{{ formatMoney(stockTotals.value) }}</dd></div>
                 </dl>
                 <p v-else class="p-5 text-sm text-muted-foreground">Bạn không có quyền xem tồn kho.</p>
             </Card>
@@ -288,7 +289,7 @@ async function remove() {
                             <th class="px-4 py-2.5 font-medium">Mã vạch</th>
                             <th class="px-4 py-2.5 text-right font-medium">Giá bán lẻ</th>
                             <th class="px-4 py-2.5 text-right font-medium">Giá bán buôn</th>
-                            <th class="px-4 py-2.5 text-right font-medium">Giá vốn BQ</th>
+                            <th v-if="canCost" class="px-4 py-2.5 text-right font-medium">Giá vốn BQ</th>
                             <th v-if="canStock" class="px-4 py-2.5 text-right font-medium">Có thể bán</th>
                             <th v-if="showPrices" class="px-4 py-2.5 font-medium">Nguồn giá</th>
                             <th v-if="showPrices" class="px-4 py-2.5 font-medium">Giá trên {{ channelNames.length === 1 ? channelNames[0] : 'website' }}</th>
@@ -307,7 +308,7 @@ async function remove() {
                             <td class="px-4 py-2.5 font-mono text-xs text-muted-foreground">{{ v.barcode ?? '—' }}</td>
                             <td class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{{ Number(v.ref_price) ? formatMoney(v.ref_price) : '—' }}</td>
                             <td class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{{ Number(v.wholesale_price) ? formatMoney(v.wholesale_price) : '—' }}</td>
-                            <td class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ Number(v.cost_price) ? formatMoney(v.cost_price) : '—' }}</td>
+                            <td v-if="canCost" class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ Number(v.cost_price) ? formatMoney(v.cost_price) : '—' }}</td>
                             <td v-if="canStock" class="px-4 py-2.5 text-right font-medium tabular-nums">{{ formatNumber(totals.get(v.id!)?.available ?? 0) }}</td>
                             <td v-if="showPrices" class="px-4 py-2.5" :data-testid="`price-source-${v.sku}`">
                                 <template v-if="pricesOf(v.id)">
@@ -389,7 +390,7 @@ async function remove() {
                             <th class="px-4 py-2.5 text-right font-medium">Tồn an toàn</th>
                             <th class="px-4 py-2.5 text-right font-medium">Tồn tối đa</th>
                             <th class="px-4 py-2.5 font-medium">Vị trí</th>
-                            <th class="px-4 py-2.5 text-right font-medium">Giá vốn BQ</th>
+                            <th v-if="canCost" class="px-4 py-2.5 text-right font-medium">Giá vốn BQ</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y">
@@ -417,7 +418,7 @@ async function remove() {
                                 </button>
                                 <span v-else class="font-mono text-xs">{{ r.bin_location || '—' }}</span>
                             </td>
-                            <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ Number(r.cost_price) ? formatMoney(r.cost_price) : '—' }}</td>
+                            <td v-if="canCost" class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ Number(r.cost_price) ? formatMoney(r.cost_price) : '—' }}</td>
                         </tr>
                         <tr v-if="!visibleStock.length"><td colspan="10" class="px-4 py-8 text-center text-muted-foreground">Chưa có kho đang hoạt động.</td></tr>
                     </tbody>

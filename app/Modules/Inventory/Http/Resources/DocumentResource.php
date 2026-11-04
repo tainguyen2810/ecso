@@ -2,6 +2,7 @@
 
 namespace App\Modules\Inventory\Http\Resources;
 
+use App\Modules\Access\Support\DataAccess;
 use App\Modules\Inventory\Models\InventoryAdjustment;
 use App\Modules\Inventory\Models\InventoryAdjustmentLine;
 use App\Modules\Inventory\Models\StockBalance;
@@ -45,7 +46,7 @@ class DocumentResource extends JsonResource
                     'name' => $line->variant->displayName(),
                 ],
                 'quantity' => $line->quantity,
-                'unit_cost' => $line->unit_cost ?? null,
+                'unit_cost' => app(DataAccess::class)->cost($line->unit_cost ?? null),
                 'mode' => $line->mode ?? null,
                 'system_qty' => $line->system_qty ?? null,
                 'on_hand_now' => $line instanceof InventoryAdjustmentLine && $line->mode === InventoryAdjustmentLine::MODE_COUNT && $onHandNow !== null ? (int) ($onHandNow[$line->product_variant_id] ?? 0) : null,
@@ -62,7 +63,7 @@ class DocumentResource extends JsonResource
                 'source' => $doc->source,
                 'warehouse' => $warehouse($doc->warehouse),
                 'total_quantity' => $doc->relationLoaded('lines') ? $doc->lines->sum('quantity') : null,
-                'total_value' => $doc->relationLoaded('lines') ? (string) $doc->lines->sum(fn ($l) => $l->quantity * (float) $l->unit_cost) : null,
+                'total_value' => $doc->relationLoaded('lines') ? app(DataAccess::class)->cost((string) $doc->lines->sum(fn ($l) => $l->quantity * (float) $l->unit_cost)) : null,
             ],
             $doc instanceof InventoryAdjustment => [
                 'kind' => 'adjustment',

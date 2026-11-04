@@ -3,6 +3,7 @@
 namespace App\Modules\Inventory\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Access\Support\DataAccess;
 use App\Modules\Inventory\Http\Controllers\Concerns\ResolvesLines;
 use App\Modules\Inventory\Http\Resources\DocumentResource;
 use App\Modules\Inventory\Models\StockTransfer;
@@ -45,7 +46,7 @@ class TransferController extends Controller
 
         $transfer = $this->documents->createTransfer(
             $this->findWarehouse($data['from_warehouse_id'], 'from_warehouse_id'),
-            $this->findWarehouse($data['to_warehouse_id'], 'to_warehouse_id'),
+            $this->findWarehouse($data['to_warehouse_id'], 'to_warehouse_id', assigned: false),
             $this->resolveLines($data['lines']),
             $data['note'] ?? null,
         );
@@ -63,6 +64,7 @@ class TransferController extends Controller
     public function dispatchTransfer(StockTransfer $transfer): DocumentResource
     {
         $this->authorize('transfer', $transfer);
+        app(DataAccess::class)->assertWarehouse($transfer->from_warehouse_id, 'from_warehouse_id');
 
         return new DocumentResource($this->documents->dispatchTransfer($transfer)->load(self::RELATIONS));
     }
@@ -70,6 +72,7 @@ class TransferController extends Controller
     public function receive(StockTransfer $transfer): DocumentResource
     {
         $this->authorize('transfer', $transfer);
+        app(DataAccess::class)->assertWarehouse($transfer->to_warehouse_id, 'to_warehouse_id');
 
         return new DocumentResource($this->documents->receiveTransfer($transfer)->load(self::RELATIONS));
     }
@@ -77,6 +80,7 @@ class TransferController extends Controller
     public function cancel(StockTransfer $transfer): DocumentResource
     {
         $this->authorize('transfer', $transfer);
+        app(DataAccess::class)->assertWarehouse($transfer->from_warehouse_id, 'from_warehouse_id');
 
         return new DocumentResource($this->documents->cancelTransfer($transfer)->load(self::RELATIONS));
     }

@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Quyền dữ liệu, đợt C kiểm toán sản phẩm (2026-11-04)
+- **Quyền mới `products.cost.view`** (Xem giá vốn, giá trị tồn và đơn giá nhập). Có sẵn ở Chủ, Quản trị, Quản lý vận hành, Kế toán, Chỉ xem; Nhân viên kho và Nhân viên xử lý đơn không có. Vai trò tự tạo đang có `reports.view`, `products.manage` hoặc `purchasing.manage` được thêm quyền này khi migrate, nên không ai mất quyền đang dùng. Không có quyền thì API trả `null` cho giá vốn, giá trị tồn, đơn giá phiếu nhập, đơn giá trên thẻ kho; file xuất sản phẩm để trống cột giá vốn; màn hình ẩn các cột đó.
+- **Nhập kho tay không đổi giá vốn** khi người nhập không có quyền xem giá vốn: hàng vào theo giá vốn bình quân hiện tại, form không hiện ô đơn giá. Đơn giá nhập từ đơn nhập hàng (PO) không đổi.
+- **Phân kho cho nhân viên** (Nhân viên → cột "Kho thao tác"): nhân viên được chọn kho chỉ tạo phiếu nhập, kiểm, xuất chuyển, nhận chuyển, nhận PO, trả NCC, nhận hàng hoàn ở các kho đó. Không chọn kho nào thì được mọi kho (như trước). Xem tồn vẫn như cũ. Bảng `member_warehouses`.
+
 ### Trạng thái và đồng bộ sản phẩm, đợt B kiểm toán sản phẩm (2026-11-04)
 - **Ngừng bán / Lưu trữ có hiệu lực**: SKU mà sản phẩm hoặc biến thể không ở trạng thái "Đang bán" thì không thêm được vào đơn mới hay POS ("SKU … đang ngừng bán"). Dòng đã có trên đơn vẫn giữ khi sửa đơn. Ô tìm SKU ở đơn và POS chỉ hiện SKU đang bán (`/variants?sellable=1`). Website được đẩy tồn 0 khi ngừng bán, và đẩy lại tồn thật khi bán lại (sự kiện `SaleStatusChanged`, cả khi đổi hàng loạt và khi nhập file).
 - **Nhập Excel đi qua model**: giá đổi bằng file được đẩy lên website và ghi lịch sử giá như sửa tay.

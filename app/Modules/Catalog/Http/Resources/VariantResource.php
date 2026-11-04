@@ -2,6 +2,7 @@
 
 namespace App\Modules\Catalog\Http\Resources;
 
+use App\Modules\Access\Support\DataAccess;
 use App\Modules\Catalog\Models\ProductComponent;
 use App\Modules\Catalog\Models\ProductVariant;
 use Illuminate\Http\Request;
@@ -21,7 +22,7 @@ class VariantResource extends JsonResource
             'ref_price' => $this->ref_price,
             'price_source' => $this->price_source ?? 'auto',
             'wholesale_price' => $this->wholesale_price,
-            'cost_price' => $this->cost_price,
+            'cost_price' => app(DataAccess::class)->cost($this->cost_price),
             'weight_gram' => $this->weight_gram,
             'status' => $this->status,
             'sellable' => $this->whenLoaded('product', fn () => $this->isSellable()),

@@ -27,6 +27,8 @@ export interface TenantContextData {
     role: { key: string; name: string };
     permissions: string[];
     entitlements: Record<string, Entitlement>;
+    /** Warehouses this member moves stock in; null = every warehouse. */
+    warehouses?: string[] | null;
 }
 
 export interface Role {
@@ -45,6 +47,8 @@ export interface Member {
     status: 'active' | 'disabled';
     joined_at: string | null;
     is_me: boolean;
+    /** Warehouses the member moves stock in; empty = every warehouse. */
+    warehouses?: string[];
 }
 
 export interface Invitation {
