@@ -2,12 +2,15 @@
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { cn } from '@/shared/lib/utils';
+import { useTenantStore } from '@/shared/stores/tenant';
 
 const route = useRoute();
-const links = [
+const tenant = useTenantStore();
+const links = computed(() => [
     { to: '/customers', label: 'Danh sách khách hàng', match: ['customers'] },
     { to: '/customers/groups', label: 'Nhóm khách hàng', match: ['customer-groups'] },
-];
+    ...(tenant.can('customers.merge') ? [{ to: '/customers/duplicates', label: 'Khách trùng', match: ['customer-duplicates'] }] : []),
+]);
 const section = computed(() => String(route.name));
 </script>
 

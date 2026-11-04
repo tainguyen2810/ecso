@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, Ban, Banknote, CalendarClock, Download, HandCoins, MapPin, Pencil, Plus, ShoppingCart, Trash2 } from 'lucide-vue-next';
+import { ArrowLeft, Ban, Banknote, CalendarClock, Download, HandCoins, Link2, MapPin, Merge, Pencil, Plus, ShoppingCart, Trash2 } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Tabs from '../../components/Tabs.vue';
 import CustomerDialog from './CustomerDialog.vue';
 import DebtEntryDialog from './DebtEntryDialog.vue';
 import DebtReceiptDialog from './DebtReceiptDialog.vue';
+import MergeDialog from './MergeDialog.vue';
 import Pager from './Pager.vue';
 import { usePaged } from './usePaged';
 import { customerSources, customerStatus, customerTypes, genderLabels, priceTierLabels } from './labels';
@@ -23,7 +24,7 @@ import { api, ApiError, downloadFile } from '@/shared/lib/api';
 import { cn, formatDate, formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
-import { orderStatus, paymentMethodNames, paymentMethods, paymentStatus, returnStatus, returnTypes } from '../orders/labels';
+import { marketplaceNames, orderStatus, paymentMethodNames, paymentMethods, paymentStatus, returnStatus, returnTypes } from '../orders/labels';
 import type { Customer, CustomerActivity, CustomerAddress, CustomerLedgerEntry, CustomerNote, CustomerSummary, OrderPaymentData, OrderReturnData, OrderSummary } from '@/shared/types';
 
 type Detail = Customer & { orders: OrderSummary[]; payments: OrderPaymentData[]; addresses: CustomerAddress[]; notes: CustomerNote[]; summary?: CustomerSummary };
@@ -137,6 +138,45 @@ const creditUse = computed(() => {
     return limit > 0 ? Math.min(100, Math.round((Number(customer.value!.debt ?? 0) / limit) * 100)) : null;
 });
 
+// Merge another card into this one: pick it, then review the merge.
+const canMerge = computed(() => tenant.can('customers.merge'));
+const pickOpen = ref(false);
+const pickQuery = ref('');
+const pickResults = ref<Customer[]>([]);
+const mergeOpen = ref(false);
+const mergeSource = ref('');
+let pickTimer: ReturnType<typeof setTimeout> | undefined;
+watch(pickQuery, (q) => {
+    clearTimeout(pickTimer);
+    if (!q.trim()) return void (pickResults.value = []);
+    pickTimer = setTimeout(async () => {
+        const { data } = await api.get('/customers', { params: { q, per_page: 8 } });
+        pickResults.value = (data.data as Customer[]).filter((c) => c.id !== customer.value?.id);
+    }, 250);
+});
+function pickForMerge(c: Customer) {
+    mergeSource.value = c.id;
+    pickOpen.value = false;
+    pickQuery.value = '';
+    mergeOpen.value = true;
+}
+async function merged() {
+    ledger.value = null;
+    for (const p of [ordersPage, paymentsPage, returnsPage, activityPage]) p.loaded.value = false;
+    await Promise.all([load(), loadLinks()]);
+}
+
+// Channel ids and past merges.
+const links = ref<{ identities: { source: string; external_id: string; label: string | null; last_seen_at: string | null }[]; merges: { id: string; code: string; name: string; by: string | null; at: string | null }[] } | null>(null);
+async function loadLinks() {
+    try {
+        links.value = (await api.get(`/customers/${route.params.id}/links`)).data.data;
+    } catch {
+        links.value = null;
+    }
+}
+onMounted(loadLinks);
+
 // Activity log wording.
 const activityLabels: Record<string, string> = {
     'customer.created': 'Tạo khách hàng',
@@ -147,6 +187,7 @@ const activityLabels: Record<string, string> = {
     'customer.debt_voided': 'Hủy chứng từ công nợ',
     'customer.debt_collected': 'Thu nợ',
     'customer.imported': 'Nhập từ file',
+    'customer.merged': 'Gộp khách',
 };
 const fieldLabels: Record<string, string> = {
     name: 'tên', phone: 'số điện thoại', email: 'email', address: 'địa chỉ', customer_group_id: 'nhóm', group: 'nhóm', status: 'trạng thái',
@@ -169,6 +210,7 @@ function activityDetail(a: CustomerActivity): string {
     if (c.number) parts.push(String(c.number));
     if (c.amount !== undefined) parts.push(formatMoney(String(c.amount)));
     if (c.voucher) parts.push(`phiếu ${c.voucher}`);
+    if (c.merged) parts.push(`gộp ${c.merged} vào khách này`);
     if (c.reason) parts.push(String(c.reason));
     return parts.join(' · ');
 }
@@ -260,6 +302,7 @@ const thead = 'border-b bg-slate-50 text-left text-[11px] uppercase tracking-wid
             <Badge :tone="customerStatus[customer.status]?.tone" data-testid="customer-status">{{ customerStatus[customer.status]?.label }}</Badge>
             <Button v-if="tenant.can('orders.create')" @click="$router.push({ path: '/orders/new', query: { customer: customer.id } })"><Plus /> Tạo đơn</Button>
             <Button v-if="canManage" variant="outline" data-testid="edit-customer" @click="dialog = true"><Pencil /> Sửa</Button>
+            <Button v-if="canMerge" variant="outline" data-testid="merge-customer" @click="pickOpen = true"><Merge /> Gộp khách</Button>
             <Button v-if="tenant.can('customers.delete') && !customer.orders_count" variant="ghost" title="Xóa" @click="remove"><Trash2 /></Button>
         </PageHeader>
 
@@ -477,6 +520,20 @@ const thead = 'border-b bg-slate-50 text-left text-[11px] uppercase tracking-wid
                         <div class="col-span-2"><dt class="text-xs text-muted-foreground">Ngày thêm</dt><dd>{{ formatDateTime(customer.created_at) }}</dd></div>
                     </dl>
                 </Card>
+                <Card v-if="links && (links.identities.length || links.merges.length)" title="Kênh liên kết và lịch sử gộp" data-testid="customer-links">
+                    <ul class="divide-y text-sm">
+                        <li v-for="i in links.identities" :key="i.source + i.external_id" class="flex items-center gap-2 px-5 py-2.5">
+                            <Link2 class="size-4 text-muted-foreground" />
+                            <span class="flex-1">{{ marketplaceNames[i.source] ?? i.source }} · <span class="font-mono text-xs">{{ i.label ?? i.external_id }}</span></span>
+                            <span class="text-xs text-muted-foreground">{{ i.last_seen_at ? formatDate(i.last_seen_at) : '' }}</span>
+                        </li>
+                        <li v-for="m in links.merges" :key="m.id" class="flex items-center gap-2 px-5 py-2.5">
+                            <Merge class="size-4 text-muted-foreground" />
+                            <span class="flex-1">Đã gộp {{ m.name }} <span class="font-mono text-xs text-muted-foreground">{{ m.code }}</span></span>
+                            <span class="text-xs text-muted-foreground">{{ m.by ?? '' }} · {{ formatDate(m.at) }}</span>
+                        </li>
+                    </ul>
+                </Card>
                 <Card title="Nhóm và điều khoản mua hàng">
                     <dl v-if="customer.group" class="space-y-2 px-5 py-4 text-sm">
                         <div class="flex justify-between"><dt class="text-muted-foreground">Nhóm</dt><dd><RouterLink :to="{ path: '/customers', query: { group: customer.group.id } }" class="text-primary hover:underline">{{ customer.group.name }}</RouterLink></dd></div>
@@ -495,6 +552,18 @@ const thead = 'border-b bg-slate-50 text-left text-[11px] uppercase tracking-wid
 
         <CustomerDialog v-model:open="dialog" :customer="customer" @saved="load" />
         <DebtReceiptDialog v-model:open="receiptDialog" :customer-id="customer.id" :debt="Number(customer.debt ?? 0)" @saved="debtChanged" />
+        <Dialog v-model:open="pickOpen" title="Gộp khách khác vào khách này" :description="`Tìm thẻ khách trùng để gộp vào ${customer.name} (${customer.code}). Thẻ được tìm sẽ bị gộp và xóa khỏi danh sách.`">
+            <Input v-model="pickQuery" placeholder="Tên, mã khách, email, số điện thoại…" data-testid="merge-search" />
+            <ul v-if="pickResults.length" class="mt-2 divide-y rounded-md border text-sm">
+                <li v-for="c in pickResults" :key="c.id">
+                    <button type="button" class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-muted" @click="pickForMerge(c)">
+                        <span><span class="font-medium">{{ c.name }}</span> <span class="font-mono text-xs text-muted-foreground">{{ c.code }}</span><span class="block text-xs text-muted-foreground">{{ [c.phone, c.email].filter(Boolean).join(' · ') }}</span></span>
+                        <span class="text-xs text-muted-foreground">{{ formatNumber(c.orders_count) }} đơn</span>
+                    </button>
+                </li>
+            </ul>
+        </Dialog>
+        <MergeDialog v-model:open="mergeOpen" :keep-id="customer.id" :source-id="mergeSource" @merged="merged" />
         <DebtEntryDialog v-model:open="entryDialog" :customer-id="customer.id" :kind="entryKind" @saved="debtChanged" />
         <Dialog v-model:open="addressDialog" :title="editingAddress ? 'Sửa địa chỉ giao hàng' : 'Thêm địa chỉ giao hàng'" description="Số điện thoại và địa chỉ được mã hóa khi lưu.">
             <form id="address-form" class="grid gap-3 sm:grid-cols-2" @submit.prevent="saveAddress">

@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Khách hàng, đợt D: một khách trên mọi kênh, khách trùng và gộp khách (2026-11-04)
+- **Nhận diện khách từ kênh** (`App\Modules\Sales\Services\CustomerResolver`): tìm thẻ khách theo thứ tự chắc chắn — mã khách trên gian hàng (bảng mới `customer_identities`), số điện thoại đầy đủ, email (không phân biệt hoa thường; hai thẻ cùng email thì không chọn thẻ nào). **Không bao giờ ghép theo tên.** Kênh chỉ điền vào ô còn trống của thẻ, không xóa dữ liệu đang có. Mã khách trên gian hàng được nhớ để lần sau vẫn nhận ra dù khách đổi số.
+- **Khách trùng** (Khách hàng → Khách trùng, quyền mới `customers.merge`): liệt kê các thẻ trùng email, trùng mã số thuế, và trùng tên (chỉ là gợi ý). ECSO không tự gộp.
+- **Gộp khách**: xem trước số đơn, phiếu thu, chứng từ công nợ, phiếu sổ quỹ, địa chỉ, ghi chú sẽ chuyển; chọn từng trường giữ giá trị của thẻ nào. Số điện thoại/địa chỉ không được chọn vẫn giữ làm địa chỉ giao hàng; tags cộng lại; ô trống được điền từ thẻ kia. Thẻ bị gộp được lưu đầy đủ (mã hóa) trong `customer_merges`, lịch sử hoạt động của nó hiện tiếp ở thẻ được giữ. Chỉ gộp được khách cùng cửa hàng. Công nợ sau gộp vẫn tính một lần từ chứng từ gốc.
+- Trang khách có thẻ "Kênh liên kết và lịch sử gộp" và nút **Gộp khách**.
+
 ### Khách hàng, đợt C: nhóm áp vào đơn, hạn mức, hồ sơ doanh nghiệp, danh sách (2026-11-04)
 - **Nhóm khách áp vào đơn và POS**: chọn khách thì đơn lấy chính sách giá (lẻ/buôn), **chiết khấu % của nhóm** (tự tính lại khi giỏ đổi, dừng khi người bán tự nhập chiết khấu) và hình thức thanh toán quen dùng. Nhân viên không có quyền sửa giá vẫn được cho đúng chiết khấu nhóm, không hơn (kiểm tra ở máy chủ).
 - **Cảnh báo hạn mức nợ** khi tạo đơn: nợ hiện tại + phần chưa thu của đơn vượt hạn mức của khách/nhóm thì hiện cảnh báo (không chặn).

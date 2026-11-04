@@ -5,6 +5,7 @@ use App\Modules\Sales\Http\Controllers\CustomerController;
 use App\Modules\Sales\Http\Controllers\CustomerDebtController;
 use App\Modules\Sales\Http\Controllers\CustomerGroupController;
 use App\Modules\Sales\Http\Controllers\CustomerHistoryController;
+use App\Modules\Sales\Http\Controllers\CustomerMergeController;
 use App\Modules\Sales\Http\Controllers\CustomerProfileController;
 use App\Modules\Sales\Http\Controllers\CustomerTransferController;
 use App\Modules\Sales\Http\Controllers\PosController;
@@ -21,6 +22,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::get('customers/staff', [CustomerController::class, 'staff']);
     Route::post('customers/bulk', [CustomerController::class, 'bulk']);
     Route::get('customers/export', [CustomerTransferController::class, 'export'])->middleware('throttle:10,1,sales.customers.export');
+    Route::get('customers/duplicates', [CustomerMergeController::class, 'duplicates']);
     Route::get('customers/import-template', [CustomerTransferController::class, 'template']);
     Route::post('customers/import', [CustomerTransferController::class, 'import'])->middleware('throttle:10,1,sales.customers.import');
     Route::apiResource('customers', CustomerController::class);
@@ -30,6 +32,9 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::get('customers/{customer}/payments', [CustomerHistoryController::class, 'payments']);
     Route::get('customers/{customer}/returns', [CustomerHistoryController::class, 'returns']);
     Route::get('customers/{customer}/activity', [CustomerHistoryController::class, 'activity']);
+    Route::get('customers/{customer}/links', [CustomerMergeController::class, 'links']);
+    Route::get('customers/{customer}/merge-preview', [CustomerMergeController::class, 'preview']);
+    Route::post('customers/{customer}/merge', [CustomerMergeController::class, 'merge'])->middleware('throttle:30,1,sales.customers.merge');
     Route::post('customers/{customer}/debt-entries', [CustomerDebtController::class, 'store'])->middleware('throttle:60,1,sales.customers.debt-entries');
     Route::post('customers/{customer}/debt-entries/{entry}/void', [CustomerDebtController::class, 'void']);
     Route::post('customers/{customer}/addresses', [CustomerProfileController::class, 'storeAddress']);

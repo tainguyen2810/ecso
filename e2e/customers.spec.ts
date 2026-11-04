@@ -103,3 +103,14 @@ test('customer import: template, preview with row errors', async ({ page }) => {
     await expect(page.getByTestId('customer-import-preview')).toContainText('Dòng 3');
     await shot(page, '08-customer-import-errors');
 });
+
+test('duplicate customers: listed for review, merge previewed before anything moves', async ({ page }) => {
+    await login(page, 'owner@demo.test');
+    await page.goto('/customers/duplicates');
+    await expect(page.getByTestId('duplicate-groups')).toContainText('Trùng mã số thuế');
+    await expect(page.getByTestId('duplicate-groups')).toContainText('Cty TNHH Minh Tuấn');
+    await page.getByTestId('duplicate-groups').getByRole('button', { name: /Gộp vào/ }).first().click();
+    await expect(page.getByTestId('merge-preview')).toContainText('Thông tin khác nhau');
+    await shot(page, '09-customer-merge');
+    await page.getByRole('dialog').getByRole('button', { name: 'Hủy' }).click();
+});

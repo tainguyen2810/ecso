@@ -44,7 +44,20 @@ class Customer extends Model
 
     protected $fillable = ['name', 'type', 'source', 'email', 'address', 'note', 'birthday', 'gender', 'tax_code', 'invoice_name', 'invoice_address', 'invoice_email', 'tags', 'status', 'payment_terms_days', 'credit_limit'];
 
-    protected $hidden = ['id', 'tenant_id', 'phone_hash', 'created_by', 'customer_group_id', 'assigned_user_id'];
+    protected $hidden = ['id', 'tenant_id', 'phone_hash', 'email_key', 'created_by', 'customer_group_id', 'assigned_user_id'];
+
+    protected static function booted(): void
+    {
+        // The email as a lookup key, so a buyer from another channel is found by it whatever its case.
+        static::saving(fn (Customer $c) => $c->email_key = self::emailKey($c->email));
+    }
+
+    public static function emailKey(?string $email): ?string
+    {
+        $email = mb_strtolower(trim((string) $email));
+
+        return $email !== '' ? mb_substr($email, 0, 150) : null;
+    }
 
     protected function casts(): array
     {
@@ -114,6 +127,12 @@ class Customer extends Model
     public function debtEntries(): HasMany
     {
         return $this->hasMany(CustomerDebtEntry::class);
+    }
+
+    /** @return HasMany<CustomerIdentity, $this> */
+    public function identities(): HasMany
+    {
+        return $this->hasMany(CustomerIdentity::class);
     }
 
     /** @return HasMany<OrderPayment, $this> */

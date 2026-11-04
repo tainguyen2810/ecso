@@ -9,6 +9,7 @@ use App\Modules\Orders\Http\Resources\ReturnResource;
 use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Sales\Http\Resources\PaymentResource;
 use App\Modules\Sales\Models\Customer;
+use App\Modules\Sales\Models\CustomerMerge;
 use App\Modules\Sales\Services\CustomerLedger;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Http\JsonResponse;
@@ -54,7 +55,9 @@ class CustomerHistoryController extends Controller
     {
         $this->authorize('view', $customer);
         $logs = AuditLog::query()->with('actor:id,name')
-            ->where('tenant_id', $context->id())->where('subject_type', class_basename(Customer::class))->where('subject_id', $customer->id)
+            ->where('tenant_id', $context->id())->where('subject_type', class_basename(Customer::class))
+            // A merged card's history stays with the card it was merged into.
+            ->whereIn('subject_id', [$customer->id, ...CustomerMerge::query()->where('customer_id', $customer->id)->pluck('merged_customer_id')])
             ->latest('id')->paginate($this->perPage($request));
 
         return response()->json([
