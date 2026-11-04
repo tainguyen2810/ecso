@@ -3,10 +3,10 @@
 namespace App\Modules\Analytics\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Analytics\Services\BusinessReports;
 use App\Modules\Analytics\Services\FinanceReport;
 use App\Modules\Analytics\Services\SalesReport;
+use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Tenancy\Support\TenantContext;
