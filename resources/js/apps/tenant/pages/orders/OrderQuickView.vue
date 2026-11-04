@@ -56,7 +56,7 @@ onMounted(async () => {
                 </div>
                 <div class="flex flex-row flex-wrap gap-2 md:flex-col">
                     <RouterLink :to="`/orders/${order.id}`"><Button size="sm" class="w-full"><ExternalLink /> Xem chi tiết</Button></RouterLink>
-                    <RouterLink v-if="order.editable && tenant.can('orders.create')" :to="`/orders/${order.id}/edit`"><Button size="sm" variant="outline" class="w-full"><Pencil /> Sửa đơn</Button></RouterLink>
+                    <RouterLink v-if="order.editable && tenant.can('orders.create') && tenant.can('orders.update')" :to="`/orders/${order.id}/edit`"><Button size="sm" variant="outline" class="w-full"><Pencil /> Sửa đơn</Button></RouterLink>
                     <Button v-if="order.source === 'manual'" size="sm" variant="outline" @click="printOpen = true"><ReceiptText /> In đơn hàng</Button>
                 </div>
             </div>

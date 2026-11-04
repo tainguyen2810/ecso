@@ -8,6 +8,7 @@ use App\Modules\Analytics\Services\LedgerReports;
 use App\Modules\Analytics\Services\OrderReports;
 use App\Modules\Analytics\Services\StockReports;
 use App\Modules\Analytics\Services\TradeReports;
+use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Tenancy\Support\TenantContext;
@@ -62,6 +63,7 @@ class ReportsController extends Controller
     public function productSales(Request $request, TradeReports $trade): JsonResponse
     {
         $this->allow('reports.view');
+        $this->exporting($request, 'product-sales');
         [$from, $to] = $this->range($request);
         $q = $request->validate(['q' => ['nullable', 'string', 'max:100']])['q'] ?? null;
 
@@ -71,6 +73,7 @@ class ReportsController extends Controller
     public function returns(Request $request, TradeReports $trade): JsonResponse
     {
         $this->allow('reports.view');
+        $this->exporting($request, 'returns');
         [$from, $to] = $this->range($request);
 
         return response()->json(['data' => $trade->returns($from, $to, $this->by($request, ['order', 'product']))]);
@@ -112,6 +115,7 @@ class ReportsController extends Controller
     public function customers(Request $request, TradeReports $trade): JsonResponse
     {
         $this->allow('reports.view');
+        $this->exporting($request, 'customers');
         [$from, $to] = $this->range($request);
 
         return response()->json(['data' => $trade->customers($from, $to)]);
@@ -151,6 +155,7 @@ class ReportsController extends Controller
     public function orders(Request $request, OrderReports $orders): JsonResponse
     {
         $this->allow('reports.view');
+        $this->exporting($request, 'orders');
         [$from, $to] = $this->range($request);
 
         return response()->json(['data' => $orders->byOrder($from, $to, $this->orderFilters($request))]);
@@ -160,6 +165,7 @@ class ReportsController extends Controller
     public function salesLines(Request $request, OrderReports $orders): JsonResponse
     {
         $this->allow('reports.view');
+        $this->exporting($request, 'sales-lines');
         [$from, $to] = $this->range($request);
 
         return response()->json(['data' => $orders->lines($from, $to, $this->orderFilters($request))]);
@@ -168,6 +174,7 @@ class ReportsController extends Controller
     public function stockDetail(Request $request, OrderReports $orders): JsonResponse
     {
         $this->allow('inventory.view');
+        $this->exporting($request, 'stock-detail');
         $data = $request->validate(['warehouse' => ['nullable', 'string'], 'q' => ['nullable', 'string', 'max:100']]);
 
         return response()->json(['data' => $orders->stockDetail($this->warehouse($data['warehouse'] ?? null), $data['q'] ?? null)]);
@@ -205,6 +212,20 @@ class ReportsController extends Controller
         $this->allow('purchasing.view');
 
         return response()->json(['data' => $ledger->payables()]);
+    }
+
+    /**
+     * "Xuất CSV" of a report whose table stops at the row limit asks again with export=1: every row of the same filter
+     * is returned, up to the export limit, and the export is written to the audit log (who exported what, when).
+     */
+    private function exporting(Request $request, string $report): void
+    {
+        if (! $request->boolean('export')) {
+            return;
+        }
+        $limit = (int) config('ecso.reports.export_row_limit', 50000);
+        config(['ecso.reports.row_limit' => $limit, 'ecso.reports.customer_row_limit' => $limit]);
+        app(AuditLogger::class)->record('report.exported', null, ['report' => $report, 'filters' => $request->except('export')]);
     }
 
     private function allow(string $permission): void

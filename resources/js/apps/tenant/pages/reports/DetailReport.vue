@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
-import { Download, FileBarChart, Info, PackagePlus, Printer, Search } from 'lucide-vue-next';
+import { Download, FileBarChart, Info, PackagePlus, Printer, Search, TriangleAlert } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import HeaderLink from '../../components/HeaderLink.vue';
 import ReportsNav from './ReportsNav.vue';
 import { useTenantStore } from '@/shared/stores/tenant';
 import RangePicker from './RangePicker.vue';
+import Alert from '@/shared/ui/Alert.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
 import KpiCard from '@/shared/ui/KpiCard.vue';
@@ -41,20 +42,24 @@ const data = ref<any>(null);
 const error = ref<string | null>(null);
 const loading = ref(false);
 
+function params(): Record<string, string | undefined> {
+    const r = report.value;
+    return {
+        by: r.tabs ? tab.value : undefined,
+        warehouse: r.warehouse ? warehouse.value || undefined : undefined,
+        channel: r.channel ? channel.value || undefined : undefined,
+        q: r.search ? q.value || undefined : undefined,
+        ...(r.period === 'range' ? range.value : {}),
+        ...(r.period === 'date' ? { date: date.value } : {}),
+    };
+}
+
 async function load() {
     loading.value = true;
     error.value = null;
     const r = report.value;
     try {
-        const params: Record<string, string | undefined> = {
-            by: r.tabs ? tab.value : undefined,
-            warehouse: r.warehouse ? warehouse.value || undefined : undefined,
-            channel: r.channel ? channel.value || undefined : undefined,
-            q: r.search ? q.value || undefined : undefined,
-            ...(r.period === 'range' ? range.value : {}),
-            ...(r.period === 'date' ? { date: date.value } : {}),
-        };
-        data.value = (await api.get(r.endpoint, { params })).data.data;
+        data.value = (await api.get(r.endpoint, { params: params() })).data.data;
     } catch (e) {
         error.value = (e as ApiError).message;
     } finally {
@@ -132,15 +137,30 @@ th, td { border: 1px solid #999; padding: 3px 5px; text-align: left; } th { back
     }, 100);
 }
 
-function exportCsv() {
+/** The table may stop at the row limit; the file then asks the server for every row of the same filter. */
+const exporting = ref(false);
+async function exportCsv() {
     if (!data.value) return;
     const r = report.value;
+    let source = data.value;
+    if (data.value.truncated) {
+        exporting.value = true;
+        try {
+            source = (await api.get(r.endpoint, { params: { ...params(), export: '1' } })).data.data;
+        } catch (e) {
+            error.value = (e as ApiError).message;
+            return;
+        } finally {
+            exporting.value = false;
+        }
+    }
+    const exportRows: any[] = r.rows?.(source) ?? source.rows;
     const suffix = r.period === 'range' ? `${range.value.from}-${range.value.to}` : r.period === 'date' ? date.value : today;
     downloadCsv(
         `${r.key}${r.tabs ? `-${tab.value}` : ''}-${suffix}.csv`,
         toCsv(
             columns.value.flatMap((c) => (c.sub ? [c.label, 'Mã'] : [c.label])),
-            rows.value.map((row) => columns.value.flatMap((c) => (c.sub ? [raw(c, row), c.sub(row)] : [raw(c, row)]))),
+            exportRows.map((row) => columns.value.flatMap((c) => (c.sub ? [raw(c, row), c.sub(row)] : [raw(c, row)]))),
         ),
     );
 }
@@ -150,7 +170,9 @@ function exportCsv() {
     <div class="mt-3"><ReportsNav /></div>
     <PageHeader :title="report.title" :description="report.description">
         <template #links>
-            <HeaderLink :icon="Download" :disabled="!rows.length" data-testid="export-csv" @click="exportCsv">Xuất file Excel</HeaderLink>
+            <HeaderLink :icon="Download" :disabled="!rows.length || exporting" data-testid="export-csv" @click="exportCsv">
+                {{ exporting ? 'Đang xuất…' : data?.truncated ? `Xuất CSV (toàn bộ ${formatNumber(data.total_rows)} dòng)` : 'Xuất CSV' }}
+            </HeaderLink>
             <HeaderLink :icon="Printer" :disabled="!rows.length" data-testid="print-report" @click="printReport">In báo cáo</HeaderLink>
         </template>
         <RangePicker v-if="report.period === 'range'" :from="range.from" :to="range.to" @update:from="(v) => (range = { ...range, from: v })" @update:to="(v) => (range = { ...range, to: v })" />
@@ -168,6 +190,11 @@ function exportCsv() {
     <p v-if="report.note" class="mb-4 flex items-start gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
         <Info class="mt-0.5 size-3.5 shrink-0" /><span>{{ report.note }}</span>
     </p>
+
+    <Alert v-if="data?.truncated" tone="amber" :icon="TriangleAlert" class="mb-4" data-testid="report-truncated">
+        Kỳ này có <b>{{ formatNumber(data.total_rows) }} dòng</b>. Bảng hiển thị <b>{{ formatNumber(rows.length) }} dòng đầu</b>; dòng <b>Tổng</b> và file xuất tính trên toàn bộ
+        {{ formatNumber(data.total_rows) }} dòng. Thu hẹp ngày hoặc thêm bộ lọc để xem hết trên màn hình.
+    </Alert>
 
     <Card>
         <div class="flex flex-wrap items-center gap-2 border-b p-3">
@@ -203,7 +230,7 @@ function exportCsv() {
                 aria-label="Kho"
                 :options="[{ value: '', label: 'Tất cả kho' }, ...warehouses.map((w) => ({ value: w.id, label: w.name }))]"
             />
-            <span v-if="data" class="text-xs text-muted-foreground">{{ formatNumber(rows.length) }} dòng</span>
+            <span v-if="data" class="text-xs text-muted-foreground">{{ data.truncated ? `${formatNumber(rows.length)} / ${formatNumber(data.total_rows)} dòng` : `${formatNumber(rows.length)} dòng` }}</span>
             <Button v-if="report.action && rows.length" size="sm" class="ml-auto" @click="router.push(report.action.to)"><PackagePlus /> {{ report.action.label }}</Button>
         </div>
 
@@ -228,7 +255,7 @@ function exportCsv() {
                 </tbody>
                 <tfoot v-if="hasTotals" class="border-t bg-muted/30 font-medium">
                     <tr>
-                        <td v-for="(c, i) in columns" :key="c.key" :class="cn('whitespace-nowrap px-4 py-2.5', numeric(c) && 'text-right tabular-nums')">{{ i === 0 ? 'Tổng' : total(c) }}</td>
+                        <td v-for="(c, i) in columns" :key="c.key" :class="cn('whitespace-nowrap px-4 py-2.5', numeric(c) && 'text-right tabular-nums')">{{ i === 0 ? (data.truncated ? 'Tổng (toàn bộ)' : 'Tổng') : total(c) }}</td>
                     </tr>
                 </tfoot>
             </table>
