@@ -81,6 +81,12 @@ export interface Variant {
     components?: { variant: { id: string; sku: string; name: string }; quantity: number }[];
     cost_price?: string;
     weight_gram: number | null;
+    supplier?: Ref | null;
+    supplier_sku?: string | null;
+    length_mm?: number | null;
+    width_mm?: number | null;
+    height_mm?: number | null;
+    sellable?: boolean;
     status?: string;
     product?: Ref & { image?: string | null };
     stock?: StockFigures;

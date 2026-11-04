@@ -16,7 +16,7 @@ use Illuminate\Validation\ValidationException;
 
 class ProductService
 {
-    public const VARIANT_FIELDS = ['sku', 'barcode', 'name', 'options', 'ref_price', 'price_source', 'wholesale_price', 'weight_gram', 'status'];
+    public const VARIANT_FIELDS = ['sku', 'barcode', 'name', 'options', 'ref_price', 'price_source', 'wholesale_price', 'weight_gram', 'status', 'supplier_id', 'supplier_sku', 'length_mm', 'width_mm', 'height_mm'];
 
     public function __construct(private readonly AuditLogger $audit, private readonly InventoryDocumentService $documents) {}
 
@@ -124,6 +124,25 @@ class ProductService
             }
             $product->delete();
             $this->audit->record('product.deleted', $product, ['name' => $product->name]);
+        });
+    }
+
+    /**
+     * Restores a product from the recycle bin with the SKUs deleted together with it (same moment), not SKUs that
+     * were removed from it earlier.
+     */
+    public function restore(Product $product): void
+    {
+        DB::transaction(function () use ($product) {
+            $deletedAt = $product->deleted_at;
+            $product->restore();
+            $variants = $product->variants()->onlyTrashed()
+                ->when($deletedAt, fn ($q) => $q->where('deleted_at', '>=', $deletedAt->copy()->subSeconds(5)))
+                ->get();
+            $variants->each->restore();
+            $this->audit->record('product.restored', $product, ['name' => $product->name, 'skus' => $variants->pluck('sku')->all()]);
+            // Linked marketplace listings get their real stock again.
+            $this->saleStatusChanged($variants->pluck('id')->all());
         });
     }
 

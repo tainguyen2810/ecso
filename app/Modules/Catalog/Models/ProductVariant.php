@@ -24,7 +24,7 @@ class ProductVariant extends Model
     /** Who holds the selling price: auto (ECSO while in stock, else the website), ecso, woo. */
     public const PRICE_SOURCES = ['auto', 'ecso', 'woo'];
 
-    protected $fillable = ['sku', 'barcode', 'name', 'options', 'ref_price', 'price_source', 'wholesale_price', 'weight_gram', 'status'];
+    protected $fillable = ['sku', 'barcode', 'name', 'options', 'ref_price', 'price_source', 'wholesale_price', 'weight_gram', 'status', 'supplier_id', 'supplier_sku', 'length_mm', 'width_mm', 'height_mm'];
 
     protected function casts(): array
     {

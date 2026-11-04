@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Thông tin sản phẩm, đợt E kiểm toán sản phẩm (2026-11-04)
+- **Lọc theo tồn kho** ở danh sách sản phẩm (Bộ lọc khác → Tồn kho): Còn hàng, Sắp hết (tồn khả dụng ≤ tồn an toàn), Hết hàng. Thêm sắp xếp theo giá bán tăng/giảm.
+- **Thùng rác "Đã xóa"**: tab mới liệt kê sản phẩm đã xóa, nút **Khôi phục** đưa sản phẩm về cùng các SKU bị xóa cùng lúc, ghi nhật ký và đẩy lại tồn thật lên sàn đã liên kết.
+- **Tạo mã vạch**: nút cạnh ô mã vạch tạo mã EAN-13 nội bộ (đầu 2x, dải GS1 dành cho mã cửa hàng) có số kiểm tra đúng, không trùng mã đã có.
+- **Nhà cung cấp thường nhập và mã hàng của NCC** cho từng SKU; gợi ý đặt hàng ưu tiên NCC này thay vì NCC của đơn nhập gần nhất. **Kích thước gói hàng** (dài × rộng × cao, mm) cho từng SKU.
+- Ô tìm kiếm coi `%` và `_` là ký tự thường (tìm "A_1" không còn khớp "AB1").
+
 ### Kho và chuyển kho, đợt D kiểm toán sản phẩm (2026-11-04)
 - **Nhận chuyển kho thiếu**: nút "Nhận hàng" mở hộp nhập số thực nhận từng dòng (`POST /inventory/transfers/{id}/receive` nhận `lines[].line_id`, `received_qty`). Kho nhận vẫn nhập đủ số đã xuất, phần thiếu thành phiếu điều chỉnh "Thất lạc" chờ duyệt ở kho nhận, nên khoản mất được duyệt và báo cáo như hàng hủy. Phiếu chuyển ghi "Thực nhận" và liên kết phiếu thất lạc.
 - **Hàng đang chuyển đến**: tồn theo kho ở trang sản phẩm cộng thêm hàng đã xuất từ kho khác mà chưa nhận (`in_transit`).

@@ -70,7 +70,7 @@ class ReorderSuggestions
             ->whereIn('product_variants.id', $candidates)
             ->whereNull('product_variants.deleted_at')
             ->where('products.status', '!=', 'archived')
-            ->get(['product_variants.id', 'product_variants.ulid', 'product_variants.sku', 'product_variants.name as variant_name', 'products.name', 'product_variants.cost_price']);
+            ->get(['product_variants.id', 'product_variants.ulid', 'product_variants.sku', 'product_variants.name as variant_name', 'products.name', 'product_variants.cost_price', 'product_variants.supplier_id']);
 
         $rows = [];
         foreach ($variants as $v) {
@@ -102,7 +102,8 @@ class ReorderSuggestions
                 'on_order' => $pending,
                 'suggested' => $suggested,
                 'unit_cost' => bcadd((string) ($last->unit_cost ?? $v->cost_price ?? '0'), '0', 2),
-                'supplier_id' => $last ? (int) $last->supplier_id : null,
+                // The SKU's usual supplier first, else whoever supplied it last.
+                'supplier_id' => $v->supplier_id ? (int) $v->supplier_id : ($last ? (int) $last->supplier_id : null),
             ];
         }
 

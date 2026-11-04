@@ -59,7 +59,11 @@ class ProductController extends Controller
             'type' => ['nullable', Rule::in([Product::TYPE_STANDARD, Product::TYPE_COMBO])],
             'created_from' => ['nullable', 'date'],
             'created_to' => ['nullable', 'date'],
-            'sort' => ['nullable', Rule::in(['newest', 'oldest', 'name', 'available', '-available'])],
+            'sort' => ['nullable', Rule::in(['newest', 'oldest', 'name', 'available', '-available', 'price', '-price'])],
+            // Stock state over all warehouses: out (nothing available), low (at or below the safety stock), in.
+            'stock' => ['nullable', Rule::in(['out', 'low', 'in'])],
+            // Recycle bin ("Đã xóa"): deleted products, to restore.
+            'trashed' => ['nullable', 'boolean'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
@@ -67,20 +71,29 @@ class ProductController extends Controller
             ->join('product_variants', 'product_variants.id', '=', 'stock_balances.product_variant_id')
             ->where('stock_balances.tenant_id', app(TenantContext::class)->id())
             ->whereNull('product_variants.deleted_at')
-            ->selectRaw('product_variants.product_id, SUM(stock_balances.on_hand) as on_hand, SUM(stock_balances.reserved) as reserved')
+            ->selectRaw('product_variants.product_id, SUM(stock_balances.on_hand) as on_hand, SUM(stock_balances.reserved) as reserved, SUM(stock_balances.safety_stock) as safety')
             ->groupBy('product_variants.product_id');
 
+        $available = 'COALESCE(s.on_hand, 0) - COALESCE(s.reserved, 0)';
+        $trashed = (bool) ($filters['trashed'] ?? false);
         $products = Product::query()
-            ->with(['category', 'brand', 'variants'])
+            ->when($trashed, fn (Builder $q) => $q->onlyTrashed()->with(['category', 'brand', 'variants' => fn ($v) => $v->withTrashed()]), fn (Builder $q) => $q->with(['category', 'brand', 'variants']))
             ->leftJoinSub($stock, 's', 's.product_id', '=', 'products.id')
             ->select('products.*', 's.on_hand', 's.reserved')
             // After select(): select() replaces the column list, which would drop the count.
             ->withCount('variants')
-            ->when($filters['q'] ?? null, function (Builder $q, string $term) {
-                $q->where(fn (Builder $w) => $w->where('products.name', 'like', "%{$term}%")
-                    ->orWhereHas('variants', fn (Builder $v) => $v->where('sku', 'like', "%{$term}%")->orWhere('barcode', $term)));
+            ->when($filters['q'] ?? null, function (Builder $q, string $term) use ($trashed) {
+                $like = '%'.self::escapeLike($term).'%';
+                $q->where(fn (Builder $w) => $w->where('products.name', 'like', $like)
+                    ->orWhereHas('variants', fn (Builder $v) => $v->when($trashed, fn ($t) => $t->withTrashed())->where('sku', 'like', $like)->orWhere('barcode', $term)));
             })
-            ->when($filters['status'] ?? null, fn (Builder $q, string $s) => $q->where('products.status', $s), fn (Builder $q) => $q->where('products.status', '!=', Product::STATUS_ARCHIVED))
+            ->when($filters['status'] ?? null, fn (Builder $q, string $s) => $q->where('products.status', $s), fn (Builder $q) => $trashed ? $q : $q->where('products.status', '!=', Product::STATUS_ARCHIVED))
+            // Combos have no stock rows of their own: the stock filters look at stocked products only.
+            ->when($filters['stock'] ?? null, fn (Builder $q, string $state) => $q->where('products.type', '!=', Product::TYPE_COMBO)->whereRaw(match ($state) {
+                'out' => "{$available} <= 0",
+                'low' => "{$available} > 0 AND {$available} <= COALESCE(s.safety, 0)",
+                default => "{$available} > 0",
+            }))
             ->when($filters['category'] ?? null, fn (Builder $q, string $c) => $q->whereIn('category_id', Category::query()->where('ulid', $c)->select('id')))
             ->when($filters['brand'] ?? null, fn (Builder $q, string $b) => $q->whereIn('brand_id', Brand::query()->where('ulid', $b)->select('id')))
             ->when($filters['tag'] ?? null, fn (Builder $q, string $t) => $q->whereJsonContains('products.tags', $t))
@@ -92,6 +105,8 @@ class ProductController extends Controller
                 'name' => $q->orderBy('products.name'),
                 'available' => $q->orderByRaw('COALESCE(s.on_hand, 0) - COALESCE(s.reserved, 0)')->orderByDesc('products.id'),
                 '-available' => $q->orderByRaw('COALESCE(s.on_hand, 0) - COALESCE(s.reserved, 0) DESC')->orderByDesc('products.id'),
+                // Lowest retail price of the product's SKUs.
+                'price', '-price' => $q->orderBy(ProductVariant::query()->selectRaw('MIN(ref_price)')->whereColumn('product_variants.product_id', 'products.id'), $filters['sort'] === 'price' ? 'asc' : 'desc')->orderByDesc('products.id'),
                 default => $q->orderByDesc('products.id'),
             })
             ->paginate($filters['per_page'] ?? 20);
@@ -131,6 +146,49 @@ class ProductController extends Controller
         $service->update($product, $request->payload());
 
         return new ProductResource($product->refresh()->load(['category', 'brand', 'variants.components.component.product', 'images']));
+    }
+
+    /** Brings a deleted product back from the recycle bin, with the SKUs deleted with it. */
+    public function restore(string $product, ProductService $service): ProductResource
+    {
+        $model = Product::onlyTrashed()->where('ulid', $product)->firstOrFail();
+        $this->authorize('delete', $model);
+        $service->restore($model);
+
+        return new ProductResource($model->refresh()->load(['category', 'brand', 'variants', 'images']));
+    }
+
+    /**
+     * A free EAN-13 for goods without a barcode ("Tạo mã vạch"). Prefix 20–29 is reserved by GS1 for in-store use,
+     * so it never collides with a manufacturer's code; the check digit makes scanners accept it.
+     */
+    public function barcodeSuggestion(): JsonResponse
+    {
+        $this->authorize('create', Product::class);
+        for ($i = 0; $i < 20; $i++) {
+            $code = self::ean13('2'.random_int(0, 9).str_pad((string) random_int(0, 9_999_999_999), 10, '0', STR_PAD_LEFT));
+            if (! ProductVariant::query()->withTrashed()->where('barcode', $code)->exists()) {
+                return response()->json(['data' => ['barcode' => $code]]);
+            }
+        }
+        abort(503, 'Không tạo được mã vạch, hãy thử lại.');
+    }
+
+    /** @param  string  $twelve  the first 12 digits */
+    public static function ean13(string $twelve): string
+    {
+        $sum = 0;
+        foreach (str_split($twelve) as $i => $digit) {
+            $sum += (int) $digit * ($i % 2 === 0 ? 1 : 3);
+        }
+
+        return $twelve.((10 - $sum % 10) % 10);
+    }
+
+    /** "A_1" must not match "AB1": % and _ typed by the user are literal. */
+    private static function escapeLike(string $term): string
+    {
+        return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $term);
     }
 
     public function destroy(Product $product, ProductService $service): JsonResponse
@@ -223,8 +281,8 @@ class ProductController extends Controller
             ->when($data['sellable'] ?? false, fn (Builder $q) => $q->where('product_variants.status', Product::STATUS_ACTIVE)
                 ->whereHas('product', fn ($p) => $p->where('status', Product::STATUS_ACTIVE)))
             ->when($data['q'] ?? null, fn (Builder $q, string $term) => $q->where(fn (Builder $w) => $w
-                ->where('sku', 'like', "%{$term}%")->orWhere('barcode', $term)->orWhere('product_variants.name', 'like', "%{$term}%")
-                ->orWhereHas('product', fn ($p) => $p->where('name', 'like', "%{$term}%"))))
+                ->where('sku', 'like', '%'.self::escapeLike($term).'%')->orWhere('barcode', $term)->orWhere('product_variants.name', 'like', '%'.self::escapeLike($term).'%')
+                ->orWhereHas('product', fn ($p) => $p->where('name', 'like', '%'.self::escapeLike($term).'%'))))
             ->when($exact, fn (Builder $q) => $q->orderBy('product_id')->orderBy('product_variants.id'), fn (Builder $q) => $q->orderBy('sku'))
             ->limit($exact ? 500 : 30);
 
