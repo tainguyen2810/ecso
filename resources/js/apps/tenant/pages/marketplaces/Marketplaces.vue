@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { AlertTriangle, FlaskConical, Link2, PlugZap, RefreshCw, Send, Unplug, Zap } from 'lucide-vue-next';
+import { AlertTriangle, FlaskConical, Link2, PlugZap, RefreshCw, Send, Settings2, Unplug, Zap } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
@@ -18,6 +18,7 @@ import { formatDateTime, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { capabilityLabels, capabilityNames, orderStatus } from '../orders/labels';
+import WooConnectDialog from './WooConnectDialog.vue';
 import type { MarketplaceAccountData, MarketplaceCatalogEntry, OrderSummary, Warehouse } from '@/shared/types';
 
 const tenant = useTenantStore();
@@ -42,7 +43,13 @@ const simForm = ref({ count: 3, status: 'fake_ready', max_items: 2, order: '', t
 const realMarketplaces = computed(() => catalog.value.filter((c) => !c.is_fake));
 const connectNotice = ref<{ key: string; message: string } | null>(null);
 
+const wooOpen = ref(false);
+
 async function connectReal(c: MarketplaceCatalogEntry) {
+    if (c.connect_mode === 'store') {
+        wooOpen.value = true;
+        return;
+    }
     busy.value = `real-${c.key}`;
     connectNotice.value = null;
     try {
@@ -189,7 +196,7 @@ const accountLabel = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 
             <template v-if="tenant.can('marketplace.connect') && catalog.some((c) => c.is_fake)" #actions>
                 <Button size="sm" data-testid="connect-fake" @click="connectOpen = true"><FlaskConical /> Kết nối shop giả lập</Button>
             </template>
-            <EmptyState v-if="!accounts.length" :icon="PlugZap" title="Chưa kết nối gian hàng nào" description="Kết nối Shopee, TikTok Shop, Lazada, Tiki cần app credentials của sàn (chưa có). Trong lúc chờ, dùng shop giả lập để chạy thử toàn bộ quy trình đơn hàng và tồn kho." />
+            <EmptyState v-if="!accounts.length" :icon="PlugZap" title="Chưa kết nối gian hàng nào" description="Website WooCommerce kết nối được ngay. Shopee, TikTok Shop, Lazada, Tiki cần app credentials của sàn (chưa có)." />
             <ul v-else class="divide-y" data-testid="account-list">
                 <li v-for="a in accounts" :key="a.id" class="flex flex-wrap items-center gap-4 px-5 py-4">
                     <MarketplaceLogo :marketplace="a.marketplace" :name="a.marketplace_name" size="lg" />
@@ -199,7 +206,7 @@ const accountLabel = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 
                             <Badge :tone="accountTone(a)">{{ accountLabel(a) }}</Badge>
                             <Badge v-if="a.marketplace === 'fake'" tone="warning">Giả lập</Badge>
                         </div>
-                        <div class="mt-0.5 text-xs text-muted-foreground">{{ a.marketplace_name }} · Shop ID {{ a.external_shop_id }} · kết nối {{ formatDateTime(a.connected_at) }}</div>
+                        <div class="mt-0.5 text-xs text-muted-foreground">{{ a.marketplace_name }} · {{ a.base_url ?? `Shop ID ${a.external_shop_id}` }} · kết nối {{ formatDateTime(a.connected_at) }}</div>
                         <div v-if="a.last_error" class="mt-1 flex items-center gap-1 text-xs text-destructive"><AlertTriangle class="size-3" /> {{ a.last_error }}</div>
                     </div>
                     <div v-if="a.stats" class="grid grid-cols-4 gap-4 text-center text-xs">
@@ -210,6 +217,7 @@ const accountLabel = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 
                     </div>
                     <div v-if="a.status === 'connected'" class="flex flex-wrap items-center gap-2">
                         <Select class="w-44" :model-value="a.warehouse?.id ?? ''" :disabled="!tenant.can('marketplace.connect')" :options="warehouses.map((w) => ({ value: w.id, label: `Kho: ${w.code}` }))" aria-label="Kho xuất" @update:model-value="(v) => changeWarehouse(a, v)" />
+                        <RouterLink v-if="a.marketplace === 'woocommerce'" :to="`/marketplaces/${a.id}/store`"><Button size="sm" variant="outline" :data-testid="`woo-settings-${a.id}`"><Settings2 /> Cài đặt đồng bộ</Button></RouterLink>
                         <RouterLink :to="`/marketplaces/${a.id}/listings`"><Button size="sm" variant="outline"><Link2 /> Liên kết SKU <Badge v-if="a.stats?.suggested" tone="warning" class="ml-1">{{ a.stats.suggested }}</Badge></Button></RouterLink>
                         <template v-if="tenant.can('marketplace.connect')">
                             <Button size="sm" variant="outline" :loading="busy === `sync-${a.id}`" @click="syncProducts(a)"><RefreshCw /> Tải sản phẩm</Button>
@@ -227,7 +235,8 @@ const accountLabel = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 
                 <div v-for="c in realMarketplaces" :key="c.key" class="flex flex-col rounded-md border p-4">
                     <div class="flex items-center justify-between">
                         <span class="flex items-center gap-2 font-medium"><MarketplaceLogo :marketplace="c.key" :name="c.name" />{{ c.name }}</span>
-                        <Badge v-if="!c.available" tone="muted">Chưa có connector</Badge>
+                        <Badge v-if="c.connect_mode === 'store'" tone="success">Sẵn sàng</Badge>
+                        <Badge v-else-if="!c.available" tone="muted">Chưa có connector</Badge>
                         <Badge v-else-if="!c.credentials_configured" tone="warning">Chưa có credentials</Badge>
                         <Badge v-else-if="c.capabilities['shop.authorize'] !== 'supported'" tone="muted">UNKNOWN</Badge>
                         <Badge v-else tone="success">Sẵn sàng</Badge>
@@ -330,6 +339,8 @@ const accountLabel = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 
             </div>
         </Card>
     </div>
+
+    <WooConnectDialog v-model:open="wooOpen" :warehouses="warehouses" @connected="load" />
 
     <Dialog v-model:open="connectOpen" title="Kết nối shop giả lập" description="Shop giả lập chỉ dùng để chạy thử, được tắt hoàn toàn trên production (FAKE_MARKETPLACE_ENABLED=false). Danh sách sản phẩm được tạo từ SKU của bạn.">
         <div class="space-y-4">

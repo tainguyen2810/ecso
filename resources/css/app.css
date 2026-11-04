@@ -37,6 +37,7 @@
     /* Chart series per sales channel: each marketplace's own brand colour (same as its logo). */
     --color-channel-shopee: #ee4d2d;
     --color-channel-tiktok: #161823;
+    --color-channel-woocommerce: #7f54b3;
     --color-channel-lazada: #f0167b;
     --color-channel-tiki: #1a94ff;
     --color-channel-manual: var(--color-emerald-400);
