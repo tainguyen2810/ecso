@@ -42,7 +42,7 @@ const columns = computed<{ key: string; label: string; money?: boolean; date?: b
             { key: 'order_code', label: 'Đơn hàng' },
             { key: 'shop', label: 'Shop / kênh' },
             { key: 'created_at', label: 'Ngày duyệt', date: true },
-            { key: 'value', label: 'Giá trị hàng trả', money: true },
+            { key: 'value', label: 'Giá trị hàng trả (chưa VAT)', money: true },
             ...(hasCost.value ? [{ key: 'cost_back', label: 'Giá vốn nhập lại', money: true }] : []),
         ];
     }
@@ -51,7 +51,8 @@ const columns = computed<{ key: string; label: string; money?: boolean; date?: b
         { key: 'code', label: 'Mã đơn' },
         { key: 'shop', label: 'Shop / kênh' },
         { key: props.metric === 'revenue' || fees ? 'recognized_at' : 'placed_at', label: props.metric === 'revenue' || fees ? 'Ngày ghi nhận' : 'Ngày đặt', date: true },
-        { key: 'goods', label: 'Tiền hàng', money: true },
+        { key: 'goods', label: 'Tiền hàng (chưa VAT)', money: true },
+        ...(fees ? [] : [{ key: 'tax', label: 'VAT', money: true }]),
         ...(fees ? [] : [{ key: 'shipping', label: 'Ship khách trả', money: true }]),
         ...(hasCost.value && !fees ? [{ key: 'cogs', label: 'Giá vốn', money: true }] : []),
         ...(props.metric === 'revenue' || fees ? [{ key: 'fee', label: 'Phí sàn', money: true }, { key: 'fee_status', label: 'Loại phí' }] : []),
