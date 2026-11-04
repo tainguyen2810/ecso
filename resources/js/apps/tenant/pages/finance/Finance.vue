@@ -19,6 +19,7 @@ interface FinanceData {
     cancelled: { orders: number; revenue: number };
     refunds: number;
     cogs: number;
+    cogs_returned: number;
     cogs_missing_lines: number;
     estimated_gross_profit: number;
     other_income: number | null;
@@ -85,17 +86,19 @@ function shortDay(day: string): string {
             <KpiCard label="Doanh thu hoàn thành" :icon="CircleCheck" tone="green" :value="formatMoney(data.completed.revenue)">{{ formatNumber(data.completed.orders) }} đơn đã giao trong kỳ</KpiCard>
             <KpiCard label="Giá vốn hàng đã giao" :icon="Package" :value="formatMoney(data.cogs)">
                 <span v-if="data.cogs_missing_lines" class="text-amber-600">{{ data.cogs_missing_lines }} dòng hàng chưa có giá vốn</span>
+                <template v-else-if="data.cogs_returned > 0">−{{ formatMoney(data.cogs_returned) }} hàng trả đã nhập lại kho</template>
                 <template v-else>Theo giá vốn bình quân lúc xuất kho</template>
             </KpiCard>
             <KpiCard label="Lợi nhuận gộp ước tính" :icon="TrendingUp" :tone="Number(data.estimated_gross_profit) < 0 ? 'red' : 'green'" :value="formatMoney(data.estimated_gross_profit)"><template #value><span data-testid="gross-profit">{{ formatMoney(data.estimated_gross_profit) }}</span></template>{{ margin === null ? '—' : margin + '%' }} · chưa trừ phí sàn</KpiCard>
-            <KpiCard label="Hoàn tiền" :icon="Undo2" :value="formatMoney(data.refunds)" />
+            <KpiCard label="Hoàn tiền" :icon="Undo2" :value="formatMoney(data.refunds)">Phiếu trả đã duyệt (không tính phiếu chờ duyệt)</KpiCard>
             <KpiCard label="Đơn hủy" :icon="CircleX" :tone="data.cancelled.orders > 0 ? 'red' : 'slate'" :value="formatNumber(data.cancelled.orders)">{{ formatMoney(data.cancelled.revenue) }}</KpiCard>
             <Card v-if="data.estimated_profit !== null" class="p-4 sm:col-span-2" data-testid="other-pnl">
                 <p class="text-xs text-muted-foreground">Lợi nhuận sau thu chi khác</p>
                 <p class="mt-2 text-xl font-semibold tabular-nums">{{ formatMoney(data.estimated_profit) }}</p>
                 <p class="text-xs text-muted-foreground">
-                    Lãi gộp <span class="text-success">+{{ formatMoney(data.other_income) }}</span> thu khác <span class="text-destructive">−{{ formatMoney(data.other_expenses) }}</span> chi phí,
-                    từ <RouterLink to="/cash" class="text-primary hover:underline">phiếu thu chi</RouterLink> có tính KQKD
+                    = Lãi gộp {{ formatMoney(data.estimated_gross_profit) }} <span class="text-success">+ thu khác {{ formatMoney(data.other_income) }}</span>
+                    <span class="text-destructive">− chi phí {{ formatMoney(data.other_expenses) }}</span> từ
+                    <RouterLink to="/cash" class="text-primary hover:underline">phiếu thu chi</RouterLink> có tính KQKD. <strong>Chưa trừ phí sàn.</strong>
                 </p>
             </Card>
             <Card class="p-4" data-testid="fees-unknown">
