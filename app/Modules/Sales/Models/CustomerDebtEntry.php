@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
  *
  * @property Carbon $entry_date
  * @property Carbon|null $due_date
+ * @property Carbon|null $voided_at
  */
 class CustomerDebtEntry extends Model
 {

@@ -107,7 +107,7 @@ class CustomerController extends Controller
     private function summary(Customer $customer): array
     {
         $orders = $customer->orders()->whereNotIn('status', [OrderStatus::CANCELLED, OrderStatus::RETURNED]);
-        $row = (clone $orders)->selectRaw('COUNT(*) as n, COALESCE(SUM(total), 0) as total, MIN(placed_at) as first_at, MAX(placed_at) as last_at')->first();
+        $row = (clone $orders)->toBase()->selectRaw('COUNT(*) as n, COALESCE(SUM(total), 0) as total, MIN(placed_at) as first_at, MAX(placed_at) as last_at')->first();
         $n = (int) ($row->n ?? 0);
         $first = $row?->first_at ? Carbon::parse($row->first_at) : null;
         $last = $row?->last_at ? Carbon::parse($row->last_at) : null;

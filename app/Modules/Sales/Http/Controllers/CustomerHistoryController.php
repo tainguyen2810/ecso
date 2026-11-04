@@ -63,7 +63,7 @@ class CustomerHistoryController extends Controller
                 'action' => $l->action,
                 'actor' => $l->actor?->name,
                 'changes' => $l->changes,
-                'at' => $l->created_at?->toIso8601String(),
+                'at' => $l->created_at->toIso8601String(),
             ]),
             'meta' => ['current_page' => $logs->currentPage(), 'last_page' => $logs->lastPage(), 'total' => $logs->total()],
         ]);
