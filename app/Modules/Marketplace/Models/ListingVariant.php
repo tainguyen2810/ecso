@@ -31,12 +31,14 @@ class ListingVariant extends Model
 
     protected $attributes = ['mapping_status' => self::UNMAPPED];
 
-    protected $fillable = ['marketplace_account_id', 'listing_id', 'external_sku_id', 'seller_sku', 'name', 'price', 'marketplace_stock'];
+    protected $fillable = ['marketplace_account_id', 'listing_id', 'external_sku_id', 'seller_sku', 'name', 'price', 'regular_price', 'sale_price', 'marketplace_stock'];
 
     protected function casts(): array
     {
         return [
             'price' => 'decimal:2',
+            'regular_price' => 'decimal:2',
+            'sale_price' => 'decimal:2',
             'marketplace_stock' => 'integer',
             'last_pushed_qty' => 'integer',
             'mapped_at' => 'datetime',

@@ -14,6 +14,8 @@ use Illuminate\Support\Carbon;
 /**
  * A connected marketplace shop.
  *
+ * @property string|null $base_url
+ * @property array<string, mixed>|null $settings per-store sync switches, auth mode, webhook ids
  * @property Carbon|null $connected_at
  * @property Carbon|null $last_synced_at
  * @property Carbon|null $circuit_open_until
@@ -43,11 +45,23 @@ class MarketplaceAccount extends Model
     {
         return [
             'sync_enabled' => 'boolean',
+            'settings' => 'array',
             'connected_at' => 'datetime',
             'last_synced_at' => 'datetime',
             'circuit_open_until' => 'datetime',
             'consecutive_failures' => 'integer',
         ];
+    }
+
+    /** Per-store sync switches (WooCommerce store page); a missing switch means the default below. */
+    public const SYNC_DEFAULTS = ['sync_orders' => true, 'sync_stock' => true, 'sync_prices' => false, 'import_new_products' => true];
+
+    /** @var array<int, string> */
+    public const SETTING_KEYS = ['sync_orders', 'sync_stock', 'sync_prices', 'import_new_products'];
+
+    public function syncs(string $what): bool
+    {
+        return (bool) ($this->settings[$what] ?? self::SYNC_DEFAULTS[$what] ?? true);
     }
 
     public function isActive(): bool

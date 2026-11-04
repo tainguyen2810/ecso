@@ -388,7 +388,31 @@ export interface MarketplaceCatalogEntry {
     available: boolean;
     is_fake: boolean;
     credentials_configured: boolean;
+    /** oauth = marketplace app authorization, store = WooCommerce (store approval / API keys), fake = simulator */
+    connect_mode?: 'oauth' | 'store' | 'fake';
     capabilities: Record<string, string>;
+}
+
+export interface MarketplaceSyncSettings {
+    sync_orders: boolean;
+    sync_stock: boolean;
+    sync_prices: boolean;
+    import_new_products: boolean;
+}
+
+export interface WooConnectChecks {
+    https: boolean;
+    woocommerce_version: string | null;
+    products: number | null;
+    orders: number | null;
+    webhooks?: string[];
+}
+
+export interface NewListingData {
+    id: string;
+    title: string;
+    image_url: string | null;
+    variants: { name: string | null; seller_sku: string | null; price: string | null; regular_price: string | null; sale_price: string | null }[];
 }
 
 export interface MarketplaceAccountData {
@@ -399,6 +423,8 @@ export interface MarketplaceAccountData {
     external_shop_id: string;
     status: string;
     sync_enabled: boolean;
+    base_url?: string | null;
+    settings?: MarketplaceSyncSettings;
     warehouse: { id: string; code: string; name: string } | null;
     connected_at: string | null;
     last_synced_at: string | null;

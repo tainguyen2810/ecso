@@ -2,7 +2,7 @@
 
 namespace App\Modules\Marketplace\Connectors\Data;
 
-/** What we need from a verified webhook: which shop, which event, which order. */
+/** What we need from a verified webhook: which shop, which event, which order (or product). */
 final class WebhookMessage
 {
     public function __construct(
@@ -11,5 +11,6 @@ final class WebhookMessage
         public readonly ?string $eventId = null,
         public readonly ?string $orderId = null,
         public readonly ?int $timestamp = null,
+        public readonly ?string $productId = null,
     ) {}
 }

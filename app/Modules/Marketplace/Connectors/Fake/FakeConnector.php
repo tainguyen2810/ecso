@@ -89,7 +89,7 @@ class FakeConnector implements MarketplaceConnector
         return hash_hmac('sha256', $timestamp.'.'.$body, (string) config('marketplaces.fake.webhook_secret'));
     }
 
-    public function parseWebhook(string $body): WebhookMessage
+    public function parseWebhook(string $body, array $headers = []): WebhookMessage
     {
         $data = json_decode($body, true);
         if (! is_array($data) || ! isset($data['type'])) {

@@ -19,6 +19,7 @@ export const channelColors: Record<string, string> = {
     tiktok: 'var(--color-channel-tiktok)',
     lazada: 'var(--color-channel-lazada)',
     tiki: 'var(--color-channel-tiki)',
+    woocommerce: 'var(--color-channel-woocommerce)',
     manual: 'var(--color-channel-manual)',
 };
 

@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+### Kết nối WooCommerce, đợt 1 (2026-11-04)
+- WooCommerce là một kênh trong Kết nối sàn (`config/marketplaces.php`, `WooCommerceConnector`, REST API v3). Kết nối dễ nhất: nhập địa chỉ website → bấm **Phê duyệt** trên màn hình `/wc-auth/v1/authorize` của chính WooCommerce → Woo gửi khóa về `POST /api/v1/woocommerce/auth-callback` → người dùng quay về `/marketplaces/woocommerce/callback`. Dự phòng: dán Consumer key/secret, có hướng dẫn 3 bước ngay trong hộp thoại.
+- Bảo vệ: chỉ HTTPS, chặn IP/máy nội bộ, khóa và secret webhook mã hóa, một website chỉ thuộc một doanh nghiệp, state dùng một lần. Host bỏ header Authorization thì tự chuyển sang khóa trên query string (Woo hỗ trợ qua HTTPS).
+- Khi kết nối: đăng ký 5 webhook (đơn tạo/sửa, sản phẩm tạo/sửa/xóa) với secret riêng từng website, chữ ký HMAC-SHA256 base64; ping của Woo được trả 200. Ngắt kết nối thì gỡ webhook.
+- Đơn Woo vào Danh sách đơn hàng (nguồn WooCommerce) và giữ hàng; trạng thái: pending→Chờ thanh toán, on-hold→Chờ xác nhận, processing→Chờ đóng gói, completed→Hoàn tất, cancelled/failed→Hủy, refunded→Hoàn. Đóng gói/bàn giao ghi meta `_ecso_stage` trên đơn Woo. Quét bù 15 phút/lần.
+- Tồn kho: đẩy "có thể bán" lên Woo qua `products/batch` và `variations/batch`. Sản phẩm: lấy sản phẩm đơn và biến thể, gợi ý ghép theo SKU; webhook sản phẩm đọc lại đúng sản phẩm đó.
+- Trang gian hàng Woo (`/marketplaces/:id/store`): bật/tắt đơn, tồn, sản phẩm mới (giá: đợt 2), kho trừ hàng, **Sản phẩm mới chờ duyệt** (duyệt tạo sản phẩm ECSO với giá khuyến mãi nếu có, hoặc bỏ qua).
+- Migration `2026_11_11_100000_add_woocommerce_support`: `marketplace_accounts.base_url/settings`, `marketplace_credentials.webhook_secret`, `webhook_events.external_product_id`, `listing_variants.regular_price/sale_price`, bảng trạng thái `woocommerce`.
+- `MarketplaceConnector::parseWebhook()` nhận thêm `$headers` (Woo gửi loại sự kiện và website trong header).
+
 ### Tài khoản demo (2026-11-04)
 - Lệnh `php artisan ecso:demo-tenant <email> [--days=60] [--name=…] [--force]`: tạo đăng nhập mới (chủ + nhân viên kho `<tên>+kho@…`, mật khẩu ngẫu nhiên in một lần) và doanh nghiệp "… (dữ liệu mẫu)" có sản phẩm, tồn kho 2 kho, khách hàng, NCC, đơn nhập, phiếu kiểm/chuyển kho, ca bán hàng và đơn bán kênh riêng mỗi ngày trong N ngày (nhập hàng định kỳ mỗi tuần).
 - Không tạo super admin, không bật sàn giả lập; trên production phải thêm `--force` (chỉ dùng cho máy chủ demo). Ngày tháng của dữ liệu lịch sử nhất quán (đơn, thanh toán, sổ kho cùng ngày).

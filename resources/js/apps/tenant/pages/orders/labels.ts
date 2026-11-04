@@ -133,6 +133,7 @@ export const marketplaceNames: Record<string, string> = {
     tiktok: 'TikTok Shop',
     lazada: 'Lazada',
     tiki: 'Tiki',
+    woocommerce: 'WooCommerce',
     fake: 'Sàn giả lập',
     manual: 'Kênh riêng',
 };

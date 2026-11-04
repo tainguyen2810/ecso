@@ -5,6 +5,8 @@ namespace App\Modules\Marketplace\Services;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Marketplace\Connectors\ConnectorRegistry;
+use App\Modules\Marketplace\Connectors\Data\ProductData;
+use App\Modules\Marketplace\Connectors\FetchesSingleProduct;
 use App\Modules\Marketplace\Events\ListingMappingChanged;
 use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
@@ -35,26 +37,7 @@ class ListingService
         do {
             $page = $connector->listProducts($account, $cursor);
             foreach ($page->products as $product) {
-                DB::transaction(function () use ($account, $product, &$counts) {
-                    $listing = MarketplaceListing::query()->updateOrCreate(
-                        ['marketplace_account_id' => $account->id, 'external_product_id' => $product->externalProductId],
-                        ['title' => $product->title, 'status' => $product->status, 'image_url' => $product->imageUrl, 'synced_at' => now()],
-                    );
-                    $counts['listings']++;
-
-                    foreach ($product->variants as $v) {
-                        $variant = ListingVariant::query()->firstOrNew(['marketplace_account_id' => $account->id, 'external_sku_id' => $v['external_sku_id']]);
-                        $variant->fill([
-                            'listing_id' => $listing->id,
-                            'seller_sku' => $v['seller_sku'],
-                            'name' => $v['name'],
-                            'price' => $v['price'],
-                            'marketplace_stock' => $v['stock'],
-                        ])->save();
-                        $counts['variants']++;
-                        $counts['suggested'] += (int) $this->suggest($variant);
-                    }
-                });
+                $this->upsert($account, $product, $counts);
             }
             $cursor = $page->nextCursor;
         } while ($cursor !== null);
@@ -62,6 +45,62 @@ class ListingService
         $account->forceFill(['last_synced_at' => now()])->save();
 
         return $counts;
+    }
+
+    /**
+     * Re-reads one listing after a product webhook. A product removed from the channel keeps its rows (orders may
+     * point at them) but is marked "deleted".
+     *
+     * @return array{listings: int, variants: int, suggested: int}
+     */
+    public function syncProduct(MarketplaceAccount $account, string $externalProductId): array
+    {
+        $counts = ['listings' => 0, 'variants' => 0, 'suggested' => 0];
+        $connector = $this->connectors->for($account->marketplace);
+        if (! $connector instanceof FetchesSingleProduct) {
+            return $this->sync($account);
+        }
+
+        $product = $connector->getProduct($account, $externalProductId);
+        if ($product === null) {
+            MarketplaceListing::query()->where('marketplace_account_id', $account->id)->where('external_product_id', $externalProductId)
+                ->update(['status' => 'deleted', 'synced_at' => now()]);
+
+            return $counts;
+        }
+
+        $this->upsert($account, $product, $counts);
+
+        return $counts;
+    }
+
+    /**
+     * @param  array{listings: int, variants: int, suggested: int}  $counts
+     */
+    private function upsert(MarketplaceAccount $account, ProductData $product, array &$counts): void
+    {
+        DB::transaction(function () use ($account, $product, &$counts) {
+            $listing = MarketplaceListing::query()->updateOrCreate(
+                ['marketplace_account_id' => $account->id, 'external_product_id' => $product->externalProductId],
+                ['title' => $product->title, 'status' => $product->status, 'image_url' => $product->imageUrl, 'synced_at' => now()],
+            );
+            $counts['listings']++;
+
+            foreach ($product->variants as $v) {
+                $variant = ListingVariant::query()->firstOrNew(['marketplace_account_id' => $account->id, 'external_sku_id' => $v['external_sku_id']]);
+                $variant->fill([
+                    'listing_id' => $listing->id,
+                    'seller_sku' => $v['seller_sku'],
+                    'name' => $v['name'],
+                    'price' => $v['price'],
+                    'regular_price' => $v['regular_price'] ?? null,
+                    'sale_price' => $v['sale_price'] ?? null,
+                    'marketplace_stock' => $v['stock'],
+                ])->save();
+                $counts['variants']++;
+                $counts['suggested'] += (int) $this->suggest($variant);
+            }
+        });
     }
 
     /** Suggests the internal SKU whose code equals the seller SKU exactly. Never maps by itself. */

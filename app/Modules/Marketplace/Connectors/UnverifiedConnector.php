@@ -44,7 +44,7 @@ abstract class UnverifiedConnector implements MarketplaceConnector
         return false;
     }
 
-    public function parseWebhook(string $body): WebhookMessage
+    public function parseWebhook(string $body, array $headers = []): WebhookMessage
     {
         throw $this->unknown(Capability::ORDERS_WEBHOOK);
     }

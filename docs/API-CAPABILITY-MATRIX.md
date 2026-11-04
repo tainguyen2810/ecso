@@ -140,3 +140,23 @@ Thứ cấp (chỉ để lập kế hoạch, không phải bằng chứng):
 - Hookdeck – TikTok Shop Webhooks: https://hookdeck.com/webhooks/platforms/guide-to-tiktok-shop-webhooks-features-and-best-practices
 - Rollout – Shopee API essentials: https://rollout.com/integration-guides/shopee/api-essentials
 - EcomPHP/tiktokshop-php: https://github.com/EcomPHP/tiktokshop-php
+
+
+## WooCommerce (2026-11-04)
+
+WooCommerce chạy trên website của chính người bán, không cần app được duyệt. Connector viết theo tài liệu REST API v3
+(woocommerce.github.io/woocommerce-rest-api-docs) và màn hình ủy quyền `/wc-auth/v1/authorize`. Trạng thái:
+`DOCUMENTED_NOT_TESTED`: đã chạy với website WooCommerce mô phỏng trong test (`tests/Support/FakeWooStore.php`),
+**chưa thử với website thật**.
+
+| Thao tác | Endpoint | Trạng thái |
+|---|---|---|
+| Kết nối (phê duyệt / khóa tay) | `/wc-auth/v1/authorize`, `GET system_status` | DOCUMENTED_NOT_TESTED |
+| Webhook đơn, sản phẩm | `POST webhooks`, header `X-WC-Webhook-Signature/Topic/Source` | DOCUMENTED_NOT_TESTED |
+| Lấy đơn, quét đơn | `GET orders/{id}`, `GET orders?modified_after=` | DOCUMENTED_NOT_TESTED |
+| Xác nhận / hủy đơn | `PUT orders/{id}` status | DOCUMENTED_NOT_TESTED |
+| Đóng gói / bàn giao | `PUT orders/{id}` meta `_ecso_stage` (ECSO tự định nghĩa) | DOCUMENTED_NOT_TESTED |
+| Sản phẩm, biến thể | `GET products`, `GET products/{id}/variations` | DOCUMENTED_NOT_TESTED |
+| Cập nhật tồn | `POST products/batch`, `POST products/{id}/variations/batch` | DOCUMENTED_NOT_TESTED |
+| Cập nhật giá | `regular_price`, `sale_price` | Đợt 2 |
+| In vận đơn, trả hàng | — | UNAVAILABLE (Woo không có sẵn) |

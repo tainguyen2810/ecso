@@ -47,8 +47,13 @@ interface MarketplaceConnector
     /** Checks the signature (and timestamp, when the marketplace sends one) of a raw webhook request. */
     public function verifyWebhook(string $body, array $headers): bool;
 
-    /** @throws UnsupportedCapability|ConnectorException */
-    public function parseWebhook(string $body): WebhookMessage;
+    /**
+     * @param  array<string, mixed>  $headers  the same headers verifyWebhook() checked (some marketplaces send the
+     *                                         event type or the shop in headers)
+     *
+     * @throws UnsupportedCapability|ConnectorException
+     */
+    public function parseWebhook(string $body, array $headers = []): WebhookMessage;
 
     /** @throws UnsupportedCapability|ConnectorException */
     public function getOrder(MarketplaceAccount $account, string $externalOrderId): OrderData;

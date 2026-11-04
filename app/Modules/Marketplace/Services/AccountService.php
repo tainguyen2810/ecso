@@ -8,6 +8,7 @@ use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Marketplace\Connectors\ConnectorRegistry;
 use App\Modules\Marketplace\Connectors\Fake\FakeConnector;
 use App\Modules\Marketplace\Connectors\Fake\FakeMarketplace;
+use App\Modules\Marketplace\Connectors\WooCommerce\WooCommerceConnector;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Support\Facades\DB;
@@ -58,10 +59,15 @@ class AccountService
     }
 
     /**
-     * @param  array{shop_name?: string, warehouse_id?: int|null, sync_enabled?: bool}  $data
+     * @param  array{shop_name?: string, warehouse_id?: int|null, sync_enabled?: bool, settings?: array<string, bool>}  $data
      */
     public function update(MarketplaceAccount $account, array $data): MarketplaceAccount
     {
+        if (isset($data['settings'])) {
+            $data['settings'] = array_merge((array) $account->settings, array_intersect_key($data['settings'], MarketplaceAccount::SYNC_DEFAULTS));
+            $account->forceFill(['settings' => $data['settings']]);
+            unset($data['settings']);
+        }
         $account->fill($data)->save();
         $this->audit->record('marketplace.updated', $account, $data);
 
@@ -71,6 +77,11 @@ class AccountService
     /** Stops syncing and forgets the tokens. Orders and history are kept. */
     public function disconnect(MarketplaceAccount $account): MarketplaceAccount
     {
+        if ($account->marketplace === WooCommerceConnector::MARKETPLACE) {
+            // Stop the store from sending webhooks to us (best effort, before the keys are forgotten).
+            app(WooCommerceConnectService::class)->removeWebhooks($account);
+        }
+
         DB::transaction(function () use ($account) {
             $account->credential()->delete();
             $account->forceFill(['status' => MarketplaceAccount::REVOKED, 'sync_enabled' => false])->save();

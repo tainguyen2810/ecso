@@ -44,7 +44,7 @@ class WebhookReceiver
         }
 
         try {
-            $message = $connector->parseWebhook($body);
+            $message = $connector->parseWebhook($body, $headers);
         } catch (ConnectorException|UnsupportedCapability $e) {
             return ['accepted' => false, 'duplicate' => false, 'event_id' => null];
         }
@@ -59,6 +59,7 @@ class WebhookReceiver
                 'external_event_id' => $message->eventId,
                 'external_shop_id' => $message->shopId,
                 'external_order_id' => $message->orderId,
+                'external_product_id' => $message->productId,
                 'payload_hash' => $hash,
                 'signature_valid' => true,
                 'payload' => strlen($body) <= self::MAX_STORED_PAYLOAD ? json_decode($body, true) : null,

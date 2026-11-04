@@ -19,6 +19,8 @@ class AccountResource extends JsonResource
             'external_shop_id' => $this->external_shop_id,
             'status' => $this->status,
             'sync_enabled' => $this->sync_enabled,
+            'base_url' => $this->base_url,
+            'settings' => array_merge(MarketplaceAccount::SYNC_DEFAULTS, array_intersect_key((array) $this->settings, MarketplaceAccount::SYNC_DEFAULTS)),
             'warehouse' => $this->warehouse ? ['id' => $this->warehouse->ulid, 'code' => $this->warehouse->code, 'name' => $this->warehouse->name] : null,
             'connected_at' => $this->connected_at?->toIso8601String(),
             'last_synced_at' => $this->last_synced_at?->toIso8601String(),
