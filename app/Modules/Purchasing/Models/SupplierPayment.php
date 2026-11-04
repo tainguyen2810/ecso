@@ -23,7 +23,7 @@ class SupplierPayment extends Model
 
     protected $guarded = ['id', 'ulid', 'tenant_id'];
 
-    protected $hidden = ['id', 'tenant_id', 'supplier_id', 'purchase_order_id', 'created_by', 'voided_by'];
+    protected $hidden = ['id', 'tenant_id', 'cash_account_id', 'supplier_id', 'purchase_order_id', 'created_by', 'voided_by'];
 
     protected function casts(): array
     {

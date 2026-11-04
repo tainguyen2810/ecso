@@ -6,6 +6,7 @@ const route = useRoute();
 const links = [
     { to: '/cash', label: 'Phiếu thu, phiếu chi', name: 'cash' },
     { to: '/reports/cashbook', label: 'Sổ quỹ', name: 'report-cashbook' },
+    { to: '/cash/accounts', label: 'Quỹ', name: 'cash-accounts' },
     { to: '/cash/types', label: 'Loại phiếu', name: 'cash-types' },
 ];
 </script>

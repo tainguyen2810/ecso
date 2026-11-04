@@ -53,6 +53,7 @@ final class PermissionRegistry
         'finance' => [
             'finance.view' => 'Xem tài chính, sổ quỹ',
             'finance.vouchers' => 'Lập và hủy phiếu thu, phiếu chi',
+            'finance.accounts' => 'Quản lý quỹ, chuyển tiền giữa các quỹ',
         ],
         'reports' => ['reports.view' => 'Xem báo cáo'],
         'marketplace' => [
@@ -101,7 +102,7 @@ final class PermissionRegistry
             ]],
             Role::ACCOUNTANT => ['name' => 'Kế toán', 'rank' => 40, 'permissions' => [
                 'dashboard.view', 'orders.view', 'products.view', 'inventory.view', 'purchasing.view',
-                'returns.view', 'finance.view', 'finance.vouchers', 'reports.view', 'billing.view', 'customers.view', 'orders.payment', 'orders.shifts', 'purchasing.payment',
+                'returns.view', 'finance.view', 'finance.vouchers', 'finance.accounts', 'reports.view', 'billing.view', 'customers.view', 'orders.payment', 'orders.shifts', 'purchasing.payment',
             ]],
             Role::VIEWER => ['name' => 'Chỉ xem', 'rank' => 10, 'permissions' => self::READ_ALL],
         ];

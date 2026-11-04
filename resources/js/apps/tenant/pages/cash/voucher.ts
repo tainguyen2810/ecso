@@ -2,21 +2,26 @@ import { formatDateTime, formatMoney } from '@/shared/lib/utils';
 import { paymentMethods } from '../orders/labels';
 
 export type Direction = 'receipt' | 'payment';
-export type Source = 'voucher' | 'order_payment' | 'supplier_payment' | 'shift_movement';
+/** A row's direction: a transfer between funds is "transfer" in the list of every fund, receipt/payment in one fund's list. */
+export type RowDirection = Direction | 'transfer';
+export type Source = 'voucher' | 'order_payment' | 'supplier_payment' | 'shift_movement' | 'transfer';
 export type PartyKind = 'customer' | 'supplier' | 'staff' | 'carrier' | 'other';
 
 export interface VoucherRow {
     source: Source;
     id: string;
     number: string | null;
-    direction: Direction;
+    direction: RowDirection;
     type: { id: string | null; name: string };
     counts_in_pnl: boolean;
     party: { kind: PartyKind; id: string | null; name: string };
     method: string;
+    account: { id: string; name: string } | null;
+    /** For a transfer: the fund on the other side. */
+    counter_account: string | null;
     amount: number;
     paid_at: string;
-    document: { kind: 'order' | 'purchase' | 'shift'; id: string; number: string } | null;
+    document: { kind: 'order' | 'purchase' | 'shift' | 'transfer'; id: string; number: string } | null;
     reference: string | null;
     note: string | null;
     created_by: string | null;
@@ -24,6 +29,29 @@ export interface VoucherRow {
     voided_at: string | null;
     void_reason: string | null;
 }
+
+export type FundKind = 'cash' | 'bank' | 'ewallet' | 'cod' | 'other';
+
+export interface Fund {
+    id: string;
+    kind: FundKind;
+    name: string;
+    bank_name: string | null;
+    account_number: string | null;
+    holder: string | null;
+    /** Payment methods whose money lands in this fund unless another is picked. */
+    methods: string[];
+    opening_balance: number;
+    opening_at: string | null;
+    note: string | null;
+    is_active: boolean;
+    balance: number;
+}
+
+export const fundKinds: Record<FundKind, string> = { cash: 'Tiền mặt', bank: 'Ngân hàng', ewallet: 'Ví điện tử', cod: 'COD chờ đối soát', other: 'Khác' };
+
+/** The fund money of this method goes to by default. */
+export const defaultFund = (funds: Fund[], method: string): Fund | undefined => funds.find((f) => f.is_active && f.methods.includes(method));
 
 export interface VoucherType {
     id: string;
@@ -35,7 +63,7 @@ export interface VoucherType {
     vouchers_count?: number;
 }
 
-export const directionLabels: Record<Direction, string> = { receipt: 'Phiếu thu', payment: 'Phiếu chi' };
+export const directionLabels: Record<RowDirection, string> = { receipt: 'Phiếu thu', payment: 'Phiếu chi', transfer: 'Chuyển quỹ' };
 
 export const partyKinds: Record<PartyKind, string> = {
     customer: 'Khách hàng',
@@ -45,7 +73,7 @@ export const partyKinds: Record<PartyKind, string> = {
     other: 'Đối tượng khác',
 };
 
-export const sourceLabels: Record<Source, string> = { voucher: 'Lập tay', order_payment: 'Tự động từ đơn hàng', supplier_payment: 'Tự động từ trả NCC', shift_movement: 'Tự động từ ca bán hàng' };
+export const sourceLabels: Record<Source, string> = { voucher: 'Lập tay', order_payment: 'Tự động từ đơn hàng', supplier_payment: 'Tự động từ trả NCC', shift_movement: 'Tự động từ ca bán hàng', transfer: 'Chuyển quỹ' };
 
 /** Code shown for a row: the voucher number, or the source document for automatic rows. */
 export function voucherCode(v: VoucherRow): string {
@@ -55,6 +83,7 @@ export function voucherCode(v: VoucherRow): string {
 export function documentLink(v: Pick<VoucherRow, 'document'>): string | null {
     if (!v.document) return null;
     if (v.document.kind === 'shift') return '/pos/shifts';
+    if (v.document.kind === 'transfer') return null;
     return v.document.kind === 'order' ? `/orders/${v.document.id}` : `/purchasing/${v.document.id}`;
 }
 
@@ -116,8 +145,9 @@ function esc(value: string | null | undefined): string {
 /** A5 receipt or payment voucher with signature boxes. Pure function (unit tested); printed through the browser. */
 export function voucherHtml(v: VoucherRow, shopName: string): string {
     const receipt = v.direction === 'receipt';
-    const title = receipt ? 'PHIẾU THU' : 'PHIẾU CHI';
-    const who = receipt ? 'Người nộp' : 'Người nhận';
+    const transfer = v.direction === 'transfer';
+    const title = transfer ? 'PHIẾU CHUYỂN QUỸ' : receipt ? 'PHIẾU THU' : 'PHIẾU CHI';
+    const who = transfer ? 'Người chuyển' : receipt ? 'Người nộp' : 'Người nhận';
     const reason = [v.type.name, v.note].filter(Boolean).join(' · ');
 
     return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${esc(voucherCode(v))}</title>
@@ -143,7 +173,7 @@ ${v.voided_at ? `<p class="c"><span class="void">ĐÃ HỦY: ${esc(v.void_reason
 <tr><td class="k">Lý do</td><td>${esc(reason)}</td></tr>
 <tr><td class="k">Số tiền</td><td><b>${formatMoney(v.amount)}</b></td></tr>
 <tr><td class="k">Bằng chữ</td><td><i>${esc(amountInWords(v.amount))}</i></td></tr>
-<tr><td class="k">Hình thức</td><td>${esc(paymentMethods[v.method] ?? v.method)}${v.reference ? ` · Tham chiếu: ${esc(v.reference)}` : ''}</td></tr>
+<tr><td class="k">${transfer ? 'Quỹ' : 'Hình thức'}</td><td>${transfer ? esc(v.party.name) : esc(paymentMethods[v.method] ?? v.method)}${!transfer && v.account ? ` · Quỹ: ${esc(v.account.name)}` : ''}${v.reference ? ` · Tham chiếu: ${esc(v.reference)}` : ''}</td></tr>
 ${v.document ? `<tr><td class="k">Chứng từ gốc</td><td>${esc(v.document.number)}</td></tr>` : ''}
 </table>
 <div class="sign">

@@ -32,7 +32,7 @@ class OrderPayment extends Model
 
     protected $guarded = ['id', 'ulid', 'tenant_id'];
 
-    protected $hidden = ['id', 'tenant_id', 'order_id', 'customer_id', 'created_by', 'voided_by'];
+    protected $hidden = ['id', 'tenant_id', 'cash_account_id', 'order_id', 'customer_id', 'created_by', 'voided_by'];
 
     protected function casts(): array
     {

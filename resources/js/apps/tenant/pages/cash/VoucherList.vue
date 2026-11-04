@@ -22,7 +22,7 @@ import { api, ApiError } from '@/shared/lib/api';
 import { formatDateTime, formatMoney } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { paymentMethods } from '../orders/labels';
-import { directionLabels, partyKinds, sourceLabels, voucherCode, type Direction, type VoucherRow, type VoucherType } from './voucher';
+import { directionLabels, partyKinds, sourceLabels, voucherCode, type Direction, type Fund, type VoucherRow, type VoucherType } from './voucher';
 
 const tenant = useTenantStore();
 const route = useRoute();
@@ -38,6 +38,8 @@ const q = ref(qs('q'));
 const type = ref(qs('type'));
 const method = ref(qs('method'));
 const partyKind = ref(qs('party_kind'));
+const account = ref(qs('account'));
+const funds = ref<Fund[]>([]);
 const page = ref(Number(qs('page')) || 1);
 
 const rows = ref<VoucherRow[]>([]);
@@ -61,6 +63,7 @@ const params = () => ({
     type: type.value || undefined,
     method: method.value || undefined,
     party_kind: partyKind.value || undefined,
+    account: account.value || undefined,
 });
 
 async function load() {
@@ -82,6 +85,7 @@ async function load() {
 onMounted(async () => {
     load();
     api.get('/cash-voucher-types').then(({ data }) => (types.value = data.data)).catch(() => {});
+    api.get('/cash-accounts').then(({ data }) => (funds.value = data.data)).catch(() => {});
     // Links from the cashbook open a voucher directly: /cash?open=voucher:ULID
     const [source, id] = qs('open').split(':');
     if (source && id) {
@@ -98,13 +102,17 @@ watch(q, () => {
     clearTimeout(timer);
     timer = setTimeout(() => ((page.value = 1), load()), 300);
 });
-watch([direction, status, type, method, partyKind, () => range.value.from, () => range.value.to], () => ((page.value = 1), load()));
+watch([direction, status, type, method, partyKind, account, () => range.value.from, () => range.value.to], () => ((page.value = 1), load()));
+
+const methodLabel = (v: VoucherRow) => (v.source === 'transfer' ? 'Chuyển quỹ' : (paymentMethods[v.method] ?? v.method));
+const fundOptions = computed(() => [{ value: '', label: 'Mọi quỹ' }, ...funds.value.map((f) => ({ value: f.id, label: f.is_active ? f.name : `${f.name} (ngừng dùng)` }))]);
 
 const typeOptions = computed(() => [
     { value: '', label: 'Mọi loại phiếu' },
     { value: 'order_payment', label: 'Tự động: thu tiền đơn, hoàn tiền' },
     { value: 'supplier_payment', label: 'Tự động: trả nhà cung cấp' },
     { value: 'shift_movement', label: 'Tự động: thu, chi tiền mặt trong ca' },
+    { value: 'transfer', label: 'Chuyển quỹ' },
     ...types.value
         .filter((t) => direction.value === 'all' || t.direction === direction.value)
         .map((t) => ({ value: t.id, label: `${directionLabels[t.direction]}: ${t.name}${t.is_active ? '' : ' (ngừng dùng)'}` })),
@@ -132,7 +140,7 @@ async function exportCsv() {
         downloadCsv(
             `phieu-thu-chi-${range.value.from}-${range.value.to}.csv`,
             toCsv(
-                ['Mã phiếu', 'Loại', 'Loại phiếu', 'Ngày ghi nhận', 'Đối tượng', 'Tên', 'Hình thức', 'Thu', 'Chi', 'Chứng từ gốc', 'Tham chiếu', 'Diễn giải', 'Tính KQKD', 'Trạng thái', 'Người lập'],
+                ['Mã phiếu', 'Loại', 'Loại phiếu', 'Ngày ghi nhận', 'Đối tượng', 'Tên', 'Hình thức', 'Quỹ', 'Thu', 'Chi', 'Chuyển quỹ', 'Chứng từ gốc', 'Tham chiếu', 'Diễn giải', 'Tính KQKD', 'Trạng thái', 'Người lập'],
                 all.map((v) => [
                     voucherCode(v),
                     directionLabels[v.direction],
@@ -140,9 +148,11 @@ async function exportCsv() {
                     formatDateTime(v.paid_at),
                     partyKinds[v.party.kind],
                     v.party.name,
-                    paymentMethods[v.method] ?? v.method,
+                    methodLabel(v),
+                    v.account?.name ?? '',
                     v.direction === 'receipt' ? v.amount : null,
                     v.direction === 'payment' ? v.amount : null,
+                    v.direction === 'transfer' ? v.amount : null,
                     v.document?.number ?? '',
                     v.reference,
                     v.note,
@@ -186,6 +196,7 @@ async function exportCsv() {
             </div>
             <Select v-model="type" class="w-56" :options="typeOptions" aria-label="Loại phiếu" data-testid="voucher-type-filter" />
             <Select v-model="partyKind" class="w-44" :options="[{ value: '', label: 'Mọi đối tượng' }, ...Object.entries(partyKinds).map(([value, label]) => ({ value, label }))]" aria-label="Đối tượng" />
+            <Select v-model="account" class="w-48" :options="fundOptions" aria-label="Quỹ" data-testid="voucher-account-filter" />
             <Select v-model="method" class="w-40" :options="[{ value: '', label: 'Mọi hình thức' }, ...Object.entries(paymentMethods).map(([value, label]) => ({ value, label }))]" aria-label="Hình thức" />
             <Button variant="outline" :loading="exporting" :disabled="!meta.total" @click="exportCsv"><Download /> Xuất CSV</Button>
         </div>
@@ -216,9 +227,16 @@ async function exportCsv() {
                         <td class="whitespace-nowrap px-4 py-2.5">{{ formatDateTime(v.paid_at) }}<div class="text-xs text-muted-foreground">{{ v.created_by }}</div></td>
                         <td class="px-4 py-2.5">{{ v.type.name }}<div v-if="v.note" class="max-w-56 truncate text-xs text-muted-foreground">{{ v.note }}</div></td>
                         <td class="px-4 py-2.5">{{ v.party.name }}<div class="text-xs text-muted-foreground">{{ partyKinds[v.party.kind] }}</div></td>
-                        <td class="px-4 py-2.5">{{ paymentMethods[v.method] ?? v.method }}<div v-if="v.reference" class="max-w-40 truncate text-xs text-muted-foreground">{{ v.reference }}</div></td>
-                        <td class="px-4 py-2.5 text-right tabular-nums text-success">{{ v.direction === 'receipt' ? formatMoney(v.amount) : '' }}</td>
-                        <td class="px-4 py-2.5 text-right tabular-nums text-destructive">{{ v.direction === 'payment' ? formatMoney(v.amount) : '' }}</td>
+                        <td class="px-4 py-2.5">
+                            {{ methodLabel(v) }}
+                            <div v-if="v.source !== 'transfer' && v.account" class="max-w-40 truncate text-xs text-muted-foreground">{{ v.account.name }}</div>
+                            <div v-if="v.reference" class="max-w-40 truncate text-xs text-muted-foreground">{{ v.reference }}</div>
+                        </td>
+                        <td v-if="v.direction === 'transfer'" colspan="2" class="px-4 py-2.5 text-right tabular-nums" title="Chuyển giữa các quỹ, không tính thu hay chi">⇄ {{ formatMoney(v.amount) }}</td>
+                        <template v-else>
+                            <td class="px-4 py-2.5 text-right tabular-nums text-success">{{ v.direction === 'receipt' ? formatMoney(v.amount) : '' }}</td>
+                            <td class="px-4 py-2.5 text-right tabular-nums text-destructive">{{ v.direction === 'payment' ? formatMoney(v.amount) : '' }}</td>
+                        </template>
                         <td class="px-4 py-2.5"><Badge :tone="v.voided_at ? 'danger' : 'success'">{{ v.voided_at ? 'Đã hủy' : 'Hoàn thành' }}</Badge></td>
                     </tr>
                 </tbody>

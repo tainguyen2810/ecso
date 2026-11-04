@@ -3,6 +3,7 @@
 namespace App\Modules\Sales\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Cashbook\Services\CashAccountService;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Sales\Models\CashShift;
@@ -19,10 +20,10 @@ use Illuminate\Validation\ValidationException;
  */
 class PaymentService
 {
-    public function __construct(private readonly AuditLogger $audit) {}
+    public function __construct(private readonly AuditLogger $audit, private readonly CashAccountService $accounts) {}
 
     /**
-     * @param  array{kind?: string, method: string, amount: string|int|float, reference?: string|null, note?: string|null, paid_at?: string|null, order_return_id?: int|null}  $data
+     * @param  array{kind?: string, method: string, amount: string|int|float, reference?: string|null, note?: string|null, paid_at?: string|null, order_return_id?: int|null, account?: string|null}  $data
      */
     public function record(Order $order, array $data): OrderPayment
     {
@@ -55,6 +56,7 @@ class PaymentService
 
             $payment = new OrderPayment;
             $payment->forceFill([
+                'cash_account_id' => $this->accounts->resolve($data['account'] ?? null, $data['method']),
                 'order_id' => $order->id,
                 'order_return_id' => $data['order_return_id'] ?? null,
                 // Money taken or paid back by a cashier with an open shift goes through that drawer.

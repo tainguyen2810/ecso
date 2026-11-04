@@ -51,6 +51,7 @@ class CashVoucherService
         private readonly PaymentService $payments,
         private readonly TenantContext $context,
         private readonly CustomerDebt $debt,
+        private readonly CashAccountService $accounts,
     ) {}
 
     /** Creates the default types the first time a business opens its voucher types. */
@@ -101,7 +102,7 @@ class CashVoucherService
     }
 
     /**
-     * @param  array{direction: string, type: string, party_kind: string, party_id?: string|null, party_name?: string|null, method: string, amount: string|int|float, counts_in_pnl?: bool|null, reference?: string|null, note?: string|null, paid_at?: string|null}  $data
+     * @param  array{direction: string, type: string, party_kind: string, party_id?: string|null, party_name?: string|null, method: string, amount: string|int|float, counts_in_pnl?: bool|null, reference?: string|null, note?: string|null, paid_at?: string|null, account?: string|null}  $data
      */
     public function record(array $data): CashVoucher
     {
@@ -126,6 +127,7 @@ class CashVoucherService
                 'party_kind' => $data['party_kind'],
                 ...$this->party($data['party_kind'], $data['party_id'] ?? null, $data['party_name'] ?? null),
                 'method' => $data['method'],
+                'cash_account_id' => $this->accounts->resolve($data['account'] ?? null, $data['method']),
                 'amount' => $amount,
                 'counts_in_pnl' => $data['counts_in_pnl'] ?? $type->counts_in_pnl,
                 'reference' => $data['reference'] ?? null,
@@ -165,7 +167,7 @@ class CashVoucherService
     }
 
     /**
-     * @param  array{method: string, amount: string|int|float, reference?: string|null, note?: string|null, paid_at?: string|null}  $data
+     * @param  array{method: string, amount: string|int|float, reference?: string|null, note?: string|null, paid_at?: string|null, account?: string|null}  $data
      * @return Collection<int, OrderPayment>
      */
     public function collectCustomerDebt(Customer $customer, array $data): Collection
@@ -198,6 +200,7 @@ class CashVoucherService
                     'reference' => $data['reference'] ?? null,
                     'note' => $data['note'] ?? 'Thu nợ khách hàng',
                     'paid_at' => $data['paid_at'] ?? null,
+                    'account' => $data['account'] ?? null,
                 ]));
                 $remaining = bcsub($remaining, $take, 2);
             }

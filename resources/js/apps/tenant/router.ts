@@ -73,6 +73,7 @@ const routes: RouteRecordRaw[] = [
             { path: 'marketplaces/prices', name: 'marketplace-prices', component: () => import('./pages/marketplaces/MarketplacePrices.vue'), meta: { permission: 'marketplace.view', nav: 'marketplaces' } },
             { path: 'marketplaces/:id/listings', name: 'marketplace-listings', component: () => import('./pages/marketplaces/Listings.vue'), meta: { permission: 'marketplace.view', nav: 'marketplaces' } },
             { path: 'cash', name: 'cash', component: () => import('./pages/cash/VoucherList.vue'), meta: { permission: 'finance.view', nav: 'cash' } },
+            { path: 'cash/accounts', name: 'cash-accounts', component: () => import('./pages/cash/CashAccounts.vue'), meta: { permission: 'finance.view', nav: 'cash' } },
             { path: 'cash/types', name: 'cash-types', component: () => import('./pages/cash/VoucherTypes.vue'), meta: { permission: 'finance.view', nav: 'cash' } },
             { path: 'finance', name: 'finance', component: () => import('./pages/finance/Finance.vue'), meta: { permission: 'finance.view', nav: 'finance' } },
             { path: 'reports', name: 'reports', redirect: { name: 'report-group', params: { group: 'sales' } } },
