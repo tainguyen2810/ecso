@@ -257,6 +257,6 @@ Bộ test Phase 10 sẽ được bổ sung dần theo từng đợt: tạo đơn
 
 Đã giao cho luồng khác (không làm trùng): B3 Woo 'refunded' (luồng WooCommerce), B4 trả hàng giảm công nợ (luồng Khách hàng) và doanh thu/lãi lỗ (luồng Tài chính), kiểm kê (luồng Sản phẩm/Kho).
 
-Chưa làm, đề xuất làm sau: M3 đơn nháp (cần trạng thái mới, ảnh hưởng nhiều báo cáo), M11 phiếu giao hàng cho shipper, PA10 hàng hỏng khi kiểm trả vào kho lỗi (thuộc luồng Kho), U3 giỏ hàng dạng ngăn kéo trên điện thoại.
+Bổ sung (PR #35): M11 phiếu giao hàng cho shipper (không giá, in tiền COD còn phải thu, chữ ký); M3 đơn nháp (bảng `order_drafts` lưu nội dung form, không tạo đơn, không giữ hàng); U3 giỏ hàng POS dạng ngăn kéo trên điện thoại; PA10 hàng hỏng khi kiểm trả vào "Kho hàng lỗi" riêng (tự tạo, không bán, không tính vào giới hạn số kho).
 
-Migration mới (đều chỉ thêm cột/bảng/quyền, có rollback): `idempotency_keys`, `order_payments.order_return_id`, `orders.cash_shift_id` + `order_payments.cash_shift_id`, quyền `orders.cancel`/`orders.payment.void`, `orders.tax_rate`/`prices_include_tax`/`tax_amount`, `orders.buyer_phone_hash` (điền sẵn cho đơn cũ), quyền `orders.view.all`.
+Migration mới (đều chỉ thêm cột/bảng/quyền, có rollback): `idempotency_keys`, `order_payments.order_return_id`, `orders.cash_shift_id` + `order_payments.cash_shift_id`, quyền `orders.cancel`/`orders.payment.void`, `orders.tax_rate`/`prices_include_tax`/`tax_amount`, `orders.buyer_phone_hash` (điền sẵn cho đơn cũ), quyền `orders.view.all`, bảng `order_drafts`, `warehouses.purpose` + `order_returns.damaged_warehouse_id`.
