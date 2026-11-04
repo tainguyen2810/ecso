@@ -4,11 +4,13 @@ namespace App\Modules\Analytics\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Analytics\Services\BusinessReports;
+use App\Modules\Analytics\Services\FinanceDetails;
 use App\Modules\Analytics\Services\FinanceReport;
 use App\Modules\Analytics\Services\SalesReport;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
+use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Tenancy\Support\TenantContext;
 use App\Shared\Support\ReportRange;
 use Carbon\CarbonImmutable;
@@ -22,18 +24,55 @@ class AnalyticsController extends Controller
     {
         abort_unless($context->can('finance.view'), 403);
         [$from, $to] = $this->range($request);
-        $account = $request->query('account') ? MarketplaceAccount::query()->where('ulid', $request->query('account'))->firstOrFail()->id : null;
 
-        $data = $report->build($from, $to, $account);
+        $data = $report->build($from, $to, $this->financeScope($request));
         // Cost of goods and profit are for members with finance.profit only.
         $data['can_view_profit'] = $context->can('finance.profit');
-        if (! $data['can_view_profit']) {
-            foreach (['cogs', 'cogs_returned', 'cogs_missing_lines', 'estimated_gross_profit', 'other_income', 'other_expenses', 'estimated_profit'] as $key) {
-                $data[$key] = null;
-            }
-        }
 
-        return response()->json(['data' => $data]);
+        return response()->json(['data' => $data['can_view_profit'] ? $data : self::withoutProfit($data)]);
+    }
+
+    /** The orders or returns behind one figure of the finance page, on the same filters. */
+    public function financeDetails(Request $request, TenantContext $context, FinanceDetails $details): JsonResponse
+    {
+        abort_unless($context->can('finance.view'), 403);
+        $metric = $request->validate(['metric' => ['required', Rule::in(FinanceDetails::METRICS)]])['metric'];
+        [$from, $to] = $this->range($request);
+
+        return response()->json(['data' => $details->build($metric, $from, $to, $this->financeScope($request), $context->can('finance.profit'))]);
+    }
+
+    /**
+     * The shop or own sales channel the finance report is scoped to: ?shop=<ulid> (or the older ?account=<ulid>). A
+     * ulid of another tenant is not found.
+     *
+     * @return array{account?: int, channel?: int}|null
+     */
+    private function financeScope(Request $request): ?array
+    {
+        $ulid = $request->query('shop') ?? $request->query('account');
+        if (! is_string($ulid) || $ulid === '') {
+            return null;
+        }
+        $account = MarketplaceAccount::query()->where('ulid', $ulid)->value('id');
+
+        return $account ? ['account' => $account] : ['channel' => SalesChannel::query()->where('ulid', $ulid)->firstOrFail()->id];
+    }
+
+    /** The finance report without cost of goods, fees and anything derived from them. */
+    public static function withoutProfit(array $data): array
+    {
+        foreach (['cogs', 'cogs_returned', 'cogs_missing_lines', 'estimated_gross_profit', 'contribution_profit', 'selling_expenses', 'stock_loss',
+            'operating_expenses', 'other_income', 'other_expenses', 'estimated_profit'] as $key) {
+            $data[$key] = null;
+        }
+        foreach (['estimated_gross_profit', 'contribution_profit', 'estimated_profit'] as $key) {
+            $data['previous'][$key] = null;
+        }
+        $data['daily'] = array_map(fn ($d) => array_merge($d, ['cogs' => null, 'gross_profit' => null]), $data['daily']);
+        $data['by_shop'] = array_map(fn ($r) => array_merge($r, ['cogs' => null, 'gross_profit' => null, 'profit' => null, 'margin' => null]), $data['by_shop']);
+
+        return $data;
     }
 
     public function bestSellers(Request $request, TenantContext $context, SalesReport $report): JsonResponse

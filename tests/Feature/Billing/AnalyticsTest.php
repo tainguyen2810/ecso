@@ -22,9 +22,14 @@ it('separates ordered and completed revenue from money received, and leaves mark
         ->and($data['cancelled']['orders'])->toBe(1)
         ->and($data['cogs'])->toEqual(100000.0)
         ->and($data['estimated_gross_profit'])->toEqual(round((float) $delivered->subtotal - (float) $delivered->discount - 100000, 2))
-        ->and($data['marketplace_fees'])->toBeNull()
+        // The shop has neither a settlement nor a fee table: its fee is unknown, counted, never shown as a known 0.
+        ->and($data['fees']['unknown_orders'])->toBe(1)
+        ->and($data['fees']['confirmed_orders'])->toBe(0)
         ->and($data['payout_received'])->toBeNull()
-        ->and($data['by_shop'][0]['orders'])->toBe(2)
+        ->and($data['payout']['pending_orders'])->toBe(1)
+        ->and($data['payout']['pending_expected'])->toBeNull()
+        ->and($data['by_shop'][0]['ordered_orders'])->toBe(2)
+        ->and($data['by_shop'][0]['orders'])->toBe(1)
         ->and(collect($data['daily'])->sum('orders'))->toBe(2);
 });
 
