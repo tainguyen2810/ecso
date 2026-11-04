@@ -33,17 +33,18 @@ class ReportsController extends Controller
         $customers = $trade->customers($from, $to);
         $data = [
             'range' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
-            'sales' => [...$sales['totals'], 'top_channels' => array_slice($sales['rows'], 0, 3)],
+            'sales' => [...$this->withoutProfit($sales['totals']), 'top_channels' => array_map(fn ($r) => $this->withoutProfit($r), array_slice($sales['rows'], 0, 3))],
             'returns' => $returns['totals'],
             'customers' => $customers['summary'],
             'delivery' => $orders->delivery($from, $to),
         ];
         if ($this->context->can('finance.view')) {
             $pl = collect($ledger->profitLoss($from, $to)['lines'])->keyBy('key');
+            $profit = $this->context->can('finance.profit');
             $data['finance'] = [
                 'revenue' => $pl['revenue']['current'],
-                'profit' => $pl['profit']['current'],
-                'profit_change' => $pl['profit']['change'],
+                'profit' => $profit ? $pl['profit']['current'] : null,
+                'profit_change' => $profit ? $pl['profit']['change'] : null,
                 'payments' => $trade->payments($from, $to)['totals'],
                 'receivable' => $ledger->receivables()['totals'],
             ];
@@ -187,7 +188,7 @@ class ReportsController extends Controller
 
     public function profitLoss(Request $request, LedgerReports $ledger): JsonResponse
     {
-        $this->allow('finance.view');
+        $this->allow('finance.profit');
         [$from, $to] = $this->range($request);
 
         return response()->json(['data' => $ledger->profitLoss($from, $to)]);
@@ -205,6 +206,21 @@ class ReportsController extends Controller
         $this->allow('purchasing.view');
 
         return response()->json(['data' => $ledger->payables()]);
+    }
+
+    /**
+     * Cost of goods and profit figures are for members with finance.profit only.
+     *
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    private function withoutProfit(array $row): array
+    {
+        if ($this->context->can('finance.profit')) {
+            return $row;
+        }
+
+        return array_merge($row, array_fill_keys(array_intersect(array_keys($row), ['cogs', 'gross_profit', 'margin', 'missing_cost_lines']), null));
     }
 
     private function allow(string $permission): void

@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Tài chính, vòng B: ghi nhận doanh thu lúc hoàn thành (2026-11-04)
+- Chính sách đã duyệt (`App\Modules\Analytics\Support\RevenuePolicy`): đơn sàn TMĐT ghi nhận doanh thu khi sàn báo **hoàn thành**, theo cột mới `orders.completed_at`. Đơn kênh riêng, POS và website WooCommerce ghi nhận khi **giao thành công**. Đơn sàn đã giao nhưng chưa hoàn thành hiện riêng ở mục "Chờ sàn hoàn thành", là số tạm tính và không tính vào lợi nhuận.
+- Trang Tài chính và Báo cáo lãi lỗ (cả thẻ Tài chính ở Tổng quan báo cáo) dùng chung chính sách này. Báo cáo lãi lỗ không còn tính đơn mới đặt hoặc chưa giao.
+- **Phí ship khách trả tính riêng**: không nằm trong doanh thu thuần. Báo cáo lãi lỗ có dòng V riêng, vẫn được cộng vào lợi nhuận.
+- Quyền mới **`finance.profit`** (Xem giá vốn và lợi nhuận, xuất báo cáo tài chính). Mặc định có ở các vai trò Chủ, Quản trị, Quản lý vận hành và Kế toán. Vai trò tùy chỉnh đang có quyền `finance.view` được thêm quyền này để giữ nguyên quyền xem cũ. Người không có quyền này không thấy giá vốn và lãi trên trang Tài chính và Tổng quan báo cáo, và không mở được Báo cáo lãi lỗ.
+
 ### Tài chính, vòng A: sửa số liệu sai (2026-11-04)
 - **Ngày theo giờ cửa hàng**: mọi báo cáo (Tài chính, Lãi lỗ, Tổng quan báo cáo, báo cáo bán hàng, trả hàng, thu chi), biểu đồ tổng quan đơn hàng, bộ lọc ngày của danh sách đơn và sổ quỹ đều tính ngày theo múi giờ cửa hàng (`tenants.timezone`, mặc định Asia/Ho_Chi_Minh), không còn theo UTC. Trước đây đơn từ 0h đến 7h sáng bị tính sang ngày hôm trước. Phần dùng chung: `App\Shared\Support\ReportRange`. Kết nối MySQL đổi mọi mốc thời gian được truyền vào truy vấn về UTC (`App\Shared\Database\LocalizedBindings`).
 - **Hoàn tiền không còn bị trừ hai lần** (trang Tài chính): chỉ tính phiếu trả đã duyệt, và chỉ tính phiếu của đơn còn nằm trong doanh thu. Giá vốn của hàng trả đã nhập lại kho được cộng lại (`cogs_returned`), theo giá vốn lúc xuất. Đơn đang có yêu cầu trả hàng vẫn được tính doanh thu cho tới khi phiếu trả được duyệt.
