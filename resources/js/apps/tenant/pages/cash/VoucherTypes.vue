@@ -101,6 +101,19 @@ async function update(t: VoucherType, changes: Partial<VoucherType>) {
                         <input type="checkbox" class="size-4" :checked="t.counts_in_pnl" :disabled="!canEdit || busy === t.id" @change="update(t, { counts_in_pnl: !t.counts_in_pnl })" />
                         Tính KQKD
                     </label>
+                    <select
+                        v-if="t.direction === 'payment' && t.counts_in_pnl"
+                        class="h-8 rounded-md border bg-background px-2 text-xs"
+                        :value="t.pnl_group ?? ''"
+                        :disabled="!canEdit || busy === t.id"
+                        aria-label="Nhóm chi phí"
+                        title="Chi phí bán hàng trừ vào lợi nhuận đóng góp, chi phí vận hành trừ vào lợi nhuận quản trị"
+                        @change="update(t, { pnl_group: (($event.target as HTMLSelectElement).value || null) as VoucherType['pnl_group'] })"
+                    >
+                        <option value="sales">Chi phí bán hàng</option>
+                        <option value="operating">Chi phí vận hành</option>
+                        <option value="">Chi phí khác</option>
+                    </select>
                     <template v-if="canEdit && editing !== t.id">
                         <Button size="icon" variant="ghost" class="size-8" aria-label="Đổi tên" @click="((editing = t.id), (editName = t.name))"><Pencil /></Button>
                         <Button size="sm" variant="ghost" :loading="busy === t.id" @click="update(t, { is_active: !t.is_active })">{{ t.is_active ? 'Ngừng dùng' : 'Dùng lại' }}</Button>
@@ -113,5 +126,6 @@ async function update(t: VoucherType, changes: Partial<VoucherType>) {
             </form>
         </Card>
     </div>
-    <p class="mt-4 text-xs text-muted-foreground">Loại đã có phiếu không xóa được, chỉ ngừng dùng để giữ đúng lịch sử. “Tính KQKD” là mặc định cho phiếu mới, đổi ở đây không làm thay đổi phiếu cũ.</p>
+    <p class="mt-4 text-xs text-muted-foreground">Loại đã có phiếu không xóa được, chỉ ngừng dùng để giữ đúng lịch sử. “Tính KQKD” là mặc định cho phiếu mới, đổi ở đây không làm thay đổi phiếu cũ.
+        Nhóm chi phí quyết định khoản chi trừ vào lợi nhuận nào trên trang Tài chính. “Tiền sàn chuyển về” không tính KQKD vì doanh thu đã tính theo đơn.</p>
 </template>

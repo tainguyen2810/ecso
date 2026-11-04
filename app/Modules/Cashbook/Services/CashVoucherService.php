@@ -27,23 +27,31 @@ use Illuminate\Validation\ValidationException;
  */
 class CashVoucherService
 {
-    /** Types every business starts with: [direction, name, counts_in_pnl]. */
+    /** Profit lines a payment type can feed (null = other): direct selling costs and costs of running the business. */
+    public const PNL_GROUPS = ['sales', 'operating'];
+
+    /**
+     * Types every business starts with: [direction, name, counts_in_pnl, pnl_group]. "Tiền sàn chuyển về" is money the
+     * marketplace pays out for orders whose revenue is already counted, so it is not income.
+     */
     public const DEFAULT_TYPES = [
-        [CashVoucher::RECEIPT, 'Thu nhập khác', true],
-        [CashVoucher::RECEIPT, 'Tiền bồi thường', true],
-        [CashVoucher::RECEIPT, 'Thanh lý tài sản', true],
-        [CashVoucher::RECEIPT, 'Cho thuê tài sản', true],
-        [CashVoucher::RECEIPT, 'Chủ góp vốn', false],
-        [CashVoucher::PAYMENT, 'Chi phí quảng cáo', true],
-        [CashVoucher::PAYMENT, 'Phí vận chuyển', true],
-        [CashVoucher::PAYMENT, 'Vật tư đóng gói', true],
-        [CashVoucher::PAYMENT, 'Lương nhân viên', true],
-        [CashVoucher::PAYMENT, 'Thuê mặt bằng', true],
-        [CashVoucher::PAYMENT, 'Điện, nước, internet', true],
-        [CashVoucher::PAYMENT, 'Phần mềm, dịch vụ', true],
-        [CashVoucher::PAYMENT, 'Thuế, phí', true],
-        [CashVoucher::PAYMENT, 'Chi phí khác', true],
-        [CashVoucher::PAYMENT, 'Chủ rút vốn', false],
+        [CashVoucher::RECEIPT, 'Thu nhập khác', true, null],
+        [CashVoucher::RECEIPT, 'Tiền bồi thường', true, null],
+        [CashVoucher::RECEIPT, 'Thanh lý tài sản', true, null],
+        [CashVoucher::RECEIPT, 'Cho thuê tài sản', true, null],
+        [CashVoucher::RECEIPT, 'Tiền sàn chuyển về', false, null],
+        [CashVoucher::RECEIPT, 'Chủ góp vốn', false, null],
+        [CashVoucher::PAYMENT, 'Chi phí quảng cáo', true, 'sales'],
+        [CashVoucher::PAYMENT, 'Phí vận chuyển', true, 'sales'],
+        [CashVoucher::PAYMENT, 'Vật tư đóng gói', true, 'sales'],
+        [CashVoucher::PAYMENT, 'Lương nhân viên', true, 'operating'],
+        [CashVoucher::PAYMENT, 'Thuê mặt bằng', true, 'operating'],
+        [CashVoucher::PAYMENT, 'Điện, nước, internet', true, 'operating'],
+        [CashVoucher::PAYMENT, 'Phần mềm, dịch vụ', true, 'operating'],
+        [CashVoucher::PAYMENT, 'Phí ngân hàng', true, 'operating'],
+        [CashVoucher::PAYMENT, 'Thuế, phí', true, 'operating'],
+        [CashVoucher::PAYMENT, 'Chi phí khác', true, 'operating'],
+        [CashVoucher::PAYMENT, 'Chủ rút vốn', false, null],
     ];
 
     public function __construct(
@@ -61,14 +69,14 @@ class CashVoucherService
             return;
         }
         DB::transaction(function () {
-            foreach (self::DEFAULT_TYPES as [$direction, $name, $pnl]) {
-                CashVoucherType::query()->firstOrCreate(['direction' => $direction, 'name' => $name], ['counts_in_pnl' => $pnl]);
+            foreach (self::DEFAULT_TYPES as [$direction, $name, $pnl, $group]) {
+                CashVoucherType::query()->firstOrCreate(['direction' => $direction, 'name' => $name], ['counts_in_pnl' => $pnl, 'pnl_group' => $group]);
             }
         });
     }
 
     /**
-     * @param  array{direction: string, name: string, counts_in_pnl?: bool, description?: string|null}  $data
+     * @param  array{direction: string, name: string, counts_in_pnl?: bool, pnl_group?: string|null, description?: string|null}  $data
      */
     public function createType(array $data): CashVoucherType
     {
@@ -77,6 +85,7 @@ class CashVoucherService
             'direction' => $data['direction'],
             'name' => trim($data['name']),
             'counts_in_pnl' => $data['counts_in_pnl'] ?? true,
+            'pnl_group' => $data['direction'] === CashVoucher::PAYMENT ? ($data['pnl_group'] ?? 'operating') : null,
             'description' => $data['description'] ?? null,
         ]);
         $this->audit->record('cash.type_created', $type, ['name' => $type->name, 'direction' => $type->direction]);
@@ -85,10 +94,13 @@ class CashVoucherService
     }
 
     /**
-     * @param  array{name?: string, counts_in_pnl?: bool, description?: string|null, is_active?: bool}  $data
+     * @param  array{name?: string, counts_in_pnl?: bool, pnl_group?: string|null, description?: string|null, is_active?: bool}  $data
      */
     public function updateType(CashVoucherType $type, array $data): CashVoucherType
     {
+        if ($type->direction !== CashVoucher::PAYMENT) {
+            unset($data['pnl_group']);
+        }
         if (isset($data['name'])) {
             $data['name'] = trim($data['name']);
             $this->assertUniqueName($type->direction, $data['name'], $type->id);

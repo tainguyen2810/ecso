@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string $direction
  * @property string $name
  * @property bool $counts_in_pnl
+ * @property string|null $pnl_group
  * @property bool $is_active
  */
 class CashVoucherType extends Model

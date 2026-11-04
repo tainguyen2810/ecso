@@ -172,7 +172,7 @@ class CashAccountService
             if (bccomp($fee, '0', 2) > 0) {
                 $type = CashVoucherType::query()->firstOrCreate(
                     ['direction' => CashVoucher::PAYMENT, 'name' => self::FEE_TYPE],
-                    ['counts_in_pnl' => true, 'description' => 'Phí chuyển tiền, phí duy trì tài khoản'],
+                    ['counts_in_pnl' => true, 'pnl_group' => 'operating', 'description' => 'Phí chuyển tiền, phí duy trì tài khoản'],
                 );
                 (new CashVoucher)->forceFill([
                     'number' => DocumentNumber::next('PC'),
