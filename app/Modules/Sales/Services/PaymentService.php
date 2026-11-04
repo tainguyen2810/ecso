@@ -20,7 +20,7 @@ class PaymentService
     public function __construct(private readonly AuditLogger $audit) {}
 
     /**
-     * @param  array{kind?: string, method: string, amount: string|int|float, reference?: string|null, note?: string|null, paid_at?: string|null}  $data
+     * @param  array{kind?: string, method: string, amount: string|int|float, reference?: string|null, note?: string|null, paid_at?: string|null, order_return_id?: int|null}  $data
      */
     public function record(Order $order, array $data): OrderPayment
     {
@@ -54,6 +54,7 @@ class PaymentService
             $payment = new OrderPayment;
             $payment->forceFill([
                 'order_id' => $order->id,
+                'order_return_id' => $data['order_return_id'] ?? null,
                 'customer_id' => $order->customer_id,
                 'kind' => $kind,
                 'method' => $data['method'],

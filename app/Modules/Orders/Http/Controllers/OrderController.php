@@ -126,6 +126,8 @@ class OrderController extends Controller
                     'capability' => $capabilities[Capability::ORDER_ACTIONS[$action]] ?? Capability::UNKNOWN,
                 ]),
             'editable' => $order->isManual() && in_array($order->status, ManualOrderService::EDITABLE, true),
+            // none | partial | full: how much of what was shipped has come back on returns.
+            'return_state' => $returnService->returnState($order),
             'payments' => PaymentResource::collection($order->payments),
             'created_by' => $order->creator?->name,
             'customer_stats' => $order->customer_id ? $this->customerStats($order) : null,

@@ -155,3 +155,61 @@ it('keeps idempotency keys per business and per user', function () {
         ], ['Idempotency-Key' => 'same-key'])->assertCreated()->assertHeaderMissing('Idempotent-Replayed');
     }
 });
+
+it('refunds from a return up to the value of the returned goods, once, and shows the return and refund state', function () {
+    [$tenant, $owner] = tenantWithOwner();
+    $variant = makeVariant($tenant, 'AO-01', ['ref_price' => 100000]);
+    stockIn($tenant, $variant, 5);
+    // 2 x 100,000 with 20,000 off the whole order: each unit really cost 90,000.
+    $order = createSalesOrder($owner, $tenant, [[$variant, 2, 100000]], ['stage' => 'completed', 'discount' => 20000, 'payments' => [['method' => 'cash', 'amount' => 180000]]])->json('data');
+    $itemId = firstItemId($owner, $tenant, $order['id']);
+
+    $return = actingInTenant($owner, $tenant)->postJson("/api/v1/orders/{$order['id']}/returns", ['type' => 'return', 'lines' => [['order_item_id' => $itemId, 'quantity' => 1]]])
+        ->assertCreated()->json('data');
+    actingInTenant($owner, $tenant)->getJson("/api/v1/returns/{$return['id']}")
+        ->assertJsonPath('data.goods_value', '90000.00')->assertJsonPath('data.refundable', '90000.00')->assertJsonPath('data.refunded', '0.00');
+
+    actingInTenant($owner, $tenant)->postJson("/api/v1/returns/{$return['id']}/refund", ['method' => 'cash', 'amount' => 100000])
+        ->assertUnprocessable()->assertJsonValidationErrors('amount');
+    actingInTenant($owner, $tenant)->postJson("/api/v1/returns/{$return['id']}/refund", ['method' => 'cash', 'amount' => 90000], ['Idempotency-Key' => 'r-1'])->assertOk()
+        ->assertJsonPath('data.refunded', '90000.00')->assertJsonPath('data.refundable', '0.00');
+    // Same click again: replayed, no second refund. Another refund: nothing left.
+    actingInTenant($owner, $tenant)->postJson("/api/v1/returns/{$return['id']}/refund", ['method' => 'cash', 'amount' => 90000], ['Idempotency-Key' => 'r-1'])->assertOk();
+    actingInTenant($owner, $tenant)->postJson("/api/v1/returns/{$return['id']}/refund", ['method' => 'cash', 'amount' => 1000])->assertUnprocessable();
+
+    actingInTenant($owner, $tenant)->getJson("/api/v1/orders/{$order['id']}")->assertOk()
+        ->assertJsonPath('data.refunded_amount', '90000.00')
+        ->assertJsonPath('data.refund_status', 'partial')
+        ->assertJsonPath('data.return_state', 'partial')
+        ->assertJsonCount(2, 'data.payments');
+    expect(OrderPayment::withoutGlobalScopes()->where('kind', 'refund')->sole()->order_return_id)->not->toBeNull();
+
+    // A cashier without the payment permission cannot refund.
+    $warehouse = addMember($tenant, Role::WAREHOUSE_STAFF);
+    actingInTenant($warehouse, $tenant)->postJson("/api/v1/returns/{$return['id']}/refund", ['method' => 'cash', 'amount' => 1000])->assertForbidden();
+});
+
+it('marks an order fully returned once everything shipped has come back', function () {
+    [$tenant, $owner] = tenantWithOwner();
+    $variant = makeVariant($tenant);
+    stockIn($tenant, $variant, 5);
+    $order = createSalesOrder($owner, $tenant, [[$variant, 2]], ['stage' => 'completed', 'payments' => [['method' => 'cash', 'amount' => 200000]]])->json('data');
+    $itemId = firstItemId($owner, $tenant, $order['id']);
+
+    actingInTenant($owner, $tenant)->getJson("/api/v1/orders/{$order['id']}")->assertJsonPath('data.return_state', 'none')->assertJsonPath('data.refund_status', 'none');
+    actingInTenant($owner, $tenant)->postJson("/api/v1/orders/{$order['id']}/returns", ['type' => 'return', 'lines' => [['order_item_id' => $itemId, 'quantity' => 2]]])->assertCreated();
+    actingInTenant($owner, $tenant)->getJson("/api/v1/orders/{$order['id']}")->assertJsonPath('data.return_state', 'full');
+});
+
+it('does not refund marketplace orders from a return', function () {
+    [$tenant, $owner] = tenantWithOwner();
+    $variant = makeVariant($tenant);
+    stockIn($tenant, $variant, 5);
+    $order = fakeOrder(fakeShop($tenant), [[$variant, 1]], 'fake_delivered');
+    $itemId = firstItemId($owner, $tenant, $order->ulid);
+
+    $return = actingInTenant($owner, $tenant)->postJson("/api/v1/orders/{$order->ulid}/returns", ['type' => 'return', 'lines' => [['order_item_id' => $itemId, 'quantity' => 1]]])
+        ->assertCreated()->json('data');
+    actingInTenant($owner, $tenant)->getJson("/api/v1/returns/{$return['id']}")->assertJsonPath('data.refundable', '0.00');
+    actingInTenant($owner, $tenant)->postJson("/api/v1/returns/{$return['id']}/refund", ['method' => 'cash', 'amount' => 1000])->assertUnprocessable();
+});

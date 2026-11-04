@@ -8,6 +8,7 @@ use App\Modules\Orders\Http\Resources\ReturnResource;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Orders\Services\ReturnService;
+use App\Modules\Sales\Models\OrderPayment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -69,6 +70,19 @@ class ReturnController extends Controller
         ]);
 
         return new ReturnResource($returns->move($return, $data['status'], $data['note'] ?? null)->load(['order', 'warehouse', 'lines.item', 'lines.variant']));
+    }
+
+    public function refund(Request $request, OrderReturn $return, ReturnService $returns): ReturnResource
+    {
+        $this->authorize('pay', Order::class);
+        $data = $request->validate([
+            'method' => ['required', Rule::in(OrderPayment::METHODS)],
+            'amount' => ['required', 'numeric', 'min:1', 'max:9999999999'],
+            'reference' => ['nullable', 'string', 'max:100'],
+            'note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        return new ReturnResource($returns->refund($return, $data)->load(['order', 'exchangeOrder', 'warehouse', 'lines.item', 'lines.variant', 'creator', 'inspector']));
     }
 
     public function inspect(Request $request, OrderReturn $return, ReturnService $returns): ReturnResource
