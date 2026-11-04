@@ -8,6 +8,7 @@ use App\Modules\Inventory\Models\InventoryAdjustmentLine;
 use App\Modules\Inventory\Models\StockBalance;
 use App\Modules\Inventory\Models\StockReceipt;
 use App\Modules\Inventory\Models\StockTransfer;
+use App\Modules\Inventory\Models\StockTransferLine;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -40,12 +41,14 @@ class DocumentResource extends JsonResource
             'created_at' => $doc->created_at?->toIso8601String(),
             'lines_count' => $this->whenCounted('lines'),
             'lines' => $this->whenLoaded('lines', fn () => $doc->lines->map(fn ($line) => array_filter([
+                'line_id' => $line instanceof StockTransferLine ? $line->id : null,
                 'variant' => [
                     'id' => $line->variant->ulid,
                     'sku' => $line->variant->sku,
                     'name' => $line->variant->displayName(),
                 ],
                 'quantity' => $line->quantity,
+                'received_qty' => $line->received_qty ?? null,
                 'unit_cost' => app(DataAccess::class)->cost($line->unit_cost ?? null),
                 'mode' => $line->mode ?? null,
                 'system_qty' => $line->system_qty ?? null,
@@ -82,6 +85,8 @@ class DocumentResource extends JsonResource
                 'to_warehouse' => $warehouse($doc->toWarehouse),
                 'dispatched_at' => $doc->dispatched_at?->toIso8601String(),
                 'received_at' => $doc->received_at?->toIso8601String(),
+                // Pending "thất lạc" adjustment for what did not arrive.
+                'shortage' => $doc->shortage_adjustment_id ? InventoryAdjustment::query()->whereKey($doc->shortage_adjustment_id)->first(['ulid', 'number', 'status'])?->only(['ulid', 'number', 'status']) : null,
             ],
             default => [],
         };

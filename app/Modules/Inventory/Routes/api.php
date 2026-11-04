@@ -3,6 +3,7 @@
 use App\Modules\Inventory\Http\Controllers\AdjustmentController;
 use App\Modules\Inventory\Http\Controllers\CostAdjustmentController;
 use App\Modules\Inventory\Http\Controllers\ReceiptController;
+use App\Modules\Inventory\Http\Controllers\ReconciliationController;
 use App\Modules\Inventory\Http\Controllers\StockController;
 use App\Modules\Inventory\Http\Controllers\TransferController;
 use App\Modules\Inventory\Http\Controllers\WarehouseController;
@@ -16,6 +17,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant', 'idempotent'])->group(f
         Route::get('stock', [StockController::class, 'index']);
         Route::get('summary', [StockController::class, 'summary']);
         Route::get('low-stock', [StockController::class, 'lowStock']);
+        Route::get('reconciliation', ReconciliationController::class)->middleware('throttle:20,1,inventory.reconciliation');
         Route::get('variants/{variant}/card', [StockController::class, 'card']);
         Route::get('products/{product}/stock', [StockController::class, 'productStock']);
         Route::get('products/{product}/movements', [StockController::class, 'productMovements']);

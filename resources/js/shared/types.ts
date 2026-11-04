@@ -159,6 +159,9 @@ export interface Movement {
 }
 
 export interface DocumentLine {
+    /** Transfer lines: id used when receiving. */
+    line_id?: number;
+    received_qty?: number;
     variant: { id: string; sku: string; name: string };
     quantity: number;
     unit_cost?: string;
@@ -174,6 +177,8 @@ export interface DocumentLine {
 }
 
 export interface InventoryDocument {
+    /** Transfers received short: the pending "thất lạc" adjustment. */
+    shortage?: { ulid: string; number: string; status: string } | null;
     id: string;
     kind: 'receipt' | 'adjustment' | 'transfer';
     number: string;

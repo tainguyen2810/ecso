@@ -31,6 +31,7 @@ interface StockRow {
     max_stock?: number | null;
     bin_location?: string | null;
     incoming: number;
+    in_transit?: number;
     cost_price: string;
 }
 interface MovementRow {
@@ -192,7 +193,7 @@ const totals = computed(() => {
 const packIds = computed(() => new Set(product.value?.type === 'combo' ? [] : (product.value?.variants ?? []).filter((v) => v.components?.length).map((v) => v.id)));
 const stockTotals = computed(() =>
     visibleStock.value.filter((r) => !packIds.value.has(r.variant.id)).reduce(
-        (s, r) => ({ on_hand: s.on_hand + r.on_hand, reserved: s.reserved + r.reserved, available: s.available + r.available, incoming: s.incoming + r.incoming, value: s.value + Math.max(0, r.on_hand) * Number(r.cost_price) }),
+        (s, r) => ({ on_hand: s.on_hand + r.on_hand, reserved: s.reserved + r.reserved, available: s.available + r.available, incoming: s.incoming + r.incoming + (r.in_transit ?? 0), value: s.value + Math.max(0, r.on_hand) * Number(r.cost_price) }),
         { on_hand: 0, reserved: 0, available: 0, incoming: 0, value: 0 },
     ),
 );
@@ -400,7 +401,10 @@ async function remove() {
                             <td class="px-4 py-2.5 text-right tabular-nums">{{ formatNumber(r.on_hand) }}</td>
                             <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ formatNumber(r.reserved) }}</td>
                             <td :class="cn('px-4 py-2.5 text-right font-medium tabular-nums', r.available <= 0 && 'text-destructive', r.available > 0 && r.available <= r.safety_stock && 'text-amber-600')">{{ formatNumber(r.available) }}</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums">{{ r.incoming ? formatNumber(r.incoming) : '—' }}</td>
+                            <td class="px-4 py-2.5 text-right tabular-nums" :title="r.in_transit ? `${formatNumber(r.incoming)} từ đơn nhập, ${formatNumber(r.in_transit)} đang chuyển từ kho khác` : undefined">
+                                {{ r.incoming || r.in_transit ? formatNumber(r.incoming + (r.in_transit ?? 0)) : '—' }}
+                                <span v-if="r.in_transit" class="block text-xs text-muted-foreground" :data-testid="`in-transit-${r.variant.sku}-${r.warehouse.code}`">{{ formatNumber(r.in_transit) }} đang chuyển đến</span>
+                            </td>
                             <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ r.safety_stock ? formatNumber(r.safety_stock) : '—' }}</td>
                             <td :class="cn('px-4 py-2.5 text-right tabular-nums text-muted-foreground', r.max_stock != null && r.on_hand > r.max_stock && 'font-medium text-amber-600')" :title="r.max_stock != null && r.on_hand > r.max_stock ? 'Tồn vượt mức tối đa' : undefined">
                                 {{ r.max_stock != null ? formatNumber(r.max_stock) : '—' }}

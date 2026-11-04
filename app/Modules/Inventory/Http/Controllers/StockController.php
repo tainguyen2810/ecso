@@ -204,6 +204,13 @@ class StockController extends Controller
         $balances = StockBalance::query()->whereIn('product_variant_id', $variants->pluck('id'))->get()
             ->groupBy('product_variant_id');
         $incoming = $onOrder->byVariantAndWarehouse($variants->pluck('id')->all());
+        // Goods dispatched from another warehouse and not received yet ("đang chuyển đến").
+        $inTransit = DB::table('stock_transfer_lines')->join('stock_transfers', 'stock_transfers.id', '=', 'stock_transfer_lines.stock_transfer_id')
+            ->where('stock_transfers.tenant_id', app(TenantContext::class)->id())->where('stock_transfers.status', StockTransfer::IN_TRANSIT)
+            ->whereIn('stock_transfer_lines.product_variant_id', $variants->pluck('id'))
+            ->groupBy('stock_transfer_lines.product_variant_id', 'stock_transfers.to_warehouse_id')
+            ->selectRaw('stock_transfer_lines.product_variant_id as v, stock_transfers.to_warehouse_id as w, SUM(stock_transfer_lines.quantity) as qty')
+            ->get()->mapWithKeys(fn ($r) => ["{$r->v}:{$r->w}" => (int) $r->qty]);
         $packs = app(ComboResolver::class)->componentsOf($variants->pluck('id')->all());
 
         $rows = [];
@@ -227,6 +234,7 @@ class StockController extends Controller
                     'max_stock' => $b?->max_stock,
                     'bin_location' => $b?->bin_location,
                     'incoming' => $incoming[$variant->id][$warehouse->id] ?? 0,
+                    'in_transit' => $inTransit["{$variant->id}:{$warehouse->id}"] ?? 0,
                     'cost_price' => app(DataAccess::class)->cost($variant->cost_price),
                 ];
             }

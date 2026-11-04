@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Kho và chuyển kho, đợt D kiểm toán sản phẩm (2026-11-04)
+- **Nhận chuyển kho thiếu**: nút "Nhận hàng" mở hộp nhập số thực nhận từng dòng (`POST /inventory/transfers/{id}/receive` nhận `lines[].line_id`, `received_qty`). Kho nhận vẫn nhập đủ số đã xuất, phần thiếu thành phiếu điều chỉnh "Thất lạc" chờ duyệt ở kho nhận, nên khoản mất được duyệt và báo cáo như hàng hủy. Phiếu chuyển ghi "Thực nhận" và liên kết phiếu thất lạc.
+- **Hàng đang chuyển đến**: tồn theo kho ở trang sản phẩm cộng thêm hàng đã xuất từ kho khác mà chưa nhận (`in_transit`).
+- **Ngừng kho an toàn**: không ngừng được kho còn đơn nhập chưa nhận xong, phiếu chuyển chưa hoàn tất, phiếu kiểm/điều chỉnh chưa duyệt hoặc gian hàng đang lấy tồn từ kho đó; thông báo nêu rõ còn gì.
+- **Đối soát tồn kho** (Sản phẩm → Đối soát tồn kho, `GET /inventory/reconciliation`): kết quả kiểm tra sổ kho (tồn = tổng sổ kho, đang giữ = các đơn đang giữ) và các đơn bàn giao khi kho thiếu hàng trong 90 ngày. Chỉ đọc, ECSO không tự sửa sổ kho.
+
 ### Quyền dữ liệu, đợt C kiểm toán sản phẩm (2026-11-04)
 - **Quyền mới `products.cost.view`** (Xem giá vốn, giá trị tồn và đơn giá nhập). Có sẵn ở Chủ, Quản trị, Quản lý vận hành, Kế toán, Chỉ xem; Nhân viên kho và Nhân viên xử lý đơn không có. Vai trò tự tạo đang có `reports.view`, `products.manage` hoặc `purchasing.manage` được thêm quyền này khi migrate, nên không ai mất quyền đang dùng. Không có quyền thì API trả `null` cho giá vốn, giá trị tồn, đơn giá phiếu nhập, đơn giá trên thẻ kho; file xuất sản phẩm để trống cột giá vốn; màn hình ẩn các cột đó.
 - **Nhập kho tay không đổi giá vốn** khi người nhập không có quyền xem giá vốn: hàng vào theo giá vốn bình quân hiện tại, form không hiện ô đơn giá. Đơn giá nhập từ đơn nhập hàng (PO) không đổi.

@@ -36,6 +36,7 @@ const routes: RouteRecordRaw[] = [
             { path: 'products/:id', name: 'product-show', component: () => import('./pages/products/ProductDetail.vue'), meta: { permission: 'products.view', nav: 'products' } },
             { path: 'inventory', name: 'inventory', component: () => import('./pages/inventory/StockList.vue'), meta: { permission: 'inventory.view', nav: 'inventory' } },
             { path: 'inventory/sku/:id', name: 'inventory-card', component: () => import('./pages/inventory/StockCard.vue'), meta: { permission: 'inventory.view', nav: 'inventory' } },
+            { path: 'inventory/reconciliation', name: 'inventory-reconciliation', component: () => import('./pages/inventory/Reconciliation.vue'), meta: { permission: 'inventory.view', nav: 'inventory' } },
             { path: 'inventory/stocktake', name: 'stocktake', component: () => import('./pages/inventory/StocktakeList.vue'), meta: { permission: 'inventory.view', nav: 'inventory' } },
             { path: 'inventory/stocktake/new', name: 'stocktake-new', component: () => import('./pages/inventory/Stocktake.vue'), meta: { permission: 'inventory.adjust', nav: 'inventory', section: 'stocktake' } },
             { path: 'inventory/stocktake/:id', name: 'stocktake-edit', component: () => import('./pages/inventory/Stocktake.vue'), meta: { permission: 'inventory.adjust', nav: 'inventory', section: 'stocktake' } },
