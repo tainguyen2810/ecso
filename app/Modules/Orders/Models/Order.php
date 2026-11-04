@@ -49,7 +49,7 @@ class Order extends Model
 
     protected $guarded = ['id', 'ulid', 'tenant_id'];
 
-    protected $hidden = ['id', 'tenant_id', 'marketplace_account_id', 'sales_channel_id', 'customer_id', 'warehouse_id', 'assigned_to', 'created_by', 'raw'];
+    protected $hidden = ['id', 'tenant_id', 'marketplace_account_id', 'sales_channel_id', 'customer_id', 'warehouse_id', 'assigned_to', 'created_by', 'raw', 'buyer_phone_hash'];
 
     protected static function booted(): void
     {
@@ -80,6 +80,9 @@ class Order extends Model
             'subtotal' => 'decimal:2',
             'shipping_fee' => 'decimal:2',
             'discount' => 'decimal:2',
+            'tax_rate' => 'decimal:2',
+            'prices_include_tax' => 'boolean',
+            'tax_amount' => 'decimal:2',
             'total' => 'decimal:2',
             'placed_at' => 'datetime',
             'paid_at' => 'datetime',

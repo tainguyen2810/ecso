@@ -12,6 +12,7 @@ import Select from '@/shared/ui/Select.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { cn, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
+import { useIdempotencyKey } from '@/shared/composables/useIdempotencyKey';
 import { adjustmentReasons, documentKinds, type DocumentKindKey } from './labels';
 import type { Variant, Warehouse } from '@/shared/types';
 
@@ -25,6 +26,7 @@ interface Line {
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
+const idempotency = useIdempotencyKey();
 const kindKey = computed(() => route.meta.kind as DocumentKindKey);
 const kind = computed(() => documentKinds[kindKey.value]);
 
@@ -84,7 +86,8 @@ async function submit() {
             kindKey.value === 'transfers'
                 ? { from_warehouse_id: form.warehouse_id, to_warehouse_id: form.to_warehouse_id, note: form.note || null, lines: payloadLines }
                 : { warehouse_id: form.warehouse_id, note: form.note || null, lines: payloadLines, ...(kindKey.value === 'adjustments' ? { reason: form.reason } : {}) };
-        const { data } = await api.post(`/inventory/${kindKey.value}`, body);
+        const { data } = await api.post(`/inventory/${kindKey.value}`, body, idempotency.config());
+        idempotency.renew();
         toast.success(`Đã tạo ${data.data.number}`);
         await router.push(`/inventory/${kindKey.value}/${data.data.id}`);
     } catch (e) {

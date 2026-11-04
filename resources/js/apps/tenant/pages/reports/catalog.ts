@@ -67,7 +67,7 @@ export const reports: Record<string, DetailReport> = {
         period: 'range',
         search: true,
         empty: 'Chưa có hàng bán trong khoảng thời gian này.',
-        note: 'Không tính đơn hủy và đơn hoàn. Chiết khấu là chiết khấu từng dòng hàng; chiết khấu cả đơn không chia về từng sản phẩm.',
+        note: 'Tính các đơn đã ghi nhận doanh thu trong kỳ, giống trang Tài chính: đơn sàn khi sàn báo hoàn thành, đơn kênh riêng khi giao xong. Chiết khấu là chiết khấu từng dòng hàng; chiết khấu cả đơn không chia về từng sản phẩm.',
         columns: () => [
             { key: 'variant', label: 'Sản phẩm', value: variant, sub: variantSku, link: variantLink },
             { key: 'orders', label: 'Đơn', type: 'number', total: true },
@@ -92,7 +92,7 @@ export const reports: Record<string, DetailReport> = {
         warehouse: true,
         channel: true,
         empty: 'Không có đơn nào trong kỳ.',
-        note: 'Không tính đơn hủy và đơn hoàn. Lãi gộp = khách phải trả − phí giao − giá vốn; đơn chưa xuất kho chưa có giá vốn.',
+        note: 'Theo ngày đặt đơn, không tính đơn hủy và đơn hoàn. Lãi gộp = khách phải trả − phí giao − giá vốn; đơn chưa xuất kho chưa có giá vốn. Doanh thu đã ghi nhận xem ở Bán hàng theo sản phẩm hoặc Tài chính.',
         kpis: (d) => [
             { label: 'Số đơn', value: d.totals.orders, type: 'number' },
             { label: 'Khách phải trả', value: d.totals.total, type: 'money' },
@@ -124,7 +124,7 @@ export const reports: Record<string, DetailReport> = {
         warehouse: true,
         channel: true,
         empty: 'Không có dòng hàng nào trong kỳ.',
-        note: 'Không tính đơn hủy và đơn hoàn. Chiết khấu là chiết khấu từng dòng; chiết khấu cả đơn xem ở Thống kê theo đơn hàng.',
+        note: 'Theo ngày đặt đơn, không tính đơn hủy và đơn hoàn. Chiết khấu là chiết khấu từng dòng; chiết khấu cả đơn xem ở Thống kê theo đơn hàng.',
         kpis: (d) => [
             { label: 'Số đơn', value: d.totals.orders, type: 'number' },
             { label: 'Số lượng bán', value: d.totals.quantity, type: 'number' },

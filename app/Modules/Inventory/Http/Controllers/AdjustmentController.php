@@ -91,6 +91,8 @@ class AdjustmentController extends Controller
             ...$this->lineRules(),
             'lines.*.mode' => ['required', Rule::in(['delta', 'count'])],
             'lines.*.quantity' => ['required', 'integer', 'between:-1000000,1000000'],
+            // Count lines: the system quantity shown when the SKU was counted (stocktake screen).
+            'lines.*.system_qty' => ['nullable', 'integer', 'between:-1000000,1000000'],
             'lines.*.reason' => ['nullable', Rule::in(InventoryAdjustment::REASONS)],
             'lines.*.note' => ['nullable', 'string', 'max:255'],
         ];

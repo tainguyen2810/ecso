@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ArrowLeft, ImagePlus, Plus, Sparkles, Tags, Trash2, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
+import Alert from '@/shared/ui/Alert.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
@@ -14,6 +15,7 @@ import { api, ApiError } from '@/shared/lib/api';
 import { cn, formatMoney } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
+import { useIdempotencyKey } from '@/shared/composables/useIdempotencyKey';
 import SkuPicker from '../../components/SkuPicker.vue';
 import { useSettingsStore } from '@/shared/stores/settings';
 import type { Product, Ref, Variant, Warehouse } from '@/shared/types';
@@ -47,6 +49,7 @@ const VAT_RATES = [
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
+const idempotency = useIdempotencyKey();
 const tenant = useTenantStore();
 const canManage = computed(() => tenant.can('products.manage'));
 const canReceive = computed(() => tenant.can('inventory.receive'));
@@ -92,6 +95,9 @@ function addPack() {
 
 const showOpening = computed(() => isNew.value && canReceive.value && !isCombo.value);
 const hasOpening = computed(() => !isCombo.value && variants.value.some((v) => Number(v.opening_qty) > 0));
+// Opening stock without a cost starts the average cost at 0 ₫: gross profit would look higher than it is.
+const noCost = (v: { opening_qty: string; opening_cost: string; conversion?: unknown }) => !v.conversion && Number(v.opening_qty) > 0 && !(Number(v.opening_cost) > 0);
+const zeroCostOpening = computed(() => (isCombo.value ? [] : variants.value.filter(noCost)));
 
 function addTag(raw = tagInput.value) {
     for (const t of raw.split(',').map((s) => s.trim()).filter(Boolean)) {
@@ -248,7 +254,8 @@ async function save(then: 'detail' | 'labels' = 'detail') {
                 ...(!isCombo.value && v.conversion ? { conversion: { base_sku: v.conversion.base_sku, quantity: Number(v.conversion.quantity) } } : {}),
             })),
         };
-        const { data } = isNew.value ? await api.post('/products', payload) : await api.put(`/products/${productId.value}`, payload);
+        const { data } = isNew.value ? await api.post('/products', payload, idempotency.config()) : await api.put(`/products/${productId.value}`, payload);
+        idempotency.renew();
         toast.success(isNew.value ? 'Đã tạo sản phẩm' : 'Đã lưu thay đổi');
         const id = data.data.id as string;
         if (then === 'labels') await router.push({ path: '/products/labels', query: { products: id } });
@@ -554,12 +561,15 @@ async function removeImage(id: number) {
                                         <p v-if="fieldError(i, 'opening_qty')" class="mt-1 text-xs text-destructive">{{ fieldError(i, 'opening_qty') }}</p>
                                     </td>
                                     <td class="px-4 py-2 text-right">
-                                        <input v-model="v.opening_cost" type="number" min="0" :data-testid="`opening-cost-${i}`" aria-label="Giá vốn ban đầu" class="h-8 w-28 rounded-md border border-input bg-card px-2 text-right tabular-nums" />
+                                        <input v-model="v.opening_cost" type="number" min="0" :data-testid="`opening-cost-${i}`" aria-label="Giá vốn ban đầu" :class="cn('h-8 w-28 rounded-md border border-input bg-card px-2 text-right tabular-nums', noCost(v) && 'border-amber-300 bg-amber-50/60')" placeholder="0 ₫" />
                                     </td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
+                    <Alert v-if="zeroCostOpening.length" tone="amber" class="m-4" data-testid="opening-no-cost">
+                        {{ zeroCostOpening.length }} SKU có tồn ban đầu nhưng chưa có giá vốn. Giá vốn sẽ bắt đầu từ 0 ₫, lãi gộp khi bán sẽ cao hơn thực tế. Hãy nhập giá vốn, hoặc để trống nếu đây là hàng được tặng.
+                    </Alert>
                 </Card>
             </div>
 

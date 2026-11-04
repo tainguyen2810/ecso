@@ -14,6 +14,7 @@ import { api, ApiError } from '@/shared/lib/api';
 import { formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
+import { useIdempotencyKey } from '@/shared/composables/useIdempotencyKey';
 import { REORDER_DRAFT_KEY, type ReorderDraft } from './reorder';
 import { purchaseCosts, VAT_RATES } from './costs';
 import { supplierPaymentMethods } from './labels';
@@ -39,6 +40,7 @@ interface Line {
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
+const idempotency = useIdempotencyKey();
 const tenant = useTenantStore();
 const editId = computed(() => (route.params.id ? String(route.params.id) : null));
 const orderMode = computed(() => route.query.mode === 'order');
@@ -163,7 +165,8 @@ async function submit(action: 'draft' | 'place' | 'receive') {
     try {
         const { data } = editId.value
             ? await api.put(`/purchase-orders/${editId.value}`, body)
-            : await api.post('/purchase-orders', { ...body, place: action !== 'draft', receive: action === 'receive', payment });
+            : await api.post('/purchase-orders', { ...body, place: action !== 'draft', receive: action === 'receive', payment }, idempotency.config());
+        idempotency.renew();
         try {
             sessionStorage.removeItem(REORDER_DRAFT_KEY);
         } catch {

@@ -244,3 +244,19 @@ Mỗi đợt: một PR riêng, có test tự động (Pest) cho từng tình hu�
 Bộ test Phase 10 sẽ được bổ sung dần theo từng đợt: tạo đơn thành công/thiếu thông tin, vượt tồn, hai người đặt cùng món, thanh toán trùng, hủy sau xuất kho, trả một phần, trả nhiều lần, đơn đồng bộ trùng, webhook trùng/sai thứ tự, API ngoài lỗi, nhân viên không quyền, truy cập tenant khác. Phần lớn nhóm đồng bộ/webhook/tenant đã có test và đang đạt; nhóm trả hàng, thanh toán trùng và ca sẽ thêm mới. Không chạy thử nghiệm nào trên dữ liệu thật (erp.itso.vn).
 
 **Phân công giữa các luồng (để không làm trùng):** công nợ khi trả hàng → luồng Khách hàng; doanh thu/lãi lỗ khi trả hàng → luồng Tài chính; kiểm kê kho (stocktake) → luồng Sản phẩm, kho và nhập hàng; Woo hoàn tiền (B3) → luồng WooCommerce. Luồng này giữ: idempotency POS/tạo đơn/thu tiền, chặn trả hàng chưa xuất kho (B1), kiểm hàng trả trùng dòng (B2, khác với kiểm kê kho), ca bán hàng, quyền.
+
+## 11. Kết quả triển khai (cập nhật 04/11/2026)
+
+| Đợt | PR | Đã làm |
+|---|---|---|
+| 1 | #22 (đã merge) | B1 không trả được hàng chưa xuất kho; B2 chặn kiểm trùng dòng; chống gửi trùng (`Idempotency-Key`) cho tạo đơn, thu tiền, tạo phiếu trả; B5/B6 sửa quyền tạo phiếu trả và sửa đơn. |
+| 2 | #27 (đã merge) | Hoàn tiền từ phiếu trả (`POST returns/{id}/refund`, không hoàn vượt giá trị hàng trả sau chiết khấu); trạng thái hoàn tiền / trả hàng trên đơn. |
+| 3 | #27 (đã merge) | Bán tại quầy bắt buộc mở ca (cài đặt `sales.pos_require_shift`, mặc định bật; đơn tạo ở màn Tạo đơn không bị ảnh hưởng); đơn và phiếu thu gắn ca (`cash_shift_id`); hủy phiếu thu của ca đã đóng cần quyền quản lý ca; quản lý mở lại ca gần nhất có lý do; nộp/rút tiền trong ca hiện trong Thu chi; POS chia nhiều hình thức thanh toán. |
+| 4 | #30 | M5 chặn sửa đè khi hai người sửa cùng đơn; M7 quyền riêng `orders.cancel`, `orders.payment.void` (vai trò cũ được cấp sẵn); M9 "Hủy hóa đơn" đơn đã hoàn tất (trả toàn bộ hàng về kho, hoàn tiền theo đúng hình thức, lưu thành phiếu trả, không xóa gì); PA1 thuế GTGT bán hàng theo Cấu hình (lưu theo đơn, làm tròn đến đồng, đơn cũ = 0). |
+| 5 | #30 | M4/U4 lọc theo kho xuất; PA13 tìm đơn theo SĐT người nhận (chỉ mục băm, số vẫn mã hóa); M6 quyền `orders.view.all` (không có thì chỉ xem đơn mình tạo/được giao, vai trò cũ được cấp sẵn); M12 lệnh `ecso:orders:verify-money` (chỉ đọc, chạy 02:45 hằng ngày); PA5 lịch sử sửa đơn chi tiết; PA2 chọn địa chỉ từ sổ địa chỉ khách; B10 hủy phiếu thu bằng hộp thoại thay `window.prompt`. |
+
+Đã giao cho luồng khác (không làm trùng): B3 Woo 'refunded' (luồng WooCommerce), B4 trả hàng giảm công nợ (luồng Khách hàng) và doanh thu/lãi lỗ (luồng Tài chính), kiểm kê (luồng Sản phẩm/Kho).
+
+Chưa làm, đề xuất làm sau: M3 đơn nháp (cần trạng thái mới, ảnh hưởng nhiều báo cáo), M11 phiếu giao hàng cho shipper, PA10 hàng hỏng khi kiểm trả vào kho lỗi (thuộc luồng Kho), U3 giỏ hàng dạng ngăn kéo trên điện thoại.
+
+Migration mới (đều chỉ thêm cột/bảng/quyền, có rollback): `idempotency_keys`, `order_payments.order_return_id`, `orders.cash_shift_id` + `order_payments.cash_shift_id`, quyền `orders.cancel`/`orders.payment.void`, `orders.tax_rate`/`prices_include_tax`/`tax_amount`, `orders.buyer_phone_hash` (điền sẵn cho đơn cũ), quyền `orders.view.all`.

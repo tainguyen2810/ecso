@@ -42,6 +42,7 @@ const data = ref<any>(null);
 const error = ref<string | null>(null);
 const loading = ref(false);
 
+const completedBasis = computed(() => ['orders', 'sales-lines'].includes(report.value.key) && route.query.basis === 'completed');
 function params(): Record<string, string | undefined> {
     const r = report.value;
     return {
@@ -49,6 +50,8 @@ function params(): Record<string, string | undefined> {
         warehouse: r.warehouse ? warehouse.value || undefined : undefined,
         channel: r.channel ? channel.value || undefined : undefined,
         q: r.search ? q.value || undefined : undefined,
+        // Opened from a day of the sales dashboard: the orders whose revenue was recognised that day.
+        basis: completedBasis.value ? 'completed' : undefined,
         ...(r.period === 'range' ? range.value : {}),
         ...(r.period === 'date' ? { date: date.value } : {}),
     };
@@ -80,7 +83,12 @@ watch(q, () => {
     timer = setTimeout(load, 300);
 });
 
-const columns = computed<Column[]>(() => (data.value ? report.value.columns(data.value, tab.value) : []));
+// Without "xem giá vốn & lợi nhuận" the server leaves cost and profit out (profit_hidden): drop their columns and cards.
+const PROFIT_KEYS = ['cogs', 'gross_profit', 'margin'];
+const columns = computed<Column[]>(() =>
+    data.value ? report.value.columns(data.value, tab.value).filter((c) => !(data.value.profit_hidden && PROFIT_KEYS.includes(c.key))) : [],
+);
+const kpis = computed(() => (data.value && report.value.kpis ? report.value.kpis(data.value).filter((k) => k.value !== undefined) : []));
 const rows = computed<any[]>(() => (data.value ? (report.value.rows?.(data.value) ?? data.value.rows) : []));
 const hasTotals = computed(() => columns.value.some((c) => c.total));
 
@@ -182,13 +190,15 @@ async function exportCsv() {
         </label>
     </PageHeader>
 
-    <div v-if="data && report.kpis" class="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="report-kpis">
-        <KpiCard v-for="k in report.kpis(data)" :key="k.label" :label="k.label" :value="show(k.type, k.value)">
+    <div v-if="kpis.length" class="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="report-kpis">
+        <KpiCard v-for="k in kpis" :key="k.label" :label="k.label" :value="show(k.type, k.value)">
             <template v-if="k.hint">{{ k.hint }}</template>
         </KpiCard>
     </div>
     <p v-if="report.note" class="mb-4 flex items-start gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-        <Info class="mt-0.5 size-3.5 shrink-0" /><span>{{ report.note }}</span>
+        <Info class="mt-0.5 size-3.5 shrink-0" />
+        <span v-if="data?.basis === 'completed'" data-testid="report-basis-completed">Đơn đã ghi nhận doanh thu trong kỳ (đơn sàn khi sàn báo hoàn thành, kênh riêng khi giao xong), giống biểu đồ ở Báo cáo bán hàng.</span>
+        <span v-else>{{ report.note }}</span>
     </p>
 
     <Alert v-if="data?.truncated" tone="amber" :icon="TriangleAlert" class="mb-4" data-testid="report-truncated">

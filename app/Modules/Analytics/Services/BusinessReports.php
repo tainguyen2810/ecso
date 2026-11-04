@@ -2,7 +2,9 @@
 
 namespace App\Modules\Analytics\Services;
 
+use App\Modules\Analytics\Support\RevenuePolicy;
 use App\Modules\Analytics\Support\Search;
+use App\Modules\Inventory\Services\CostHistory;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Tenancy\Support\TenantContext;
@@ -53,11 +55,11 @@ class BusinessReports
             ->groupBy('order_id')
             ->selectRaw('order_id, SUM(COALESCE(cost_snapshot, 0) * quantity) as cogs, SUM(CASE WHEN cost_snapshot IS NULL AND mapping_status <> \'service\' THEN 1 ELSE 0 END) as missing, SUM(quantity) as units');
 
-        $base = DB::table('orders')
+        // Orders whose revenue is recognised in the period (RevenuePolicy: marketplaces at completion, own channels at
+        // delivery), the same orders as Tài chính and Lãi lỗ. Their goods have shipped, so their cost is captured.
+        $base = RevenuePolicy::recognized(DB::table('orders')
             ->leftJoinSub($costs, 'c', 'c.order_id', '=', 'orders.id')
-            ->where('orders.tenant_id', $this->tenant())
-            ->whereBetween('orders.placed_at', [$from, $to])
-            ->whereNotIn('orders.status', self::EXCLUDED);
+            ->where('orders.tenant_id', $this->tenant()), 'orders', $from, $to);
 
         $metrics = 'COUNT(*) as orders, COALESCE(SUM(c.units), 0) as units, COALESCE(SUM(orders.total), 0) as revenue, '
             .'COALESCE(SUM(orders.subtotal - orders.discount), 0) as goods, COALESCE(SUM(orders.shipping_fee), 0) as shipping, COALESCE(SUM(c.cogs), 0) as cogs, COALESCE(SUM(c.missing), 0) as missing';
@@ -85,8 +87,8 @@ class BusinessReports
                 ->selectRaw("COALESCE(warehouses.name, 'Chưa gán kho') as label, NULL as kind, {$metrics}")
                 ->orderByDesc('revenue')->get(),
             default => (clone $base)
-                ->groupByRaw(ReportRange::day('orders.placed_at', $from))
-                ->selectRaw(ReportRange::day('orders.placed_at', $from)." as label, NULL as kind, {$metrics}")
+                ->groupByRaw(ReportRange::day(RevenuePolicy::dateSql('orders'), $from))
+                ->selectRaw(ReportRange::day(RevenuePolicy::dateSql('orders'), $from)." as label, NULL as kind, {$metrics}")
                 ->orderBy('label')->get(),
         };
 
@@ -97,21 +99,25 @@ class BusinessReports
         $totals = $this->salesRow((clone $base)->selectRaw("'total' as label, NULL as kind, {$metrics}")->first());
         $cancelled = DB::table('orders')->where('tenant_id', $this->tenant())->whereBetween('placed_at', [$from, $to])
             ->whereIn('status', self::EXCLUDED)->selectRaw('COUNT(*) as n, COALESCE(SUM(total), 0) as total')->first();
+        // Marketplace orders delivered in the period that the marketplace has not completed yet: not revenue yet.
+        $awaiting = RevenuePolicy::awaitingCompletion(DB::table('orders')->where('orders.tenant_id', $this->tenant()), 'orders', $from, $to)
+            ->selectRaw('COUNT(*) as n, COALESCE(SUM(orders.subtotal - orders.discount), 0) as goods')->first();
 
         return [
             'range' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
             'by' => $by,
             'rows' => $rows,
-            // Which date puts an order in the period: 'placed' (ngày đặt). Labels on the pages follow it.
-            'basis' => 'placed',
-            'totals' => [...$totals, 'basis' => 'placed'],
+            // Which date puts an order in the period: 'completed' (ngày ghi nhận doanh thu, RevenuePolicy).
+            'basis' => 'completed',
+            'totals' => [...$totals, 'basis' => 'completed'],
             'excluded' => ['orders' => (int) $cancelled->n, 'revenue' => (float) $cancelled->total],
+            'awaiting' => ['orders' => (int) $awaiting->n, 'goods' => round((float) $awaiting->goods, 2)],
         ];
     }
 
     /**
      * Stock in-out-balance per SKU for the range: opening, each kind of goods in and out, closing, and the closing
-     * value at the current weighted average cost.
+     * value at the weighted average cost of the end date.
      *
      * @return array<string, mixed>
      */
@@ -142,9 +148,11 @@ class BusinessReports
             ->when($warehouseId, fn ($w) => $w->where('m.warehouse_id', $warehouseId))
             ->when($q, fn ($w) => $w->where(fn ($s) => $s->where('v.sku', 'like', Search::contains($q))->orWhere('p.name', 'like', Search::contains($q))))
             ->groupBy('m.product_variant_id', 'v.ulid', 'v.sku', 'v.name', 'p.name', 'v.cost_price')
-            ->selectRaw('v.ulid, v.sku, v.name as variant_name, p.name as product_name, v.cost_price, '.implode(', ', $sums), $bindings)
+            ->selectRaw('m.product_variant_id as vid, v.ulid, v.sku, v.name as variant_name, p.name as product_name, v.cost_price, '.implode(', ', $sums), $bindings)
             ->orderBy('v.sku')
             ->get();
+        // Closing value at the cost of the end date, not today's.
+        $costs = app(CostHistory::class)->at($this->tenant(), $to, $rows->pluck('vid')->map(fn ($id) => (int) $id)->all(), $rows->pluck('cost_price', 'vid')->all());
 
         $out = [];
         $totals = array_fill_keys(['opening', 'in', 'out', 'closing', 'closing_value', ...array_keys(self::STOCK_COLUMNS)], 0.0);
@@ -175,8 +183,8 @@ class BusinessReports
                 'in' => $in,
                 'out' => $outQty,
                 'closing' => $closing,
-                'unit_cost' => round((float) $r->cost_price, 2),
-                'closing_value' => round($closing * (float) $r->cost_price, 2),
+                'unit_cost' => round($costs[(int) $r->vid] ?? (float) $r->cost_price, 2),
+                'closing_value' => round($closing * ($costs[(int) $r->vid] ?? (float) $r->cost_price), 2),
             ];
             foreach ($totals as $k => $v) {
                 $totals[$k] = $v + $row[$k];

@@ -57,6 +57,12 @@
 - **Phí ship khách trả tính riêng**: không nằm trong doanh thu thuần. Báo cáo lãi lỗ có dòng V riêng, vẫn được cộng vào lợi nhuận.
 - Quyền mới **`finance.profit`** (Xem giá vốn và lợi nhuận, xuất báo cáo tài chính). Mặc định có ở các vai trò Chủ, Quản trị, Quản lý vận hành và Kế toán. Vai trò tùy chỉnh đang có quyền `finance.view` được thêm quyền này để giữ nguyên quyền xem cũ. Người không có quyền này không thấy giá vốn và lãi trên trang Tài chính và Tổng quan báo cáo, và không mở được Báo cáo lãi lỗ.
 
+### Độ chính xác tồn kho, đợt A kiểm toán sản phẩm (2026-11-04)
+- **Kiểm hàng chốt số lúc đếm**: mỗi dòng đếm lưu `system_qty` (tồn hệ thống lúc đếm). Khi duyệt chỉ áp `số đếm − system_qty`, nên hàng bán ra hoặc nhập thêm giữa lúc đếm và lúc duyệt được giữ nguyên. Phiếu chờ duyệt hiện "Tồn lúc đếm", "Tồn hiện tại", "Sẽ áp dụng", "Tồn sau duyệt" và cảnh báo khi có nhập/xuất xen giữa. Phiếu cũ không có `system_qty` vẫn chạy như trước.
+- **Idempotency-Key** (dùng chung middleware `idempotent` của đợt an toàn đơn hàng): bật cho toàn bộ API Sản phẩm, Kho, Mua hàng. Gửi lại cùng khóa (bấm 2 lần, mạng gửi lại) trả lại kết quả lần đầu, không tạo phiếu thứ hai. Các form tạo phiếu nhập, kiểm, chuyển, điều chỉnh giá vốn, đơn nhập, nhận hàng, trả NCC, chi tiền NCC, tạo sản phẩm đều gửi khóa.
+- **Giá vốn trên mọi biến động kho**: `stock_movements.unit_cost` ghi giá vốn bình quân lúc xuất/điều chỉnh/chuyển, `avg_cost_after` ghi giá vốn sau biến động. Hàng hoàn nhập kho mang giá vốn lúc bán (`cost_snapshot`). Báo cáo tồn theo ngày và sổ kho nhập-xuất tính giá trị theo giá vốn của ngày đó (`CostHistory`), không theo giá hiện tại. Phương pháp bình quân gia quyền giữ nguyên.
+- Cảnh báo tồn đầu không có giá vốn ở form sản phẩm và khi nhập file (`zero_cost_rows`).
+
 ### Khách hàng, đợt A: công nợ thống nhất (2026-11-04)
 - **Một quy tắc công nợ dùng chung** (`App\Modules\Sales\Services\CustomerDebt`): trang khách, danh sách khách, sổ công nợ, báo cáo Công nợ phải thu, màn hình thu nợ ở Sổ quỹ và tóm tắt khách trong chi tiết đơn giờ cùng một con số. Nợ một đơn = tổng đơn − giá trị trả hàng đã duyệt − (đã thu − đã hoàn). Chỉ tính đơn kênh riêng; không tính đơn sàn, đơn COD, đơn hủy, đơn hoàn toàn bộ, đơn giao thất bại. Không lưu số cộng dồn nên đơn đồng bộ/sửa lại không bao giờ bị cộng nợ hai lần.
 - Trả hàng một phần (đã duyệt trở đi) giờ giảm công nợ. Sổ công nợ có thêm dòng **Trả hàng** và **Hoàn tiền**, mỗi dòng trỏ về đơn gốc.
