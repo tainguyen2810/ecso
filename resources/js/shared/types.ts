@@ -159,6 +159,10 @@ export interface DocumentLine {
     quantity: number;
     unit_cost?: string;
     mode?: 'delta' | 'count';
+    /** Count lines: system quantity seen when the SKU was counted. */
+    system_qty?: number;
+    /** Count lines not applied yet: stock now. */
+    on_hand_now?: number;
     on_hand_before?: number;
     applied_delta?: number;
     reason?: string;
@@ -182,6 +186,7 @@ export interface InventoryDocument {
     decided_by?: string | null;
     decided_at?: string | null;
     decision_note?: string | null;
+    counted_at?: string | null;
     dispatched_at?: string | null;
     received_at?: string | null;
     lines_count?: number;

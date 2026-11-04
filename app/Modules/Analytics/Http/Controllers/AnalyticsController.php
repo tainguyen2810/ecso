@@ -7,6 +7,7 @@ use App\Modules\Analytics\Services\BusinessReports;
 use App\Modules\Analytics\Services\FinanceDetails;
 use App\Modules\Analytics\Services\FinanceReport;
 use App\Modules\Analytics\Services\SalesReport;
+use App\Modules\Analytics\Support\ProfitFields;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Cashbook\Models\CashAccount;
 use App\Modules\Inventory\Models\Warehouse;
@@ -103,7 +104,7 @@ class AnalyticsController extends Controller
         [$from, $to] = $this->range($request);
         $by = $request->validate(['by' => ['nullable', Rule::in(['day', 'channel', 'staff', 'customer', 'warehouse'])]])['by'] ?? 'day';
 
-        return response()->json(['data' => $reports->sales($from, $to, $by)]);
+        return response()->json(['data' => ProfitFields::strip($reports->sales($from, $to, $by), $context->can('finance.profit'))]);
     }
 
     /** Stock in-out-balance per SKU (xuất nhập tồn). */
