@@ -11,8 +11,12 @@ use App\Modules\Orders\Events\OrderImported;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
 use App\Modules\Orders\Models\OrderStatusHistory;
+use App\Modules\Sales\Models\Customer;
+use App\Modules\Sales\Services\CustomerService;
+use App\Modules\Sales\Support\PhoneNumber;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Steps [4]–[6] of ORDER-LIFECYCLE §3: upsert the order from the marketplace snapshot under a row lock, record
@@ -31,22 +35,36 @@ class OrderIngestor
 
     public const IGNORED_TRANSITION = 'ignored_transition';
 
+    /** Created before the store's "orders since" moment: not synced (the seller chose to start from that moment). */
+    public const SKIPPED = 'skipped';
+
     public function __construct(
         private readonly StatusMapper $statuses,
         private readonly OrderStockSync $stock,
+        private readonly CustomerService $customers,
     ) {}
 
     /**
      * Must run inside the tenant context of $account.
      *
-     * @return array{result: string, order: Order}
+     * @return array{result: string, order: Order|null} order is null only when the result is SKIPPED
      */
     public function ingest(MarketplaceAccount $account, OrderData $data, string $source, ?int $webhookEventId = null, ?int $actorId = null): array
     {
         return DB::transaction(function () use ($account, $data, $source, $webhookEventId, $actorId) {
+            if ($this->beforeCutoff($account, $data) && ! Order::query()->where('marketplace_account_id', $account->id)
+                ->where('external_order_id', $data->externalOrderId)->exists()) {
+                return ['result' => self::SKIPPED, 'order' => null];
+            }
+
             $order = $this->lockOrCreate($account, $data);
             $isNew = $order->wasRecentlyCreated;
             $status = $this->statuses->map($account->marketplace, $data->rawStatus);
+            if ($status === OrderStatus::RETURNED && ($isNew || ! in_array($order->status, OrderStatus::SHIPPED, true))) {
+                // Refunded/returned before the goods ever left (e.g. Woo "refunded" on an unpacked order): it is a
+                // cancel, which gives the held stock back, not a return of goods that never shipped.
+                $status = OrderStatus::CANCELLED;
+            }
 
             if (! $isNew) {
                 if ($order->external_updated_at && $data->updatedAt->lessThan($order->external_updated_at)) {
@@ -161,7 +179,63 @@ class OrderIngestor
             'sync_warning' => $status === OrderStatus::UNKNOWN_STATUS ? "Trạng thái sàn chưa được ánh xạ: {$data->rawStatus}" : null,
             'raw' => $data->raw,
             'version' => ($order->version ?? 0) + 1,
-        ])->save();
+        ]);
+
+        if ($data->ownsCustomer) {
+            $this->fillStoreDetails($order, $data);
+        }
+        $order->save();
+    }
+
+    private function beforeCutoff(MarketplaceAccount $account, OrderData $data): bool
+    {
+        return $account->orders_since !== null && $data->placedAt !== null && $data->placedAt->lessThan($account->orders_since);
+    }
+
+    /**
+     * The seller's own store (WooCommerce): full contact, addresses, coupons, tax, fees, payment, and the customer
+     * card. Marketplaces never reach this (their buyers' data is not the seller's to keep).
+     */
+    private function fillStoreDetails(Order $order, OrderData $data): void
+    {
+        $order->forceFill([
+            'external_number' => $data->externalNumber,
+            'buyer_phone' => $data->buyerPhone,
+            'buyer_email' => $data->buyerEmail,
+            'addresses' => $data->addresses,
+            'external_customer_id' => $data->externalCustomerId,
+            'tax_total' => $data->taxTotal,
+            'fee_total' => $data->feeTotal,
+            'coupon_codes' => $data->couponCodes ?: null,
+            'transaction_id' => $data->transactionId,
+        ]);
+        if ($data->refundedTotal !== null) {
+            $order->refunded_amount = $data->refundedTotal;
+        }
+        // The store only proves "paid" (online payment); it never proves "not paid yet" for money ECSO recorded.
+        if ($data->paymentStatus === Order::PAYMENT_PAID) {
+            $order->forceFill(['payment_status' => Order::PAYMENT_PAID, 'paid_amount' => $data->total]);
+        } elseif ($order->payment_status === null) {
+            $order->payment_status = Order::PAYMENT_UNPAID;
+        }
+
+        $phone = PhoneNumber::normalize($data->buyerPhone);
+        if ($order->customer_id === null && $phone !== null && PhoneNumber::isValid($phone)) {
+            $order->customer_id = $this->customer($data)?->id;
+        }
+    }
+
+    /** Finds the customer by phone or creates one; two orders of a new buyer at once both end on the same card. */
+    private function customer(OrderData $data): ?Customer
+    {
+        $fields = ['name' => mb_substr($data->buyerName ?? 'Khách website', 0, 150), 'phone' => $data->buyerPhone, 'email' => $data->buyerEmail, 'address' => $data->shippingAddress];
+        try {
+            return $this->customers->findOrCreate($fields);
+        } catch (UniqueConstraintViolationException) {
+            return $this->customers->findByPhone($data->buyerPhone);
+        } catch (ValidationException) {
+            return null; // a phone that is not a valid number: the order keeps it, no customer card is made
+        }
     }
 
     /**
@@ -185,6 +259,7 @@ class OrderIngestor
                 'quantity' => $item->exists ? $item->quantity : $data->quantity, // quantity changes need a partial-cancel flow (not in MVP)
                 'unit_price' => $data->unitPrice,
                 'discount' => $data->discount,
+                'tax' => $data->tax,
             ]);
 
             // The internal SKU is fixed once set, because stock may already be held against it.

@@ -87,6 +87,7 @@ class OrderController extends Controller
                 'quantity' => $i->quantity,
                 'unit_price' => $i->unit_price,
                 'discount' => $i->discount,
+                'tax' => $i->tax,
                 'mapping_status' => $i->mapping_status,
                 'listing_id' => $i->listingVariant?->ulid,
                 'variant' => $i->variant ? ['id' => $i->variant->ulid, 'sku' => $i->variant->sku, 'name' => $i->variant->displayName()] : null,

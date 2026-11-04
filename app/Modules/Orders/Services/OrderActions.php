@@ -69,7 +69,7 @@ class OrderActions
         $result = $this->sync->syncOne($account, $order->external_order_id, 'user', null, Auth::id());
         $this->audit->record("order.{$action}", $order, ['order' => $order->external_order_id]);
 
-        return $result['order'];
+        return $result['order'] ?? $order;
     }
 
     /**

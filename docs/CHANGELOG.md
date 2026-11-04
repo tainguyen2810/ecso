@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+### Đồng bộ đơn WooCommerce, vòng A (2026-11-04)
+- Chỉ lấy đơn **tạo sau lúc bật đồng bộ đơn** (`marketplace_accounts.orders_since`). Đơn cũ hơn bị bỏ qua cả khi website gửi cập nhật, không giữ hàng. Tắt rồi bật lại đồng bộ đơn thì tính lại từ lúc bật. Không nhập đơn lịch sử.
+- Đơn website lưu đủ: số đơn website, SĐT và email đầy đủ, địa chỉ thanh toán/giao hàng (mã hóa), mã khách trên Woo, mã giảm giá, thuế (đơn và từng dòng), phí khác, mã giao dịch, số đã hoàn. Bản `raw` không còn chứa billing/shipping.
+- Trạng thái thanh toán: có ngày thanh toán và không phải COD thì là Đã thanh toán; đơn COD hoàn tất trên Woo không tự coi là đã thu tiền.
+- Đơn website gắn vào **khách hàng** theo SĐT (tạo thẻ khách nếu chưa có). SĐT không hợp lệ thì đơn vẫn vào, không gắn khách. Đơn sàn vẫn che thông tin người mua như cũ.
+- Công nợ khách chỉ tính đơn bán tay; đơn website/sàn đã thanh toán qua kênh nên không thành nợ.
+- **Nhật ký đồng bộ** (`sync_runs`): mỗi lượt đối soát ghi kết quả (OK / Một phần / Lỗi), số đơn tạo/cập nhật/lỗi. Một đơn website trả lỗi không chặn đơn khác và không đẩy mốc đồng bộ lên.
+- Sửa: đơn Woo chuyển "Đã hoàn tiền" (refunded) trước khi giao thì thành Đã hủy và nhả hàng giữ, không trừ kho. Đơn đã giao rồi mới hoàn thì mở phiếu trả hàng; kho chỉ cộng lại khi nhận và kiểm hàng.
+- Sửa: Enter trong ô tìm SKU khi quét hai mã liên tiếp nhanh hơn kết quả tìm kiếm không còn bỏ sót mã đầu.
+- Migration `2026_11_12_100000_add_woo_order_details`. Chỉ thử với cửa hàng Woo giả lập trong test, chưa thử với website thật.
+
 ### Phí sàn và giá sàn, đợt 3 (2026-11-04)
 - **Bảng phí sàn** cho từng gian hàng (Cấu hình → Thuế và chính sách giá), gồm hoa hồng %, thanh toán %, dịch vụ %, phí cố định mỗi đơn, làm tròn lên và lãi tối thiểu trên giá vốn. Có thể đặt hoa hồng riêng theo danh mục. Khi chưa lưu thì bảng hiện số tham khảo (`config/marketplaces.php`, `pricing.reference_fees`), cần kiểm tra lại theo hợp đồng.
 - Công thức giá sàn: (giá gốc + phí cố định) ÷ (1 − tổng % phí), làm tròn lên. Giá không được thấp hơn mức để còn giá vốn + lãi tối thiểu sau phí. Website WooCommerce vẫn bán theo giá gốc, không cộng phí sàn.

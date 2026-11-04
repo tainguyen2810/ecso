@@ -10,6 +10,8 @@ final class OrderData
     /**
      * @param  array<int, OrderItemData>  $items
      * @param  array<string, mixed>  $raw
+     * @param  array{billing?: array<string, string>, shipping?: array<string, string>}|null  $addresses
+     * @param  list<string>  $couponCodes
      */
     public function __construct(
         public readonly string $externalOrderId,
@@ -34,5 +36,19 @@ final class OrderData
         public readonly ?string $buyerNote = null,
         public readonly ?string $cancelReason = null,
         public readonly array $raw = [],
+        // The fields below are filled by connectors of the seller's own stores (WooCommerce), where the seller owns
+        // the customer data; marketplaces leave them empty and only the masked phone is kept.
+        public readonly ?string $externalNumber = null,
+        public readonly ?string $buyerEmail = null,
+        public readonly ?array $addresses = null,
+        public readonly ?string $externalCustomerId = null,
+        public readonly string $taxTotal = '0',
+        public readonly string $feeTotal = '0',
+        public readonly array $couponCodes = [],
+        public readonly ?string $transactionId = null,
+        public readonly ?string $refundedTotal = null,
+        /** Payment status from the store's data (paid online, or null when it cannot be known, e.g. COD). */
+        public readonly ?string $paymentStatus = null,
+        public readonly bool $ownsCustomer = false,
     ) {}
 }

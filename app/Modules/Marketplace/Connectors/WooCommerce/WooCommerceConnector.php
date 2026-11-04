@@ -21,6 +21,7 @@ use App\Modules\Marketplace\Exceptions\UnsupportedCapability;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Models\MarketplaceCredential;
 use App\Modules\Orders\Domain\OrderStatus;
+use App\Modules\Orders\Models\Order;
 use Carbon\CarbonImmutable;
 
 /**
@@ -145,7 +146,9 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
     public function listOrders(MarketplaceAccount $account, CarbonImmutable $from, CarbonImmutable $to, ?string $cursor = null): OrderPage
     {
         $page = max(1, (int) ($cursor ?? 1));
-        $response = WooClient::forAccount($account)->send('GET', 'orders', [
+        $response = WooClient::forAccount($account)->send('GET', 'orders', array_filter([
+            // Orders created before order sync was turned on are not wanted at all (ECSO skips them anyway).
+            'after' => $account->orders_since?->utc()->format('Y-m-d\TH:i:s'),
             'modified_after' => $from->utc()->format('Y-m-d\TH:i:s'),
             'modified_before' => $to->utc()->format('Y-m-d\TH:i:s'),
             'dates_are_gmt' => 'true',
@@ -155,7 +158,7 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
             'orderby' => 'id',
             'order' => 'asc',
             '_fields' => 'id',
-        ]);
+        ], fn ($v) => $v !== null));
         $ids = array_map(fn ($o) => (string) $o['id'], (array) $response->json());
         $pages = (int) $response->header('X-WP-TotalPages');
 
@@ -213,6 +216,7 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
                 quantity: $qty,
                 unitPrice: number_format($lineSubtotal / $qty, 2, '.', ''),
                 discount: number_format(max(0, $lineSubtotal - $lineTotal), 2, '.', ''),
+                tax: number_format((float) ($line['total_tax'] ?? 0), 2, '.', ''),
             );
         }
 
@@ -224,27 +228,60 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
         $addressLine = implode(', ', array_filter([$address['address_1'] ?? null, $address['address_2'] ?? null, $address['city'] ?? null, $address['state'] ?? null]));
         $carrier = collect($o['shipping_lines'] ?? [])->pluck('method_title')->filter()->implode(', ');
 
+        $isCod = ($o['payment_method'] ?? null) === 'cod';
+        $paidAt = $date($o['date_paid_gmt'] ?? null);
+        $money = fn ($v) => number_format((float) $v, 2, '.', '');
+        $refunded = array_sum(array_map(fn ($r) => abs((float) ($r['total'] ?? 0)), (array) ($o['refunds'] ?? [])));
+        $email = trim((string) ($billing['email'] ?? ''));
+
         return new OrderData(
             externalOrderId: (string) $o['id'],
             rawStatus: $raw,
             updatedAt: $date($o['date_modified_gmt'] ?? null) ?? CarbonImmutable::now(),
             items: $items,
             placedAt: $date($o['date_created_gmt'] ?? null),
-            paidAt: $date($o['date_paid_gmt'] ?? null),
+            paidAt: $paidAt,
             paymentMethod: filled($o['payment_method_title'] ?? null) ? (string) $o['payment_method_title'] : ($o['payment_method'] ?? null),
-            isCod: ($o['payment_method'] ?? null) === 'cod',
+            isCod: $isCod,
             currency: (string) ($o['currency'] ?? 'VND'),
-            subtotal: number_format($subtotal, 2, '.', ''),
-            shippingFee: number_format((float) ($o['shipping_total'] ?? 0), 2, '.', ''),
-            discount: number_format((float) ($o['discount_total'] ?? 0), 2, '.', ''),
-            total: number_format((float) ($o['total'] ?? 0), 2, '.', ''),
+            subtotal: $money($subtotal),
+            shippingFee: $money($o['shipping_total'] ?? 0),
+            discount: $money($o['discount_total'] ?? 0),
+            total: $money($o['total'] ?? 0),
             buyerName: $name !== '' ? $name : null,
             buyerPhone: filled($phone) ? (string) $phone : null,
             shippingAddress: $addressLine !== '' ? $addressLine : null,
             carrier: $carrier !== '' ? $carrier : null,
             buyerNote: filled($o['customer_note'] ?? null) ? (string) $o['customer_note'] : null,
-            raw: array_intersect_key($o, array_flip(['id', 'number', 'status', 'payment_method', 'customer_id', 'date_modified_gmt'])),
+            // Billing and shipping are kept encrypted in their own column, not in the plain raw copy.
+            raw: array_diff_key($o, array_flip(['billing', 'shipping', 'meta_data', '_links'])),
+            externalNumber: filled($o['number'] ?? null) ? mb_substr((string) $o['number'], 0, 40) : null,
+            buyerEmail: $email !== '' ? mb_substr($email, 0, 150) : null,
+            addresses: ['billing' => self::address($billing), 'shipping' => self::address($shipping)],
+            externalCustomerId: ! empty($o['customer_id']) ? (string) $o['customer_id'] : null,
+            taxTotal: $money($o['total_tax'] ?? 0),
+            feeTotal: $money(array_sum(array_map(fn ($f) => (float) ($f['total'] ?? 0), (array) ($o['fee_lines'] ?? [])))),
+            couponCodes: array_values(array_filter(array_map(fn ($c) => (string) ($c['code'] ?? ''), (array) ($o['coupon_lines'] ?? [])))),
+            transactionId: filled($o['transaction_id'] ?? null) ? mb_substr((string) $o['transaction_id'], 0, 100) : null,
+            refundedTotal: $money($refunded),
+            // Paid online = Woo recorded a payment date. COD: Woo sets that date when the order is completed, which
+            // does not prove the carrier has paid the shop, so ECSO does not mark it paid.
+            paymentStatus: $paidAt !== null && ! $isCod ? Order::PAYMENT_PAID : Order::PAYMENT_UNPAID,
+            ownsCustomer: true,
         );
+    }
+
+    /**
+     * The non-empty fields of a Woo billing/shipping address.
+     *
+     * @param  array<string, mixed>  $a
+     * @return array<string, string>
+     */
+    private static function address(array $a): array
+    {
+        $keys = ['first_name', 'last_name', 'company', 'address_1', 'address_2', 'city', 'state', 'postcode', 'country', 'phone', 'email'];
+
+        return array_filter(array_map(fn ($k) => trim((string) ($a[$k] ?? '')), array_combine($keys, $keys)), fn ($v) => $v !== '');
     }
 
     /** @param  array<string, mixed>  $line */

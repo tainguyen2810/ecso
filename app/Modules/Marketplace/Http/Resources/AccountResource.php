@@ -23,6 +23,7 @@ class AccountResource extends JsonResource
             'settings' => array_merge(MarketplaceAccount::SYNC_DEFAULTS, array_intersect_key((array) $this->settings, MarketplaceAccount::SYNC_DEFAULTS)),
             'warehouse' => $this->warehouse ? ['id' => $this->warehouse->ulid, 'code' => $this->warehouse->code, 'name' => $this->warehouse->name] : null,
             'connected_at' => $this->connected_at?->toIso8601String(),
+            'orders_since' => $this->orders_since?->toIso8601String(),
             'last_synced_at' => $this->last_synced_at?->toIso8601String(),
             'last_error' => $this->last_error,
             'circuit_open' => $this->circuitOpen(),

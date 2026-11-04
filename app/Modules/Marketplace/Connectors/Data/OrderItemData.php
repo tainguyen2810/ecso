@@ -14,5 +14,6 @@ final class OrderItemData
         public readonly int $quantity,
         public readonly string $unitPrice,
         public readonly string $discount = '0',
+        public readonly string $tax = '0',
     ) {}
 }

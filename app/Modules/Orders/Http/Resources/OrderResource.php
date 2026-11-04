@@ -36,8 +36,15 @@ class OrderResource extends JsonResource
             'discount' => $this->discount,
             'total' => $this->total,
             'buyer_name' => $this->buyer_name,
-            // Manual orders: the seller entered the phone and needs it for delivery; marketplace orders: masked only.
-            'buyer_phone' => $this->isManual() ? $this->buyer_phone : $this->buyer_phone_masked,
+            // Manual and own-website orders: the seller's own customer, full phone; marketplace orders: masked only.
+            'buyer_phone' => $this->ownsCustomerData() ? ($this->buyer_phone ?? $this->buyer_phone_masked) : $this->buyer_phone_masked,
+            'buyer_email' => $this->when($this->ownsCustomerData(), fn () => $this->buyer_email),
+            'addresses' => $this->when($this->ownsCustomerData(), fn () => $this->addresses),
+            'external_number' => $this->external_number,
+            'tax_total' => $this->tax_total,
+            'fee_total' => $this->fee_total,
+            'coupon_codes' => $this->coupon_codes ?? [],
+            'transaction_id' => $this->transaction_id,
             'shipping_address' => $this->shipping_address,
             'carrier' => $this->shipping_carrier,
             'tracking_number' => $this->tracking_number,

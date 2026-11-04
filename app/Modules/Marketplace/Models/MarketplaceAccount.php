@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $base_url
  * @property array<string, mixed>|null $settings per-store sync switches, auth mode, webhook ids
  * @property Carbon|null $connected_at
+ * @property Carbon|null $orders_since order sync starts here: orders created earlier are never taken in
  * @property Carbon|null $last_synced_at
  * @property Carbon|null $circuit_open_until
  * @property-read int|string|null $listings_total  aggregates of the shop list
@@ -47,6 +48,7 @@ class MarketplaceAccount extends Model
             'sync_enabled' => 'boolean',
             'settings' => 'array',
             'connected_at' => 'datetime',
+            'orders_since' => 'datetime',
             'last_synced_at' => 'datetime',
             'circuit_open_until' => 'datetime',
             'consecutive_failures' => 'integer',

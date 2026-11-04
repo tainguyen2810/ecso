@@ -200,6 +200,8 @@ class WooCommerceConnectService
                 'consecutive_failures' => 0,
                 'circuit_open_until' => null,
                 'connected_at' => now(),
+                // Orders are synced from the moment the store is first connected; older ones are left on the store.
+                'orders_since' => $account->orders_since ?? now(),
             ])->save();
 
             MarketplaceCredential::query()->updateOrCreate(['marketplace_account_id' => $account->id], [

@@ -21,7 +21,8 @@ class CustomerLedger
      */
     public function entries(Customer $customer): array
     {
-        $orders = Order::query()->where('customer_id', $customer->id)
+        // The debt book counts orders sold in ECSO only; channel orders (website, marketplaces) are paid there.
+        $orders = Order::query()->where('customer_id', $customer->id)->where('marketplace', Order::SOURCE_MANUAL)
             ->whereNotIn('status', [OrderStatus::CANCELLED, OrderStatus::RETURNED])
             ->get(['id', 'ulid', 'external_order_id', 'total', 'placed_at', 'created_at']);
         $byId = $orders->keyBy('id');

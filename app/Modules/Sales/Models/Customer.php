@@ -68,7 +68,9 @@ class Customer extends Model
         return $query->select('customers.*')
             ->selectSub($base('COUNT(*)'), 'orders_count')
             ->selectSub($base('COALESCE(SUM(total), 0)'), 'total_spent')
-            ->selectSub($base('COALESCE(SUM(GREATEST(total - paid_amount, 0)), 0)'), 'debt')
+            // Debt = what the customer owes the shop, recorded through ECSO's own payments: only orders sold in
+            // ECSO. Orders from a channel (own website, marketplaces) are paid through that channel, not owed.
+            ->selectSub($base('COALESCE(SUM(GREATEST(total - paid_amount, 0)), 0)')->where('orders.marketplace', Order::SOURCE_MANUAL), 'debt')
             ->selectSub(Order::query()->selectRaw('MAX(placed_at)')->whereColumn('orders.customer_id', 'customers.id'), 'last_order_at');
     }
 
