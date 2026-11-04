@@ -18,6 +18,8 @@ import { cn, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useAuthStore } from '@/shared/stores/auth';
 import { useTenantStore } from '@/shared/stores/tenant';
+import { useSettingsStore } from '@/shared/stores/settings';
+import { enabledMethods } from '@/shared/lib/paymentMethods';
 import { channelTypes, paymentMethods } from './labels';
 import type { Customer, OrderDetail, OrderReturnData, SalesChannel, Variant, Warehouse } from '@/shared/types';
 
@@ -76,7 +78,13 @@ const form = reactive({
     deliver_on: '',
     pay_method: 'cash',
     pay_amount: '' as number | string,
+    placed_at: '',
 });
+// Cấu hình: default price list and payment method, who may change prices, back-dating a sale.
+const settings = useSettingsStore();
+const canEditPrice = computed(() => (settings.data?.pricing.staff_edit_price ?? true) || tenant.can('orders.price'));
+const canBackdate = computed(() => !editId.value && !!settings.data?.sales.allow_change_sale_time);
+const payOptions = computed(() => enabledMethods(Object.entries(paymentMethods).filter(([k]) => k !== 'cod').map(([value, label]) => ({ value, label })), settings.data));
 const saving = ref(false);
 const error = ref<ApiError | null>(null);
 
@@ -93,7 +101,11 @@ const activeWarehouses = computed(() => warehouses.value.filter((w) => w.status 
 onMounted(async () => {
     try {
         api.get('/orders/tags').then(({ data }) => (tagSuggestions.value = data.data)).catch(() => {});
-        const [c, w] = await Promise.all([api.get('/sales-channels'), api.get('/warehouses')]);
+        const [c, w, s] = await Promise.all([api.get('/sales-channels'), api.get('/warehouses'), settings.load()]);
+        if (!editId.value) {
+            priceTier.value = s.pricing.sale_price;
+            if (payOptions.value.some((o) => o.value === s.payments.default_online)) form.pay_method = s.payments.default_online;
+        }
         channels.value = c.data.data;
         warehouses.value = w.data.data;
         if (editId.value) {
@@ -432,7 +444,8 @@ async function submit() {
             await router.push(`/orders/${editId.value}`);
         } else {
             const payments = num(form.pay_amount) > 0 ? [{ method: form.pay_method, amount: num(form.pay_amount) }] : [];
-            const { data } = await api.post('/sales-orders', { ...body, channel_id: form.channel_id, stage: form.stage, payments, exchange_return_id: exchange.value?.id ?? null });
+            const placedAt = canBackdate.value && form.placed_at ? form.placed_at.replace('T', ' ') : null;
+            const { data } = await api.post('/sales-orders', { ...body, channel_id: form.channel_id, stage: form.stage, payments, exchange_return_id: exchange.value?.id ?? null, ...(placedAt ? { placed_at: placedAt } : {}) });
             toast.success(`Đã tạo đơn ${data.data.external_order_id}`);
             await router.push(`/orders/${data.data.id}`);
         }
@@ -568,6 +581,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
                             <Input id="o-deliver-on" v-model="form.deliver_on" type="date" data-testid="form-deliver-on" />
                         </div>
                     </template>
+                    <div v-if="canBackdate" class="grid grid-cols-[88px_1fr] items-center gap-2">
+                        <label for="o-placed-at" class="text-muted-foreground">Ngày bán</label>
+                        <Input id="o-placed-at" v-model="form.placed_at" type="datetime-local" :max="new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)" data-testid="form-placed-at" />
+                    </div>
+                    <p v-if="error?.field('placed_at')" class="text-xs text-destructive">{{ error.field('placed_at') }}</p>
                     <p v-if="error?.field('warehouse_id')" class="text-xs text-destructive">{{ error.field('warehouse_id') }}</p>
                 </div>
             </Card>
@@ -634,10 +652,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
                                 <input v-model="l.quantity" type="number" min="1" required :data-testid="`line-qty-${i}`" :class="cn('h-8 w-20 rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums', error?.field(`lines.${i}.quantity`) && 'border-destructive')" />
                             </td>
                             <td class="px-2 py-2.5 text-right">
-                                <input v-model="l.unit_price" type="number" min="0" step="any" required :data-testid="`line-price-${i}`" class="h-8 w-28 rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" />
+                                <input v-model="l.unit_price" type="number" min="0" step="any" required :disabled="!canEditPrice && l.kind === 'sku'" :title="canEditPrice ? undefined : 'Cấu hình không cho nhân viên sửa giá'" :data-testid="`line-price-${i}`" class="h-8 w-28 rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums disabled:bg-muted/50" />
                             </td>
                             <td v-if="view.columns.discount" class="px-2 py-2.5 text-right">
-                                <input v-model="l.discount" type="number" min="0" step="any" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" />
+                                <input v-model="l.discount" type="number" min="0" step="any" :disabled="!canEditPrice" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums disabled:bg-muted/50" />
                                 <p v-if="error?.field(`lines.${i}.discount`)" class="text-xs text-destructive">{{ error.field(`lines.${i}.discount`) }}</p>
                             </td>
                             <td class="whitespace-nowrap px-3 py-2.5 text-right font-semibold tabular-nums">{{ formatMoney(lineTotal(l)) }}</td>
@@ -670,7 +688,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
                     <dt>Tổng tiền ({{ totalQty }} sản phẩm)</dt>
                     <dd class="text-right tabular-nums">{{ formatMoney(subtotal) }}</dd>
                     <dt>Chiết khấu <kbd class="text-[10px] text-muted-foreground">F6</kbd></dt>
-                    <dd><input v-model="form.discount" type="number" min="0" class="h-8 w-full rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" data-testid="order-discount" /></dd>
+                    <dd><input v-model="form.discount" type="number" min="0" :disabled="!canEditPrice" class="h-8 w-full rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums disabled:bg-muted/50" data-testid="order-discount" /></dd>
                     <p v-if="error?.field('discount')" class="col-span-2 text-right text-xs text-destructive">{{ error.field('discount') }}</p>
                     <dt class="text-primary">Phí giao hàng <kbd class="text-[10px] text-muted-foreground">F7</kbd></dt>
                     <dd><input v-model="form.shipping_fee" type="number" min="0" class="h-8 w-full rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" data-testid="shipping-fee" /></dd>
@@ -685,7 +703,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
                         <div class="col-span-2 border-t" />
                         <dt class="flex items-center gap-2 font-semibold">
                             Khách đã trả
-                            <Select v-model="form.pay_method" class="h-8 w-32 text-xs font-normal" :options="Object.entries(paymentMethods).filter(([k]) => k !== 'cod').map(([value, label]) => ({ value, label }))" aria-label="Hình thức" />
+                            <Select v-model="form.pay_method" class="h-8 w-32 text-xs font-normal" :options="payOptions" aria-label="Hình thức" />
                         </dt>
                         <dd><input v-model="form.pay_amount" type="number" min="0" placeholder="0" class="h-8 w-full rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" data-testid="pay-amount" /></dd>
                         <dd class="col-span-2 -mt-1">

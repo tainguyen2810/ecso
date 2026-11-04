@@ -1,31 +1,47 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import Button from '@/shared/ui/Button.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
 import { cn } from '@/shared/lib/utils';
+import { useSettingsStore } from '@/shared/stores/settings';
 import { useTenantStore } from '@/shared/stores/tenant';
+import { useToast } from '@/shared/composables/useToast';
 import { defaultInvoiceSize, invoiceSizes, printInvoice, setDefaultInvoiceSize, type InvoiceSize } from './invoice';
+import { printShopFrom } from './printShop';
 import type { OrderDetail } from '@/shared/types';
 
-/** "Chọn thông tin bạn muốn in": pick a template (default from Cài đặt → Mẫu in), optionally make it the default. */
+/** "Chọn thông tin bạn muốn in": pick a template (default from Cấu hình → Mẫu in), optionally make it the default. */
 const props = defineProps<{ orders: OrderDetail[] }>();
 const open = defineModel<boolean>('open', { required: true });
 const tenant = useTenantStore();
+const settings = useSettingsStore();
+const toast = useToast();
 
-const size = ref<InvoiceSize>(defaultInvoiceSize(tenant.current?.id));
+const configured = computed(() => settings.data?.print.defaults.sale);
+const size = ref<InvoiceSize>(defaultInvoiceSize(tenant.current?.id, configured.value));
 const remember = ref(false);
-watch(open, (v) => v && ((size.value = defaultInvoiceSize(tenant.current?.id)), (remember.value = false)));
+watch(open, async (v) => {
+    if (!v) return;
+    remember.value = false;
+    await settings.load().catch(() => null);
+    size.value = defaultInvoiceSize(tenant.current?.id, configured.value);
+});
+const copies = computed(() => settings.data?.sales.invoice_copies ?? 1);
 
-function print() {
-    if (remember.value) setDefaultInvoiceSize(tenant.current?.id, size.value);
-    printInvoice(props.orders.length === 1 ? props.orders[0]! : props.orders, tenant.current?.name ?? '', size.value);
+async function print() {
+    if (remember.value) {
+        // The business-wide default lives in Cấu hình; without that right, only this browser remembers.
+        if (tenant.can('settings.manage')) await settings.save('print', { defaults: { sale: size.value } }).catch(() => toast.error('Không lưu được mẫu mặc định.'));
+        else setDefaultInvoiceSize(tenant.current?.id, size.value);
+    }
+    printInvoice(props.orders.length === 1 ? props.orders[0]! : props.orders, printShopFrom(settings.data, tenant.current?.name ?? ''), size.value);
     open.value = false;
 }
 </script>
 
 <template>
     <Dialog v-model:open="open" title="Chọn thông tin bạn muốn in" size="lg">
-        <p class="mb-3 text-sm"><span class="font-medium">Hóa đơn bán hàng</span> · {{ orders.length }} đơn</p>
+        <p class="mb-3 text-sm"><span class="font-medium">Hóa đơn bán hàng</span> · {{ orders.length }} đơn<span v-if="copies > 1"> · {{ copies }} liên mỗi đơn</span></p>
         <p class="mb-2 text-sm text-muted-foreground">Chọn mẫu in phiếu</p>
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-4" data-testid="print-sizes">
             <button

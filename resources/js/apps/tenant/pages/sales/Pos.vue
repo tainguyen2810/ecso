@@ -13,6 +13,8 @@ import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { paymentMethods } from '../orders/labels';
 import { printInvoice } from '../orders/invoice';
+import { printShopFrom } from '../orders/printShop';
+import { useSettingsStore } from '@/shared/stores/settings';
 import { addToCart, cartTotals, emptyCart, quickCash, type Cart } from './pos';
 import ShiftPanel from './ShiftPanel.vue';
 import type { CashShift, Customer, OrderDetail, SalesChannel, Variant, Warehouse } from '@/shared/types';
@@ -20,6 +22,10 @@ import type { CashShift, Customer, OrderDetail, SalesChannel, Variant, Warehouse
 const STORAGE_KEY = 'ecso.pos.carts';
 const toast = useToast();
 const tenant = useTenantStore();
+const settings = useSettingsStore();
+// Cấu hình: methods offered at the counter, and whether staff may change prices.
+const posMethods = computed(() => (['cash', 'bank_transfer', 'card', 'ewallet'] as const).filter((m) => settings.data?.payments.methods[m] ?? true));
+const canEditPrice = computed(() => (settings.data?.pricing.staff_edit_price ?? true) || tenant.can('orders.price'));
 
 const channels = ref<SalesChannel[]>([]);
 const warehouses = ref<Warehouse[]>([]);
@@ -44,6 +50,13 @@ const suggestedOpening = ref('0');
 const shiftOpen = ref(false);
 const shiftLoaded = ref(false);
 
+function freshCart(no: number): Cart {
+    const c = emptyCart(no);
+    const m = settings.data?.payments.default_pos;
+    if (m && posMethods.value.includes(m as never)) c.method = m as Cart['method'];
+    return c;
+}
+
 const methodIcons = { cash: Banknote, bank_transfer: QrCode, card: CreditCard, ewallet: Wallet } as const;
 
 function persist() {
@@ -62,7 +75,10 @@ onMounted(async () => {
     } catch {
         /* ignore */
     }
-    const [c, w] = await Promise.all([api.get('/sales-channels'), api.get('/warehouses')]);
+    const [c, w, s] = await Promise.all([api.get('/sales-channels'), api.get('/warehouses'), settings.load()]);
+    autoPrint.value = s.sales.pos_auto_print;
+    // Empty carts start on the counter's default method.
+    carts.value.forEach((ct) => !ct.lines.length && posMethods.value.includes(s.payments.default_pos as never) && (ct.method = s.payments.default_pos as Cart['method']));
     channels.value = (c.data.data as SalesChannel[]).filter((ch) => ch.is_active);
     warehouses.value = w.data.data;
     const pos = channels.value.find((ch) => ch.type === 'pos') ?? channels.value[0];
@@ -141,14 +157,14 @@ function pickCustomer(c: Customer) {
 }
 
 function newCart() {
-    carts.value.push(emptyCart(Math.max(...carts.value.map((c) => c.no)) + 1));
+    carts.value.push(freshCart(Math.max(...carts.value.map((c) => c.no)) + 1));
     active.value = carts.value.length - 1;
     focusSearch();
 }
 
 function closeCart(i: number) {
     carts.value.splice(i, 1);
-    if (!carts.value.length) carts.value.push(emptyCart(1));
+    if (!carts.value.length) carts.value.push(freshCart(1));
     active.value = Math.min(active.value, carts.value.length - 1);
 }
 
@@ -162,6 +178,10 @@ async function pay() {
         error.value = 'Chưa mở ca. Mở ca và đếm tiền đầu ca trước khi bán.';
         closedShift.value = null;
         shiftOpen.value = true;
+        return;
+    }
+    if (settings.data?.sales.pos_require_cash && cart.value.method === 'cash' && cart.value.received === '' && totals.value.total > 0) {
+        error.value = 'Nhập số tiền khách đưa trước khi thanh toán.';
         return;
     }
     if (shortfall.value > 0 && !cart.value.customer) {
@@ -184,9 +204,9 @@ async function pay() {
         toast.success(`Đã bán ${data.data.external_order_id}${change.value > 0 ? ` · trả lại khách ${formatMoney(change.value)}` : ''}`);
         if (autoPrint.value) {
             const detail = await api.get(`/orders/${data.data.id}`);
-            printInvoice(detail.data.data as OrderDetail, tenant.current?.name ?? '', 'k80');
+            printInvoice(detail.data.data as OrderDetail, printShopFrom(settings.data, tenant.current?.name ?? ''), 'k80');
         }
-        carts.value[active.value] = emptyCart(cart.value.no);
+        carts.value[active.value] = freshCart(cart.value.no);
         await runSearch();
         focusSearch();
     } catch (e) {
@@ -317,7 +337,7 @@ const quick = computed(() => quickCash(totals.value.total));
                                 <button type="button" class="px-2 py-1" @click="l.quantity++"><Plus class="size-3.5" /></button>
                             </div>
                             <span class="text-xs text-muted-foreground">×</span>
-                            <input v-model.number="l.unit_price" type="number" min="0" class="h-7 w-24 rounded-md border bg-card px-2 text-right text-sm tabular-nums" />
+                            <input v-model.number="l.unit_price" type="number" min="0" :disabled="!canEditPrice" :title="canEditPrice ? undefined : 'Cấu hình không cho nhân viên sửa giá'" class="h-7 w-24 rounded-md border bg-card px-2 text-right text-sm tabular-nums disabled:bg-muted/50" />
                             <span class="ml-auto text-sm font-medium tabular-nums">{{ formatNumber(l.quantity * l.unit_price - l.discount) }}</span>
                         </div>
                         <p v-if="stockOf(l.variant_id) !== undefined && l.quantity > stockOf(l.variant_id)!" class="mt-1 text-xs text-destructive">Vượt tồn khả dụng ({{ stockOf(l.variant_id) }})</p>
@@ -327,12 +347,12 @@ const quick = computed(() => quickCash(totals.value.total));
 
             <div class="space-y-2 border-t p-3 text-sm">
                 <div class="flex justify-between"><span class="text-muted-foreground">Tiền hàng ({{ totals.quantity }} sp)</span><span class="tabular-nums">{{ formatMoney(totals.subtotal) }}</span></div>
-                <div class="flex items-center justify-between"><span class="text-muted-foreground">Giảm giá</span><input v-model="cart.discount" type="number" min="0" class="h-7 w-28 rounded-md border bg-card px-2 text-right tabular-nums" data-testid="pos-discount" /></div>
+                <div class="flex items-center justify-between"><span class="text-muted-foreground">Giảm giá</span><input v-model="cart.discount" type="number" min="0" :disabled="!canEditPrice" class="h-7 w-28 rounded-md border bg-card px-2 text-right tabular-nums disabled:bg-muted/50" data-testid="pos-discount" /></div>
                 <div class="flex justify-between text-lg font-semibold"><span>Khách phải trả</span><span class="tabular-nums" data-testid="pos-total">{{ formatMoney(totals.total) }}</span></div>
 
-                <div class="grid grid-cols-4 gap-1">
+                <div class="grid gap-1" :style="{ gridTemplateColumns: `repeat(${Math.max(posMethods.length, 1)}, minmax(0, 1fr))` }">
                     <button
-                        v-for="m in ['cash', 'bank_transfer', 'card', 'ewallet'] as const"
+                        v-for="m in posMethods"
                         :key="m"
                         type="button"
                         :class="cn('flex flex-col items-center gap-0.5 rounded-md border px-1 py-1.5 text-xs', cart.method === m ? 'border-primary bg-primary/10 text-primary' : 'hover:bg-muted')"

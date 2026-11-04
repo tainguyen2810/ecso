@@ -15,6 +15,7 @@ import { cn, formatMoney } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
 import SkuPicker from '../../components/SkuPicker.vue';
+import { useSettingsStore } from '@/shared/stores/settings';
 import type { Product, Ref, Variant, Warehouse } from '@/shared/types';
 
 interface VariantRow {
@@ -123,7 +124,12 @@ onMounted(async () => {
         warehouses.value = ((await api.get('/warehouses')).data.data as Warehouse[]).filter((w) => w.status === 'active');
         form.opening_warehouse_id = (warehouses.value.find((w) => w.is_default) ?? warehouses.value[0])?.id ?? '';
     }
-    if (isNew.value && !copyFrom.value) return;
+    if (isNew.value && !copyFrom.value) {
+        // New product: the sales tax set in Cấu hình → Thuế (0 = not applied).
+        const rate = (await useSettingsStore().load().catch(() => null))?.tax.sale_rate;
+        if (rate) form.vat_rate = String(rate);
+        return;
+    }
     try {
         const p: Product = (await api.get(`/products/${productId.value ?? copyFrom.value}`)).data.data;
         const copying = isNew.value;

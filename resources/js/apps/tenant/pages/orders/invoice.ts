@@ -12,6 +12,28 @@ export const invoiceSizes: { value: InvoiceSize; label: string; hint: string }[]
     { value: 'k57', label: 'Mẫu in K57', hint: 'Máy in nhiệt 57 mm' },
 ];
 
+/** Shop details printed on the receipt (Cấu hình → Thông tin cửa hàng, Thanh toán, Mẫu in). A plain name works too. */
+export interface PrintShop {
+    name: string;
+    logo?: string | null;
+    address?: string | null;
+    phone?: string | null;
+    taxCode?: string | null;
+    footer?: string | null;
+    /** Bank account for a VietQR code on a receipt that still has money owed. */
+    bank?: { bank: string; number: string; holder: string } | null;
+    signatures?: boolean;
+    copies?: number;
+}
+
+const shopOf = (shop: string | PrintShop): PrintShop => (typeof shop === 'string' ? { name: shop } : shop);
+
+/** VietQR image (napas standard) with the amount and the order number as the transfer note. */
+export function vietQrUrl(bank: { bank: string; number: string; holder: string }, amount: number, note: string): string {
+    const q = new URLSearchParams({ amount: String(Math.round(amount)), addInfo: note, accountName: bank.holder });
+    return `https://img.vietqr.io/image/${encodeURIComponent(bank.bank)}-${encodeURIComponent(bank.number)}-compact.png?${q}`;
+}
+
 function esc(value: string | null | undefined): string {
     return (value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
@@ -31,8 +53,20 @@ ${payments.map((p) => `<tr><td>${p.kind === 'refund' ? 'Hoàn tiền' : 'Đã tr
 ${paid > 0 || due > 0 ? `<tr><td><b>Còn phải trả</b></td><td class="r"><b>${formatMoney(due)}</b></td></tr>` : ''}`;
 }
 
+const dueOf = (order: OrderDetail) => Math.max(0, Number(order.total) - Number(order.paid_amount ?? 0));
+function contactLine(shop: PrintShop): string {
+    return [shop.address, shop.phone ? `ĐT: ${shop.phone}` : null, shop.taxCode ? `MST: ${shop.taxCode}` : null].filter(Boolean).map((v) => esc(v)).join(' · ');
+}
+function qrBlock(order: OrderDetail, shop: PrintShop, width: string): string {
+    const due = dueOf(order);
+    if (!shop.bank || due <= 0) return '';
+    return `<div class="qr"><img src="${esc(vietQrUrl(shop.bank, due, order.external_order_id))}" alt="VietQR" style="width:${width}"><div>Quét mã để chuyển khoản ${formatMoney(due)}<br>${esc(shop.bank.bank)} · ${esc(shop.bank.number)} · ${esc(shop.bank.holder)}</div></div>`;
+}
+
 /** Thermal roll (K80 / K57): one column, each line then "qty × price … amount". */
-function rollHtml(order: OrderDetail, shopName: string, size: 'k80' | 'k57'): string {
+function rollHtml(order: OrderDetail, shopArg: string | PrintShop, size: 'k80' | 'k57'): string {
+    const shop = shopOf(shopArg);
+    const shopName = shop.name;
     const rows = order.items
         .map(
             (i) => `<tr><td colspan="3" class="name">${esc(i.name)}${i.variant_name ? ` · ${esc(i.variant_name)}` : ''}</td></tr>
@@ -54,20 +88,26 @@ td { padding: 1px 0; vertical-align: top; }
 .sub td { border-bottom: 1px dashed #999; padding-bottom: 3px; }
 hr { border: 0; border-top: 1px dashed #000; margin: 6px 0; }
 .total td { font-size: ${k80 ? '15px' : '12px'}; font-weight: bold; padding-top: 4px; }
+.logo { display: block; max-width: 60%; max-height: 18mm; margin: 0 auto 2px; }
+.qr { text-align: center; margin-top: 6px; } .qr div { font-size: ${k80 ? '10px' : '9px'}; }
 </style></head><body>
+${shop.logo ? `<img class="logo" src="${esc(shop.logo)}" alt="">` : ''}
 <h1>${esc(shopName)}</h1>
-<p class="c muted">${esc(order.channel?.name ?? '')}</p>
+${contactLine(shop) ? `<p class="c muted">${contactLine(shop)}</p>` : `<p class="c muted">${esc(order.channel?.name ?? '')}</p>`}
 <p class="c"><b>HÓA ĐƠN BÁN HÀNG</b><br>${esc(order.external_order_id)} · ${formatDateTime(order.placed_at)}</p>
 ${order.buyer_name ? `<p>Khách: <b>${esc(order.buyer_name)}</b>${order.buyer_phone ? ` · ${esc(order.buyer_phone)}` : ''}${order.shipping_address ? `<br>${esc(order.shipping_address)}` : ''}</p>` : ''}
 <hr><table>${rows}</table>
 <table>${totalsRows(order)}</table>
 ${order.buyer_note ? `<hr><p>Ghi chú: ${esc(order.buyer_note)}</p>` : ''}
-<hr><p class="c">Cảm ơn quý khách!</p>
+${qrBlock(order, shop, k80 ? '42mm' : '36mm')}
+<hr><p class="c">${esc(shop.footer ?? 'Cảm ơn quý khách!')}</p>
 </body></html>`;
 }
 
 /** Sheet (A4 portrait / A5 landscape): header with shop and buyer, a table of lines, totals and signatures. */
-function sheetHtml(order: OrderDetail, shopName: string, size: 'a4' | 'a5'): string {
+function sheetHtml(order: OrderDetail, shopArg: string | PrintShop, size: 'a4' | 'a5'): string {
+    const shop = shopOf(shopArg);
+    const shopName = shop.name;
     const a5 = size === 'a5';
     const rows = order.items
         .map(
@@ -93,16 +133,20 @@ table.sum { width: 45%; border-collapse: collapse; } table.sum td { padding: 2px
 .total td { font-size: ${a5 ? '13px' : '15px'}; font-weight: bold; border-top: 1px solid #000; padding-top: 4px; }
 .sign { display: flex; justify-content: space-around; margin-top: ${a5 ? '10px' : '24px'}; text-align: center; }
 .sign div { width: 40%; } .sign small { display: block; color: #444; margin-bottom: ${a5 ? '28px' : '48px'}; }
+.brand { display: flex; gap: 8px; align-items: center; } .brand img { max-height: ${a5 ? '12mm' : '16mm'}; max-width: 30mm; }
+.qr { display: flex; gap: 8px; align-items: center; margin-top: 6px; font-size: 10px; }
+.footer { text-align: center; margin-top: 6px; color: #444; }
 </style></head><body>
-<div class="head"><div><h1>${esc(shopName)}</h1><div class="muted">${esc(order.channel?.name ?? '')}</div></div><div class="r">Số: <b>${esc(order.external_order_id)}</b><br>${formatDateTime(order.placed_at)}</div></div>
+<div class="head"><div class="brand">${shop.logo ? `<img src="${esc(shop.logo)}" alt="">` : ''}<div><h1>${esc(shopName)}</h1><div class="muted">${contactLine(shop) || esc(order.channel?.name ?? '')}</div></div></div><div class="r">Số: <b>${esc(order.external_order_id)}</b><br>${formatDateTime(order.placed_at)}</div></div>
 <div class="title">HÓA ĐƠN BÁN HÀNG</div>
 <div class="info">
 <div>Khách hàng: <b>${esc(order.buyer_name ?? order.customer?.name ?? 'Khách lẻ')}</b>${order.buyer_phone ? `<br>Điện thoại: ${esc(order.buyer_phone)}` : ''}</div>
 <div>${order.shipping_address ? `Địa chỉ: ${esc(order.shipping_address)}` : ''}${order.created_by ? `<br>Nhân viên: ${esc(order.created_by)}` : ''}</div>
 </div>
 <table class="lines"><thead><tr><th style="width:5%">STT</th><th>Sản phẩm</th><th style="width:14%">Mã SKU</th><th style="width:7%">SL</th><th style="width:13%">Đơn giá</th><th style="width:11%">Chiết khấu</th><th style="width:14%">Thành tiền</th></tr></thead><tbody>${rows}</tbody></table>
-<div class="bottom"><div>${order.buyer_note ? `Ghi chú: ${esc(order.buyer_note)}` : ''}</div><table class="sum">${totalsRows(order)}</table></div>
-<div class="sign"><div><b>Người mua hàng</b><small>(Ký, ghi rõ họ tên)</small></div><div><b>Người bán hàng</b><small>(Ký, ghi rõ họ tên)</small></div></div>
+<div class="bottom"><div>${order.buyer_note ? `Ghi chú: ${esc(order.buyer_note)}` : ''}${qrBlock(order, shop, a5 ? '26mm' : '32mm')}</div><table class="sum">${totalsRows(order)}</table></div>
+${shop.signatures === false ? '' : '<div class="sign"><div><b>Người mua hàng</b><small>(Ký, ghi rõ họ tên)</small></div><div><b>Người bán hàng</b><small>(Ký, ghi rõ họ tên)</small></div></div>'}
+${shop.footer ? `<div class="footer">${esc(shop.footer)}</div>` : ''}
 </body></html>`;
 }
 
@@ -110,21 +154,23 @@ table.sum { width: 45%; border-collapse: collapse; } table.sum td { padding: 2px
  * Sales receipt as a self-contained HTML page in the chosen template. Pure function (unit tested); printing goes
  * through the browser so any printer driver works without plugins.
  */
-export function invoiceHtml(order: OrderDetail, shopName: string, size: InvoiceSize = 'k80'): string {
-    return size === 'a4' || size === 'a5' ? sheetHtml(order, shopName, size) : rollHtml(order, shopName, size);
+export function invoiceHtml(order: OrderDetail, shop: string | PrintShop, size: InvoiceSize = 'k80'): string {
+    return size === 'a4' || size === 'a5' ? sheetHtml(order, shop, size) : rollHtml(order, shop, size);
 }
 
-/** Several receipts in one print job, one per page. */
-export function invoicesHtml(orders: OrderDetail[], shopName: string, size: InvoiceSize = 'k80'): string {
-    const pages = orders.map((o) => invoiceHtml(o, shopName, size));
+/** Several receipts in one print job, one per page; each repeated as many copies (liên) as configured. */
+export function invoicesHtml(orders: OrderDetail[], shop: string | PrintShop, size: InvoiceSize = 'k80'): string {
+    const copies = Math.max(1, typeof shop === 'string' ? 1 : (shop.copies ?? 1));
+    const pages = orders.flatMap((o) => Array.from({ length: copies }, () => invoiceHtml(o, shop, size)));
     const body = (html: string) => html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('</body>'));
     const head = pages[0]!.slice(0, pages[0]!.indexOf('<body>') + 6);
 
     return `${head}${pages.map((p) => `<section style="page-break-after: always">${body(p)}</section>`).join('')}</body></html>`;
 }
 
-/** Default template of this business on this browser (Cài đặt → Mẫu in). A5 landscape unless changed. */
-export function defaultInvoiceSize(tenantId: string | undefined): InvoiceSize {
+/** Default template from Cấu hình → Mẫu in; this browser's own choice (older versions) only before settings load. */
+export function defaultInvoiceSize(tenantId: string | undefined, configured?: string | null): InvoiceSize {
+    if (configured && invoiceSizes.some((s) => s.value === configured)) return configured as InvoiceSize;
     try {
         const v = localStorage.getItem(`ecso.print.size.${tenantId ?? 'default'}`);
         return invoiceSizes.some((s) => s.value === v) ? (v as InvoiceSize) : 'a5';
@@ -141,17 +187,19 @@ export function setDefaultInvoiceSize(tenantId: string | undefined, size: Invoic
     }
 }
 
-export function printInvoice(order: OrderDetail | OrderDetail[], shopName: string, size: InvoiceSize = 'k80'): void {
+export function printInvoice(order: OrderDetail | OrderDetail[], shop: string | PrintShop, size: InvoiceSize = 'k80'): void {
     const frame = document.createElement('iframe');
     frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
     document.body.appendChild(frame);
     const doc = frame.contentDocument!;
     doc.open();
-    doc.write(Array.isArray(order) ? invoicesHtml(order, shopName, size) : invoiceHtml(order, shopName, size));
+    const copies = typeof shop === 'string' ? 1 : (shop.copies ?? 1);
+    doc.write(Array.isArray(order) || copies > 1 ? invoicesHtml(Array.isArray(order) ? order : [order], shop, size) : invoiceHtml(order, shop, size));
     doc.close();
+    // Give the logo and QR images a moment to load before the print dialog.
     setTimeout(() => {
         frame.contentWindow!.focus();
         frame.contentWindow!.print();
         setTimeout(() => frame.remove(), 1000);
-    }, 100);
+    }, 600);
 }

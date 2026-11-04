@@ -41,4 +41,10 @@ class OrderPolicy extends PermissionPolicy
     {
         return $this->allows('orders.payment');
     }
+
+    /** Sell at another price or with a discount when Cấu hình does not let staff do it. */
+    public function changePrice(User $user): bool
+    {
+        return $this->allows('orders.price');
+    }
 }

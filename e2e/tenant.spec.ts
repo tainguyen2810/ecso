@@ -40,7 +40,11 @@ test('owner works in the tenant dashboard', async ({ page }) => {
     await page.getByRole('button', { name: 'Cửa hàng Mẫu' }).click();
     await expect(page.getByTestId('tenant-switcher')).toContainText('Cửa hàng Mẫu');
 
-    await page.getByRole('link', { name: 'Nhân viên' }).click();
+    // Staff, plan and activity log are reached from Cấu hình, like Sapo.
+    await page.getByRole('link', { name: 'Cấu hình', exact: true }).click();
+    await expect(page.getByTestId('settings-hub')).toBeVisible();
+    await shot(page, '12-settings');
+    await page.getByRole('link', { name: /Nhân viên và phân quyền/ }).click();
     await expect(page.getByRole('cell', { name: /Trần Thị Kho/ })).toBeVisible();
     await shot(page, '07-members');
 
@@ -52,16 +56,16 @@ test('owner works in the tenant dashboard', async ({ page }) => {
     await expect(page.getByText('Đã gửi lời mời')).toBeVisible();
     await shot(page, '09-invitations');
 
-    await page.getByRole('link', { name: 'Gói dịch vụ' }).click();
+    await page.getByRole('link', { name: 'Cấu hình', exact: true }).click();
+    await page.getByRole('link', { name: /Gói dịch vụ/ }).click();
     await expect(page.getByText('Các gói dịch vụ')).toBeVisible();
     await shot(page, '10-subscription');
 
-    await page.getByRole('link', { name: 'Nhật ký' }).click();
+    await page.getByRole('link', { name: 'Cấu hình', exact: true }).click();
+    await page.getByRole('link', { name: /Nhật ký hoạt động/ }).click();
     await expect(page.getByRole('cell', { name: 'Gửi lời mời' }).first()).toBeVisible();
     await shot(page, '11-audit-log');
 
-    await page.getByRole('link', { name: 'Cài đặt' }).click();
-    await shot(page, '12-settings');
 
     // Purchasing sits in the Sản phẩm group, like Sapo.
     await page.getByRole('link', { name: 'Sản phẩm' }).first().click();
@@ -79,7 +83,7 @@ test('warehouse staff only sees what their role allows', async ({ page }) => {
     await expect(page.getByRole('heading', { name: /Xin chào/ })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Sản phẩm', exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Nhân viên' })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Cài đặt' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Cấu hình', exact: true })).toHaveCount(0);
     await shot(page, '14-staff-dashboard');
 
     await page.goto('/settings');

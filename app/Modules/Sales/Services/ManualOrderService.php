@@ -82,7 +82,7 @@ class ManualOrderService
                 'warehouse_id' => $warehouse->id,
                 'created_by' => Auth::id(),
                 'assigned_to' => Auth::id(),
-                'placed_at' => now(),
+                'placed_at' => isset($data['placed_at']) ? now()->parse($data['placed_at']) : now(),
                 'payment_status' => Order::PAYMENT_UNPAID,
                 'paid_amount' => 0,
                 'refunded_amount' => 0,

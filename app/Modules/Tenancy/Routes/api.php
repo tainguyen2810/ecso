@@ -2,6 +2,7 @@
 
 use App\Modules\Tenancy\Http\Controllers\InvitationController;
 use App\Modules\Tenancy\Http\Controllers\MemberController;
+use App\Modules\Tenancy\Http\Controllers\SettingsController;
 use App\Modules\Tenancy\Http\Controllers\TenantController;
 use Illuminate\Support\Facades\Route;
 
@@ -15,6 +16,10 @@ Route::middleware(['auth:sanctum', 'verified'])->group(function () {
     Route::middleware('tenant')->group(function () {
         Route::get('tenant', [TenantController::class, 'current']);
         Route::patch('tenant', [TenantController::class, 'update']);
+        Route::get('tenant/settings', [SettingsController::class, 'show']);
+        Route::put('tenant/settings/{section}', [SettingsController::class, 'update'])->whereIn('section', ['store', 'tax', 'pricing', 'payments', 'sales', 'reasons', 'print']);
+        Route::post('tenant/logo', [SettingsController::class, 'uploadLogo'])->middleware('throttle:10,1,tenancy.logo');
+        Route::delete('tenant/logo', [SettingsController::class, 'deleteLogo']);
 
         Route::get('roles', [MemberController::class, 'roles']);
         Route::get('members', [MemberController::class, 'index']);
