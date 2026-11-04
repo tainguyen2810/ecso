@@ -28,16 +28,18 @@ interface PlData {
     previous_range: { from: string; to: string };
     lines: Line[];
     missing_cost_lines: number;
+    fees_unknown_orders?: number;
 }
 
 /** Lines whose increase is bad news: the change badge is red when they go up. */
-const COSTS = ['discount', 'returns', 'cogs', 'cogs_out', 'stock_loss', 'write_off', 'stocktake', 'other_expenses'];
+const COSTS = ['discount', 'returns', 'cogs', 'cogs_out', 'marketplace_fees', 'fees_confirmed', 'fees_estimated', 'selling_expenses', 'stock_loss', 'write_off', 'stocktake', 'operating_expenses', 'misc_expenses', 'other_expenses'];
 const DRILL: Record<string, { name: string; params?: Record<string, string>; query?: Record<string, string> }> = {
     sales: { name: 'report-sales' },
     products: { name: 'report-detail', params: { report: 'product-sales' } },
     returns: { name: 'report-detail', params: { report: 'returns' } },
     stock: { name: 'report-stock' },
     cash: { name: 'cash' },
+    finance: { name: 'finance' },
 };
 
 const { range } = useReportQuery();
@@ -94,7 +96,9 @@ function exportCsv() {
         <p class="mb-4 flex items-start gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
             <Info class="mt-0.5 size-3.5 shrink-0" />
             <span>
-                Tính trên đơn đặt trong kỳ (trừ đơn hủy). Phí sàn và các khoản thu, chi khác chưa có trong hệ thống nên chưa trừ.
+                Doanh thu ghi nhận khi sàn báo đơn hoàn thành (đơn tự tạo, website, POS: khi giao thành công). Phí sàn đã xác nhận lấy từ file đối soát, phần còn lại ước tính theo bảng phí của shop.
+                Lợi nhuận quản trị là số ước tính để quản lý, chưa phải lợi nhuận kế toán.
+                <template v-if="data.fees_unknown_orders"> <strong class="text-amber-700">{{ formatNumber(data.fees_unknown_orders) }} đơn chưa biết phí sàn</strong> (shop chưa có bảng phí): lợi nhuận đang cao hơn thực tế.</template>
                 <template v-if="data.missing_cost_lines"> {{ formatNumber(data.missing_cost_lines) }} dòng hàng đã xuất chưa có giá vốn, lợi nhuận đang cao hơn thực tế.</template>
                 Bấm vào dòng có mũi tên để xem chi tiết.
             </span>

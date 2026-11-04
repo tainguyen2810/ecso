@@ -2,8 +2,8 @@
 
 namespace App\Modules\Analytics\Services;
 
-use App\Modules\Analytics\Support\ReturnValues;
-use App\Modules\Orders\Domain\OrderStatus;
+use App\Modules\Analytics\Support\ProfitFigures;
+use App\Modules\Analytics\Support\RevenuePolicy;
 use App\Modules\Purchasing\Models\Supplier;
 use App\Modules\Sales\Services\CustomerDebt;
 use App\Modules\Tenancy\Support\TenantContext;
@@ -16,11 +16,9 @@ class LedgerReports
     public function __construct(private readonly TenantContext $context) {}
 
     /**
-     * Profit and loss for the range and for the period of the same length just before it. Revenue is goods sold on
-     * orders placed in the period (cancelled ones excluded) less returns opened in the period; cost of goods is the
-     * ledger cost captured at shipping less the cost (as shipped) of goods put back on the shelf from approved returns. Other income and
-     * expenses are the receipt and payment vouchers whose type counts in profit and loss. Marketplace fees are not in
-     * the system yet, so they are not here.
+     * Profit and loss for the range and for the period of the same length just before it, from ProfitFigures (the
+     * same figures as the finance page): revenue recognised by RevenuePolicy, approved returns, cost as shipped,
+     * marketplace fees confirmed or estimated, shipping charged to buyers on its own line, vouchers by profit group.
      *
      * @return array<string, mixed>
      */
@@ -34,21 +32,27 @@ class LedgerReports
         $previous = $this->period($prevFrom, $prevTo);
 
         $labels = [
-            ['revenue', 'I. Doanh thu thuần (1 - 2 - 3 + 4)', 0, 'sales'],
+            ['revenue', 'I. Doanh thu thuần (1 - 2 - 3)', 0, 'sales'],
             ['goods', '1. Tiền hàng bán ra', 1, 'sales'],
             ['discount', '2. Chiết khấu', 1, 'sales'],
             ['returns', '3. Hàng trả lại', 1, 'returns'],
-            ['shipping', '4. Phí giao hàng thu của khách', 1, 'sales'],
-            ['cogs', 'II. Giá vốn hàng bán (5 - 6)', 0, null],
-            ['cogs_out', '5. Giá vốn hàng xuất bán', 1, 'products'],
-            ['cogs_back', '6. Giá vốn hàng trả lại nhập kho', 1, 'returns'],
+            ['cogs', 'II. Giá vốn hàng bán (4 - 5)', 0, null],
+            ['cogs_out', '4. Giá vốn hàng xuất bán', 1, 'products'],
+            ['cogs_back', '5. Giá vốn hàng trả lại nhập kho', 1, 'returns'],
             ['gross_profit', 'III. Lợi nhuận gộp (I - II)', 0, null],
-            ['stock_loss', 'IV. Hao hụt kho (7 + 8)', 0, null],
-            ['write_off', '7. Hàng hủy, mất', 1, 'stock'],
-            ['stocktake', '8. Chênh lệch kiểm kê, điều chỉnh', 1, 'stock'],
-            ['other_income', 'V. Thu nhập khác (phiếu thu)', 0, 'cash'],
-            ['other_expenses', 'VI. Chi phí khác (phiếu chi)', 0, 'cash'],
-            ['profit', 'Lợi nhuận (III - IV + V - VI)', 0, null],
+            ['marketplace_fees', 'IV. Phí sàn (6 + 7)', 0, 'finance'],
+            ['fees_confirmed', '6. Đã xác nhận (file đối soát)', 1, 'finance'],
+            ['fees_estimated', '7. Ước tính theo bảng phí', 1, 'finance'],
+            ['shipping', 'V. Phí giao hàng thu của khách', 0, 'sales'],
+            ['selling_expenses', 'VI. Chi phí bán hàng (phiếu chi)', 0, 'cash'],
+            ['contribution_profit', 'Lợi nhuận đóng góp (III - IV + V - VI)', 0, null],
+            ['stock_loss', 'VII. Hao hụt kho (8 + 9)', 0, null],
+            ['write_off', '8. Hàng hủy, mất', 1, 'stock'],
+            ['stocktake', '9. Chênh lệch kiểm kê, điều chỉnh', 1, 'stock'],
+            ['operating_expenses', 'VIII. Chi phí vận hành (phiếu chi)', 0, 'cash'],
+            ['misc_expenses', 'IX. Chi phí khác (phiếu chi)', 0, 'cash'],
+            ['other_income', 'X. Thu nhập khác (phiếu thu)', 0, 'cash'],
+            ['profit', 'Lợi nhuận quản trị ước tính (đóng góp - VII - VIII - IX + X)', 0, null],
         ];
 
         return [
@@ -64,6 +68,7 @@ class LedgerReports
                 'change' => $previous[$l[0]] != 0 ? round(($current[$l[0]] - $previous[$l[0]]) / abs($previous[$l[0]]) * 100, 1) : null,
             ], $labels),
             'missing_cost_lines' => $current['missing_cost_lines'],
+            'fees_unknown_orders' => $current['fees_unknown_orders'],
         ];
     }
 
@@ -118,57 +123,10 @@ class LedgerReports
         return ['rows' => $rows, 'totals' => ['suppliers' => count($rows), 'debt' => round(array_sum(array_column($rows, 'debt')), 2)]];
     }
 
-    /** @return array<string, float|int> */
+    /** @return array<string, float|int|null> */
     private function period(CarbonImmutable $from, CarbonImmutable $to): array
     {
-        $orders = DB::table('orders')->where('tenant_id', $this->tenant())->whereBetween('placed_at', [$from, $to])->where('status', '!=', OrderStatus::CANCELLED)
-            ->selectRaw('COALESCE(SUM(subtotal), 0) as goods, COALESCE(SUM(discount), 0) as discount, COALESCE(SUM(shipping_fee), 0) as shipping')->first();
-        $cost = DB::table('order_items as i')->join('orders as o', 'o.id', '=', 'i.order_id')
-            ->where('o.tenant_id', $this->tenant())->whereBetween('o.placed_at', [$from, $to])->where('o.status', '!=', OrderStatus::CANCELLED)
-            ->selectRaw('COALESCE(SUM(i.cost_snapshot * i.quantity), 0) as cogs, COALESCE(SUM(CASE WHEN i.cost_snapshot IS NULL AND i.mapping_status <> \'service\' AND o.status IN (\''.implode("','", OrderStatus::SHIPPED).'\') THEN 1 ELSE 0 END), 0) as missing')
-            ->first();
-        // Returns of orders still in revenue (an order cancelled after shipping is out of revenue and cost already).
-        // Marketplace returns often carry no refund amount: their goods value counts instead (ReturnValues).
-        $returnRows = fn () => DB::table('order_returns as r')->join('orders as ro', 'ro.id', '=', 'r.order_id')
-            ->leftJoinSub(ReturnValues::lines(), 'rv', 'rv.order_return_id', '=', 'r.id')
-            ->where('r.tenant_id', $this->tenant())->whereIn('r.status', ReturnValues::COUNTED)->where('ro.status', '!=', OrderStatus::CANCELLED);
-        $returns = (float) $returnRows()->whereBetween('r.created_at', [$from, $to])->selectRaw('COALESCE(SUM('.ReturnValues::valueSql().'), 0) as v')->value('v');
-        // Goods put back on the shelf, at the cost captured when they shipped.
-        $cogsBack = (float) $returnRows()->whereBetween('r.inspected_at', [$from, $to])->selectRaw('COALESCE(SUM(rv.cost_back), 0) as v')->value('v');
-
-        $value = fn (array $types, ?string $extra = null) => (float) DB::table('stock_movements as m')->join('product_variants as v', 'v.id', '=', 'm.product_variant_id')
-            ->where('m.tenant_id', $this->tenant())->whereBetween('m.created_at', [$from, $to])->whereIn('m.type', $types)
-            ->when($extra, fn ($q) => $q->whereRaw($extra))
-            ->selectRaw('COALESCE(SUM(m.on_hand_delta * COALESCE(m.unit_cost, v.cost_price)), 0) as v')->value('v');
-        $writeOffReasons = "m.reason IN ('".implode("','", BusinessReports::WRITE_OFF_REASONS)."')";
-
-        $writeOff = -$value(BusinessReports::STOCK_COLUMNS['damage_out']) - $value(['ADJUSTMENT_OUT'], $writeOffReasons);
-        $stocktake = -$value(['ADJUSTMENT_OUT'], "(m.reason IS NULL OR NOT {$writeOffReasons})") - $value(BusinessReports::STOCK_COLUMNS['adjust_in']);
-
-        $other = DB::table('cash_vouchers')->where('tenant_id', $this->tenant())->whereNull('voided_at')->where('counts_in_pnl', true)->whereBetween('paid_at', [$from, $to])
-            ->selectRaw("COALESCE(SUM(CASE WHEN direction = 'receipt' THEN amount ELSE 0 END), 0) as income, COALESCE(SUM(CASE WHEN direction = 'payment' THEN amount ELSE 0 END), 0) as expenses")
-            ->first();
-
-        $p = [
-            'goods' => (float) $orders->goods,
-            'discount' => (float) $orders->discount,
-            'returns' => $returns,
-            'shipping' => (float) $orders->shipping,
-            'cogs_out' => (float) $cost->cogs,
-            'cogs_back' => $cogsBack,
-            'write_off' => $writeOff,
-            'stocktake' => $stocktake,
-            'other_income' => (float) $other->income,
-            'other_expenses' => (float) $other->expenses,
-        ];
-        $p['revenue'] = $p['goods'] - $p['discount'] - $p['returns'] + $p['shipping'];
-        $p['cogs'] = $p['cogs_out'] - $p['cogs_back'];
-        $p['gross_profit'] = $p['revenue'] - $p['cogs'];
-        $p['stock_loss'] = $p['write_off'] + $p['stocktake'];
-        $p['profit'] = $p['gross_profit'] - $p['stock_loss'] + $p['other_income'] - $p['other_expenses'];
-
-        // + 0.0 turns a negated zero (-0) into 0 so it never shows as "-0 đ".
-        return [...array_map(fn ($v) => round($v, 2) + 0.0, $p), 'missing_cost_lines' => (int) $cost->missing];
+        return app(ProfitFigures::class)->period($from, $to);
     }
 
     private function tenant(): int

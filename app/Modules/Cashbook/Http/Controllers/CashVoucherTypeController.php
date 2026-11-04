@@ -33,6 +33,7 @@ class CashVoucherTypeController extends Controller
             'direction' => ['required', Rule::in(CashVoucher::DIRECTIONS)],
             'name' => ['required', 'string', 'max:100'],
             'counts_in_pnl' => ['nullable', 'boolean'],
+            'pnl_group' => ['nullable', Rule::in(CashVoucherService::PNL_GROUPS)],
             'description' => ['nullable', 'string', 'max:255'],
         ]);
 
@@ -45,6 +46,7 @@ class CashVoucherTypeController extends Controller
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:100'],
             'counts_in_pnl' => ['sometimes', 'boolean'],
+            'pnl_group' => ['sometimes', 'nullable', Rule::in(CashVoucherService::PNL_GROUPS)],
             'description' => ['sometimes', 'nullable', 'string', 'max:255'],
             'is_active' => ['sometimes', 'boolean'],
         ]);

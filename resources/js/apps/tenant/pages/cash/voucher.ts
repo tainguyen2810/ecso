@@ -30,6 +30,8 @@ export interface VoucherType {
     direction: Direction;
     name: string;
     counts_in_pnl: boolean;
+    /** Group of a payment type in profit and loss: selling expenses lower contribution profit. */
+    pnl_group?: 'sales' | 'operating' | null;
     description: string | null;
     is_active: boolean;
     vouchers_count?: number;

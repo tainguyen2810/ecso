@@ -5,6 +5,7 @@ namespace App\Modules\Orders\Models;
 use App\Modules\Identity\Models\User;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
+use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Sales\Models\SalesChannel;
@@ -23,6 +24,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $external_updated_at
  * @property Carbon|null $handed_over_at
  * @property Carbon|null $delivered_at
+ * @property Carbon|null $completed_at
  * @property Carbon|null $cancelled_at
  * @property Carbon|null $deleted_on_channel_at
  * @property Carbon|null $packing_slip_printed_at
@@ -48,6 +50,16 @@ class Order extends Model
     protected $guarded = ['id', 'ulid', 'tenant_id'];
 
     protected $hidden = ['id', 'tenant_id', 'marketplace_account_id', 'sales_channel_id', 'customer_id', 'warehouse_id', 'assigned_to', 'created_by', 'raw'];
+
+    protected static function booted(): void
+    {
+        // Revenue of marketplace orders is recognised when they complete (RevenuePolicy): keep the first time.
+        static::saving(function (Order $order) {
+            if ($order->status === OrderStatus::COMPLETED && $order->completed_at === null) {
+                $order->completed_at = now();
+            }
+        });
+    }
 
     protected function casts(): array
     {
@@ -75,6 +87,7 @@ class Order extends Model
             'external_updated_at' => MicroTimestamp::class,
             'handed_over_at' => 'datetime',
             'delivered_at' => 'datetime',
+            'completed_at' => 'datetime',
             'cancelled_at' => 'datetime',
             'deleted_on_channel_at' => 'datetime',
             'packing_slip_printed_at' => 'datetime',

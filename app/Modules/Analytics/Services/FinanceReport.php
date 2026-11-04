@@ -2,113 +2,232 @@
 
 namespace App\Modules\Analytics\Services;
 
-use App\Modules\Analytics\Support\ReturnValues;
+use App\Modules\Analytics\Support\ProfitFigures;
+use App\Modules\Analytics\Support\RevenuePolicy;
+use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Orders\Domain\OrderStatus;
-use App\Modules\Orders\Models\Order;
+use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Tenancy\Support\TenantContext;
 use App\Shared\Support\ReportRange;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Tenant finance overview. Separates what is known from what is not:
- *  - ordered / completed revenue are what buyers paid on the marketplace (not money received);
- *  - cost of goods comes from the stock ledger cost captured when goods left the warehouse;
- *  - marketplace fees and the actual payout need settlement data from the marketplace API, which no connector
- *    provides yet, so they are reported as UNKNOWN (null) instead of being estimated;
- *  - other income and expenses are the receipt and payment vouchers whose type counts in profit and loss. They
- *    belong to the whole business, so they are left out (null) when the report is filtered to one shop.
+ * Tenant finance overview. Profit figures come from ProfitFigures, the same source as the profit and loss report.
+ * It keeps apart what is known from what is estimated:
+ *  - ordered revenue is what buyers ordered; recognised (completed) revenue follows RevenuePolicy (marketplaces at
+ *    completion, own channels at delivery). Neither is money received;
+ *  - marketplace fees are CONFIRMED by an imported settlement, ESTIMATED from the shop's fee table, or UNKNOWN;
+ *  - the payout of a settlement is money received for revenue already counted, never new revenue;
+ *  - other income and expenses belong to the whole business and are null when the report is scoped to one shop.
  */
 class FinanceReport
 {
-    /** @return array<string, mixed> */
-    public function build(CarbonImmutable $from, CarbonImmutable $to, ?int $accountId = null): array
+    public function __construct(private readonly ProfitFigures $profit, private readonly TenantContext $context) {}
+
+    /**
+     * @param  array{account?: int, channel?: int}|null  $scope
+     * @return array<string, mixed>
+     */
+    public function build(CarbonImmutable $from, CarbonImmutable $to, ?array $scope = null): array
     {
-        $orders = fn () => Order::query()->when($accountId, fn ($q) => $q->where('marketplace_account_id', $accountId));
+        $scope = array_filter($scope ?? []) ?: null;
+        [$prevFrom, $prevTo] = $this->previous($from, $to);
 
-        $placed = $orders()->whereBetween('placed_at', [$from, $to]);
-        $ordered = (clone $placed)->where('status', '!=', OrderStatus::CANCELLED)->toBase()
-            ->selectRaw('COUNT(*) as n, COALESCE(SUM(total), 0) as total, COALESCE(SUM(subtotal - discount), 0) as goods')->first();
-        $cancelled = (clone $placed)->where('status', OrderStatus::CANCELLED)->toBase()->selectRaw('COUNT(*) as n, COALESCE(SUM(total), 0) as total')->first();
+        $placed = fn () => $this->profit->scoped(DB::table('orders as o')->where('o.tenant_id', $this->tenant())->whereBetween('o.placed_at', [$from, $to]), $scope);
+        $ordered = $placed()->where('o.status', '!=', OrderStatus::CANCELLED)
+            ->selectRaw('COUNT(*) as n, COALESCE(SUM(o.total), 0) as total, COALESCE(SUM(o.subtotal - o.discount), 0) as goods')->first();
+        $cancelled = $placed()->where('o.status', OrderStatus::CANCELLED)->selectRaw('COUNT(*) as n, COALESCE(SUM(o.total), 0) as total')->first();
 
-        // Delivered orders, including those with a return request still open: they stay in revenue until the return
-        // is approved, and the approved return is then subtracted below.
-        $completedStatuses = [OrderStatus::DELIVERED, OrderStatus::COMPLETED, OrderStatus::RETURN_REQUESTED];
-        $completed = $orders()->whereIn('status', $completedStatuses)->whereBetween('delivered_at', [$from, $to])->toBase()
-            ->selectRaw('COUNT(*) as n, COALESCE(SUM(total), 0) as total, COALESCE(SUM(subtotal - discount), 0) as goods')->first();
+        $completed = $this->profit->recognized($from, $to, $scope)
+            ->selectRaw('COUNT(*) as n, COALESCE(SUM(o.total), 0) as total, COALESCE(SUM(o.subtotal - o.discount), 0) as goods, COALESCE(SUM(o.shipping_fee), 0) as shipping')->first();
+        $awaiting = $this->profit->scoped(RevenuePolicy::awaitingCompletion(DB::table('orders as o')->where('o.tenant_id', $this->tenant()), 'o', $from, $to), $scope)
+            ->selectRaw('COUNT(*) as n, COALESCE(SUM(o.total), 0) as total, COALESCE(SUM(o.subtotal - o.discount), 0) as goods')->first();
 
-        $cogs = (float) DB::table('order_items')->join('orders', 'orders.id', '=', 'order_items.order_id')
-            ->where('orders.tenant_id', $this->tenantId())
-            ->when($accountId, fn ($q) => $q->where('orders.marketplace_account_id', $accountId))
-            ->whereIn('orders.status', $completedStatuses)->whereBetween('orders.delivered_at', [$from, $to])
-            ->selectRaw('COALESCE(SUM(order_items.cost_snapshot * order_items.quantity), 0) as cogs')->value('cogs');
-        $missingCost = (int) DB::table('order_items')->join('orders', 'orders.id', '=', 'order_items.order_id')
-            ->where('orders.tenant_id', $this->tenantId())
-            ->when($accountId, fn ($q) => $q->where('orders.marketplace_account_id', $accountId))
-            ->whereIn('orders.status', $completedStatuses)->whereBetween('orders.delivered_at', [$from, $to])
-            ->whereNull('order_items.cost_snapshot')->where('order_items.mapping_status', '!=', 'service')->count();
-
-        // Returns of the orders counted above only: an order that ended RETURNED or CANCELLED is already out of revenue
-        // and cost, so subtracting its return again would count it twice.
-        $returns = fn () => DB::table('order_returns as r')->join('orders as ro', 'ro.id', '=', 'r.order_id')
-            ->leftJoinSub(ReturnValues::lines(), 'rv', 'rv.order_return_id', '=', 'r.id')
-            ->where('r.tenant_id', $this->tenantId())->whereIn('r.status', ReturnValues::COUNTED)->whereIn('ro.status', $completedStatuses)
-            ->when($accountId, fn ($q) => $q->where('ro.marketplace_account_id', $accountId));
-        $refunds = (float) $returns()->whereBetween('r.created_at', [$from, $to])->selectRaw('COALESCE(SUM('.ReturnValues::valueSql().'), 0) as v')->value('v');
-        // Cost of returned goods put back on the shelf, at the cost captured when they shipped.
-        $cogsReturned = (float) $returns()->whereBetween('r.inspected_at', [$from, $to])->selectRaw('COALESCE(SUM(rv.cost_back), 0) as v')->value('v');
-
-        $daily = $orders()->whereBetween('placed_at', [$from, $to])->where('status', '!=', OrderStatus::CANCELLED)
-            ->selectRaw(ReportRange::day('placed_at', $from).' as day, COUNT(*) as orders, SUM(total) as revenue')->groupBy('day')->orderBy('day')->get()
-            ->keyBy('day');
-        $series = [];
-        for ($d = $from->startOfDay(); $d->lte($to); $d = $d->addDay()) {
-            $row = $daily->get($d->toDateString());
-            $series[] = ['day' => $d->toDateString(), 'orders' => (int) ($row->orders ?? 0), 'revenue' => (float) ($row->revenue ?? 0)];
-        }
-
-        // Marketplace shops and the seller's own channels (Phase 9) side by side.
-        $byShop = DB::table('orders')
-            ->leftJoin('marketplace_accounts', 'marketplace_accounts.id', '=', 'orders.marketplace_account_id')
-            ->leftJoin('sales_channels', 'sales_channels.id', '=', 'orders.sales_channel_id')
-            ->where('orders.tenant_id', $this->tenantId())->whereBetween('orders.placed_at', [$from, $to])->where('orders.status', '!=', OrderStatus::CANCELLED)
-            ->when($accountId, fn ($q) => $q->where('orders.marketplace_account_id', $accountId))
-            ->groupBy('orders.marketplace_account_id', 'orders.sales_channel_id', 'marketplace_accounts.shop_name', 'marketplace_accounts.marketplace', 'sales_channels.name')
-            ->selectRaw("COALESCE(marketplace_accounts.shop_name, sales_channels.name, 'Khác') as shop, COALESCE(marketplace_accounts.marketplace, 'manual') as marketplace, COUNT(*) as orders, SUM(orders.total) as revenue")
-            ->orderByDesc('revenue')->get();
-
-        $completedGoods = (float) $completed->goods;
-        $grossProfit = round($completedGoods - $refunds - ($cogs - $cogsReturned), 2);
-        $other = $accountId ? null : DB::table('cash_vouchers')
-            ->where('tenant_id', $this->tenantId())->whereNull('voided_at')->where('counts_in_pnl', true)->whereBetween('paid_at', [$from, $to])
-            ->selectRaw("COALESCE(SUM(CASE WHEN direction = 'receipt' THEN amount ELSE 0 END), 0) as income, COALESCE(SUM(CASE WHEN direction = 'payment' THEN amount ELSE 0 END), 0) as expenses")
-            ->first();
+        $p = $this->profit->period($from, $to, $scope);
+        $prev = $this->profit->period($prevFrom, $prevTo, $scope);
+        $payout = $this->payout($from, $to, $scope);
 
         return [
             'range' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+            'previous_range' => ['from' => $prevFrom->toDateString(), 'to' => $prevTo->toDateString()],
+            'scoped' => $scope !== null,
             'ordered' => ['orders' => (int) $ordered->n, 'revenue' => (float) $ordered->total, 'goods' => (float) $ordered->goods],
-            'completed' => ['orders' => (int) $completed->n, 'revenue' => (float) $completed->total, 'goods' => $completedGoods],
+            // Recognised revenue. goods = goods after discounts (net of shipping); shipping = charged to the buyer, apart.
+            'completed' => ['orders' => (int) $completed->n, 'revenue' => (float) $completed->total, 'goods' => (float) $completed->goods, 'shipping' => (float) $completed->shipping],
+            // Marketplace orders delivered in the period, not completed by the marketplace yet: provisional, not in profit.
+            'awaiting_completion' => ['orders' => (int) $awaiting->n, 'revenue' => (float) $awaiting->total, 'goods' => (float) $awaiting->goods],
             'cancelled' => ['orders' => (int) $cancelled->n, 'revenue' => (float) $cancelled->total],
-            'refunds' => $refunds,
-            'cogs' => $cogs,
-            'cogs_returned' => $cogsReturned,
-            'cogs_missing_lines' => $missingCost,
-            // Goods value of completed orders minus approved returns minus (cost of goods shipped minus cost of goods
-            // returned to stock). Marketplace fees NOT deducted.
-            'estimated_gross_profit' => $grossProfit,
-            'other_income' => $other ? (float) $other->income : null,
-            'other_expenses' => $other ? (float) $other->expenses : null,
-            'estimated_profit' => $other ? round($grossProfit + (float) $other->income - (float) $other->expenses, 2) : null,
-            'marketplace_fees' => null,
-            'payout_received' => null,
-            'unknown_reason' => 'Chưa có dữ liệu đối soát/settlement từ API sàn (connector chưa hỗ trợ).',
-            'daily' => $series,
-            'by_shop' => $byShop->map(fn ($r) => ['shop' => $r->shop, 'marketplace' => $r->marketplace, 'orders' => (int) $r->orders, 'revenue' => (float) $r->revenue]),
+            'refunds' => $p['returns'],
+            'net_revenue' => $p['revenue'],
+            'cogs' => $p['cogs_out'],
+            'cogs_returned' => $p['cogs_back'],
+            'cogs_missing_lines' => $p['missing_cost_lines'],
+            'estimated_gross_profit' => $p['gross_profit'],
+            'fees' => [
+                'total' => $p['marketplace_fees'],
+                'confirmed' => $p['fees_confirmed'],
+                'confirmed_orders' => $p['fees_confirmed_orders'],
+                'estimated' => $p['fees_estimated'],
+                'estimated_orders' => $p['fees_estimated_orders'],
+                'unknown_orders' => $p['fees_unknown_orders'],
+            ],
+            'marketplace_fees' => $p['marketplace_fees'],
+            'payout' => $payout,
+            'payout_received' => $payout['received'],
+            'selling_expenses' => $p['selling_expenses'],
+            'contribution_profit' => $p['contribution_profit'],
+            'stock_loss' => $p['stock_loss'],
+            'operating_expenses' => $p['operating_expenses'],
+            'other_income' => $p['other_income'],
+            'other_expenses' => $p['other_expenses'],
+            'estimated_profit' => $p['profit'],
+            'previous' => [
+                'orders' => $prev['orders'],
+                'net_revenue' => $prev['revenue'],
+                'estimated_gross_profit' => $prev['gross_profit'],
+                'contribution_profit' => $prev['contribution_profit'],
+                'estimated_profit' => $prev['profit'],
+            ],
+            'daily' => $this->daily($from, $to, $scope),
+            'by_shop' => $scope ? [] : $this->byShop($from, $to, $prevFrom, $prevTo),
+            'shops' => $this->shops(),
         ];
     }
 
-    private function tenantId(): int
+    /** The period of the same length just before [from, to]. @return array{0: CarbonImmutable, 1: CarbonImmutable} */
+    public function previous(CarbonImmutable $from, CarbonImmutable $to): array
     {
-        return app(TenantContext::class)->id();
+        $days = (int) $from->startOfDay()->diffInDays($to->startOfDay()) + 1;
+
+        return [$from->subDays($days)->startOfDay(), $from->subDay()->endOfDay()];
+    }
+
+    /**
+     * Money the marketplaces paid out for orders recognised in the period (settlement net amount), and the marketplace
+     * orders still waiting for their settlement. A payout is cash for revenue already counted, not new revenue.
+     *
+     * @return array{received: float|null, received_orders: int, pending_orders: int, pending_expected: float|null}
+     */
+    private function payout(CarbonImmutable $from, CarbonImmutable $to, ?array $scope): array
+    {
+        $row = ProfitFigures::withFees($this->profit->recognized($from, $to, $scope))->whereRaw(ProfitFigures::isMarketplaceSql())
+            ->selectRaw('COALESCE(SUM(s.net_amount), 0) as received, COUNT(s.id) as received_orders, '
+                .'COALESCE(SUM(CASE WHEN s.id IS NULL THEN 1 ELSE 0 END), 0) as pending_orders, '
+                .'SUM(CASE WHEN s.id IS NULL THEN o.subtotal - o.discount - ('.ProfitFigures::estimatedFeeSql().') END) as pending_expected, '
+                .'COALESCE(SUM('.ProfitFigures::unknownFeeSql().'), 0) as pending_unknown')
+            ->first();
+
+        return [
+            'received' => (int) $row->received_orders > 0 ? round((float) $row->received, 2) : null,
+            'received_orders' => (int) $row->received_orders,
+            'pending_orders' => (int) $row->pending_orders,
+            // Expected from the fee table; null when any pending order has no fee table (amount unknown).
+            'pending_expected' => (int) $row->pending_unknown > 0 || $row->pending_expected === null ? null : round((float) $row->pending_expected, 2),
+        ];
+    }
+
+    /** Orders placed per day, and goods, cost and gross profit (before returns) of orders recognised per day. */
+    private function daily(CarbonImmutable $from, CarbonImmutable $to, ?array $scope): array
+    {
+        $placed = $this->profit->scoped(DB::table('orders as o')->where('o.tenant_id', $this->tenant()), $scope)
+            ->whereBetween('o.placed_at', [$from, $to])->where('o.status', '!=', OrderStatus::CANCELLED)
+            ->selectRaw(ReportRange::day('o.placed_at', $from).' as day, COUNT(*) as orders, SUM(o.total) as revenue')->groupBy('day')->get()->keyBy('day');
+        $day = ReportRange::day(RevenuePolicy::dateSql('o'), $from);
+        $cost = DB::table('order_items')->selectRaw('order_id, SUM(cost_snapshot * quantity) as cogs')->groupBy('order_id');
+        $recognized = $this->profit->recognized($from, $to, $scope)->leftJoinSub($cost, 'c', 'c.order_id', '=', 'o.id')
+            ->selectRaw("{$day} as day, COUNT(*) as orders, SUM(o.subtotal - o.discount) as goods, COALESCE(SUM(c.cogs), 0) as cogs")
+            ->groupBy('day')->get()->keyBy('day');
+
+        $series = [];
+        for ($d = $from->startOfDay(); $d->lte($to); $d = $d->addDay()) {
+            $key = $d->toDateString();
+            $a = $placed->get($key);
+            $b = $recognized->get($key);
+            $goods = (float) ($b->goods ?? 0);
+            $cogs = (float) ($b->cogs ?? 0);
+            $series[] = [
+                'day' => $key, 'orders' => (int) ($a->orders ?? 0), 'revenue' => (float) ($a->revenue ?? 0),
+                'completed_orders' => (int) ($b->orders ?? 0), 'net_revenue' => $goods, 'cogs' => $cogs, 'gross_profit' => round($goods - $cogs, 2),
+            ];
+        }
+
+        return $series;
+    }
+
+    /**
+     * Each marketplace shop and own sales channel side by side, on the same basis as the totals.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function byShop(CarbonImmutable $from, CarbonImmutable $to, CarbonImmutable $prevFrom, CarbonImmutable $prevTo): array
+    {
+        $key = fn (Builder $q) => $q->groupBy('o.marketplace_account_id', 'o.sales_channel_id')->get()
+            ->keyBy(fn ($r) => $r->marketplace_account_id ? 'a'.$r->marketplace_account_id : ($r->sales_channel_id ? 'c'.$r->sales_channel_id : 'x'));
+        $base = fn () => DB::table('orders as o')->where('o.tenant_id', $this->tenant())->select('o.marketplace_account_id', 'o.sales_channel_id');
+
+        $placed = $key($base()->whereBetween('o.placed_at', [$from, $to])
+            ->selectRaw('SUM(CASE WHEN o.status <> ? THEN 1 ELSE 0 END) as ordered, SUM(CASE WHEN o.status = ? THEN 1 ELSE 0 END) as cancelled, SUM(CASE WHEN o.status <> ? THEN o.total ELSE 0 END) as revenue',
+                [OrderStatus::CANCELLED, OrderStatus::CANCELLED, OrderStatus::CANCELLED]));
+        $before = $key(RevenuePolicy::recognized($base(), 'o', $prevFrom, $prevTo)->selectRaw('SUM(o.subtotal - o.discount) as goods'));
+        $recognised = $key(RevenuePolicy::recognized($base(), 'o', $from, $to)->selectRaw('COUNT(*) as n'));
+
+        $accounts = MarketplaceAccount::query()->get(['id', 'ulid', 'shop_name', 'marketplace'])->keyBy(fn ($a) => 'a'.$a->id);
+        $channels = SalesChannel::query()->get(['id', 'ulid', 'name'])->keyBy(fn ($c) => 'c'.$c->id);
+
+        $rows = [];
+        foreach ($placed->keys()->merge($recognised->keys())->unique() as $id) {
+            if ($id === 'x') {
+                continue;
+            }
+            $shop = $accounts->get($id) ?? $channels->get($id);
+            if (! $shop) {
+                continue;
+            }
+            $isAccount = str_starts_with($id, 'a');
+            $p = $this->profit->period($from, $to, [$isAccount ? 'account' : 'channel' => $shop->id]);
+            $previous = (float) ($before->get($id)->goods ?? 0);
+            $rows[] = [
+                'id' => $shop->ulid,
+                'kind' => $isAccount ? 'account' : 'channel',
+                'shop' => $isAccount ? $shop->shop_name : $shop->name,
+                'marketplace' => $isAccount ? $shop->marketplace : 'manual',
+                'ordered_orders' => (int) ($placed->get($id)->ordered ?? 0),
+                'cancelled_orders' => (int) ($placed->get($id)->cancelled ?? 0),
+                'revenue' => (float) ($placed->get($id)->revenue ?? 0),
+                'orders' => $p['orders'],
+                'returns' => $p['returns'],
+                'net_revenue' => $p['revenue'],
+                'cogs' => $p['cogs'],
+                'gross_profit' => $p['gross_profit'],
+                'fees' => $p['marketplace_fees'],
+                'fees_unknown_orders' => $p['fees_unknown_orders'],
+                'shipping' => $p['shipping'],
+                // Contribution before selling expenses (which belong to the whole business).
+                'profit' => $p['contribution_profit'],
+                'margin' => $p['revenue'] > 0 ? round($p['contribution_profit'] / $p['revenue'] * 100, 1) : null,
+                'average_order' => $p['orders'] > 0 ? round(($p['goods'] - $p['discount']) / $p['orders'], 0) : null,
+                'growth' => $previous > 0 ? round(($p['goods'] - $p['discount'] - $previous) / $previous * 100, 1) : null,
+            ];
+        }
+        usort($rows, fn ($a, $b) => $b['net_revenue'] <=> $a['net_revenue'] ?: $b['revenue'] <=> $a['revenue']);
+
+        return $rows;
+    }
+
+    /** Shops and own channels the report can be scoped to. @return list<array<string, string>> */
+    private function shops(): array
+    {
+        return MarketplaceAccount::query()->orderBy('shop_name')->get(['ulid', 'shop_name', 'marketplace'])
+            ->map(fn ($a) => ['id' => $a->ulid, 'kind' => 'account', 'name' => $a->shop_name, 'marketplace' => $a->marketplace])
+            ->concat(SalesChannel::query()->orderBy('name')->get(['ulid', 'name'])
+                ->map(fn ($c) => ['id' => $c->ulid, 'kind' => 'channel', 'name' => $c->name, 'marketplace' => 'manual']))
+            ->values()->all();
+    }
+
+    private function tenant(): int
+    {
+        return $this->context->id();
     }
 }

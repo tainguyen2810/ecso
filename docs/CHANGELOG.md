@@ -41,6 +41,20 @@
 - Sửa: đơn Woo chuyển "Đã hoàn tiền" (refunded) trước khi giao thì thành Đã hủy và nhả hàng giữ, không trừ kho. Đơn đã giao rồi mới hoàn thì mở phiếu trả hàng; kho chỉ cộng lại khi nhận và kiểm hàng.
 - Sửa: Enter trong ô tìm SKU khi quét hai mã liên tiếp nhanh hơn kết quả tìm kiếm không còn bỏ sót mã đầu.
 - Migration `2026_11_12_100000_add_woo_order_details`. Chỉ thử với cửa hàng Woo giả lập trong test, chưa thử với website thật.
+### Tài chính, vòng C–E: phí sàn, lợi nhuận nhiều tầng, lọc theo shop (2026-11-04)
+- **Một nguồn số liệu lợi nhuận** (`App\Modules\Analytics\Support\ProfitFigures`) cho trang Tài chính và Báo cáo lãi lỗ: doanh thu thuần, giá vốn, lợi nhuận gộp, **lợi nhuận đóng góp** (gộp − phí sàn + phí ship khách trả − chi phí bán hàng) và **lợi nhuận quản trị ước tính** (đóng góp − hao hụt kho − chi phí vận hành, chi phí khác + thu nhập khác). Ghi rõ là số ước tính, chưa phải lợi nhuận kế toán.
+- **Phí sàn** tách 3 loại: *đã xác nhận* (từ file đối soát đã nhập), *ước tính* (theo bảng phí của shop cho đơn chưa đối soát), *chưa biết* (shop chưa có bảng phí: đếm số đơn, không tính là 0). Đơn kênh riêng, POS, website không có phí sàn.
+- **Tiền sàn chuyển về** lấy từ đối soát, hiện riêng, không cộng vào doanh thu. Có thêm số đơn chờ đối soát và số tiền dự kiến (khi biết bảng phí).
+- Loại phiếu chi có **nhóm lãi lỗ** (Chi phí bán hàng / Chi phí vận hành / Chi phí khác). Loại mặc định được gán sẵn nhóm; thêm loại "Tiền sàn chuyển về" (không tính KQKD) và "Phí ngân hàng".
+- Trang Tài chính: lọc theo **từng shop hoặc kênh bán**, chọn nhanh kỳ, so sánh với kỳ trước, bảng theo shop (đơn đặt/hủy, doanh thu thuần, giá vốn, lãi gộp, phí sàn, lợi nhuận đóng góp, biên, giá trị TB/đơn, tăng trưởng), biểu đồ doanh thu thuần và lãi gộp theo ngày (chạm được trên điện thoại), công thức ở mỗi ô, xuất CSV.
+- Bấm vào từng ô (doanh thu, chờ hoàn thành, trả hàng, hủy, phí sàn, tiền về) để xem **danh sách đơn tạo nên con số**, tổng khớp với ô, xuất CSV. API: `GET /api/v1/finance/details?metric=revenue|awaiting|cancelled|returns|fees|payouts`.
+- Báo cáo lãi lỗ có các dòng mới: phí sàn (đã xác nhận/ước tính), chi phí bán hàng, lợi nhuận đóng góp, chi phí vận hành, chi phí khác.
+
+### Tài chính, vòng B: ghi nhận doanh thu lúc hoàn thành (2026-11-04)
+- Chính sách đã duyệt (`App\Modules\Analytics\Support\RevenuePolicy`): đơn sàn TMĐT ghi nhận doanh thu khi sàn báo **hoàn thành**, theo cột mới `orders.completed_at`. Đơn kênh riêng, POS và website WooCommerce ghi nhận khi **giao thành công**. Đơn sàn đã giao nhưng chưa hoàn thành hiện riêng ở mục "Chờ sàn hoàn thành", là số tạm tính và không tính vào lợi nhuận.
+- Trang Tài chính và Báo cáo lãi lỗ (cả thẻ Tài chính ở Tổng quan báo cáo) dùng chung chính sách này. Báo cáo lãi lỗ không còn tính đơn mới đặt hoặc chưa giao.
+- **Phí ship khách trả tính riêng**: không nằm trong doanh thu thuần. Báo cáo lãi lỗ có dòng V riêng, vẫn được cộng vào lợi nhuận.
+- Quyền mới **`finance.profit`** (Xem giá vốn và lợi nhuận, xuất báo cáo tài chính). Mặc định có ở các vai trò Chủ, Quản trị, Quản lý vận hành và Kế toán. Vai trò tùy chỉnh đang có quyền `finance.view` được thêm quyền này để giữ nguyên quyền xem cũ. Người không có quyền này không thấy giá vốn và lãi trên trang Tài chính và Tổng quan báo cáo, và không mở được Báo cáo lãi lỗ.
 
 ### Khách hàng, đợt A: công nợ thống nhất (2026-11-04)
 - **Một quy tắc công nợ dùng chung** (`App\Modules\Sales\Services\CustomerDebt`): trang khách, danh sách khách, sổ công nợ, báo cáo Công nợ phải thu, màn hình thu nợ ở Sổ quỹ và tóm tắt khách trong chi tiết đơn giờ cùng một con số. Nợ một đơn = tổng đơn − giá trị trả hàng đã duyệt − (đã thu − đã hoàn). Chỉ tính đơn kênh riêng; không tính đơn sàn, đơn COD, đơn hủy, đơn hoàn toàn bộ, đơn giao thất bại. Không lưu số cộng dồn nên đơn đồng bộ/sửa lại không bao giờ bị cộng nợ hai lần.
