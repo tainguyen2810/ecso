@@ -633,3 +633,67 @@ export interface CashShift {
     totals: CashShiftTotals;
     movements?: { kind: 'in' | 'out'; amount: string; reason: string; created_by: string | null; created_at: string }[];
 }
+
+/** Round 3: fee table of one marketplace shop with its category overrides and the actual fees (settlement data). */
+export interface FeeStats {
+    orders: number;
+    order_amount: number;
+    commission_pct: number;
+    payment_pct: number;
+    service_pct: number;
+    total_pct: number;
+    fixed_fee: number;
+    fixed_fee_per_order: number;
+    shipping_fee: number;
+    net_amount: number;
+    category_name?: string;
+}
+
+export interface FeeRuleFields {
+    commission_pct: number | string | null;
+    payment_pct: number | string | null;
+    service_pct: number | string | null;
+    fixed_fee: number | string | null;
+}
+
+export interface FeeRuleRow {
+    account: { id: string; shop_name: string; marketplace: string; marketplace_name: string };
+    saved: boolean;
+    shop: FeeRuleFields & { rounding: number | string; min_margin_pct: number | string; auto_apply: boolean; auto_update_fees: boolean; suggested_from: { days: number; orders: number; at: string } | null };
+    categories: (FeeRuleFields & { category_id: string; category_name: string | null; actual: FeeStats | null })[];
+    actual: FeeStats | null;
+}
+
+export interface FeeAlertData {
+    id: string;
+    type: 'fee_drift' | 'loss_orders';
+    account: { id: string; shop_name: string; marketplace: string } | null;
+    text: string;
+    data: Record<string, unknown>;
+    created_at: string;
+}
+
+export interface PriceBoardCell {
+    listing_id: string;
+    current: number | null;
+    new: number | null;
+    raised: boolean;
+    new_outcome: { fees: number; net: number; profit: number | null; margin_pct: number | null } | null;
+    current_outcome: { fees: number; net: number; profit: number | null; margin_pct: number | null } | null;
+    status: 'pending' | 'loss' | 'locked' | 'export' | 'ok' | 'no_price';
+    locked: boolean;
+    below_margin: boolean;
+    min_margin_pct: number | null;
+}
+
+export interface PriceBoardRow {
+    variant_id: string;
+    product_id: string | null;
+    name: string | null;
+    variant_name: string | null;
+    sku: string;
+    base: number;
+    cost: number | null;
+    flags: { pending: boolean; loss: boolean; locked: boolean };
+    cells: Record<string, PriceBoardCell>;
+}

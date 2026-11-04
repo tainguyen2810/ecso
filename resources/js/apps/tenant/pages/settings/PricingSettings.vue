@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import SettingsPage from './SettingsPage.vue';
 import SettingsSection from './SettingsSection.vue';
+import MarketplaceFeeTable from './MarketplaceFeeTable.vue';
 import { useSettingsForm } from './useSettingsForm';
 import FormField from '@/shared/ui/FormField.vue';
 import Select from '@/shared/ui/Select.vue';
@@ -75,4 +76,5 @@ async function save() {
             </SettingsSection>
         </template>
     </SettingsPage>
+    <MarketplaceFeeTable />
 </template>

@@ -101,6 +101,10 @@ class ListingService
                 $counts['variants']++;
                 $counts['suggested'] += (int) $this->suggest($variant);
                 $this->prices->onChannelPrice($account, $variant);
+                // A price waiting in the price file is done once the marketplace shows it.
+                if ($variant->price_push_status === 'export' && $variant->target_price !== null && abs((float) $variant->getAttribute('price') - (float) $variant->target_price) < 1) {
+                    $variant->forceFill(['price_push_status' => 'ok', 'pushed_price' => $variant->target_price, 'price_pushed_at' => now()])->save();
+                }
             }
         });
     }

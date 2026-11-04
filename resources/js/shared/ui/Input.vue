@@ -2,7 +2,7 @@
 import { cn } from '@/shared/lib/utils';
 
 defineOptions({ inheritAttrs: false });
-const model = defineModel<string | number>();
+const model = defineModel<string | number | null>();
 defineProps<{ class?: string; invalid?: boolean }>();
 </script>
 

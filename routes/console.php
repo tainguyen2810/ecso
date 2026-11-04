@@ -22,6 +22,9 @@ Schedule::command('ecso:marketplace:push-due')->everyMinute()->withoutOverlappin
 // Order reconcile: recovers lost webhooks by polling recently changed orders (ORDER-LIFECYCLE.md §6).
 Schedule::command('ecso:orders:reconcile')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
 
+// Fee check: actual marketplace fees vs fee tables, loss orders (round 3 WooCommerce/pricing).
+Schedule::command('ecso:marketplace:check-fees')->dailyAt('06:00')->withoutOverlapping()->onOneServer();
+
 // Monitoring alerts (queues, failed jobs, scheduler, circuits, disk) — Phase 8.
 Schedule::command('ecso:monitor')->everyFiveMinutes()->withoutOverlapping()->onOneServer();
 
