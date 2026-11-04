@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import { ArrowLeft, Check, PackageCheck, Send, Tags, X } from 'lucide-vue-next';
+import { ArrowLeft, Check, History, PackageCheck, Send, Tags, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
+import Alert from '@/shared/ui/Alert.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -25,6 +26,12 @@ const toast = useToast();
 const kindKey = computed(() => route.meta.kind as DocumentKindKey);
 const kind = computed(() => documentKinds[kindKey.value]);
 const hasLineNotes = computed(() => (doc.value?.lines ?? []).some((l) => l.reason || l.line_note));
+// Stocktake lines keep the stock seen when counting; approval applies count − that stock (sales in between kept).
+const hasSnapshot = computed(() => (doc.value?.lines ?? []).some((l) => l.system_qty !== undefined));
+const showNow = computed(() => (doc.value?.lines ?? []).some((l) => l.on_hand_now !== undefined));
+const movedSince = computed(() => (doc.value?.lines ?? []).filter((l) => l.on_hand_now !== undefined && l.system_qty !== undefined && l.on_hand_now !== l.system_qty));
+const pendingDelta = (l: { quantity: number; system_qty?: number }) => (l.system_qty === undefined ? null : l.quantity - l.system_qty);
+const signed = (n: number) => (n > 0 ? '+' : '') + formatNumber(n);
 
 const doc = ref<InventoryDocument | null>(null);
 const loadError = ref<string | null>(null);
@@ -103,6 +110,11 @@ const steps = computed(() => {
             </template>
         </PageHeader>
 
+        <Alert v-if="isPending && movedSince.length" :icon="History" tone="amber" class="mb-5" data-testid="moved-since-count">
+            <p class="font-medium">{{ formatNumber(movedSince.length) }} SKU đã có nhập hoặc xuất sau khi đếm{{ doc.counted_at ? ` (${formatDateTime(doc.counted_at)})` : '' }}.</p>
+            <p class="mt-0.5 text-muted-foreground">Khi duyệt, ECSO chỉ cộng hoặc trừ phần lệch tìm thấy lúc đếm và giữ nguyên các giao dịch đó. Cột "Tồn sau duyệt" là tồn kho sau khi phiếu được áp dụng.</p>
+        </Alert>
+
         <div class="grid gap-5 lg:grid-cols-3">
             <Card class="lg:col-span-2" title="Chi tiết hàng hóa">
                 <div class="overflow-x-auto">
@@ -114,8 +126,11 @@ const steps = computed(() => {
                                 <th class="px-4 py-2.5 text-right font-medium">Số lượng</th>
                                 <th v-if="doc.kind === 'receipt'" class="px-4 py-2.5 text-right font-medium">Đơn giá</th>
                                 <th v-if="doc.kind === 'receipt'" class="px-4 py-2.5 text-right font-medium">Thành tiền</th>
-                                <th v-if="doc.kind === 'adjustment'" class="px-4 py-2.5 text-right font-medium">Tồn trước</th>
-                                <th v-if="doc.kind === 'adjustment'" class="px-4 py-2.5 text-right font-medium">Đã áp dụng</th>
+                                <th v-if="hasSnapshot" class="px-4 py-2.5 text-right font-medium">Tồn lúc đếm</th>
+                                <th v-if="showNow" class="px-4 py-2.5 text-right font-medium">Tồn hiện tại</th>
+                                <th v-if="doc.kind === 'adjustment' && !showNow" class="px-4 py-2.5 text-right font-medium">Tồn trước</th>
+                                <th v-if="doc.kind === 'adjustment'" class="px-4 py-2.5 text-right font-medium">{{ showNow ? 'Sẽ áp dụng' : 'Đã áp dụng' }}</th>
+                                <th v-if="showNow" class="px-4 py-2.5 text-right font-medium">Tồn sau duyệt</th>
                                 <th v-if="hasLineNotes" class="px-4 py-2.5 font-medium">Lý do, ghi chú</th>
                             </tr>
                         </thead>
@@ -129,10 +144,16 @@ const steps = computed(() => {
                                 <td class="px-4 py-2.5 text-right tabular-nums">{{ l.mode === 'delta' && l.quantity > 0 ? '+' : '' }}{{ formatNumber(l.quantity) }}</td>
                                 <td v-if="doc.kind === 'receipt'" class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(l.unit_cost) }}</td>
                                 <td v-if="doc.kind === 'receipt'" class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(l.quantity * Number(l.unit_cost)) }}</td>
-                                <td v-if="doc.kind === 'adjustment'" class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ l.on_hand_before ?? '—' }}</td>
-                                <td v-if="doc.kind === 'adjustment'" :class="cn('px-4 py-2.5 text-right font-medium tabular-nums', (l.applied_delta ?? 0) > 0 && 'text-success', (l.applied_delta ?? 0) < 0 && 'text-destructive')">
+                                <td v-if="hasSnapshot" class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ l.system_qty === undefined ? '—' : formatNumber(l.system_qty) }}</td>
+                                <td v-if="showNow" :class="cn('px-4 py-2.5 text-right tabular-nums', l.on_hand_now !== l.system_qty ? 'font-medium text-amber-600' : 'text-muted-foreground')">{{ l.on_hand_now === undefined ? '—' : formatNumber(l.on_hand_now) }}</td>
+                                <td v-if="doc.kind === 'adjustment' && !showNow" class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ l.on_hand_before ?? '—' }}</td>
+                                <td v-if="doc.kind === 'adjustment' && showNow" :class="cn('px-4 py-2.5 text-right font-medium tabular-nums', (pendingDelta(l) ?? 0) > 0 && 'text-success', (pendingDelta(l) ?? 0) < 0 && 'text-destructive')">
+                                    {{ pendingDelta(l) === null ? 'Chờ duyệt' : pendingDelta(l) === 0 ? 'Khớp' : signed(pendingDelta(l)!) }}
+                                </td>
+                                <td v-else-if="doc.kind === 'adjustment'" :class="cn('px-4 py-2.5 text-right font-medium tabular-nums', (l.applied_delta ?? 0) > 0 && 'text-success', (l.applied_delta ?? 0) < 0 && 'text-destructive')">
                                     {{ l.applied_delta === undefined ? 'Chờ duyệt' : (l.applied_delta > 0 ? '+' : '') + l.applied_delta }}
                                 </td>
+                                <td v-if="showNow" class="px-4 py-2.5 text-right font-semibold tabular-nums">{{ l.on_hand_now === undefined || pendingDelta(l) === null ? '—' : formatNumber(l.on_hand_now + pendingDelta(l)!) }}</td>
                                 <td v-if="hasLineNotes" class="px-4 py-2.5 text-xs text-muted-foreground">{{ [l.reason ? varianceReasons[l.reason] ?? l.reason : null, l.line_note].filter(Boolean).join(' · ') || '—' }}</td>
                             </tr>
                         </tbody>

@@ -237,13 +237,13 @@ class ReturnService
 
                 $line->forceFill(['received_qty' => $input['received_qty'], 'sellable_qty' => $input['sellable_qty'], 'damaged_qty' => $input['damaged_qty']])->save();
                 if ($input['sellable_qty'] > 0) {
-                    $restock[] = ['variant_id' => $line->product_variant_id, 'quantity' => $input['sellable_qty']];
+                    $restock[] = ['variant_id' => $line->product_variant_id, 'quantity' => $input['sellable_qty'], 'line_id' => $line->id];
                 }
             }
 
             if ($restock !== []) {
                 // A returned combo goes back into stock as its components.
-                $restock = $this->combos->expand($restock);
+                $restock = $this->withSoldCost($this->combos->expand($restock), $restock, $byId);
                 $this->inventory->restockReturn($warehouse, $restock, "restock:return:{$return->id}", $return, "Hàng hoàn {$return->number}");
             }
 
@@ -259,6 +259,42 @@ class ReturnService
 
             return $return;
         });
+    }
+
+    /**
+     * Restocked goods carry the cost they were sold at (the order line's cost snapshot), so "giá vốn hàng trả lại"
+     * matches the cost of goods sold. A SKU that also comes back as part of a combo, or was sold without a cost,
+     * goes back at the current average.
+     *
+     * @param  array<int, array{variant_id: int, quantity: int}>  $expanded
+     * @param  array<int, array{variant_id: int, quantity: int, line_id: int}>  $restock
+     * @param  Collection<int, OrderReturnLine>  $lines
+     * @return array<int, array{variant_id: int, quantity: int, unit_cost?: string}>
+     */
+    private function withSoldCost(array $expanded, array $restock, $lines): array
+    {
+        $combos = $this->combos->componentsOf(array_column($restock, 'variant_id'));
+        $items = OrderItem::query()->whereIn('id', $lines->pluck('order_item_id'))->pluck('cost_snapshot', 'id');
+        $sold = [];
+        foreach ($restock as $r) {
+            $cost = $items[$lines[$r['line_id']]->order_item_id] ?? null;
+            if (isset($combos[$r['variant_id']])) {
+                continue;
+            }
+            $sold[$r['variant_id']] ??= ['qty' => 0, 'value' => '0', 'known' => true];
+            $sold[$r['variant_id']]['qty'] += $r['quantity'];
+            $sold[$r['variant_id']]['known'] = $sold[$r['variant_id']]['known'] && $cost !== null;
+            $sold[$r['variant_id']]['value'] = bcadd($sold[$r['variant_id']]['value'], bcmul((string) ($cost ?? '0'), (string) $r['quantity'], 4), 4);
+        }
+
+        return array_map(function (array $line) use ($sold) {
+            $s = $sold[$line['variant_id']] ?? null;
+            if ($s && $s['known'] && $s['qty'] === $line['quantity']) {
+                $line['unit_cost'] = bcdiv($s['value'], (string) $s['qty'], 4);
+            }
+
+            return $line;
+        }, $expanded);
     }
 
     /**

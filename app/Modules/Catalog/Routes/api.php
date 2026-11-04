@@ -6,7 +6,8 @@ use App\Modules\Catalog\Http\Controllers\ProductTransferController;
 use App\Modules\Catalog\Http\Controllers\TaxonomyController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
+// idempotent: a repeated POST with the same Idempotency-Key replays the first answer (no second document).
+Route::middleware(['auth:sanctum', 'verified', 'tenant', 'idempotent'])->group(function () {
     Route::get('categories', [TaxonomyController::class, 'categories']);
     Route::post('categories', [TaxonomyController::class, 'storeCategory']);
     Route::patch('categories/{category}', [TaxonomyController::class, 'updateCategory']);

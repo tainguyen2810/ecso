@@ -15,11 +15,11 @@ class InventoryAdjustmentLine extends Model
 
     public $timestamps = false;
 
-    protected $fillable = ['product_variant_id', 'mode', 'quantity', 'reason', 'note'];
+    protected $fillable = ['product_variant_id', 'mode', 'quantity', 'system_qty', 'reason', 'note'];
 
     protected function casts(): array
     {
-        return ['quantity' => 'integer', 'applied_delta' => 'integer', 'on_hand_before' => 'integer'];
+        return ['quantity' => 'integer', 'system_qty' => 'integer', 'applied_delta' => 'integer', 'on_hand_before' => 'integer'];
     }
 
     /** @return BelongsTo<ProductVariant, $this> */
