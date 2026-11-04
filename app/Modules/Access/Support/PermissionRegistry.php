@@ -28,6 +28,9 @@ final class PermissionRegistry
         'customers' => [
             'customers.view' => 'Xem khách hàng',
             'customers.manage' => 'Thêm, sửa khách hàng',
+            'customers.import' => 'Nhập khách hàng từ file',
+            'customers.export' => 'Xuất danh sách khách hàng (có số điện thoại, địa chỉ)',
+            'customers.delete' => 'Xóa khách hàng',
         ],
         'products' => [
             'products.view' => 'Xem sản phẩm',
@@ -86,7 +89,7 @@ final class PermissionRegistry
             Role::OWNER => ['name' => 'Chủ doanh nghiệp', 'rank' => 100, 'permissions' => $all],
             Role::ADMIN => ['name' => 'Quản trị doanh nghiệp', 'rank' => 90, 'permissions' => array_values(array_diff($all, ['billing.manage']))],
             Role::MANAGER => ['name' => 'Quản lý vận hành', 'rank' => 70, 'permissions' => [
-                ...self::READ_ALL, 'orders.update', 'orders.cancel', 'orders.assign', 'orders.print', 'orders.create', 'orders.payment', 'orders.payment.void', 'orders.price', 'orders.shifts', 'customers.manage', 'products.manage',
+                ...self::READ_ALL, 'orders.update', 'orders.cancel', 'orders.assign', 'orders.print', 'orders.create', 'orders.payment', 'orders.payment.void', 'orders.price', 'orders.shifts', 'customers.manage', 'customers.import', 'customers.export', 'customers.delete', 'products.manage',
                 'inventory.receive', 'inventory.adjust', 'inventory.adjust.approve', 'inventory.transfer', 'purchasing.manage', 'purchasing.payment',
                 'returns.inspect', 'finance.view', 'finance.vouchers', 'members.view',
             ]],
@@ -96,7 +99,7 @@ final class PermissionRegistry
             ]],
             Role::ORDER_STAFF => ['name' => 'Nhân viên xử lý đơn', 'rank' => 40, 'permissions' => [
                 'dashboard.view', 'orders.view', 'orders.update', 'orders.cancel', 'orders.print', 'orders.create', 'orders.payment', 'orders.payment.void', 'products.view',
-                'inventory.view', 'returns.view', 'customers.view', 'customers.manage',
+                'inventory.view', 'returns.view', 'customers.view', 'customers.manage', 'customers.import', 'customers.export', 'customers.delete',
             ]],
             Role::ACCOUNTANT => ['name' => 'Kế toán', 'rank' => 40, 'permissions' => [
                 'dashboard.view', 'orders.view', 'products.view', 'inventory.view', 'purchasing.view',

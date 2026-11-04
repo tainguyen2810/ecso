@@ -28,6 +28,9 @@ const toast = useToast();
 const route = useRoute();
 const router = useRouter();
 const canManage = computed(() => tenant.can('customers.manage'));
+const canImport = computed(() => tenant.can('customers.import'));
+const canExport = computed(() => tenant.can('customers.export'));
+const canDelete = computed(() => tenant.can('customers.delete'));
 
 const rows = ref<Customer[]>([]);
 const meta = ref({ current_page: 1, last_page: 1, total: 0 });
@@ -159,15 +162,15 @@ const bulkAction = ref('');
 const bulkValue = ref('');
 const bulkBusy = ref(false);
 watch(bulkAction, () => (bulkValue.value = ''));
-const BULK_ACTIONS = [
+const BULK_ACTIONS = computed(() => [
     { value: '', label: 'Chọn thao tác…' },
     { value: 'set_group', label: 'Chuyển nhóm' },
     { value: 'add_tag', label: 'Gắn tag' },
     { value: 'remove_tag', label: 'Gỡ tag' },
     { value: 'assign', label: 'Giao nhân viên phụ trách' },
     { value: 'set_status', label: 'Đổi trạng thái giao dịch' },
-    { value: 'delete', label: 'Xóa khách' },
-];
+    ...(canDelete.value ? [{ value: 'delete', label: 'Xóa khách' }] : []),
+]);
 const bulkReady = computed(() => bulkAction.value && (['delete', 'set_group', 'assign'].includes(bulkAction.value) || bulkValue.value.trim() !== ''));
 async function applyBulk() {
     if (bulkAction.value === 'delete' && !window.confirm(`Xóa ${selected.value.size} khách đã chọn? Khách đã có đơn hàng sẽ được giữ lại.`)) return;
@@ -203,8 +206,8 @@ async function exportFile(onlySelected: boolean) {
 
 <template>
     <PageHeader title="Khách hàng" description="Danh bạ khách mua qua kênh bán riêng: nhóm, người phụ trách, lịch sử mua và công nợ.">
-        <Button v-if="canManage" variant="outline" :loading="exporting" data-testid="customer-export" @click="exportFile(false)"><Download /> Xuất Excel</Button>
-        <Button v-if="canManage" variant="outline" data-testid="customer-import" @click="importOpen = true"><Upload /> Nhập file</Button>
+        <Button v-if="canExport" variant="outline" :loading="exporting" data-testid="customer-export" @click="exportFile(false)"><Download /> Xuất Excel</Button>
+        <Button v-if="canImport" variant="outline" data-testid="customer-import" @click="importOpen = true"><Upload /> Nhập file</Button>
         <Button v-if="canManage" data-testid="add-customer" @click="dialog = true"><UserPlus /> Thêm khách</Button>
     </PageHeader>
     <CustomersNav />
@@ -319,7 +322,7 @@ async function exportFile(onlySelected: boolean) {
                 <datalist id="bulk-tags"><option v-for="t in tags" :key="t" :value="t" /></datalist>
             </template>
             <Button size="sm" :disabled="!bulkReady" :loading="bulkBusy" :variant="bulkAction === 'delete' ? 'destructive' : 'default'" data-testid="bulk-apply" @click="applyBulk">Áp dụng</Button>
-            <Button size="sm" variant="outline" :loading="exporting" @click="exportFile(true)"><Download /> Xuất các khách đã chọn</Button>
+            <Button v-if="canExport" size="sm" variant="outline" :loading="exporting" @click="exportFile(true)"><Download /> Xuất các khách đã chọn</Button>
             <button class="ml-auto text-xs text-muted-foreground hover:text-foreground" @click="selected = new Set()">Bỏ chọn</button>
         </div>
 
@@ -331,7 +334,7 @@ async function exportFile(onlySelected: boolean) {
             :title="filters.q || activeExtra || filters.group || filters.view !== 'all' ? 'Không có khách phù hợp' : 'Chưa có khách hàng'"
             description="Khách được thêm tự động khi tạo đơn bán với khách mới, thêm thủ công, hoặc nhập từ file Excel."
         >
-            <Button v-if="canManage && !filters.q" variant="outline" @click="importOpen = true"><Upload /> Nhập từ Excel</Button>
+            <Button v-if="canImport && !filters.q" variant="outline" @click="importOpen = true"><Upload /> Nhập từ Excel</Button>
         </EmptyState>
         <div v-else class="overflow-x-auto" :class="loading && 'opacity-60'">
             <table class="w-full text-sm" data-testid="customer-table">
