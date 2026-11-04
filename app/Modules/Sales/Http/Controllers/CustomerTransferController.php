@@ -3,6 +3,7 @@
 namespace App\Modules\Sales\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Services\CustomerExporter;
 use App\Modules\Sales\Services\CustomerImporter;
@@ -13,13 +14,13 @@ use OpenSpout\Writer\XLSX\Writer as XlsxWriter;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * Customer import / export (CSV, XLSX). Both carry personal data (phones, addresses), so both need customers.manage.
+ * Customer import / export (CSV, XLSX). Both carry personal data (phones, addresses): each has its own permission (customers.import, customers.export).
  */
 class CustomerTransferController extends Controller
 {
-    public function import(Request $request, CustomerImporter $importer): JsonResponse
+    public function import(Request $request, CustomerImporter $importer, AuditLogger $audit): JsonResponse
     {
-        $this->authorize('create', Customer::class);
+        $this->authorize('import', Customer::class);
         $data = $request->validate([
             'file' => ['required', 'file', 'max:5120', 'mimes:csv,txt,xlsx'],
             'dry_run' => ['sometimes', 'boolean'],
@@ -37,6 +38,9 @@ class CustomerTransferController extends Controller
         }
 
         $result = $importer->import($parsed['rows'], (bool) ($data['dry_run'] ?? false));
+        if (! $result['dry_run'] && ! $result['errors']) {
+            $audit->record('customer.imported', null, ['file' => $file->getClientOriginalName(), 'created' => $result['created'], 'updated' => $result['updated']]);
+        }
 
         return response()->json(
             ['message' => $result['errors'] ? 'Có lỗi, chưa nhập dòng nào.' : 'OK', 'total' => count($parsed['rows'])] + $result,
@@ -44,18 +48,20 @@ class CustomerTransferController extends Controller
         );
     }
 
-    public function export(Request $request, CustomerExporter $exporter): StreamedResponse
+    public function export(Request $request, CustomerExporter $exporter, AuditLogger $audit): StreamedResponse
     {
-        $this->authorize('create', Customer::class);
+        $this->authorize('export', Customer::class);
         $data = $request->validate(['format' => ['nullable', 'in:csv,xlsx'], 'ids' => ['nullable', 'string', 'max:20000']]);
         $ids = filled($data['ids'] ?? null) ? array_values(array_filter(explode(',', $data['ids']))) : null;
+        // The file carries phones and addresses in clear: who took it, and which customers, is kept.
+        $audit->record('customer.exported', null, ['format' => $data['format'] ?? 'xlsx', 'scope' => $ids === null ? 'all' : count($ids).' selected']);
 
         return $exporter->stream($data['format'] ?? 'xlsx', $ids);
     }
 
     public function template(): StreamedResponse
     {
-        $this->authorize('create', Customer::class);
+        $this->authorize('import', Customer::class);
 
         return response()->streamDownload(function () {
             $writer = new XlsxWriter;

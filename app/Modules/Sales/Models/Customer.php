@@ -5,6 +5,7 @@ namespace App\Modules\Sales\Models;
 use App\Modules\Identity\Models\User;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Sales\Services\CustomerDebt;
 use App\Modules\Sales\Support\PhoneNumber;
 use App\Modules\Tenancy\Concerns\BelongsToTenant;
 use App\Shared\Concerns\HasPublicUlid;
@@ -53,8 +54,8 @@ class Customer extends Model
     }
 
     /**
-     * Adds orders_count, total_spent, debt and last_order_at. Cancelled and returned orders do not count; debt is
-     * what is still unpaid on the other orders.
+     * Adds orders_count, total_spent, last_order_at (cancelled and returned orders do not count, as in the sales
+     * reports) and debt, which follows CustomerDebt: own-channel orders less their returns and net payments.
      *
      * @param  Builder<Customer>  $query
      * @return Builder<Customer>
@@ -64,12 +65,14 @@ class Customer extends Model
         $excluded = "'".OrderStatus::CANCELLED."','".OrderStatus::RETURNED."'";
         $base = fn (string $select) => Order::query()->selectRaw($select)
             ->whereColumn('orders.customer_id', 'customers.id')->whereRaw("orders.status NOT IN ({$excluded})");
+        $debt = CustomerDebt::constrain(Order::query()->whereColumn('orders.customer_id', 'customers.id'))
+            ->selectRaw('GREATEST(COALESCE(SUM('.CustomerDebt::dueSql().'), 0), 0)');
 
         return $query->select('customers.*')
             ->selectSub($base('COUNT(*)'), 'orders_count')
             ->selectSub($base('COALESCE(SUM(total), 0)'), 'total_spent')
-            ->selectSub($base('COALESCE(SUM(GREATEST(total - paid_amount, 0)), 0)'), 'debt')
-            ->selectSub(Order::query()->selectRaw('MAX(placed_at)')->whereColumn('orders.customer_id', 'customers.id'), 'last_order_at');
+            ->selectSub($debt, 'debt')
+            ->selectSub($base('MAX(placed_at)'), 'last_order_at');
     }
 
     /** @return BelongsTo<CustomerGroup, $this> */

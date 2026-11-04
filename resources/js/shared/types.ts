@@ -316,7 +316,7 @@ export interface CustomerNote {
 }
 
 export interface CustomerLedgerEntry {
-    type: 'order' | 'payment';
+    type: 'order' | 'return' | 'payment' | 'refund';
     ref: string | null;
     order_id: string | null;
     at: string | null;
