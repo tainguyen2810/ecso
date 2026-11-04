@@ -9,6 +9,7 @@ use App\Modules\Marketplace\Connectors\ConnectorRegistry;
 use App\Modules\Marketplace\Connectors\Fake\FakeConnector;
 use App\Modules\Marketplace\Connectors\Fake\FakeMarketplace;
 use App\Modules\Marketplace\Connectors\WooCommerce\WooCommerceConnector;
+use App\Modules\Marketplace\Jobs\SyncListingsJob;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Support\Facades\DB;
@@ -63,6 +64,7 @@ class AccountService
      */
     public function update(MarketplaceAccount $account, array $data): MarketplaceAccount
     {
+        $pricesWereOn = $account->syncs('sync_prices');
         if (isset($data['settings'])) {
             $data['settings'] = array_merge((array) $account->settings, array_intersect_key($data['settings'], MarketplaceAccount::SYNC_DEFAULTS));
             $account->forceFill(['settings' => $data['settings']]);
@@ -70,6 +72,11 @@ class AccountService
         }
         $account->fill($data)->save();
         $this->audit->record('marketplace.updated', $account, $data);
+
+        // Turning price sync on re-reads the store: each linked SKU then follows its price source.
+        if (! $pricesWereOn && $account->syncs('sync_prices') && $account->isActive()) {
+            SyncListingsJob::dispatch($account->id)->afterCommit();
+        }
 
         return $account;
     }

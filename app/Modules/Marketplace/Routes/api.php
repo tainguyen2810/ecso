@@ -3,6 +3,7 @@
 use App\Modules\Marketplace\Http\Controllers\FakeMarketplaceController;
 use App\Modules\Marketplace\Http\Controllers\ListingController;
 use App\Modules\Marketplace\Http\Controllers\MarketplaceAccountController;
+use App\Modules\Marketplace\Http\Controllers\PriceController;
 use App\Modules\Marketplace\Http\Controllers\WebhookController;
 use App\Modules\Marketplace\Http\Controllers\WooCommerceController;
 use Illuminate\Support\Facades\Route;
@@ -36,6 +37,13 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::post('marketplace-accounts/{account}/sync-products', [MarketplaceAccountController::class, 'syncProducts'])->middleware('throttle:10,1,marketplace.marketplace-accounts.x.sync-products');
     Route::post('marketplace-accounts/{account}/push-stock', [MarketplaceAccountController::class, 'pushStock'])->middleware('throttle:10,1,marketplace.marketplace-accounts.x.push-stock');
     Route::get('marketplace-webhooks', [MarketplaceAccountController::class, 'webhooks']);
+
+    Route::get('marketplace-accounts/{account}/price-changes', [PriceController::class, 'pending']);
+    Route::post('marketplace-accounts/{account}/price-changes/approve-all', [PriceController::class, 'approveAll']);
+    Route::post('price-changes/{change}/approve', [PriceController::class, 'approve']);
+    Route::post('price-changes/{change}/reject', [PriceController::class, 'reject']);
+    Route::get('products/{product}/prices', [PriceController::class, 'product']);
+    Route::put('products/{product}/price-source', [PriceController::class, 'setSource']);
 
     Route::get('marketplace-accounts/{account}/listings', [ListingController::class, 'index']);
     Route::post('marketplace-accounts/{account}/listings/confirm-suggestions', [ListingController::class, 'confirmSuggestions']);

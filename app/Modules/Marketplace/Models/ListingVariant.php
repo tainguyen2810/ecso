@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
  *
  * @property Carbon|null $mapped_at
  * @property Carbon|null $last_pushed_at
+ * @property Carbon|null $price_pushed_at
  */
 class ListingVariant extends Model
 {
@@ -39,6 +40,10 @@ class ListingVariant extends Model
             'price' => 'decimal:2',
             'regular_price' => 'decimal:2',
             'sale_price' => 'decimal:2',
+            'price_locked' => 'boolean',
+            'target_price' => 'decimal:2',
+            'pushed_price' => 'decimal:2',
+            'price_pushed_at' => 'datetime',
             'marketplace_stock' => 'integer',
             'last_pushed_qty' => 'integer',
             'mapped_at' => 'datetime',

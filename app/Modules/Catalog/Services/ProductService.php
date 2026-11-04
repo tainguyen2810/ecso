@@ -14,7 +14,7 @@ use Illuminate\Validation\ValidationException;
 
 class ProductService
 {
-    public const VARIANT_FIELDS = ['sku', 'barcode', 'name', 'options', 'ref_price', 'wholesale_price', 'weight_gram', 'status'];
+    public const VARIANT_FIELDS = ['sku', 'barcode', 'name', 'options', 'ref_price', 'price_source', 'wholesale_price', 'weight_gram', 'status'];
 
     public function __construct(private readonly AuditLogger $audit, private readonly InventoryDocumentService $documents) {}
 
@@ -236,6 +236,9 @@ class ProductService
             if (array_key_exists($price, $attributes) && $attributes[$price] === null) {
                 $attributes[$price] = 0;
             }
+        }
+        if (array_key_exists('price_source', $attributes) && $attributes['price_source'] === null) {
+            unset($attributes['price_source']);
         }
         if (array_key_exists('barcode', $attributes) && $attributes['barcode'] !== null) {
             $attributes['barcode'] = trim($attributes['barcode']) ?: null;

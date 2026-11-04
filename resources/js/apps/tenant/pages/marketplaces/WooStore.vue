@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { AlertTriangle, ChevronLeft, Link2, PackagePlus, RefreshCw, Send, ShoppingCart, Unplug } from 'lucide-vue-next';
+import { AlertTriangle, ChevronLeft, Link2, PackagePlus, RefreshCw, Send, ShoppingCart, Tag, Unplug } from 'lucide-vue-next';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -17,17 +17,18 @@ import { api, ApiError } from '@/shared/lib/api';
 import { formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
-import type { MarketplaceAccountData, MarketplaceSyncSettings, NewListingData, Warehouse } from '@/shared/types';
+import type { MarketplaceAccountData, MarketplaceSyncSettings, NewListingData, PendingPriceChange, Warehouse } from '@/shared/types';
 
-/** Settings page of a connected WooCommerce store: sync switches, warehouse, new store products waiting for approval. */
+/** Settings page of a connected WooCommerce store: sync switches, warehouse, new store products and website prices waiting for approval. */
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
 const tenant = useTenantStore();
 
 const account = ref<MarketplaceAccountData | null>(null);
-const overview = ref({ orders_this_week: 0, new_products: 0, sync_errors: 0 });
+const overview = ref({ orders_this_week: 0, new_products: 0, pending_prices: 0, sync_errors: 0 });
 const pending = ref<NewListingData[]>([]);
+const prices = ref<PendingPriceChange[]>([]);
 const warehouses = ref<Warehouse[]>([]);
 const loading = ref(true);
 const loadError = ref<string | null>(null);
@@ -39,10 +40,16 @@ async function load() {
     loadError.value = null;
     try {
         const id = route.params.id as string;
-        const [a, p, w] = await Promise.all([api.get(`/marketplace-accounts/${id}`), api.get(`/marketplace-accounts/${id}/new-products`), api.get('/warehouses')]);
+        const [a, p, w, pr] = await Promise.all([
+            api.get(`/marketplace-accounts/${id}`),
+            api.get(`/marketplace-accounts/${id}/new-products`),
+            api.get('/warehouses'),
+            api.get(`/marketplace-accounts/${id}/price-changes`),
+        ]);
         account.value = a.data.data;
         overview.value = a.data.overview;
         pending.value = p.data.data;
+        prices.value = pr.data.data;
         warehouses.value = w.data.data.filter((x: Warehouse) => x.status === 'active');
     } catch (e) {
         loadError.value = (e as ApiError).message;
@@ -67,13 +74,14 @@ async function run(key: string, fn: () => Promise<string | void>) {
 const switches: { key: keyof MarketplaceSyncSettings; label: string; hint: string }[] = [
     { key: 'sync_orders', label: 'Đơn hàng Woo về ECSO', hint: 'Vào Danh sách đơn hàng, nguồn WooCommerce, giữ hàng ngay' },
     { key: 'sync_stock', label: 'Tồn kho ECSO lên Woo', hint: 'Số có thể bán của kho bên dưới' },
-    { key: 'sync_prices', label: 'Giá (đợt 2)', hint: 'Theo nguồn giá từng sản phẩm; giá khuyến mãi Woo là giá bán thực tế' },
+    { key: 'sync_prices', label: 'Giá hai chiều', hint: 'Theo nguồn giá từng sản phẩm; giá khuyến mãi Woo là giá bán thực tế' },
     { key: 'import_new_products', label: 'Sản phẩm mới trên Woo', hint: 'Vào danh sách chờ duyệt' },
 ];
 
 const setSwitch = (key: keyof MarketplaceSyncSettings, value: boolean) => run(`set-${key}`, async () => {
     const { data } = await api.patch(`/marketplace-accounts/${account.value!.id}`, { settings: { [key]: value } });
     account.value = { ...account.value!, settings: data.data.settings };
+    if (key === 'sync_prices' && value) return 'Đã bật giá hai chiều. ECSO đang đọc lại giá trên website.';
 });
 const setWarehouse = (id: string | undefined) => run('warehouse', async () => {
     const { data } = await api.patch(`/marketplace-accounts/${account.value!.id}`, { warehouse_id: id });
@@ -104,6 +112,19 @@ const skip = (id: string) => run(`skip-${id}`, async () => {
     await api.post(`/marketplace-accounts/${account.value!.id}/new-products/skip`, { listing_ids: [id] });
     pending.value = pending.value.filter((p) => p.id !== id);
     overview.value.new_products = Math.max(0, overview.value.new_products - 1);
+});
+
+const decidePrice = (id: string, action: 'approve' | 'reject') => run(`price-${action}-${id}`, async () => {
+    await api.post(`/price-changes/${id}/${action}`);
+    prices.value = prices.value.filter((p) => p.id !== id);
+    overview.value.pending_prices = prices.value.length;
+    return action === 'approve' ? 'Đã áp dụng giá website vào ECSO.' : undefined;
+});
+const approveAllPrices = () => run('price-all', async () => {
+    const { data } = await api.post(`/marketplace-accounts/${account.value!.id}/price-changes/approve-all`);
+    prices.value = [];
+    overview.value.pending_prices = 0;
+    return `Đã áp dụng ${formatNumber(data.data.applied)} giá từ website.`;
 });
 
 const statusLabel = computed(() => (account.value?.status !== 'connected' ? 'Đã ngắt' : account.value.last_error ? 'Có lỗi' : 'Đang kết nối'));
@@ -154,7 +175,7 @@ const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].
                         :key="s.key"
                         :label="s.label"
                         :hint="s.hint"
-                        :disabled="!canEdit || busy === `set-${s.key}` || s.key === 'sync_prices'"
+                        :disabled="!canEdit || busy === `set-${s.key}`"
                         :model-value="account.settings?.[s.key] ?? false"
                         :data-testid="`woo-switch-${s.key}`"
                         @update:model-value="(v: boolean) => setSwitch(s.key, v)"
@@ -195,5 +216,48 @@ const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].
                 <p class="border-t px-5 py-3 text-xs text-muted-foreground">Giá khuyến mãi (nếu có) được dùng làm giá bán khi tạo sản phẩm.</p>
             </Card>
         </div>
+
+        <Card v-if="account.settings?.sync_prices || prices.length" title="Giá từ website chờ duyệt" description="Giá bằng 0 hoặc lệch quá 50% so với giá ECSO thì không tự áp dụng." class="mt-4" data-testid="woo-pending-prices">
+            <template v-if="canEdit && prices.length" #actions>
+                <Button size="sm" :loading="busy === 'price-all'" data-testid="woo-prices-approve-all" @click="approveAllPrices">Áp dụng tất cả</Button>
+            </template>
+            <EmptyState v-if="!prices.length" :icon="Tag" title="Không có giá chờ duyệt" description="Giá website thay đổi hợp lý được áp dụng tự động; xem lịch sử ở trang từng sản phẩm." />
+            <div v-else class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                        <tr>
+                            <th class="px-5 py-2.5 font-medium">Sản phẩm</th>
+                            <th class="px-4 py-2.5 text-right font-medium">Giá ECSO</th>
+                            <th class="px-4 py-2.5 text-right font-medium">Giá trên website</th>
+                            <th class="px-4 py-2.5 text-right font-medium">Lệch</th>
+                            <th class="px-4 py-2.5 font-medium">Lý do chờ</th>
+                            <th class="px-5 py-2.5" />
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <tr v-for="p in prices" :key="p.id">
+                            <td class="px-5 py-3">
+                                <RouterLink v-if="p.product_id" :to="`/products/${p.product_id}`" class="font-medium hover:text-primary">{{ p.product_name }}</RouterLink>
+                                <span v-else class="font-medium">{{ p.product_name ?? '—' }}</span>
+                                <span v-if="p.variant_name" class="text-muted-foreground"> · {{ p.variant_name }}</span>
+                                <p class="font-mono text-xs text-muted-foreground">{{ p.sku }}</p>
+                            </td>
+                            <td class="px-4 py-3 text-right tabular-nums">{{ p.ecso_price !== null ? formatMoney(p.ecso_price) : '—' }}</td>
+                            <td class="px-4 py-3 text-right font-semibold tabular-nums">{{ formatMoney(p.website_price) }}<span v-if="p.on_sale" class="ml-1 text-xs font-normal text-muted-foreground">(KM)</span></td>
+                            <td class="px-4 py-3 text-right tabular-nums" :class="(p.diff_percent ?? 0) < 0 ? 'text-rose-600' : 'text-emerald-600'">
+                                {{ p.diff_percent === null ? '—' : `${p.diff_percent > 0 ? '+' : ''}${p.diff_percent.toLocaleString('vi-VN')}%` }}
+                            </td>
+                            <td class="px-4 py-3">{{ p.reason }}</td>
+                            <td class="whitespace-nowrap px-5 py-3 text-right">
+                                <template v-if="canEdit">
+                                    <Button size="sm" variant="ghost" class="text-primary" :loading="busy === `price-approve-${p.id}`" @click="decidePrice(p.id, 'approve')">Áp dụng</Button>
+                                    <Button size="sm" variant="ghost" :loading="busy === `price-reject-${p.id}`" @click="decidePrice(p.id, 'reject')">Bỏ qua</Button>
+                                </template>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </Card>
     </template>
 </template>

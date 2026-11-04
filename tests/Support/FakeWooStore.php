@@ -151,6 +151,11 @@ class FakeWooStore
                 continue;
             }
             $rows[$u['id']] = array_merge($rows[$u['id']], $u);
+            if (isset($u['regular_price']) || isset($u['sale_price'])) {
+                // Like WooCommerce: the selling price is the sale price when there is one.
+                $row = $rows[$u['id']];
+                $rows[$u['id']]['price'] = ($row['sale_price'] ?? '') !== '' ? $row['sale_price'] : $row['regular_price'];
+            }
             $out[] = $rows[$u['id']];
         }
 

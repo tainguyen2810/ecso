@@ -32,6 +32,7 @@ use App\Modules\Marketplace\Listeners\PlanInventoryPush;
 use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Policies\MarketplacePolicy;
+use App\Modules\Marketplace\Services\PriceSync;
 use App\Modules\Orders\Console\ReconcileOrdersCommand;
 use App\Modules\Orders\Events\OrderImported;
 use App\Modules\Orders\Listeners\FillOrderShortages;
@@ -121,6 +122,8 @@ class ModuleServiceProvider extends ServiceProvider
         Event::listen(AvailableStockChanged::class, PlanInventoryPush::class);
         Event::listen(ListingMappingChanged::class, RemapOrderItems::class);
         Event::listen(ListingMappingChanged::class, PlanInventoryPush::class);
+        // A retail price changed in ECSO goes to the websites where ECSO holds the price.
+        ProductVariant::updated(fn (ProductVariant $variant) => app(PriceSync::class)->variantUpdated($variant));
 
         foreach (self::API_MODULES as $module) {
             Route::middleware('api')->prefix('api/v1')->group(app_path("Modules/{$module}/Routes/api.php"));

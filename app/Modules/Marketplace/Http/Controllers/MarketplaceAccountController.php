@@ -11,6 +11,7 @@ use App\Modules\Marketplace\Http\Resources\AccountResource;
 use App\Modules\Marketplace\Models\InventorySyncOutbox;
 use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
+use App\Modules\Marketplace\Models\PriceChange;
 use App\Modules\Marketplace\Models\WebhookEvent;
 use App\Modules\Marketplace\Services\AccountService;
 use App\Modules\Marketplace\Services\InventorySyncPlanner;
@@ -92,6 +93,7 @@ class MarketplaceAccountController extends Controller
         return (new AccountResource($account))->additional(['overview' => [
             'orders_this_week' => Order::query()->where('marketplace_account_id', $account->id)->where('placed_at', '>=', now()->startOfWeek())->count(),
             'new_products' => $newListings->count($account),
+            'pending_prices' => PriceChange::query()->where('marketplace_account_id', $account->id)->where('status', PriceChange::PENDING)->count(),
             'sync_errors' => (int) $account->push_errors + $failedWebhooks,
         ]])->response();
     }

@@ -56,6 +56,29 @@ class StockReader
     }
 
     /**
+     * On-hand quantity per variant over all warehouses (combos: whole combos their components make).
+     *
+     * @param  array<int, int>  $variantIds
+     * @return array<int, int>
+     */
+    public function onHand(array $variantIds): array
+    {
+        $combos = $this->combos->componentsOf($variantIds);
+        $components = array_merge(...array_values(array_map('array_keys', $combos)) ?: [[]]);
+        $ids = array_values(array_unique([...$variantIds, ...$components]));
+        $single = StockBalance::query()->whereIn('product_variant_id', $ids)->groupBy('product_variant_id')
+            ->selectRaw('product_variant_id, SUM(on_hand) as qty')->pluck('qty', 'product_variant_id')->map(fn ($q) => (int) $q)->all();
+        $buildable = ComboResolver::buildable($combos, $single);
+
+        $result = [];
+        foreach ($variantIds as $id) {
+            $result[$id] = $buildable[$id] ?? $single[$id] ?? 0;
+        }
+
+        return $result;
+    }
+
+    /**
      * Available (on hand − held) per variant, in one warehouse or all; combos as whole combos buildable.
      *
      * @param  array<int, int>  $variantIds

@@ -6,6 +6,7 @@ use App\Modules\Marketplace\Connectors\Capability;
 use App\Modules\Marketplace\Connectors\Data\OrderData;
 use App\Modules\Marketplace\Connectors\Data\OrderItemData;
 use App\Modules\Marketplace\Connectors\Data\OrderPage;
+use App\Modules\Marketplace\Connectors\Data\PriceUpdate;
 use App\Modules\Marketplace\Connectors\Data\ProductData;
 use App\Modules\Marketplace\Connectors\Data\ProductPage;
 use App\Modules\Marketplace\Connectors\Data\ShopAuthorization;
@@ -14,6 +15,7 @@ use App\Modules\Marketplace\Connectors\Data\StockUpdateResult;
 use App\Modules\Marketplace\Connectors\Data\WebhookMessage;
 use App\Modules\Marketplace\Connectors\FetchesSingleProduct;
 use App\Modules\Marketplace\Connectors\MarketplaceConnector;
+use App\Modules\Marketplace\Connectors\UpdatesPrices;
 use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Exceptions\UnsupportedCapability;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
@@ -30,7 +32,7 @@ use Carbon\CarbonImmutable;
  * Woo order as the meta "_ecso_stage" and read back as raw status "processing:packed" / "processing:handed_over",
  * so the order re-read from Woo after an action is always the truth.
  */
-class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
+class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector, UpdatesPrices
 {
     public const MARKETPLACE = 'woocommerce';
 
@@ -347,15 +349,39 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
      */
     public function updateInventory(MarketplaceAccount $account, array $updates): array
     {
+        return $this->batchUpdate($account, $updates, fn (StockUpdate $u) => ['manage_stock' => true, 'stock_quantity' => max(0, $u->quantity)]);
+    }
+
+    /**
+     * Sets the regular price. A sale price set on the store is left alone: while it runs, buyers pay the sale price.
+     */
+    public function updatePrices(MarketplaceAccount $account, array $updates): array
+    {
+        return $this->batchUpdate($account, $updates, fn (PriceUpdate $u) => ['regular_price' => self::wooMoney($u->price)]);
+    }
+
+    /** Woo stores prices as strings; VND has no decimals. */
+    public static function wooMoney(string $price): string
+    {
+        $value = rtrim(rtrim(number_format((float) $price, 2, '.', ''), '0'), '.');
+
+        return $value === '' ? '0' : $value;
+    }
+
+    /**
+     * @param  array<int, StockUpdate|PriceUpdate>  $updates
+     * @param  callable(StockUpdate|PriceUpdate): array<string, mixed>  $fields
+     * @return array<int, StockUpdateResult>
+     */
+    private function batchUpdate(MarketplaceAccount $account, array $updates, callable $fields): array
+    {
         $client = WooClient::forAccount($account);
         $results = [];
-        $groups = collect($updates)->groupBy(fn (StockUpdate $u) => $u->externalProductId === $u->externalSkuId || $u->externalProductId === '' ? 'products' : "products/{$u->externalProductId}/variations");
+        $groups = collect($updates)->groupBy(fn ($u) => $u->externalProductId === $u->externalSkuId || $u->externalProductId === '' ? 'products' : "products/{$u->externalProductId}/variations");
 
         foreach ($groups as $path => $group) {
             foreach ($group->chunk(100) as $chunk) {
-                $response = $client->post("{$path}/batch", ['update' => $chunk->map(fn (StockUpdate $u) => [
-                    'id' => (int) $u->externalSkuId, 'manage_stock' => true, 'stock_quantity' => max(0, $u->quantity),
-                ])->values()->all()]);
+                $response = $client->post("{$path}/batch", ['update' => $chunk->map(fn ($u) => ['id' => (int) $u->externalSkuId] + $fields($u))->values()->all()]);
                 $returned = collect($response['update'] ?? []);
                 foreach ($chunk as $update) {
                     $row = $returned->first(fn ($r) => (string) ($r['id'] ?? '') === $update->externalSkuId && ! isset($r['error']))

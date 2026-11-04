@@ -21,7 +21,10 @@ class ProductVariant extends Model
 {
     use BelongsToTenant, HasPublicUlid, SoftDeletes;
 
-    protected $fillable = ['sku', 'barcode', 'name', 'options', 'ref_price', 'wholesale_price', 'weight_gram', 'status'];
+    /** Who holds the selling price: auto (ECSO while in stock, else the website), ecso, woo. */
+    public const PRICE_SOURCES = ['auto', 'ecso', 'woo'];
+
+    protected $fillable = ['sku', 'barcode', 'name', 'options', 'ref_price', 'price_source', 'wholesale_price', 'weight_gram', 'status'];
 
     protected function casts(): array
     {
@@ -29,6 +32,7 @@ class ProductVariant extends Model
             'options' => 'array',
             'cost_price' => 'decimal:4',
             'ref_price' => 'decimal:2',
+            'price_updated_at' => 'datetime',
             'wholesale_price' => 'decimal:2',
             'weight_gram' => 'integer',
         ];

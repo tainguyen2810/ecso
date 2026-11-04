@@ -19,7 +19,7 @@ import { api, ApiError } from '@/shared/lib/api';
 import { cn, formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
-import type { Product } from '@/shared/types';
+import type { Product, ProductPrices } from '@/shared/types';
 
 interface StockRow {
     variant: { id: string; sku: string; name: string | null };
@@ -85,6 +85,56 @@ async function saveLocation() {
 }
 const id = computed(() => route.params.id as string);
 
+// Two-way price with websites: price source, price on each linked website, price history.
+const prices = ref<ProductPrices | null>(null);
+const pricesOf = (variantId: string | undefined) => prices.value?.variants.find((v) => v.id === variantId);
+const showPrices = computed(() => !!prices.value && (prices.value.history.length > 0 || prices.value.variants.some((v) => v.channels.length > 0)));
+const channelNames = computed(() => [...new Set((prices.value?.variants ?? []).flatMap((v) => v.channels.map((c) => c.shop_name ?? '')))].filter(Boolean));
+const sourceOptions = [
+    { value: 'auto', label: 'Tự động (theo tồn kho)' },
+    { value: 'ecso', label: 'ECSO giữ giá' },
+    { value: 'woo', label: 'Website giữ giá' },
+];
+const productSource = computed(() => {
+    const set = new Set((prices.value?.variants ?? []).map((v) => v.price_source));
+    return set.size === 1 ? [...set][0]! : '';
+});
+function holderText(v: ProductPrices['variants'][number]) {
+    const who = v.holder === 'ecso' ? 'ECSO giữ' : 'Website giữ';
+    return v.price_source === 'auto' ? `Tự động · ${who}` : who;
+}
+function holderHint(v: ProductPrices['variants'][number]) {
+    if (v.price_source !== 'auto') return 'cố định';
+    return v.holder === 'ecso' ? `vì còn ${formatNumber(v.on_hand)} trong kho` : 'vì hết hàng';
+}
+function pushText(c: ProductPrices['variants'][number]['channels'][number]) {
+    if (!c.price_sync) return { text: 'chưa bật giá hai chiều', tone: 'text-muted-foreground' };
+    if (c.push_status === 'failed') return { text: c.push_error ?? 'đẩy giá lỗi', tone: 'text-destructive' };
+    if (c.push_status === 'pending') return { text: 'đang đẩy giá', tone: 'text-amber-600' };
+    if (c.push_status === 'ok' && c.pushed_at) return { text: `✓ khớp, đẩy lúc ${formatDateTime(c.pushed_at)}`, tone: 'text-success' };
+    return { text: 'giá trên website', tone: 'text-muted-foreground' };
+}
+const historyStatus: Record<string, { label: string; tone: string }> = {
+    applied: { label: 'Đã áp dụng', tone: 'text-success' },
+    pending: { label: 'Chờ duyệt (ở trang gian hàng)', tone: 'text-amber-600' },
+    rejected: { label: 'Bỏ qua', tone: 'text-muted-foreground' },
+    reverted: { label: 'Đã trả lại giá ECSO', tone: 'text-amber-600' },
+};
+const savingSource = ref(false);
+async function setSource(value: string | undefined) {
+    if (!value) return;
+    savingSource.value = true;
+    try {
+        await api.put(`/products/${id.value}/price-source`, { price_source: value });
+        prices.value = (await api.get(`/products/${id.value}/prices`)).data.data;
+        toast.success('Đã đổi nguồn giá');
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    } finally {
+        savingSource.value = false;
+    }
+}
+
 const product = ref<Product | null>(null);
 const loadError = ref<string | null>(null);
 const tab = ref('stock');
@@ -105,6 +155,7 @@ onMounted(async () => {
         loadError.value = (e as ApiError).message;
         return;
     }
+    api.get(`/products/${id.value}/prices`).then(({ data }) => (prices.value = data.data)).catch(() => (prices.value = null));
     if (canStock.value) {
         const { data } = await api.get(`/inventory/products/${id.value}/stock`);
         stock.value = data.data;
@@ -239,12 +290,14 @@ async function remove() {
                             <th class="px-4 py-2.5 text-right font-medium">Giá bán buôn</th>
                             <th class="px-4 py-2.5 text-right font-medium">Giá vốn BQ</th>
                             <th v-if="canStock" class="px-4 py-2.5 text-right font-medium">Có thể bán</th>
+                            <th v-if="showPrices" class="px-4 py-2.5 font-medium">Nguồn giá</th>
+                            <th v-if="showPrices" class="px-4 py-2.5 font-medium">Giá trên {{ channelNames.length === 1 ? channelNames[0] : 'website' }}</th>
                             <th class="px-4 py-2.5" />
                         </tr>
                     </thead>
                     <tbody class="divide-y">
                         <tr v-for="v in product.variants" :key="v.id">
-                            <td class="px-4 py-2.5 font-mono text-xs font-medium">{{ v.sku }}</td>
+                            <td class="whitespace-nowrap px-4 py-2.5 font-mono text-xs font-medium">{{ v.sku }}</td>
                             <td class="px-4 py-2.5">
                                 {{ v.name ?? '—' }}
                                 <span v-if="product.type !== 'combo' && v.components?.length === 1" class="block text-xs text-muted-foreground" data-testid="pack-conversion">
@@ -252,15 +305,69 @@ async function remove() {
                                 </span>
                             </td>
                             <td class="px-4 py-2.5 font-mono text-xs text-muted-foreground">{{ v.barcode ?? '—' }}</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums">{{ Number(v.ref_price) ? formatMoney(v.ref_price) : '—' }}</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums">{{ Number(v.wholesale_price) ? formatMoney(v.wholesale_price) : '—' }}</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ Number(v.cost_price) ? formatMoney(v.cost_price) : '—' }}</td>
+                            <td class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{{ Number(v.ref_price) ? formatMoney(v.ref_price) : '—' }}</td>
+                            <td class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{{ Number(v.wholesale_price) ? formatMoney(v.wholesale_price) : '—' }}</td>
+                            <td class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ Number(v.cost_price) ? formatMoney(v.cost_price) : '—' }}</td>
                             <td v-if="canStock" class="px-4 py-2.5 text-right font-medium tabular-nums">{{ formatNumber(totals.get(v.id!)?.available ?? 0) }}</td>
-                            <td class="px-4 py-2.5 text-right"><RouterLink v-if="canStock" :to="`/inventory/sku/${v.id}`" class="text-xs text-primary hover:underline">Thẻ kho</RouterLink></td>
+                            <td v-if="showPrices" class="px-4 py-2.5" :data-testid="`price-source-${v.sku}`">
+                                <template v-if="pricesOf(v.id)">
+                                    <span class="inline-flex whitespace-nowrap rounded bg-blue-50 px-1.5 py-0.5 text-xs text-blue-700">{{ holderText(pricesOf(v.id)!) }}</span>
+                                    <span class="block text-xs text-muted-foreground">{{ holderHint(pricesOf(v.id)!) }}</span>
+                                </template>
+                            </td>
+                            <td v-if="showPrices" class="px-4 py-2.5">
+                                <div v-for="c in pricesOf(v.id)?.channels ?? []" :key="c.account_id ?? ''" class="leading-tight">
+                                    <span v-if="channelNames.length > 1" class="text-xs text-muted-foreground">{{ c.shop_name }}: </span>
+                                    <span class="whitespace-nowrap font-medium tabular-nums">{{ c.price !== null ? formatMoney(c.price) : '—' }}</span>
+                                    <span v-if="c.sale_price && c.regular_price && c.sale_price !== c.regular_price" class="ml-1 text-xs text-muted-foreground line-through">{{ formatMoney(c.regular_price) }}</span>
+                                    <span :class="cn('block text-xs', pushText(c).tone)">{{ pushText(c).text }}</span>
+                                </div>
+                                <span v-if="!pricesOf(v.id)?.channels.length" class="text-muted-foreground">—</span>
+                            </td>
+                            <td class="whitespace-nowrap px-4 py-2.5 text-right"><RouterLink v-if="canStock" :to="`/inventory/sku/${v.id}`" class="text-xs text-primary hover:underline">Thẻ kho</RouterLink></td>
                         </tr>
                     </tbody>
                 </table>
             </div>
+        </Card>
+
+        <Card v-if="showPrices" title="Lịch sử giá" class="mt-5" data-testid="price-history">
+            <template #actions>
+                <label class="flex items-center gap-2 text-sm text-muted-foreground">
+                    Nguồn giá
+                    <Select :model-value="productSource" class="w-56" aria-label="Nguồn giá" :disabled="!canManage || savingSource" :options="productSource ? sourceOptions : [{ value: '', label: 'Khác nhau theo SKU' }, ...sourceOptions]" data-testid="price-source-select" @update:model-value="setSource" />
+                </label>
+            </template>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                        <tr>
+                            <th class="px-4 py-2.5 font-medium">Lúc</th>
+                            <th v-if="(product.variants?.length ?? 0) > 1" class="px-4 py-2.5 font-medium">SKU</th>
+                            <th class="px-4 py-2.5 text-right font-medium">Giá cũ</th>
+                            <th class="px-4 py-2.5 text-right font-medium">Giá mới</th>
+                            <th class="px-4 py-2.5 font-medium">Nguồn</th>
+                            <th class="px-4 py-2.5 font-medium">Người / sự kiện</th>
+                            <th class="px-4 py-2.5 font-medium">Trạng thái</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <tr v-for="h in prices!.history" :key="h.id">
+                            <td class="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{{ formatDateTime(h.created_at) }}</td>
+                            <td v-if="(product.variants?.length ?? 0) > 1" class="whitespace-nowrap px-4 py-2.5 font-mono text-xs">{{ h.sku }}</td>
+                            <td class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ h.old_price !== null ? formatMoney(h.old_price) : '—' }}</td>
+                            <td class="whitespace-nowrap px-4 py-2.5 text-right font-medium tabular-nums">{{ formatMoney(h.new_price) }}</td>
+                            <td class="px-4 py-2.5">{{ h.source === 'ecso' ? 'ECSO' : (h.shop_name ?? 'Website') }}</td>
+                            <td class="px-4 py-2.5">{{ h.actor ? `${h.actor}: ${h.reason ?? ''}` : h.reason }}</td>
+                            <td :class="cn('px-4 py-2.5', historyStatus[h.status]?.tone)">{{ historyStatus[h.status]?.label ?? h.status }}</td>
+                        </tr>
+                        <tr v-if="!prices!.history.length"><td colspan="7" class="px-4 py-8 text-center text-muted-foreground">Chưa có thay đổi giá.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="border-t px-4 py-3 text-xs text-muted-foreground">
+                Tự động: còn hàng thì ECSO giữ giá (sửa giá trong ECSO sẽ đẩy lên website, sửa trên website sẽ bị trả lại); hết hàng thì lấy giá bán thực tế trên website (giá khuyến mãi nếu có). ECSO chỉ đổi giá thường trên website, không đụng giá khuyến mãi.
+            </p>
         </Card>
 
         <Card v-if="canStock" class="mt-5">

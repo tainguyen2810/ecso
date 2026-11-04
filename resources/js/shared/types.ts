@@ -415,6 +415,58 @@ export interface NewListingData {
     variants: { name: string | null; seller_sku: string | null; price: string | null; regular_price: string | null; sale_price: string | null }[];
 }
 
+/** A website price waiting for approval (0, or more than 50% away from ECSO's). */
+export interface PendingPriceChange {
+    id: string;
+    product_id: string | null;
+    product_name: string | null;
+    variant_name: string | null;
+    sku: string | null;
+    ecso_price: string | null;
+    website_price: string;
+    on_sale: boolean;
+    diff_percent: number | null;
+    reason: string | null;
+    created_at: string;
+}
+
+export type PriceSource = 'auto' | 'ecso' | 'woo';
+
+/** Price source, who holds the price now, prices on linked websites, and price history of one product. */
+export interface ProductPrices {
+    variants: {
+        id: string;
+        sku: string;
+        price_source: PriceSource;
+        holder: 'ecso' | 'channel';
+        on_hand: number;
+        channels: {
+            account_id: string | null;
+            shop_name: string | null;
+            marketplace: string | null;
+            price_sync: boolean;
+            price: string | null;
+            regular_price: string | null;
+            sale_price: string | null;
+            push_status: string | null;
+            push_error: string | null;
+            pushed_at: string | null;
+        }[];
+    }[];
+    history: {
+        id: string;
+        sku: string | null;
+        old_price: string | null;
+        new_price: string;
+        source: 'ecso' | 'channel';
+        shop_name: string | null;
+        status: 'applied' | 'pending' | 'rejected' | 'reverted';
+        reason: string | null;
+        actor: string | null;
+        created_at: string;
+    }[];
+}
+
 export interface MarketplaceAccountData {
     id: string;
     marketplace: string;

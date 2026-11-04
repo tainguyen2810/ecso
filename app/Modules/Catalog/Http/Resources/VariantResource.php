@@ -19,6 +19,7 @@ class VariantResource extends JsonResource
             'name' => $this->name,
             'options' => $this->options ?? (object) [],
             'ref_price' => $this->ref_price,
+            'price_source' => $this->price_source ?? 'auto',
             'wholesale_price' => $this->wholesale_price,
             'cost_price' => $this->cost_price,
             'weight_gram' => $this->weight_gram,

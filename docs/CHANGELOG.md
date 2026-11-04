@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+### WooCommerce đợt 2: giá hai chiều (2026-11-04)
+- **Nguồn giá** từng SKU (`product_variants.price_source`): Tự động (còn hàng thì ECSO giữ giá, hết hàng thì website giữ), ECSO giữ, Website giữ. Đổi ở trang sản phẩm (`PUT /products/{id}/price-source`).
+- ECSO giữ giá: sửa giá bán lẻ trong ECSO thì đẩy lên **giá thường** (`regular_price`) của Woo qua batch API (`PushPricesJob`); ai sửa giá trên website sẽ bị trả lại và ghi "Đã trả lại giá ECSO". ECSO không đụng giá khuyến mãi trên Woo.
+- Website giữ giá: giá bán thực tế trên Woo (khuyến mãi nếu có, nếu không là giá thường) thành giá bán lẻ ECSO. Giá bằng 0 hoặc lệch quá 50% thì vào **Giá từ website chờ duyệt** ở trang gian hàng (áp dụng / bỏ qua / áp dụng tất cả); giá đã bỏ qua không hỏi lại cho đến khi website đổi giá khác.
+- Chống vòng lặp: áp giá từ website không kích hoạt đẩy giá; giá website trùng giá ECSO thì không làm gì.
+- Công tắc **Giá hai chiều** trên trang gian hàng (mặc định tắt); bật lên thì ECSO đọc lại toàn bộ sản phẩm website để áp nguồn giá.
+- Trang sản phẩm: cột Nguồn giá, Giá trên website (trạng thái đẩy giá), thẻ **Lịch sử giá**.
+- Migration `2026_11_11_110000_add_price_sync`: cột nguồn giá, cột theo dõi đẩy giá trên `listing_variants`, bảng `price_changes`. API: `GET marketplace-accounts/{id}/price-changes`, `POST price-changes/{id}/approve|reject`, `POST marketplace-accounts/{id}/price-changes/approve-all`, `GET products/{id}/prices`.
+- Chỉ kiểm thử với website Woo giả lập (`tests/Support/FakeWooStore.php`), chưa thử trên website thật.
+
 ### Kết nối WooCommerce, đợt 1 (2026-11-04)
 - WooCommerce là một kênh trong Kết nối sàn (`config/marketplaces.php`, `WooCommerceConnector`, REST API v3). Kết nối dễ nhất: nhập địa chỉ website → bấm **Phê duyệt** trên màn hình `/wc-auth/v1/authorize` của chính WooCommerce → Woo gửi khóa về `POST /api/v1/woocommerce/auth-callback` → người dùng quay về `/marketplaces/woocommerce/callback`. Dự phòng: dán Consumer key/secret, có hướng dẫn 3 bước ngay trong hộp thoại.
 - Bảo vệ: chỉ HTTPS, chặn IP/máy nội bộ, khóa và secret webhook mã hóa, một website chỉ thuộc một doanh nghiệp, state dùng một lần. Host bỏ header Authorization thì tự chuyển sang khóa trên query string (Woo hỗ trợ qua HTTPS).
