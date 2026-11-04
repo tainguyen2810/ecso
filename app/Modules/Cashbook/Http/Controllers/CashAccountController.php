@@ -11,6 +11,8 @@ use App\Modules\Cashbook\Models\CashVoucher;
 use App\Modules\Cashbook\Services\CashAccountService;
 use App\Modules\Cashbook\Services\CashFlows;
 use App\Modules\Cashbook\Services\VoucherLedger;
+use App\Modules\Cashbook\Support\PeriodLock;
+use App\Shared\Support\ReportRange;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -19,14 +21,17 @@ use Illuminate\Validation\Rule;
 /** Funds (quỹ) with their balances, and transfers between them. */
 class CashAccountController extends Controller
 {
-    public function index(CashAccountService $service, CashFlows $flows): AnonymousResourceCollection
+    /** Funds with their balances now, or at the end of the day `at` (in the business's time zone). */
+    public function index(Request $request, CashAccountService $service, CashFlows $flows): AnonymousResourceCollection
     {
         $this->authorize('viewAny', CashAccount::class);
+        $at = $request->validate(['at' => ['nullable', 'date_format:Y-m-d']])['at'] ?? null;
         $accounts = $service->all();
-        CashAccountResource::$balances = $flows->balances();
+        CashAccountResource::$balances = $flows->balances($at ? ReportRange::date($at)->endOfDay() : null);
 
         return CashAccountResource::collection($accounts)->additional(['meta' => [
             'total' => (float) collect(CashAccountResource::$balances)->only($accounts->where('is_active', true)->pluck('id')->all())->sum(),
+            'closed_until' => PeriodLock::current()?->closed_until->toDateString(),
         ]]);
     }
 

@@ -4,12 +4,6 @@ use App\Modules\Access\Models\Role;
 use App\Modules\Cashbook\Models\CashAccount;
 use App\Modules\Cashbook\Models\CashVoucher;
 
-/** The fund named $name, from the funds list. */
-function fund($user, $tenant, string $name): array
-{
-    return collect(actingInTenant($user, $tenant)->getJson('/api/v1/cash-accounts')->assertOk()->json('data'))->firstWhere('name', $name);
-}
-
 it('starts every business with default funds and puts each payment in the fund of its method', function () {
     [$tenant, $owner] = tenantWithOwner();
     $funds = collect(actingInTenant($owner, $tenant)->getJson('/api/v1/cash-accounts')->assertOk()->json('data'));

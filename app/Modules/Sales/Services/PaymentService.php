@@ -4,6 +4,7 @@ namespace App\Modules\Sales\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Cashbook\Services\CashAccountService;
+use App\Modules\Cashbook\Support\PeriodLock;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Sales\Models\CashShift;
@@ -54,6 +55,9 @@ class PaymentService
                 }
             }
 
+            $paidAt = isset($data['paid_at']) ? Carbon::parse($data['paid_at']) : now();
+            PeriodLock::assertOpen($paidAt);
+
             $payment = new OrderPayment;
             $payment->forceFill([
                 'cash_account_id' => $this->accounts->resolve($data['account'] ?? null, $data['method']),
@@ -67,7 +71,7 @@ class PaymentService
                 'amount' => $amount,
                 'reference' => $data['reference'] ?? null,
                 'note' => $data['note'] ?? null,
-                'paid_at' => isset($data['paid_at']) ? Carbon::parse($data['paid_at']) : now(),
+                'paid_at' => $paidAt,
                 'created_by' => Auth::id(),
             ])->save();
 
@@ -86,6 +90,7 @@ class PaymentService
             if ($payment->voided_at !== null) {
                 return $payment;
             }
+            PeriodLock::assertOpen($payment->paid_at, 'payment', 'hủy');
             // The drawer of a closed shift has been counted: changing its money needs the shift supervisor.
             $shift = $payment->cash_shift_id ? CashShift::query()->find($payment->cash_shift_id) : null;
             if ($shift !== null && ! $shift->isOpen() && ! app(TenantContext::class)->can('orders.shifts')) {

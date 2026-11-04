@@ -59,8 +59,10 @@ final class PermissionRegistry
         'finance' => [
             'finance.view' => 'Xem tài chính, sổ quỹ',
             'finance.profit' => 'Xem giá vốn và lợi nhuận, xuất báo cáo tài chính',
-            'finance.vouchers' => 'Lập và hủy phiếu thu, phiếu chi',
+            'finance.vouchers' => 'Lập phiếu thu, phiếu chi',
+            'finance.vouchers.void' => 'Hủy phiếu thu, phiếu chi lập tay',
             'finance.accounts' => 'Quản lý quỹ, chuyển tiền giữa các quỹ',
+            'finance.close' => 'Kiểm quỹ, khóa sổ và mở khóa sổ',
         ],
         'reports' => ['reports.view' => 'Xem báo cáo'],
         'marketplace' => [
@@ -97,7 +99,7 @@ final class PermissionRegistry
             Role::MANAGER => ['name' => 'Quản lý vận hành', 'rank' => 70, 'permissions' => [
                 ...self::READ_ALL, 'orders.update', 'orders.cancel', 'orders.assign', 'orders.print', 'orders.create', 'orders.payment', 'orders.payment.void', 'orders.price', 'orders.shifts', 'customers.manage', 'customers.import', 'customers.export', 'customers.delete', 'customers.debt_adjust', 'customers.merge', 'products.manage',
                 'inventory.receive', 'inventory.adjust', 'inventory.adjust.approve', 'inventory.transfer', 'purchasing.manage', 'purchasing.payment',
-                'returns.inspect', 'finance.view', 'finance.profit', 'finance.vouchers', 'members.view',
+                'returns.inspect', 'finance.view', 'finance.profit', 'finance.vouchers', 'finance.vouchers.void', 'members.view',
             ]],
             Role::WAREHOUSE_STAFF => ['name' => 'Nhân viên kho', 'rank' => 40, 'permissions' => [
                 'dashboard.view', 'orders.view', 'orders.view.all', 'orders.print', 'products.view', 'inventory.view',
@@ -109,7 +111,7 @@ final class PermissionRegistry
             ]],
             Role::ACCOUNTANT => ['name' => 'Kế toán', 'rank' => 40, 'permissions' => [
                 'dashboard.view', 'orders.view', 'orders.view.all', 'products.view', 'inventory.view', 'purchasing.view',
-                'returns.view', 'finance.view', 'finance.profit', 'finance.vouchers', 'finance.accounts', 'reports.view', 'billing.view', 'customers.view', 'customers.debt_adjust', 'orders.payment', 'orders.payment.void', 'orders.shifts', 'purchasing.payment', 'products.cost.view',
+                'returns.view', 'finance.view', 'finance.profit', 'finance.vouchers', 'finance.vouchers.void', 'finance.accounts', 'finance.close', 'reports.view', 'billing.view', 'customers.view', 'customers.debt_adjust', 'orders.payment', 'orders.payment.void', 'orders.shifts', 'purchasing.payment', 'products.cost.view',
             ]],
             Role::VIEWER => ['name' => 'Chỉ xem', 'rank' => 10, 'permissions' => self::READ_ALL],
         ];

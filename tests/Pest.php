@@ -214,3 +214,9 @@ function revoke(string $role, string $permission): void
     Role::query()->whereNull('tenant_id')->where('key', $role)->firstOrFail()
         ->permissions()->detach(Permission::query()->where('key', $permission)->value('id'));
 }
+
+/** The fund named $name, from the funds list. */
+function fund($user, $tenant, string $name): array
+{
+    return collect(actingInTenant($user, $tenant)->getJson('/api/v1/cash-accounts')->assertOk()->json('data'))->firstWhere('name', $name);
+}

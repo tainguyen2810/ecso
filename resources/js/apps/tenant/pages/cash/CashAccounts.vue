@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, type Component } from 'vue';
-import { ArrowLeftRight, Banknote, BookOpen, CircleDollarSign, Landmark, Pencil, Plus, Truck, Wallet } from 'lucide-vue-next';
+import { ArrowLeftRight, Banknote, BookOpen, CircleDollarSign, ClipboardCheck, Landmark, Lock, Pencil, Plus, Truck, Wallet } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import CashNav from './CashNav.vue';
+import ClosingDialog from './ClosingDialog.vue';
+import CountDialog from './CountDialog.vue';
 import TransferDialog from './TransferDialog.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
@@ -17,7 +19,7 @@ import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import type { Tone } from '@/shared/lib/tones';
 import { useToast } from '@/shared/composables/useToast';
-import { formatMoney, formatNumber } from '@/shared/lib/utils';
+import { formatDate, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { paymentMethods } from '../orders/labels';
 import { fundKinds, type Fund, type FundKind } from './voucher';
@@ -30,6 +32,15 @@ const loadError = ref<string | null>(null);
 const canManage = computed(() => tenant.can('finance.accounts'));
 const transferOpen = ref(false);
 const transferFrom = ref<string | null>(null);
+const canClose = computed(() => tenant.can('finance.close'));
+const closedUntil = ref<string | null>(null);
+const closingOpen = ref(false);
+const counting = ref<Fund | null>(null);
+const countOpen = ref(false);
+function count(f: Fund) {
+    counting.value = f;
+    countOpen.value = true;
+}
 
 const icons: Record<FundKind, [Component, Tone]> = { cash: [Banknote, 'green'], bank: [Landmark, 'blue'], ewallet: [Wallet, 'amber'], cod: [Truck, 'slate'], other: [CircleDollarSign, 'slate'] };
 
@@ -39,6 +50,7 @@ async function load() {
         const { data } = await api.get('/cash-accounts');
         funds.value = data.data;
         total.value = data.meta.total;
+        closedUntil.value = data.meta.closed_until ?? null;
     } catch (e) {
         loadError.value = (e as ApiError).message;
     }
@@ -133,6 +145,12 @@ function transfer(from: string | null) {
                 </div>
                 <p class="max-w-md text-xs text-muted-foreground">Chuyển tiền giữa các quỹ không làm thay đổi tổng này và không tính là thu hay chi. Số dư = số dư đầu + thu − chi + chuyển đến − chuyển đi.</p>
             </div>
+            <div class="flex flex-wrap items-center gap-2 border-t px-4 py-2.5 text-sm" data-testid="closing-status">
+                <Lock class="size-4 text-muted-foreground" />
+                <span v-if="closedUntil">Sổ đã khóa đến hết ngày <b>{{ formatDate(closedUntil) }}</b>: phiếu từ ngày đó trở về trước không lập thêm, hủy hay lùi ngày được.</span>
+                <span v-else class="text-muted-foreground">Sổ chưa khóa. Khóa sổ sau khi đối chiếu xong một kỳ để số dư đã báo cáo không bị đổi.</span>
+                <Button size="sm" variant="outline" class="ml-auto" data-testid="open-closing" @click="closingOpen = true">{{ canClose ? 'Khóa sổ' : 'Lịch sử khóa sổ' }}</Button>
+            </div>
         </Card>
 
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="funds">
@@ -158,6 +176,7 @@ function transfer(from: string | null) {
                 <div class="flex flex-wrap gap-1 border-t px-2 py-1.5">
                     <RouterLink :to="{ path: '/reports/cashbook', query: { account: f.id } }" class="inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs text-primary hover:bg-muted"><BookOpen class="size-3.5" /> Sổ quỹ</RouterLink>
                     <button v-if="canManage" type="button" class="inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs text-primary hover:bg-muted" @click="transfer(f.id)"><ArrowLeftRight class="size-3.5" /> Chuyển đi</button>
+                    <button type="button" class="inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs text-primary hover:bg-muted" :data-testid="`count-${f.kind}`" @click="count(f)"><ClipboardCheck class="size-3.5" /> Kiểm quỹ</button>
                 </div>
             </Card>
         </div>
@@ -218,4 +237,6 @@ function transfer(from: string | null) {
         </template>
     </Dialog>
     <TransferDialog v-model:open="transferOpen" :funds="funds ?? []" :from="transferFrom" @saved="load" />
+    <CountDialog v-model:open="countOpen" :fund="counting" :can-count="canClose" @saved="load" />
+    <ClosingDialog v-model:open="closingOpen" :can-close="canClose" @changed="load" />
 </template>

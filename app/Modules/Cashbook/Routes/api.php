@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Cashbook\Http\Controllers\CashAccountController;
+use App\Modules\Cashbook\Http\Controllers\CashClosingController;
 use App\Modules\Cashbook\Http\Controllers\CashVoucherController;
 use App\Modules\Cashbook\Http\Controllers\CashVoucherTypeController;
 use Illuminate\Support\Facades\Route;
@@ -11,6 +12,11 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::get('cash-accounts', [CashAccountController::class, 'index']);
     Route::post('cash-accounts', [CashAccountController::class, 'store']);
     Route::patch('cash-accounts/{cashAccount}', [CashAccountController::class, 'update']);
+    Route::get('cash-accounts/{cashAccount}/counts', [CashClosingController::class, 'counts']);
+    Route::post('cash-accounts/{cashAccount}/counts', [CashClosingController::class, 'count'])->middleware('idempotent');
+    Route::get('cash-closings', [CashClosingController::class, 'index']);
+    Route::post('cash-closings', [CashClosingController::class, 'close']);
+    Route::post('cash-closings/{cashClosing}/reopen', [CashClosingController::class, 'reopen']);
     Route::post('cash-transfers', [CashAccountController::class, 'transfer'])->middleware('idempotent');
     Route::post('cash-transfers/{cashTransfer}/void', [CashAccountController::class, 'voidTransfer']);
 

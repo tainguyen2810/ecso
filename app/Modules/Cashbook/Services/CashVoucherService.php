@@ -5,6 +5,7 @@ namespace App\Modules\Cashbook\Services;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Cashbook\Models\CashVoucher;
 use App\Modules\Cashbook\Models\CashVoucherType;
+use App\Modules\Cashbook\Support\PeriodLock;
 use App\Modules\Identity\Models\User;
 use App\Modules\Inventory\Support\DocumentNumber;
 use App\Modules\Orders\Models\Order;
@@ -135,6 +136,9 @@ class CashVoucherService
                 throw ValidationException::withMessages(['amount' => 'Số tiền phải lớn hơn 0.']);
             }
 
+            $paidAt = isset($data['paid_at']) ? Carbon::parse($data['paid_at']) : now();
+            PeriodLock::assertOpen($paidAt);
+
             $voucher = new CashVoucher;
             $voucher->forceFill([
                 'number' => DocumentNumber::next($data['direction'] === CashVoucher::RECEIPT ? 'PT' : 'PC'),
@@ -148,7 +152,7 @@ class CashVoucherService
                 'counts_in_pnl' => $data['counts_in_pnl'] ?? $type->counts_in_pnl,
                 'reference' => $data['reference'] ?? null,
                 'note' => $data['note'] ?? null,
-                'paid_at' => isset($data['paid_at']) ? Carbon::parse($data['paid_at']) : now(),
+                'paid_at' => $paidAt,
                 'created_by' => Auth::id(),
             ])->save();
             $this->audit->record("cash.{$voucher->direction}", $voucher, ['number' => $voucher->number, 'amount' => $amount, 'type' => $type->name]);
@@ -164,6 +168,7 @@ class CashVoucherService
             if ($voucher->voided_at !== null) {
                 throw ValidationException::withMessages(['voucher' => 'Phiếu đã hủy.']);
             }
+            PeriodLock::assertOpen($voucher->paid_at, 'voucher', 'hủy');
             $voucher->forceFill(['voided_at' => now(), 'voided_by' => Auth::id(), 'void_reason' => $reason])->save();
             $this->audit->record('cash.voided', $voucher, ['number' => $voucher->number, 'amount' => $voucher->amount, 'reason' => $reason]);
 

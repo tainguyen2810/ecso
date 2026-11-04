@@ -8,6 +8,7 @@ use App\Modules\Cashbook\Models\CashTransfer;
 use App\Modules\Cashbook\Models\CashVoucher;
 use App\Modules\Cashbook\Models\CashVoucherType;
 use App\Modules\Cashbook\Support\DefaultCashAccounts;
+use App\Modules\Cashbook\Support\PeriodLock;
 use App\Modules\Inventory\Support\DocumentNumber;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Support\Carbon;
@@ -103,6 +104,10 @@ class CashAccountService
             }
             if (array_key_exists('opening_balance', $data)) {
                 $data['opening_balance'] = bcadd((string) ($data['opening_balance'] ?? 0), '0', 2);
+                // The opening balance is part of every closed balance: changing it would rewrite them.
+                if (bccomp($data['opening_balance'], (string) $account->opening_balance, 2) !== 0 && PeriodLock::current()) {
+                    throw ValidationException::withMessages(['opening_balance' => 'Sổ đã khóa, không đổi số dư đầu của quỹ. Mở khóa sổ trước, hoặc kiểm quỹ để ghi chênh lệch.']);
+                }
             }
             if (($data['is_active'] ?? true) === false) {
                 if ($account->methods !== []) {
@@ -156,6 +161,7 @@ class CashAccountService
                 throw ValidationException::withMessages(['fee' => 'Phí không được âm.']);
             }
             $at = isset($data['transferred_at']) ? Carbon::parse($data['transferred_at']) : now();
+            PeriodLock::assertOpen($at, 'transferred_at');
 
             $transfer = new CashTransfer([
                 'number' => DocumentNumber::next('CQ'),
@@ -205,6 +211,7 @@ class CashAccountService
             if ($transfer->voided_at !== null) {
                 throw ValidationException::withMessages(['transfer' => 'Phiếu chuyển quỹ đã hủy.']);
             }
+            PeriodLock::assertOpen($transfer->transferred_at, 'transfer', 'hủy');
             $stamp = ['voided_at' => now(), 'voided_by' => Auth::id(), 'void_reason' => $reason];
             $transfer->forceFill($stamp)->save();
             CashVoucher::query()->where('cash_transfer_id', $transfer->id)->whereNull('voided_at')->update($stamp);
