@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Cake, Columns3, Download, Search, SlidersHorizontal, Upload, UserPlus, UsersRound, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
@@ -21,7 +21,7 @@ import { api, ApiError, downloadFile } from '@/shared/lib/api';
 import { cn, formatDate, formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
-import type { Customer, CustomerGroup } from '@/shared/types';
+import type { Customer, CustomerGroup, CustomerImportJob } from '@/shared/types';
 
 const tenant = useTenantStore();
 const toast = useToast();
@@ -151,8 +151,29 @@ async function load() {
     }
 }
 
+// A large file being imported in the background: shown above the list until it ends, then the list reloads.
+const importJob = ref<CustomerImportJob | null>(null);
+let importTimer: ReturnType<typeof setTimeout> | undefined;
+async function watchImport() {
+    clearTimeout(importTimer);
+    if (!canImport.value) return;
+    try {
+        const { data } = await api.get('/customers/imports/latest');
+        const was = importJob.value?.status;
+        const job: CustomerImportJob | null = data.data;
+        const active = !!job && ['queued', 'importing'].includes(job.status);
+        importJob.value = active || (job && was && was !== job.status) ? job : null;
+        if (was && was !== 'done' && job?.status === 'done') load();
+        if (active) importTimer = setTimeout(watchImport, 4000);
+    } catch {
+        importJob.value = null;
+    }
+}
+onBeforeUnmount(() => clearTimeout(importTimer));
+
 onMounted(async () => {
     load();
+    watchImport();
     const [g, s, t] = await Promise.all([api.get('/customer-groups'), api.get('/customers/staff'), api.get('/customers/tags')]).catch(() => [null, null, null]);
     groups.value = g?.data.data ?? [];
     staff.value = s?.data.data ?? [];
@@ -228,12 +249,22 @@ async function exportFile(onlySelected: boolean) {
 </script>
 
 <template>
-    <PageHeader title="Khách hàng" description="Danh bạ khách mua qua kênh bán riêng: nhóm, người phụ trách, lịch sử mua và công nợ.">
+    <PageHeader title="Khách hàng" description="Danh bạ khách mua qua các kênh: nhóm, người phụ trách, lịch sử mua và công nợ (công nợ chỉ tính đơn kênh bán riêng).">
         <Button v-if="canExport" variant="outline" :loading="exporting" data-testid="customer-export" @click="exportFile(false)"><Download /> Xuất Excel</Button>
         <Button v-if="canImport" variant="outline" data-testid="customer-import" @click="importOpen = true"><Upload /> Nhập file</Button>
         <Button v-if="canManage" data-testid="add-customer" @click="dialog = true"><UserPlus /> Thêm khách</Button>
     </PageHeader>
     <CustomersNav />
+
+    <div v-if="importJob" class="mb-3 rounded-md border px-3 py-2 text-sm" :class="importJob.status === 'failed' ? 'border-destructive/30 bg-destructive/5 text-destructive' : 'bg-muted/40'" data-testid="customer-import-banner">
+        <template v-if="importJob.status === 'queued' || importJob.status === 'importing'">
+            Đang nhập tệp <b>{{ importJob.file_name }}</b>: {{ formatNumber(importJob.processed) }} / {{ formatNumber(importJob.total) }} dòng. Khách mới chỉ hiện khi đã nhập xong toàn bộ.
+        </template>
+        <template v-else-if="importJob.status === 'done'">
+            Đã nhập xong tệp <b>{{ importJob.file_name }}</b>: thêm {{ formatNumber(importJob.created) }} khách, cập nhật {{ formatNumber(importJob.updated) }} khách.
+        </template>
+        <template v-else>Không nhập được tệp <b>{{ importJob.file_name }}</b>: {{ importJob.message }} Mở "Nhập file" để xem chi tiết.</template>
+    </div>
 
     <Card>
         <div class="border-b px-3">
@@ -439,5 +470,5 @@ async function exportFile(onlySelected: boolean) {
         <Pagination :page="meta.current_page" :last-page="meta.last_page" :total="meta.total" @go="(p) => ((filters.page = p), load())" />
     </Card>
     <CustomerDialog v-model:open="dialog" @saved="(c) => $router.push(`/customers/${c.id}`)" />
-    <CustomerImportDialog v-model:open="importOpen" @imported="load" />
+    <CustomerImportDialog v-model:open="importOpen" @imported="load" @update:open="(v: boolean) => !v && watchImport()" />
 </template>

@@ -41,4 +41,11 @@ return [
         'lock_path' => storage_path('app/installed.lock'),
         'token_path' => storage_path('app/install-token.txt'),
     ],
+
+    // Customer files: up to sync_rows rows are imported while the user waits; larger files (up to background_rows)
+    // are checked and imported in the background (CustomerImport).
+    'customer_import' => [
+        'sync_rows' => (int) env('CUSTOMER_IMPORT_SYNC_ROWS', 5000),
+        'background_rows' => (int) env('CUSTOMER_IMPORT_BACKGROUND_ROWS', 30000),
+    ],
 ];

@@ -15,6 +15,7 @@ use App\Modules\Orders\Models\OrderRefund;
 use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Orders\Models\OrderStatusHistory;
 use App\Modules\Sales\Models\Customer;
+use App\Modules\Sales\Services\CustomerResolver;
 use App\Modules\Sales\Services\CustomerService;
 use App\Modules\Sales\Support\PhoneNumber;
 use Carbon\CarbonImmutable;
@@ -215,8 +216,26 @@ class OrderIngestor
 
         if ($data->ownsCustomer) {
             $this->fillStoreDetails($order, $data);
+        } elseif ($order->customer_id === null && filled($data->buyerAccountId)) {
+            $order->customer_id = $this->marketplaceBuyer($order, $data)?->id;
         }
         $order->save();
+    }
+
+    /**
+     * A marketplace buyer known by their account on that shop (not by the masked phone): the next order of the same
+     * account lands on the same card. The card gets only a name; the buyer's phone and address stay on the order,
+     * as the marketplace gives them for delivering it.
+     */
+    private function marketplaceBuyer(Order $order, OrderData $data): ?Customer
+    {
+        $name = filled($data->buyerName) && ! str_contains((string) $data->buyerName, '*') ? $data->buyerName : $data->buyerAccountName;
+
+        return app(CustomerResolver::class)->resolve(
+            ['name' => filled($name) ? mb_substr((string) $name, 0, 150) : null],
+            ['source' => $order->marketplace, 'account_id' => $order->marketplace_account_id, 'external_id' => $data->buyerAccountId, 'label' => $data->buyerAccountName],
+            $order->marketplace,
+        );
     }
 
     private function beforeCutoff(MarketplaceAccount $account, OrderData $data): bool

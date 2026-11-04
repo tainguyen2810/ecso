@@ -6,6 +6,7 @@ use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\CustomerIdentity;
 use App\Modules\Sales\Support\PhoneNumber;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Finds the customer card for a buyer coming from a channel, or makes one. The match is, in order of certainty:
@@ -36,20 +37,48 @@ class CustomerResolver
                 return null; // nothing to know the buyer by again: the order keeps its buyer details, no card is made
             }
             $phone = PhoneNumber::normalize($buyer['phone'] ?? null);
-            $customer = $this->customers->findOrCreate(array_filter([
+            $fields = array_filter([
                 'name' => $buyer['name'],
                 'phone' => $phone !== null && PhoneNumber::isValid($phone) ? $phone : null,
                 'email' => filter_var($buyer['email'] ?? null, FILTER_VALIDATE_EMAIL) ?: null,
                 'address' => $buyer['address'] ?? null,
                 'source' => in_array($channelType, Customer::SOURCES, true) ? $channelType : null,
-            ], fn ($v) => filled($v)));
-        } else {
-            $this->fillBlanks($customer, $buyer);
+            ], fn ($v) => filled($v));
+            if (blank($identity['external_id'] ?? null)) {
+                return $this->customers->findOrCreate($fields);
+            }
+
+            // Two orders of a new buyer at once: the card and its store id are made together (a savepoint), so the
+            // second order, whose store id is refused, drops its card and takes the first one.
+            try {
+                return DB::transaction(function () use ($fields, $identity) {
+                    $customer = $this->customers->findOrCreate($fields);
+                    CustomerIdentity::query()->create($this->identityKeys($identity) + ['customer_id' => $customer->id, 'label' => $identity['label'] ?? null, 'last_seen_at' => now()]);
+
+                    return $customer;
+                });
+            } catch (UniqueConstraintViolationException) {
+                // A locking read sees the row the other order committed (a plain read would use this transaction's snapshot).
+                $taken = CustomerIdentity::query()->where($this->identityKeys($identity))->lockForUpdate()->first();
+
+                return Customer::query()->whereKey($taken?->customer_id)->lockForUpdate()->first()
+                    ?? throw new \RuntimeException('Customer identity vanished after a duplicate insert.');
+            }
         }
 
+        $this->fillBlanks($customer, $buyer);
         $this->remember($customer, $identity);
 
         return $customer;
+    }
+
+    /**
+     * @param  array{source: string, account_id?: int|null, external_id?: string|null}  $identity
+     * @return array{source: string, marketplace_account_id: int|null, external_id: string}
+     */
+    private function identityKeys(array $identity): array
+    {
+        return ['source' => $identity['source'], 'marketplace_account_id' => $identity['account_id'] ?? null, 'external_id' => (string) $identity['external_id']];
     }
 
     /** @param  array{source: string, account_id?: int|null, external_id?: string|null}|null  $identity */
@@ -108,7 +137,7 @@ class CustomerResolver
         if (blank($identity['external_id'] ?? null)) {
             return;
         }
-        $keys = ['source' => $identity['source'], 'marketplace_account_id' => $identity['account_id'] ?? null, 'external_id' => (string) $identity['external_id']];
+        $keys = $this->identityKeys($identity);
         try {
             CustomerIdentity::query()->updateOrCreate($keys, [
                 'customer_id' => CustomerIdentity::query()->where($keys)->value('customer_id') ?? $customer->id,

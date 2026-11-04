@@ -166,8 +166,10 @@ it('keeps marketplace buyers masked: only the own website gets the full contact'
     $order = fakeOrder(fakeShop($tenant), [[$variant, 1]]);
 
     $json = actingInTenant($owner, $tenant)->getJson("/api/v1/orders/{$order->ulid}")->assertOk()->json('data');
+    // The marketplace buyer is known by their account (a card with a name only), never by their contact details.
+    $card = TenantContext::run($tenant, fn () => Customer::query()->find($order->fresh()->customer_id));
     expect($json)->not->toHaveKey('buyer_email')->and($json)->not->toHaveKey('addresses')
-        ->and($order->fresh()->customer_id)->toBeNull();
+        ->and($card->phone)->toBeNull()->and($card->email)->toBeNull()->and($card->address)->toBeNull();
 });
 
 it('gives the stock back when a website order is refunded before it ships, and opens a return after', function () {

@@ -28,6 +28,9 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::get('customers/duplicates', [CustomerMergeController::class, 'duplicates']);
     Route::get('customers/import-template', [CustomerTransferController::class, 'template']);
     Route::post('customers/import', [CustomerTransferController::class, 'import'])->middleware('throttle:10,1,sales.customers.import');
+    Route::get('customers/imports/latest', [CustomerTransferController::class, 'latestImport']);
+    Route::get('customers/imports/{import}', [CustomerTransferController::class, 'showImport']);
+    Route::post('customers/imports/{import}/run', [CustomerTransferController::class, 'runImport'])->middleware('throttle:10,1,sales.customers.import-run');
     Route::apiResource('customers', CustomerController::class);
     Route::get('customers/{customer}/ledger', [CustomerController::class, 'ledger']);
     Route::get('customers/{customer}/ledger/export', [CustomerHistoryController::class, 'ledgerExport'])->middleware('throttle:20,1,sales.customers.ledger-export');

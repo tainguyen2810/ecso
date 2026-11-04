@@ -434,6 +434,24 @@ export interface CustomerSummary {
     top_products?: { name: string; variant_name: string | null; sku: string | null; quantity: number; amount: string; orders: number }[];
 }
 
+/** A large customer file checked and imported in the background. */
+export interface CustomerImportJob {
+    id: string;
+    file_name: string;
+    status: 'pending_check' | 'checking' | 'checked' | 'queued' | 'importing' | 'done' | 'failed' | 'expired';
+    total: number;
+    processed: number;
+    created: number;
+    updated: number;
+    error_count: number;
+    errors: { row: number; message: string }[];
+    message: string | null;
+    by: string | null;
+    started_at: string | null;
+    finished_at: string | null;
+    created_at: string | null;
+}
+
 export interface CustomerTask {
     id: string;
     title: string;
