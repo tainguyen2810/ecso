@@ -25,6 +25,7 @@ class ListingService
         private readonly ConnectorRegistry $connectors,
         private readonly TenantContext $context,
         private readonly AuditLogger $audit,
+        private readonly PriceSync $prices,
     ) {}
 
     /** @return array{listings: int, variants: int, suggested: int} */
@@ -99,6 +100,7 @@ class ListingService
                 ])->save();
                 $counts['variants']++;
                 $counts['suggested'] += (int) $this->suggest($variant);
+                $this->prices->onChannelPrice($account, $variant);
             }
         });
     }

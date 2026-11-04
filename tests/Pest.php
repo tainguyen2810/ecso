@@ -156,3 +156,28 @@ function createSalesOrder($user, $tenant, array $lines, array $extra = []): Test
         ...$extra,
     ]);
 }
+
+// WooCommerce tests (tests/Support/FakeWooStore.php is the simulated store; $test->store, ->owner, ->tenant).
+
+function wooConnect($test): MarketplaceAccount
+{
+    actingInTenant($test->owner, $test->tenant)->postJson('/api/v1/marketplace-accounts/woocommerce/keys', [
+        'website' => 'shop.example.vn', 'consumer_key' => 'ck_test', 'consumer_secret' => 'cs_test',
+    ])->assertCreated();
+
+    return MarketplaceAccount::withoutGlobalScopes()->where('marketplace', 'woocommerce')->sole();
+}
+
+function wooMap($test, MarketplaceAccount $account): void
+{
+    TenantContext::run($test->tenant, fn () => actingInTenant($test->owner, $test->tenant)
+        ->postJson("/api/v1/marketplace-accounts/{$account->ulid}/listings/confirm-suggestions")->assertOk());
+}
+
+function wooWebhook($test, string $topic, array $payload, ?string $secret = null)
+{
+    [$body, $headers] = $test->store->signed($topic, $payload, $secret);
+
+    return $test->call('POST', '/api/v1/webhooks/woocommerce', [], [], [], collect($headers)
+        ->mapWithKeys(fn ($v, $k) => ['HTTP_'.strtoupper(str_replace('-', '_', $k)) => $v])->all() + ['CONTENT_TYPE' => 'application/json'], $body);
+}

@@ -40,6 +40,7 @@ class ProductRequest extends FormRequest
             'variants.*.options' => ['nullable', 'array', 'max:5'],
             'variants.*.options.*' => ['string', 'max:100'],
             'variants.*.ref_price' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
+            'variants.*.price_source' => ['nullable', 'in:auto,ecso,woo'],
             'variants.*.wholesale_price' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             'variants.*.weight_gram' => ['nullable', 'integer', 'min:0', 'max:1000000'],
             'variants.*.status' => ['sometimes', Rule::in(['active', 'inactive'])],
