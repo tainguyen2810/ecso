@@ -22,13 +22,27 @@ const active = ref(0);
 let timer: ReturnType<typeof setTimeout> | undefined;
 let searchedFor: string | null = null;
 
-async function search() {
-    searchedFor = query.value;
-    const { data } = await api.get('/variants', { params: { q: query.value || undefined, warehouse: props.warehouse || undefined, stocked: props.stocked ? 1 : undefined } });
-    if (searchedFor !== query.value) return; // a newer search is on its way
-    results.value = (data.data as Variant[]).filter((v) => !props.exclude?.includes(v.id!));
-    active.value = 0;
-    searched.value = true;
+/** Results per query text, so an Enter answers for the text it was pressed on even when the user typed on since. */
+let pending: { q: string; run: Promise<Variant[]> } | null = null;
+
+function search(): Promise<Variant[]> {
+    const q = query.value;
+    searchedFor = q;
+    const run = load(q);
+    pending = { q, run };
+    return run;
+}
+
+async function load(q: string): Promise<Variant[]> {
+    const { data } = await api.get('/variants', { params: { q: q || undefined, warehouse: props.warehouse || undefined, stocked: props.stocked ? 1 : undefined } });
+    const found = (data.data as Variant[]).filter((v) => !props.exclude?.includes(v.id!));
+    if (q === query.value) {
+        // Only the answer for the current text fills the list; an older answer would overwrite a newer one.
+        results.value = found;
+        active.value = 0;
+        searched.value = true;
+    }
+    return found;
 }
 
 watch(query, () => {
@@ -40,10 +54,10 @@ onMounted(() => {
     if (props.inline) search();
 });
 
-function pick(v: Variant) {
+function pick(v: Variant, forText = query.value) {
     emit('pick', v);
     if (props.inline) return;
-    query.value = '';
+    if (query.value === forText) query.value = ''; // keep what the user typed after pressing Enter
     open.value = false;
 }
 
@@ -56,14 +70,18 @@ async function onKey(e: KeyboardEvent) {
     else if (e.key === 'ArrowUp') active.value = Math.max(active.value - 1, 0);
     else if (e.key === 'Enter') {
         e.preventDefault();
+        const q = query.value;
+        let list = results.value;
         // Barcode scanners type the code and press Enter faster than the debounce: search right away.
-        if (searchedFor !== query.value) {
+        if (searchedFor !== q) {
             clearTimeout(timer);
-            await search();
+            list = await search();
+        } else if (pending?.q === q) {
+            list = await pending.run; // the search for this text is already on its way (debounce fired)
         }
-        const exact = results.value.find((v) => v.barcode === query.value || v.sku.toLowerCase() === query.value.toLowerCase());
-        const choice = exact ?? results.value[active.value];
-        if (choice) pick(choice);
+        const exact = list.find((v) => v.barcode === q || v.sku.toLowerCase() === q.toLowerCase());
+        const choice = exact ?? (q === query.value ? list[active.value] : list[0]);
+        if (choice) pick(choice, q);
     } else if (e.key === 'Escape') open.value = false;
 }
 </script>
