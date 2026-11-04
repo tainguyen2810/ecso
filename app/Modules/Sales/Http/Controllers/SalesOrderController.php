@@ -45,7 +45,9 @@ class SalesOrderController extends Controller
 
     public function update(Request $request, Order $order, ManualOrderService $orders): OrderResource
     {
+        // Editing lines, prices and the buyer of an existing order is order handling, not only selling.
         $this->authorize('create', Order::class);
+        $this->authorize('update', $order);
         $data = $request->validate([
             ...$this->rules(),
             'lines' => ['sometimes', 'array', 'min:1', 'max:200'],

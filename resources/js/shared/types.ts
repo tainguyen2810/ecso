@@ -240,6 +240,8 @@ export interface OrderItemDetail {
     seller_sku: string | null;
     external_sku_id: string | null;
     quantity: number;
+    /** Shipped and not yet covered by a return. */
+    returnable: number;
     unit_price: string;
     discount: string;
     mapping_status: string;
