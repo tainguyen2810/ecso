@@ -62,7 +62,8 @@ test('finance dashboard separates revenue from money received', async ({ page })
     await login(page, 'owner@demo.test');
     await page.goto('/finance');
     await expect(page.getByTestId('finance-kpis')).toContainText('Doanh thu đặt hàng');
-    await expect(page.getByTestId('fees-unknown')).toContainText('Chưa xác định');
+    await expect(page.getByTestId('finance-fees')).toContainText('Phí sàn');
+    await expect(page.getByTestId('finance-payout')).toContainText('không phải doanh thu mới');
     await expect(page.getByText('không phải tiền thực nhận')).toBeVisible();
     await shot(page, '07-finance');
 });
