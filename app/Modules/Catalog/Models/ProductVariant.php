@@ -66,4 +66,28 @@ class ProductVariant extends Model
     {
         return trim($sku);
     }
+
+    /** Sold in orders, POS and on the marketplaces: the variant and its product are both active. */
+    public function isSellable(): bool
+    {
+        return $this->status === Product::STATUS_ACTIVE && ($this->product?->status ?? Product::STATUS_ACTIVE) === Product::STATUS_ACTIVE;
+    }
+
+    /**
+     * Ids of the given variants that are stopped (the variant or its product is not active). Runs in the tenant scope.
+     *
+     * @param  array<int, int>  $ids
+     * @return array<int, int>
+     */
+    public static function stoppedIds(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return static::query()->whereIn('product_variants.id', $ids)
+            ->where(fn ($q) => $q->where('product_variants.status', '!=', Product::STATUS_ACTIVE)
+                ->orWhereHas('product', fn ($p) => $p->where('status', '!=', Product::STATUS_ACTIVE)))
+            ->pluck('product_variants.id')->map(fn ($id) => (int) $id)->all();
+    }
 }

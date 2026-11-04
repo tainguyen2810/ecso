@@ -24,6 +24,7 @@ class VariantResource extends JsonResource
             'cost_price' => $this->cost_price,
             'weight_gram' => $this->weight_gram,
             'status' => $this->status,
+            'sellable' => $this->whenLoaded('product', fn () => $this->isSellable()),
             'components' => $this->whenLoaded('components', fn () => $this->components->map(fn (ProductComponent $c) => [
                 'variant' => ['id' => $c->component->ulid, 'sku' => $c->component->sku, 'name' => $c->component->displayName()],
                 'quantity' => $c->quantity,

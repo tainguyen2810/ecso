@@ -3,12 +3,14 @@
 namespace App\Modules\Catalog\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Catalog\Events\SaleStatusChanged;
 use App\Modules\Catalog\Models\Product;
 use App\Modules\Catalog\Models\ProductComponent;
 use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Inventory\Models\StockReceipt;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Services\InventoryDocumentService;
+use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -63,6 +65,7 @@ class ProductService
     {
         return DB::transaction(function () use ($product, $data) {
             $product->fill(collect($data)->only(Product::FIELDS)->all())->save();
+            $statusChanged = $product->wasChanged('status') ? $product->variants()->pluck('id')->all() : [];
 
             if ($product->isCombo() && array_key_exists('components', $data)) {
                 $this->syncComponents($product->variants()->firstOrFail(), $data['components']);
@@ -83,6 +86,9 @@ class ProductService
                     if ($variant) {
                         $before = $variant->only(['sku', 'barcode']);
                         $variant->fill($this->variantAttributes($input))->save();
+                        if ($variant->wasChanged('status')) {
+                            $statusChanged[] = $variant->id;
+                        }
                         if ($before !== $variant->only(['sku', 'barcode'])) {
                             $changes[] = ['from' => $before, 'to' => $variant->only(['sku', 'barcode'])];
                         }
@@ -102,6 +108,8 @@ class ProductService
                     $this->audit->record('product.sku_changed', $product, ['changes' => $changes]);
                 }
             }
+
+            $this->saleStatusChanged($statusChanged);
 
             return $product;
         });
@@ -124,10 +132,29 @@ class ProductService
      */
     public function bulkStatus(array $productIds, string $status): int
     {
-        $count = Product::query()->whereIn('id', $productIds)->update(['status' => $status]);
-        $this->audit->record('product.bulk_status', null, ['count' => $count, 'status' => $status]);
+        return DB::transaction(function () use ($productIds, $status) {
+            $changing = Product::query()->whereIn('id', $productIds)->where('status', '!=', $status)->pluck('id')->all();
+            $count = Product::query()->whereIn('id', $productIds)->update(['status' => $status]);
+            $this->audit->record('product.bulk_status', null, ['count' => $count, 'status' => $status]);
+            $this->saleStatusChanged(ProductVariant::query()->whereIn('product_id', $changing)->pluck('id')->all());
 
-        return $count;
+            return $count;
+        });
+    }
+
+    /**
+     * The marketplaces publish 0 for a stopped SKU and the real stock again once it is active.
+     *
+     * @param  array<int, int|string>  $variantIds
+     */
+    private function saleStatusChanged(array $variantIds): void
+    {
+        if ($variantIds === []) {
+            return;
+        }
+        $tenantId = app(TenantContext::class)->id();
+        $ids = array_values(array_unique(array_map('intval', $variantIds)));
+        DB::afterCommit(fn () => SaleStatusChanged::dispatch($tenantId, $ids));
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Modules\Billing\Payments\GatewayRegistry;
 use App\Modules\Cashbook\Models\CashVoucher;
 use App\Modules\Cashbook\Models\CashVoucherType;
 use App\Modules\Cashbook\Policies\CashbookPolicy;
+use App\Modules\Catalog\Events\SaleStatusChanged;
 use App\Modules\Catalog\Models\Brand;
 use App\Modules\Catalog\Models\Category;
 use App\Modules\Catalog\Models\Product;
@@ -124,6 +125,7 @@ class ModuleServiceProvider extends ServiceProvider
         Event::listen(AvailableStockChanged::class, PlanInventoryPush::class);
         Event::listen(ListingMappingChanged::class, RemapOrderItems::class);
         Event::listen(ListingMappingChanged::class, PlanInventoryPush::class);
+        Event::listen(SaleStatusChanged::class, PlanInventoryPush::class);
         // A retail price changed in ECSO goes to the websites where ECSO holds the price.
         ProductVariant::updated(function (ProductVariant $variant) {
             app(PriceSync::class)->variantUpdated($variant);

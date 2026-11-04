@@ -210,6 +210,8 @@ class ProductController extends Controller
             'products.*' => ['string'],
             // Stock documents (receipts, counts, transfers, purchases): combos have no stock of their own.
             'stocked' => ['nullable', 'boolean'],
+            // Orders and POS: only SKUs on sale (the variant and its product active).
+            'sellable' => ['nullable', 'boolean'],
         ]);
         $exact = ! empty($data['ids']) || ! empty($data['products']);
 
@@ -218,6 +220,8 @@ class ProductController extends Controller
             ->when($data['ids'] ?? null, fn (Builder $q, array $ids) => $q->whereIn('product_variants.ulid', $ids))
             ->when($data['products'] ?? null, fn (Builder $q, array $ids) => $q->whereIn('product_id', Product::query()->whereIn('ulid', $ids)->select('id')))
             ->unless($exact, fn (Builder $q) => $q->whereHas('product', fn ($p) => $p->where('status', '!=', Product::STATUS_ARCHIVED)))
+            ->when($data['sellable'] ?? false, fn (Builder $q) => $q->where('product_variants.status', Product::STATUS_ACTIVE)
+                ->whereHas('product', fn ($p) => $p->where('status', Product::STATUS_ACTIVE)))
             ->when($data['q'] ?? null, fn (Builder $q, string $term) => $q->where(fn (Builder $w) => $w
                 ->where('sku', 'like', "%{$term}%")->orWhere('barcode', $term)->orWhere('product_variants.name', 'like', "%{$term}%")
                 ->orWhereHas('product', fn ($p) => $p->where('name', 'like', "%{$term}%"))))

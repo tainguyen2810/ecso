@@ -6,6 +6,7 @@ use App\Modules\Catalog\Models\Brand;
 use App\Modules\Catalog\Models\Category;
 use App\Modules\Catalog\Models\Product;
 use App\Modules\Catalog\Models\ProductVariant;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -34,7 +35,7 @@ class ProductRequest extends FormRequest
             'variants.*.opening_cost' => $creating ? ['nullable', 'numeric', 'min:0', 'max:9999999999'] : ['prohibited'],
             'variants' => [$creating ? 'required' : 'sometimes', 'array', 'min:1', 'max:200'],
             'variants.*.id' => ['sometimes', 'string'],
-            'variants.*.sku' => ['required', 'string', 'max:64', 'regex:'.self::SKU_REGEX, 'distinct:ignore_case'],
+            'variants.*.sku' => ['required', 'string', 'max:64', $this->skuFormat(), 'distinct:ignore_case'],
             'variants.*.barcode' => ['nullable', 'string', 'max:64', 'distinct:ignore_case'],
             'variants.*.name' => ['nullable', 'string', 'max:255'],
             'variants.*.options' => ['nullable', 'array', 'max:5'],
@@ -54,6 +55,31 @@ class ProductRequest extends FormRequest
             'components.*.variant_id' => ['required', 'string', 'distinct'],
             'components.*.quantity' => ['required', 'integer', 'min:1', 'max:10000'],
         ];
+    }
+
+    /**
+     * New or changed SKUs use letters, digits and . _ - /. A SKU kept as it is may have other characters: SKUs
+     * created from a website (spaces, #, +) must not stop the product from being edited.
+     */
+    private function skuFormat(): Closure
+    {
+        $kept = null;
+
+        return function (string $attribute, mixed $value, Closure $fail) use (&$kept) {
+            if (! is_string($value) || preg_match(self::SKU_REGEX, $value)) {
+                return;
+            }
+            $product = $this->route('product');
+            if ($product instanceof Product) {
+                $kept ??= ProductVariant::query()->where('product_id', $product->id)->pluck('sku', 'ulid')->all();
+                $index = (int) explode('.', $attribute)[1];
+                $id = $this->input("variants.{$index}.id");
+                if (is_string($id) && isset($kept[$id]) && $kept[$id] === $value) {
+                    return;
+                }
+            }
+            $fail('SKU chỉ gồm chữ, số và . _ - /');
+        };
     }
 
     public function isCombo(): bool

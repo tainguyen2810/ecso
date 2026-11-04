@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Trạng thái và đồng bộ sản phẩm, đợt B kiểm toán sản phẩm (2026-11-04)
+- **Ngừng bán / Lưu trữ có hiệu lực**: SKU mà sản phẩm hoặc biến thể không ở trạng thái "Đang bán" thì không thêm được vào đơn mới hay POS ("SKU … đang ngừng bán"). Dòng đã có trên đơn vẫn giữ khi sửa đơn. Ô tìm SKU ở đơn và POS chỉ hiện SKU đang bán (`/variants?sellable=1`). Website được đẩy tồn 0 khi ngừng bán, và đẩy lại tồn thật khi bán lại (sự kiện `SaleStatusChanged`, cả khi đổi hàng loạt và khi nhập file).
+- **Nhập Excel đi qua model**: giá đổi bằng file được đẩy lên website và ghi lịch sử giá như sửa tay.
+- **SKU từ website có dấu cách, #, +**: sản phẩm vẫn sửa và lưu được khi giữ nguyên SKU đó; SKU mới hoặc SKU đổi vẫn theo quy tắc chữ, số và . _ - /.
+- **Duyệt sản phẩm mới từ website an toàn**: so SKU không phân biệt hoa thường; SKU đang nằm trong thùng rác được khôi phục và liên kết, không còn lỗi 500. Sản phẩm tạo mới lấy thêm mô tả (dạng chữ), danh mục đầu tiên, cân nặng (kg → gram), thuộc tính biến thể và barcode (`global_unique_id`) nếu chưa bị SKU khác dùng. Ảnh chưa được tải về ECSO.
+
 ### Tài chính, vòng C–E: phí sàn, lợi nhuận nhiều tầng, lọc theo shop (2026-11-04)
 - **Một nguồn số liệu lợi nhuận** (`App\Modules\Analytics\Support\ProfitFigures`) cho trang Tài chính và Báo cáo lãi lỗ: doanh thu thuần, giá vốn, lợi nhuận gộp, **lợi nhuận đóng góp** (gộp − phí sàn + phí ship khách trả − chi phí bán hàng) và **lợi nhuận quản trị ước tính** (đóng góp − hao hụt kho − chi phí vận hành, chi phí khác + thu nhập khác). Ghi rõ là số ước tính, chưa phải lợi nhuận kế toán.
 - **Phí sàn** tách 3 loại: *đã xác nhận* (từ file đối soát đã nhập), *ước tính* (theo bảng phí của shop cho đơn chưa đối soát), *chưa biết* (shop chưa có bảng phí: đếm số đơn, không tính là 0). Đơn kênh riêng, POS, website không có phí sàn.

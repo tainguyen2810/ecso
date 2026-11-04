@@ -109,7 +109,7 @@ watch(warehouseId, runSearch);
 
 async function runSearch() {
     if (!warehouseId.value) return;
-    const { data } = await api.get('/variants', { params: { q: search.value || undefined, warehouse: warehouseId.value } });
+    const { data } = await api.get('/variants', { params: { q: search.value || undefined, warehouse: warehouseId.value, sellable: 1 } });
     results.value = data.data;
 }
 
