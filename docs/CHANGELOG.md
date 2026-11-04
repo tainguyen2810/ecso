@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Tài chính, vòng A: sửa số liệu sai (2026-11-04)
+- **Ngày theo giờ cửa hàng**: mọi báo cáo (Tài chính, Lãi lỗ, Tổng quan báo cáo, báo cáo bán hàng, trả hàng, thu chi), biểu đồ tổng quan đơn hàng, bộ lọc ngày của danh sách đơn và sổ quỹ đều tính ngày theo múi giờ cửa hàng (`tenants.timezone`, mặc định Asia/Ho_Chi_Minh), không còn theo UTC. Trước đây đơn từ 0h đến 7h sáng bị tính sang ngày hôm trước. Phần dùng chung: `App\Shared\Support\ReportRange`. Kết nối MySQL đổi mọi mốc thời gian được truyền vào truy vấn về UTC (`App\Shared\Database\LocalizedBindings`).
+- **Hoàn tiền không còn bị trừ hai lần** (trang Tài chính): chỉ tính phiếu trả đã duyệt, và chỉ tính phiếu của đơn còn nằm trong doanh thu. Giá vốn của hàng trả đã nhập lại kho được cộng lại (`cogs_returned`), theo giá vốn lúc xuất. Đơn đang có yêu cầu trả hàng vẫn được tính doanh thu cho tới khi phiếu trả được duyệt.
+- **Báo cáo lãi lỗ**: đơn hủy sau khi giao không còn bị trừ hàng trả. Giá trị hàng trả có chia chiết khấu theo dòng. Giá vốn hàng trả nhập kho tính theo giá vốn lúc xuất, không theo giá vốn hiện tại. Một quy tắc dùng chung: `App\Modules\Analytics\Support\ReturnValues`.
+- Trang Tài chính ghi rõ cách tính lợi nhuận sau thu chi, có thêm dòng "Chưa trừ phí sàn". Thẻ Hoàn tiền ghi rõ chỉ tính phiếu trả đã duyệt.
+
 ### Phí sàn và giá sàn, đợt 3 (2026-11-04)
 - **Bảng phí sàn** cho từng gian hàng (Cấu hình → Thuế và chính sách giá), gồm hoa hồng %, thanh toán %, dịch vụ %, phí cố định mỗi đơn, làm tròn lên và lãi tối thiểu trên giá vốn. Có thể đặt hoa hồng riêng theo danh mục. Khi chưa lưu thì bảng hiện số tham khảo (`config/marketplaces.php`, `pricing.reference_fees`), cần kiểm tra lại theo hợp đồng.
 - Công thức giá sàn: (giá gốc + phí cố định) ÷ (1 − tổng % phí), làm tròn lên. Giá không được thấp hơn mức để còn giá vốn + lãi tối thiểu sau phí. Website WooCommerce vẫn bán theo giá gốc, không cộng phí sàn.
