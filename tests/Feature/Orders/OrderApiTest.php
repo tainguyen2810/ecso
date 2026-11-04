@@ -9,6 +9,8 @@ use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
 
 beforeEach(function () {
+    // Reports count days in the shop's time zone (UTC+7): run at a time when the UTC and local dates are the same.
+    $this->travelTo(now()->startOfDay()->addHours(3));
     [$this->tenant, $this->owner] = tenantWithOwner();
     $this->shirt = makeVariant($this->tenant, 'AO-001', ['product_name' => 'Áo thun', 'ref_price' => 150000]);
     $this->pants = makeVariant($this->tenant, 'QUAN-001', ['product_name' => 'Quần jean', 'ref_price' => 350000]);

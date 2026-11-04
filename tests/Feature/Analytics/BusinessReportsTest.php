@@ -18,6 +18,11 @@ function reportSale($user, $tenant, array $lines, array $extra = [])
     ])->assertCreated();
 }
 
+beforeEach(function () {
+    // Reports count days in the shop's time zone (UTC+7): run at a time when the UTC and local dates are the same.
+    $this->travelTo(now()->startOfDay()->addHours(3));
+});
+
 it('reports sales and gross profit by channel, staff and day', function () {
     [$tenant, $owner] = tenantWithOwner();
     $cashier = addMember($tenant, Role::ORDER_STAFF);
