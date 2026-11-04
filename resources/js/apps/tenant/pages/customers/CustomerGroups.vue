@@ -146,7 +146,7 @@ async function remove(g: CustomerGroup) {
             </FormField>
             <FormField label="Chiết khấu (%)" for="g-discount" :error="error?.field('discount_percent')"><Input id="g-discount" v-model="form.discount_percent" type="number" min="0" max="100" step="0.5" /></FormField>
             <FormField label="Hạn thanh toán (ngày)" for="g-terms" :error="error?.field('payment_terms_days')" hint="Đơn quá số ngày này thì tính là nợ quá hạn."><Input id="g-terms" v-model="form.payment_terms_days" type="number" min="0" max="365" /></FormField>
-            <FormField label="Hạn mức nợ" for="g-credit" :error="error?.field('credit_limit')"><Input id="g-credit" v-model="form.credit_limit" type="number" min="0" step="100000" /></FormField>
+            <FormField label="Hạn mức nợ" for="g-credit" :error="error?.field('credit_limit')"><Input id="g-credit" v-model="form.credit_limit" type="number" min="0" step="any" /></FormField>
             <FormField label="Thanh toán quen dùng" for="g-pay" class="sm:col-span-2">
                 <Select id="g-pay" v-model="form.payment_method" :options="[{ value: '', label: 'Không đặt' }, ...Object.entries(paymentMethods).map(([value, label]) => ({ value, label }))]" />
             </FormField>

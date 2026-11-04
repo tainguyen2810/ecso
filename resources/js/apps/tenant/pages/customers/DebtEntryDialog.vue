@@ -55,7 +55,7 @@ async function save() {
                 <Select id="de-direction" v-model="form.direction" :options="[{ value: 'up', label: 'Tăng công nợ' }, { value: 'down', label: 'Giảm công nợ' }]" data-testid="de-direction" />
             </FormField>
             <FormField label="Số tiền" for="de-amount" :error="error?.field('amount')" :class="opening ? 'sm:col-span-2' : ''">
-                <Input id="de-amount" v-model="form.amount" type="number" min="1" step="1000" required data-testid="de-amount" />
+                <Input id="de-amount" v-model="form.amount" type="number" min="1" step="any" required data-testid="de-amount" />
             </FormField>
             <FormField label="Ngày chứng từ" for="de-date" :error="error?.field('entry_date')"><Input id="de-date" v-model="form.entry_date" type="date" /></FormField>
             <FormField label="Hạn thanh toán" for="de-due" hint="Quá ngày này thì tính là nợ quá hạn." :error="error?.field('due_date')"><Input id="de-due" v-model="form.due_date" type="date" /></FormField>

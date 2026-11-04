@@ -46,7 +46,7 @@ async function save() {
 <template>
     <Dialog v-model:open="open" title="Thu nợ khách hàng" :description="`Khách đang nợ ${formatMoney(debt)}. Tiền thu trả nợ đầu kỳ/điều chỉnh trước, rồi đến các đơn cũ nhất.`">
         <form id="debt-receipt-form" class="grid gap-3 sm:grid-cols-2" @submit.prevent="save">
-            <FormField label="Số tiền thu" for="dr-amount" :error="error?.field('amount')"><Input id="dr-amount" v-model="form.amount" type="number" min="1" step="1000" required data-testid="dr-amount" /></FormField>
+            <FormField label="Số tiền thu" for="dr-amount" :error="error?.field('amount')"><Input id="dr-amount" v-model="form.amount" type="number" min="1" step="any" required data-testid="dr-amount" /></FormField>
             <FormField label="Hình thức" for="dr-method"><Select id="dr-method" v-model="form.method" :options="methods" /></FormField>
             <FormField label="Mã giao dịch" for="dr-ref"><Input id="dr-ref" v-model="form.reference" maxlength="100" /></FormField>
             <FormField label="Ghi chú" for="dr-note"><Input id="dr-note" v-model="form.note" maxlength="500" /></FormField>

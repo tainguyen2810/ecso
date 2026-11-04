@@ -98,7 +98,7 @@ async function save() {
             </FormField>
             <FormField label="Mã số thuế" for="c-tax" :error="error?.field('tax_code')"><Input id="c-tax" v-model="form.tax_code" placeholder="Khi khách cần xuất hóa đơn" /></FormField>
             <FormField label="Hạn thanh toán (ngày)" for="c-terms" :error="error?.field('payment_terms_days')" hint="Để trống thì theo nhóm khách."><Input id="c-terms" v-model="form.payment_terms_days" type="number" min="0" max="365" data-testid="c-terms" /></FormField>
-            <FormField label="Hạn mức nợ" for="c-credit" :error="error?.field('credit_limit')" hint="Để trống thì theo nhóm khách."><Input id="c-credit" v-model="form.credit_limit" type="number" min="0" step="100000" data-testid="c-credit" /></FormField>
+            <FormField label="Hạn mức nợ" for="c-credit" :error="error?.field('credit_limit')" hint="Để trống thì theo nhóm khách."><Input id="c-credit" v-model="form.credit_limit" type="number" min="0" step="any" data-testid="c-credit" /></FormField>
             <FormField v-if="customer" label="Trạng thái" for="c-status">
                 <Select id="c-status" v-model="form.status" :options="[{ value: 'active', label: 'Đang giao dịch' }, { value: 'inactive', label: 'Ngừng giao dịch' }]" />
             </FormField>
