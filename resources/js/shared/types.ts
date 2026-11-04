@@ -258,6 +258,7 @@ export interface OrderItemDetail {
 export interface OrderDetail extends OrderSummary {
     items: OrderItemDetail[];
     history: { from: string | null; to: string; raw_status: string | null; source: string; actor: string | null; note: string | null; occurred_at: string | null; created_at: string }[];
+    edits?: { at: string | null; actor: string | null; changes: string[] }[];
     notes: { id: number; body: string; user: string | null; created_at: string | null }[];
     returns: OrderReturnData[];
     actions: Record<string, { allowed: boolean; capability: string }>;

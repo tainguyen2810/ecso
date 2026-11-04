@@ -158,15 +158,25 @@ async function pay() {
     }
 }
 
-async function voidPayment(id: string) {
-    const reason = window.prompt('Lý do hủy phiếu thu/chi này?');
-    if (!reason) return;
+// Void a payment typed by mistake: asks for the reason in a dialog (the audit log keeps it).
+const voidPaymentId = ref<string | null>(null);
+const voidPaymentReason = ref('');
+function voidPayment(id: string) {
+    voidPaymentId.value = id;
+    voidPaymentReason.value = '';
+}
+async function confirmVoidPayment() {
+    busy.value = 'void-payment';
     try {
-        await api.post(`/payments/${id}/void`, { reason });
+        await api.post(`/payments/${voidPaymentId.value}/void`, { reason: voidPaymentReason.value.trim() });
         toast.success('Đã hủy phiếu.');
+        voidPaymentId.value = null;
         await load();
     } catch (e) {
-        toast.error((e as ApiError).message);
+        const err = e as ApiError;
+        toast.error(err.field('payment') ?? err.field('reason') ?? err.message);
+    } finally {
+        busy.value = null;
     }
 }
 const workflow = computed(() => (order.value ? orderWorkflow(order.value) : []));
@@ -413,6 +423,18 @@ async function createReturn() {
                     </ol>
                 </Card>
 
+                <Card v-if="order.edits?.length" caps title="Lịch sử sửa đơn">
+                    <ul class="divide-y text-sm" data-testid="order-edits">
+                        <li v-for="(e, idx) in order.edits" :key="idx" class="px-5 py-3">
+                            <div class="text-xs text-muted-foreground">{{ e.at ? formatDateTime(e.at) : '' }}<span v-if="e.actor"> · {{ e.actor }}</span></div>
+                            <ul v-if="e.changes.length" class="mt-1 space-y-0.5">
+                                <li v-for="(c, i) in e.changes" :key="i">{{ c }}</li>
+                            </ul>
+                            <p v-else class="mt-1 text-muted-foreground">Lưu lại, không đổi nội dung.</p>
+                        </li>
+                    </ul>
+                </Card>
+
                 <Card caps title="Ghi chú nội bộ">
                     <ul v-if="order.notes.length" class="divide-y text-sm">
                         <li v-for="n in order.notes" :key="n.id" class="flex gap-3 px-5 py-3">
@@ -578,6 +600,14 @@ async function createReturn() {
             <template #footer>
                 <Button variant="outline" @click="cancelOpen = false">Đóng</Button>
                 <Button variant="destructive" :loading="busy === 'cancel'" @click="act('cancel', { reason: cancelReason || null })">Hủy đơn</Button>
+            </template>
+        </Dialog>
+
+        <Dialog :open="voidPaymentId !== null" title="Hủy phiếu thu/chi" description="Chỉ hủy phiếu nhập nhầm. Phiếu đã hủy vẫn được lưu và không còn tính vào số đã thu." @update:open="(v: boolean) => !v && (voidPaymentId = null)">
+            <FormField label="Lý do hủy"><Input v-model="voidPaymentReason" placeholder="Ví dụ: nhập nhầm số tiền" data-testid="void-payment-reason" /></FormField>
+            <template #footer>
+                <Button variant="outline" @click="voidPaymentId = null">Đóng</Button>
+                <Button variant="destructive" :disabled="!voidPaymentReason.trim()" :loading="busy === 'void-payment'" data-testid="void-payment-submit" @click="confirmVoidPayment">Hủy phiếu</Button>
             </template>
         </Dialog>
 

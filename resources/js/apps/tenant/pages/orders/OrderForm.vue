@@ -346,6 +346,28 @@ watch(
     },
 );
 
+// Saved delivery addresses of the chosen customer (Khách hàng › Sổ địa chỉ), offered under "Địa chỉ giao".
+interface SavedAddress { id: string; label: string | null; recipient: string | null; phone: string | null; address: string }
+const savedAddresses = ref<SavedAddress[]>([]);
+async function loadAddresses(id: string) {
+    savedAddresses.value = [];
+    try {
+        const { data } = await api.get(`/customers/${id}`);
+        if (customer.value?.id === id) savedAddresses.value = data.data.addresses ?? [];
+    } catch {
+        // No access to customer details: the field stays a plain input.
+    }
+}
+function useAddress(a: SavedAddress) {
+    form.shipping_address = a.address;
+    if (a.recipient) form.buyer_name = a.recipient;
+    if (a.phone) form.buyer_phone = a.phone;
+}
+watch(
+    () => customer.value?.id,
+    (id) => (id ? loadAddresses(id) : (savedAddresses.value = [])),
+);
+
 function chooseCustomer(c: Customer) {
     customer.value = c;
     newCustomer.enabled = false;
@@ -753,7 +775,21 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
                 <div v-if="editId || form.stage !== 'completed'" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <FormField label="Người nhận" for="o-name"><Input id="o-name" v-model="form.buyer_name" /></FormField>
                     <FormField label="Điện thoại" for="o-phone"><Input id="o-phone" v-model="form.buyer_phone" inputmode="tel" /></FormField>
-                    <FormField label="Địa chỉ giao" for="o-address" class="sm:col-span-2"><Input id="o-address" v-model="form.shipping_address" /></FormField>
+                    <FormField label="Địa chỉ giao" for="o-address" class="sm:col-span-2">
+                        <Input id="o-address" v-model="form.shipping_address" />
+                        <div v-if="savedAddresses.length" class="mt-1.5 flex flex-wrap gap-1.5" data-testid="saved-addresses">
+                            <button
+                                v-for="a in savedAddresses"
+                                :key="a.id"
+                                type="button"
+                                :class="['max-w-full truncate rounded-full border px-2.5 py-1 text-xs', form.shipping_address === a.address ? 'border-blue-300 bg-blue-50 text-blue-700' : 'hover:bg-muted']"
+                                :title="a.address"
+                                @click="useAddress(a)"
+                            >
+                                {{ a.label || a.recipient || 'Địa chỉ' }} · {{ a.address }}
+                            </button>
+                        </div>
+                    </FormField>
                     <FormField label="Đơn vị vận chuyển" for="o-carrier"><Input id="o-carrier" v-model="form.carrier" placeholder="GHN, GHTK, tự giao…" /></FormField>
                     <label class="flex items-center gap-2 self-end pb-2 text-sm"><input v-model="form.is_cod" type="checkbox" class="size-4" /> Thu hộ (COD) khi giao</label>
                 </div>

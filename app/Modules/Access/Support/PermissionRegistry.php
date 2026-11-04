@@ -15,6 +15,7 @@ final class PermissionRegistry
         'dashboard' => ['dashboard.view' => 'Xem tổng quan'],
         'orders' => [
             'orders.view' => 'Xem đơn hàng',
+            'orders.view.all' => 'Xem đơn của mọi nhân viên (không có: chỉ xem đơn mình tạo hoặc được giao)',
             'orders.update' => 'Xử lý đơn hàng',
             'orders.cancel' => 'Hủy đơn hàng',
             'orders.assign' => 'Phân công đơn',
@@ -74,7 +75,7 @@ final class PermissionRegistry
     ];
 
     private const READ_ALL = [
-        'dashboard.view', 'orders.view', 'products.view', 'inventory.view', 'purchasing.view',
+        'dashboard.view', 'orders.view', 'orders.view.all', 'products.view', 'inventory.view', 'purchasing.view',
         'returns.view', 'reports.view', 'marketplace.view', 'customers.view',
     ];
 
@@ -94,15 +95,15 @@ final class PermissionRegistry
                 'returns.inspect', 'finance.view', 'finance.vouchers', 'members.view',
             ]],
             Role::WAREHOUSE_STAFF => ['name' => 'Nhân viên kho', 'rank' => 40, 'permissions' => [
-                'dashboard.view', 'orders.view', 'orders.print', 'products.view', 'inventory.view',
+                'dashboard.view', 'orders.view', 'orders.view.all', 'orders.print', 'products.view', 'inventory.view',
                 'inventory.receive', 'inventory.adjust', 'inventory.transfer', 'purchasing.view', 'returns.view', 'returns.inspect',
             ]],
             Role::ORDER_STAFF => ['name' => 'Nhân viên xử lý đơn', 'rank' => 40, 'permissions' => [
-                'dashboard.view', 'orders.view', 'orders.update', 'orders.cancel', 'orders.print', 'orders.create', 'orders.payment', 'orders.payment.void', 'products.view',
+                'dashboard.view', 'orders.view', 'orders.view.all', 'orders.update', 'orders.cancel', 'orders.print', 'orders.create', 'orders.payment', 'orders.payment.void', 'products.view',
                 'inventory.view', 'returns.view', 'customers.view', 'customers.manage', 'customers.import', 'customers.export', 'customers.delete',
             ]],
             Role::ACCOUNTANT => ['name' => 'Kế toán', 'rank' => 40, 'permissions' => [
-                'dashboard.view', 'orders.view', 'products.view', 'inventory.view', 'purchasing.view',
+                'dashboard.view', 'orders.view', 'orders.view.all', 'products.view', 'inventory.view', 'purchasing.view',
                 'returns.view', 'finance.view', 'finance.vouchers', 'reports.view', 'billing.view', 'customers.view', 'orders.payment', 'orders.payment.void', 'orders.shifts', 'purchasing.payment',
             ]],
             Role::VIEWER => ['name' => 'Chỉ xem', 'rank' => 10, 'permissions' => self::READ_ALL],

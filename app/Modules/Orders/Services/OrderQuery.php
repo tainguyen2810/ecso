@@ -4,14 +4,17 @@ namespace App\Modules\Orders\Services;
 
 use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Identity\Models\User;
+use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Sales\Support\PhoneNumber;
+use App\Modules\Tenancy\Support\TenantContext;
 use App\Shared\Support\ReportRange;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Auth;
 
 /** Filters of the order list (ORDER-LIFECYCLE §7). Every filter value is resolved inside the tenant scope. */
 class OrderQuery
@@ -22,7 +25,7 @@ class OrderQuery
      */
     public function build(array $filters, ?int $userId, bool $withTab = true): Builder
     {
-        $query = Order::query();
+        $query = self::visible(Order::query());
 
         if ($withTab && ($tab = $filters['tab'] ?? null) && isset(OrderStatus::TABS[$tab])) {
             $query->whereIn('status', OrderStatus::TABS[$tab]);
@@ -35,6 +38,9 @@ class OrderQuery
         }
         if ($channel = $filters['channel'] ?? null) {
             $query->where('sales_channel_id', SalesChannel::query()->where('ulid', $channel)->value('id') ?? 0);
+        }
+        if ($warehouse = $filters['warehouse'] ?? null) {
+            $query->where('warehouse_id', Warehouse::query()->where('ulid', $warehouse)->value('id') ?? 0);
         }
         if ($customer = $filters['customer'] ?? null) {
             $query->where('customer_id', Customer::query()->where('ulid', $customer)->value('id') ?? 0);
@@ -55,9 +61,11 @@ class OrderQuery
             $query->where('placed_at', '<', ReportRange::date($to)->addDay());
         }
         if ($q = trim((string) ($filters['q'] ?? ''))) {
+            $phoneHash = PhoneNumber::hash(PhoneNumber::normalize($q)) ?? '-';
             $query->where(fn (Builder $w) => $w->where('external_order_id', 'like', "%{$q}%")
                 ->orWhere('tracking_number', $q)
-                ->orWhereHas('customer', fn ($c) => $c->where('name', 'like', "%{$q}%")->orWhere('phone_hash', PhoneNumber::hash(PhoneNumber::normalize($q)) ?? '-'))
+                ->orWhere('buyer_phone_hash', $phoneHash)
+                ->orWhereHas('customer', fn ($c) => $c->where('name', 'like', "%{$q}%")->orWhere('phone_hash', $phoneHash))
                 ->orWhereHas('items', fn ($i) => $i->where('seller_sku', $q)->orWhere('name', 'like', "%{$q}%")));
         }
         if ($sku = $filters['sku'] ?? null) {
@@ -98,6 +106,24 @@ class OrderQuery
     }
 
     /**
+     * Orders the signed-in member may see: all of them with orders.view.all, otherwise only those they created or
+     * were assigned (a cashier who should not browse colleagues' sales).
+     *
+     * @param  Builder<Order>  $query
+     * @return Builder<Order>
+     */
+    public static function visible(Builder $query): Builder
+    {
+        $context = app(TenantContext::class);
+        if (! $context->has() || $context->can('orders.view.all') || ! Auth::check()) {
+            return $query;
+        }
+        $me = Auth::id();
+
+        return $query->where(fn (Builder $w) => $w->where('created_by', $me)->orWhere('assigned_to', $me));
+    }
+
+    /**
      * Order count per tab for the current filters (without the tab filter itself).
      *
      * @param  array<string, mixed>  $filters
@@ -124,7 +150,7 @@ class OrderQuery
      */
     public function pipeline(): array
     {
-        $byStatus = Order::query()->toBase()
+        $byStatus = self::visible(Order::query())->toBase()
             ->whereIn('status', [...OrderStatus::OPEN, OrderStatus::HANDED_OVER, OrderStatus::IN_TRANSIT, OrderStatus::FAILED_DELIVERY])
             ->selectRaw('status, count(*) as c, COALESCE(SUM(total), 0) as amount')->groupBy('status')->get()->keyBy('status');
         $sum = fn (array $statuses) => [
@@ -132,7 +158,7 @@ class OrderQuery
             'amount' => collect($statuses)->reduce(fn (string $t, $s) => bcadd($t, (string) ($byStatus[$s]->amount ?? 0), 2), '0.00'),
         ];
 
-        $due = Order::query()->toBase()->where('marketplace', Order::SOURCE_MANUAL)->where('status', '!=', OrderStatus::CANCELLED)
+        $due = self::visible(Order::query())->toBase()->where('marketplace', Order::SOURCE_MANUAL)->where('status', '!=', OrderStatus::CANCELLED)
             ->where('payment_status', '!=', Order::PAYMENT_PAID)
             ->selectRaw('count(*) as c, COALESCE(SUM(GREATEST(total - paid_amount, 0)), 0) as amount')->first();
 

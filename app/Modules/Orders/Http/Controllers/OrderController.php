@@ -3,6 +3,7 @@
 namespace App\Modules\Orders\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Audit\Models\AuditLog;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Identity\Models\User;
 use App\Modules\Inventory\Services\ReservationLedger;
@@ -111,6 +112,13 @@ class OrderController extends Controller
                 'occurred_at' => $h->occurred_at?->toIso8601String(),
                 'created_at' => $h->created_at->toIso8601String(),
             ]),
+            // What each edit changed, newest first.
+            'edits' => AuditLog::query()->with('actor:id,name')->where('tenant_id', $order->tenant_id)->where('action', 'order.updated')->where('subject_type', 'Order')->where('subject_id', $order->id)
+                ->latest('id')->limit(50)->get()->map(fn (AuditLog $log) => [
+                    'at' => $log->created_at?->toIso8601String(),
+                    'actor' => $log->actor?->name,
+                    'changes' => array_values((array) ($log->changes['diff'] ?? [])),
+                ]),
             'notes' => $order->notes()->with('user:id,name')->get()->map(fn (OrderNote $n) => [
                 'id' => $n->id, 'body' => $n->body, 'user' => $n->user?->name, 'created_at' => $n->created_at?->toIso8601String(),
             ]),
@@ -417,6 +425,7 @@ class OrderController extends Controller
             'account' => ['nullable', 'string'],
             'channel' => ['nullable', 'string'],
             'customer' => ['nullable', 'string'],
+            'warehouse' => ['nullable', 'string'],
             'source' => ['nullable', Rule::in(['manual', 'marketplace'])],
             'payment_status' => ['nullable', Rule::in([Order::PAYMENT_UNPAID, Order::PAYMENT_PARTIAL, Order::PAYMENT_PAID])],
             'marketplace' => ['nullable', 'string', 'max:20'],

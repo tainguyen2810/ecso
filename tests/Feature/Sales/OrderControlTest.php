@@ -1,14 +1,6 @@
 <?php
 
-use App\Modules\Access\Models\Permission;
 use App\Modules\Access\Models\Role;
-
-/** Takes one permission away from a system role, as a business tightening its staff rights would. */
-function revoke(string $role, string $permission): void
-{
-    Role::query()->whereNull('tenant_id')->where('key', $role)->firstOrFail()
-        ->permissions()->detach(Permission::query()->where('key', $permission)->value('id'));
-}
 
 it('refuses to save an order edited from a stale copy', function () {
     [$tenant, $owner] = tenantWithOwner();

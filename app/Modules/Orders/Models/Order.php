@@ -46,7 +46,7 @@ class Order extends Model
 
     protected $guarded = ['id', 'ulid', 'tenant_id'];
 
-    protected $hidden = ['id', 'tenant_id', 'marketplace_account_id', 'sales_channel_id', 'customer_id', 'warehouse_id', 'assigned_to', 'created_by', 'raw'];
+    protected $hidden = ['id', 'tenant_id', 'marketplace_account_id', 'sales_channel_id', 'customer_id', 'warehouse_id', 'assigned_to', 'created_by', 'raw', 'buyer_phone_hash'];
 
     protected function casts(): array
     {
