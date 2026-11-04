@@ -55,7 +55,7 @@ class CustomerTaskController extends Controller
         $task = new CustomerTask(['title' => $data['title'], 'due_at' => $data['due_at']]);
         $task->forceFill([
             'customer_id' => $customer->id, 'created_by' => $request->user()->id,
-            'assigned_user_id' => $this->customers->member($data['assigned_user_id'] ?? null)?->id ?? $request->user()->id,
+            'assigned_user_id' => $this->customers->member($data['assigned_user_id'] ?? null)->id ?? $request->user()->id,
         ])->save();
         $this->audit->record('customer.task_created', $customer, ['title' => $task->title, 'due_at' => $task->due_at->toIso8601String()]);
 
