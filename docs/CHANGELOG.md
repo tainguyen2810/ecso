@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Tài chính: doanh thu không gồm thuế GTGT (2026-11-04)
+- Doanh thu thuần trên trang Tài chính và Báo cáo lãi lỗ **không gồm thuế GTGT bán ra**. Giá đã gồm thuế: trừ phần thuế nằm trong giá (dòng mới "3. Thuế GTGT nằm trong giá bán"). Giá chưa gồm thuế: thuế cộng thêm không bao giờ vào doanh thu.
+- Hàng trả lại trừ khỏi doanh thu theo giá trị chưa gồm thuế (tiền hoàn đã gồm cả thuế trả lại cho khách). Giá trị hàng trả khi không nhập số tiền hoàn giờ chia cả chiết khấu đơn và thuế cộng thêm theo tỷ lệ, giống `OrderReturn::goodsValue()`.
+- Xem chi tiết đơn có thêm cột VAT.
+
 ### Tài chính, vòng C–E: phí sàn, lợi nhuận nhiều tầng, lọc theo shop (2026-11-04)
 - **Một nguồn số liệu lợi nhuận** (`App\Modules\Analytics\Support\ProfitFigures`) cho trang Tài chính và Báo cáo lãi lỗ: doanh thu thuần, giá vốn, lợi nhuận gộp, **lợi nhuận đóng góp** (gộp − phí sàn + phí ship khách trả − chi phí bán hàng) và **lợi nhuận quản trị ước tính** (đóng góp − hao hụt kho − chi phí vận hành, chi phí khác + thu nhập khác). Ghi rõ là số ước tính, chưa phải lợi nhuận kế toán.
 - **Phí sàn** tách 3 loại: *đã xác nhận* (từ file đối soát đã nhập), *ước tính* (theo bảng phí của shop cho đơn chưa đối soát), *chưa biết* (shop chưa có bảng phí: đếm số đơn, không tính là 0). Đơn kênh riêng, POS, website không có phí sàn.

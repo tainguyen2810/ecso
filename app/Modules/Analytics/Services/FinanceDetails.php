@@ -43,7 +43,7 @@ class FinanceDetails
         $truncated = $rows->count() > self::LIMIT;
         $rows = $rows->take(self::LIMIT)->map(function ($r) use ($withCost) {
             $row = (array) $r;
-            foreach (['goods', 'discount', 'shipping', 'total', 'cogs', 'fee', 'payout', 'value', 'cost_back', 'gross_profit'] as $key) {
+            foreach (['goods', 'discount', 'tax', 'shipping', 'total', 'cogs', 'fee', 'payout', 'value', 'cost_back', 'gross_profit'] as $key) {
                 if (array_key_exists($key, $row)) {
                     $row[$key] = $row[$key] === null ? null : round((float) $row[$key], 2);
                 }
@@ -81,8 +81,8 @@ class FinanceDetails
             ->leftJoin('marketplace_accounts as ma', 'ma.id', '=', 'o.marketplace_account_id')
             ->leftJoin('sales_channels as sc', 'sc.id', '=', 'o.sales_channel_id')
             ->selectRaw("o.ulid as id, o.external_order_id as code, o.marketplace, o.status, COALESCE(ma.shop_name, sc.name, 'Khác') as shop, "
-                .'o.placed_at, '.RevenuePolicy::dateSql('o').' as recognized_at, o.subtotal - o.discount as goods, o.discount, o.shipping_fee as shipping, o.total, '
-                .'c.cogs, o.subtotal - o.discount - COALESCE(c.cogs, 0) as gross_profit, '
+                .'o.placed_at, '.RevenuePolicy::dateSql('o').' as recognized_at, '.ProfitFigures::netGoodsSql().' as goods, o.discount, o.tax_amount as tax, o.shipping_fee as shipping, o.total, '
+                .'c.cogs, '.ProfitFigures::netGoodsSql().' - COALESCE(c.cogs, 0) as gross_profit, '
                 .'COALESCE('.ProfitFigures::confirmedFeeSql().', '.ProfitFigures::estimatedFeeSql().') as fee, '
                 ."CASE WHEN s.id IS NOT NULL THEN 'confirmed' WHEN ".ProfitFigures::unknownFeeSql()." = 1 THEN 'unknown' WHEN cr.id IS NOT NULL AND ".ProfitFigures::isMarketplaceSql()." THEN 'estimated' ELSE 'none' END as fee_status, "
                 .'s.net_amount as payout, s.settled_at')
@@ -97,7 +97,7 @@ class FinanceDetails
             ->leftJoin('sales_channels as sc', 'sc.id', '=', 'ro.sales_channel_id')
             ->selectRaw("r.ulid as id, r.number as code, ro.external_order_id as order_code, ro.ulid as order_id, r.status, COALESCE(ma.shop_name, sc.name, 'Khác') as shop, r.created_at, r.inspected_at, "
                 // A return counts in the period it was approved (value) and in the period its goods went back on the shelf (cost).
-                .'CASE WHEN r.created_at BETWEEN ? AND ? THEN '.ReturnValues::valueSql().' ELSE 0 END as value, '
+                .'CASE WHEN r.created_at BETWEEN ? AND ? THEN '.ReturnValues::netValueSql().' ELSE 0 END as value, '
                 .'CASE WHEN r.inspected_at BETWEEN ? AND ? THEN COALESCE(rv.cost_back, 0) ELSE 0 END as cost_back', [$from, $to, $from, $to])
             ->orderBy('r.created_at')->orderBy('r.id');
     }
