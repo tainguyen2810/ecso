@@ -48,6 +48,7 @@ function totalsRows(order: OrderDetail): string {
     return `<tr><td>Tiền hàng</td><td class="r">${formatMoney(order.subtotal)}</td></tr>
 ${Number(order.shipping_fee) > 0 ? `<tr><td>Phí giao hàng</td><td class="r">${formatMoney(order.shipping_fee)}</td></tr>` : ''}
 ${Number(order.discount) > 0 ? `<tr><td>Giảm giá</td><td class="r">−${formatMoney(order.discount)}</td></tr>` : ''}
+${Number(order.tax_amount ?? 0) > 0 ? `<tr><td>${order.prices_include_tax === false ? 'Thuế GTGT' : 'Trong đó thuế GTGT'} ${Number(order.tax_rate)}%</td><td class="r">${formatMoney(order.tax_amount!)}</td></tr>` : ''}
 <tr class="total"><td>TỔNG CỘNG</td><td class="r">${formatMoney(order.total)}</td></tr>
 ${payments.map((p) => `<tr><td>${p.kind === 'refund' ? 'Hoàn tiền' : 'Đã trả'} (${esc(paymentMethodNames[p.method] ?? p.method)})</td><td class="r">${p.kind === 'refund' ? '−' : ''}${formatMoney(p.amount)}</td></tr>`).join('')}
 ${paid > 0 || due > 0 ? `<tr><td><b>Còn phải trả</b></td><td class="r"><b>${formatMoney(due)}</b></td></tr>` : ''}`;

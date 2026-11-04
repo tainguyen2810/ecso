@@ -21,6 +21,7 @@ use App\Modules\Sales\Models\CashShift;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Sales\Models\SalesChannel;
+use App\Modules\Sales\Support\PhoneNumber;
 use App\Modules\Tenancy\Support\TenantSettings;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -85,6 +86,9 @@ class ManualOrderService
                 'sales_channel_id' => $channel->id,
                 'warehouse_id' => $warehouse->id,
                 'cash_shift_id' => $shift?->id,
+                // The tax rate in force when the order is made stays with the order.
+                'tax_rate' => (float) TenantSettings::current()->get('tax.sale_rate'),
+                'prices_include_tax' => (bool) TenantSettings::current()->get('tax.prices_include_tax'),
                 'created_by' => Auth::id(),
                 'assigned_to' => Auth::id(),
                 'placed_at' => isset($data['placed_at']) ? now()->parse($data['placed_at']) : now(),
@@ -148,7 +152,12 @@ class ManualOrderService
             if (! in_array($order->status, self::EDITABLE, true)) {
                 throw ValidationException::withMessages(['order' => 'Chỉ sửa được đơn chưa đóng gói.']);
             }
+            // Two people editing the same order: the later save would silently overwrite the first one.
+            if (isset($data['version']) && (int) $data['version'] !== (int) $order->version) {
+                throw ValidationException::withMessages(['version' => 'Đơn vừa được người khác sửa hoặc đổi trạng thái. Tải lại trang để xem bản mới nhất rồi sửa lại.']);
+            }
 
+            $before = $this->editSnapshot($order);
             $previousCustomer = $order->customer_id !== null ? (int) $order->customer_id : null;
             $customer = array_key_exists('customer_id', $data) || isset($data['customer']) ? $this->customer($data, $previousCustomer) : $order->customer;
             $this->fillDetails($order, $data, $customer);
@@ -176,7 +185,8 @@ class ManualOrderService
                 $order->forceFill(['sync_warning' => 'Khách đã trả nhiều hơn tổng tiền mới của đơn: cần hoàn lại phần chênh lệch.'])->save();
             }
 
-            $this->audit->record('order.updated', $order, ['order' => $order->external_order_id, 'total' => $order->total]);
+            $diff = $this->editDiff($before, $this->editSnapshot($order->refresh()));
+            $this->audit->record('order.updated', $order, ['order' => $order->external_order_id, 'total' => $order->total, 'diff' => $diff]);
 
             return $order->refresh();
         });
@@ -294,6 +304,7 @@ class ManualOrderService
             'buyer_name' => $name,
             'buyer_phone' => $phone,
             'buyer_phone_masked' => OrderIngestor::maskPhone($phone),
+            'buyer_phone_hash' => PhoneNumber::hash(PhoneNumber::normalize($phone)),
             'shipping_address' => $address,
         ]);
 
@@ -371,6 +382,73 @@ class ManualOrderService
     }
 
     /** @return array<int, array{variant_id: string|null, name?: string, quantity: int, unit_price: string, discount: string}> */
+    /**
+     * What an edit can change, in words a seller reads: lines by SKU or name, buyer, delivery, money.
+     *
+     * @return array{lines: array<string, array{qty: int, price: string, discount: string}>, fields: array<string, string>}
+     */
+    private function editSnapshot(Order $order): array
+    {
+        $lines = [];
+        foreach ($order->items()->with('variant')->get() as $i) {
+            $key = $i->variant->sku ?? $i->name;
+            $lines[$key] = ['qty' => (int) $i->quantity + (int) ($lines[$key]['qty'] ?? 0), 'price' => (string) $i->unit_price, 'discount' => (string) $i->discount];
+        }
+
+        return ['lines' => $lines, 'fields' => [
+            'Khách hàng' => (string) ($order->customer->name ?? ''),
+            'Người nhận' => (string) $order->buyer_name,
+            'SĐT người nhận' => (string) $order->buyer_phone_masked,
+            'Địa chỉ giao' => (string) $order->shipping_address,
+            'Kho xuất' => (string) ($order->warehouse->name ?? ''),
+            'Phí giao hàng' => (string) $order->shipping_fee,
+            'Chiết khấu đơn' => (string) $order->discount,
+            'Tổng tiền' => (string) $order->total,
+        ]];
+    }
+
+    /**
+     * Human-readable changes between two snapshots, e.g. "ATC-01: SL 1 → 2" or "Tổng tiền: 100.000 → 200.000".
+     *
+     * @param  array{lines: array<string, array{qty: int, price: string, discount: string}>, fields: array<string, string>}  $a
+     * @param  array{lines: array<string, array{qty: int, price: string, discount: string}>, fields: array<string, string>}  $b
+     * @return array<int, string>
+     */
+    private function editDiff(array $a, array $b): array
+    {
+        $money = fn (string $v) => is_numeric($v) ? number_format((float) $v, 0, ',', '.') : $v;
+        $diff = [];
+        foreach ($b['lines'] as $key => $line) {
+            $old = $a['lines'][$key] ?? null;
+            if ($old === null) {
+                $diff[] = "Thêm {$key} × {$line['qty']}";
+
+                continue;
+            }
+            if ($old['qty'] !== $line['qty']) {
+                $diff[] = "{$key}: SL {$old['qty']} → {$line['qty']}";
+            }
+            if (bccomp($old['price'], $line['price'], 2) !== 0) {
+                $diff[] = "{$key}: giá {$money($old['price'])} → {$money($line['price'])}";
+            }
+            if (bccomp($old['discount'], $line['discount'], 2) !== 0) {
+                $diff[] = "{$key}: giảm {$money($old['discount'])} → {$money($line['discount'])}";
+            }
+        }
+        foreach (array_diff_key($a['lines'], $b['lines']) as $key => $line) {
+            $diff[] = "Bỏ {$key} × {$line['qty']}";
+        }
+        foreach ($b['fields'] as $label => $value) {
+            $old = $a['fields'][$label] ?? '';
+            $same = is_numeric($old) && is_numeric($value) ? bccomp($old, $value, 2) === 0 : $old === $value;
+            if (! $same) {
+                $diff[] = $label === 'Địa chỉ giao' ? 'Đổi địa chỉ giao' : "{$label}: ".($old === '' ? '(trống)' : $money($old)).' → '.($value === '' ? '(trống)' : $money($value));
+            }
+        }
+
+        return $diff;
+    }
+
     private function currentLines(Order $order): array
     {
         return $order->items()->with('variant')->get()->map(fn (OrderItem $i) => $i->variant === null
@@ -389,7 +467,29 @@ class ManualOrderService
             throw ValidationException::withMessages(['discount' => 'Giảm giá lớn hơn tổng tiền đơn.']);
         }
 
-        $order->forceFill(['subtotal' => $subtotal, 'total' => $total])->save();
+        // VAT on the goods after the order discount (not on shipping), at the rate the order was created with.
+        $tax = self::saleTax(bcsub($subtotal, (string) $order->discount, 2), (string) $order->tax_rate, (bool) $order->prices_include_tax);
+        if (! $order->prices_include_tax) {
+            $total = bcadd($total, $tax, 2);
+        }
+
+        $order->forceFill(['subtotal' => $subtotal, 'tax_amount' => $tax, 'total' => $total])->save();
+    }
+
+    /**
+     * Sale tax on an amount, rounded to the đồng. Prices that include tax hold it inside (amount × r / (100 + r));
+     * prices before tax get it added on top (amount × r / 100). Mirrored by saleTax() in resources/js/shared/lib/tax.ts.
+     */
+    public static function saleTax(string $amount, string $rate, bool $included): string
+    {
+        if (bccomp($rate, '0', 2) <= 0 || bccomp($amount, '0', 2) <= 0) {
+            return '0.00';
+        }
+        $tax = $included
+            ? bcdiv(bcmul($amount, $rate, 8), bcadd('100', $rate, 8), 8)
+            : bcdiv(bcmul($amount, $rate, 8), '100', 8);
+
+        return number_format(round((float) $tax), 2, '.', '');
     }
 
     /**

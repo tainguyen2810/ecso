@@ -5,7 +5,9 @@ namespace App\Modules\Sales\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Orders\Http\Resources\OrderResource;
+use App\Modules\Orders\Http\Resources\ReturnResource;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Orders\Services\ReturnService;
 use App\Modules\Orders\Support\OrderTags;
 use App\Modules\Sales\Http\Resources\PaymentResource;
 use App\Modules\Sales\Models\OrderPayment;
@@ -51,6 +53,7 @@ class SalesOrderController extends Controller
         $this->authorize('update', $order);
         $data = $request->validate([
             ...$this->rules(),
+            'version' => ['sometimes', 'integer'], // the version the editor loaded: refused if someone saved since
             'lines' => ['sometimes', 'array', 'min:1', 'max:200'],
             ...$this->lineRules(),
         ]);
@@ -59,9 +62,22 @@ class SalesOrderController extends Controller
         return new OrderResource($orders->update($order, $data)->load(['channel', 'customer', 'warehouse']));
     }
 
+    /** "Hủy hóa đơn" of a completed sale: everything back to stock and the money back to the buyer, in one step. */
+    public function voidSale(Request $request, Order $order, ReturnService $returns): ReturnResource
+    {
+        $this->authorize('cancel', $order);
+        $this->authorize('pay', $order);
+        $data = $request->validate(['reason' => ['required', 'string', 'max:255']]);
+
+        return new ReturnResource($returns->voidSale($order, $data['reason'])->load(['order', 'warehouse', 'lines.item', 'lines.variant']));
+    }
+
     public function action(Request $request, Order $order, string $action, ManualOrderService $orders): OrderResource
     {
         $this->authorize('update', $order);
+        if ($action === 'cancel') {
+            $this->authorize('cancel', $order);
+        }
         $params = $request->validate([
             'reason' => ['nullable', 'string', 'max:255'],
             'carrier' => ['nullable', 'string', 'max:100'],
@@ -89,6 +105,7 @@ class SalesOrderController extends Controller
     public function void(Request $request, OrderPayment $payment, PaymentService $payments): PaymentResource
     {
         $this->authorize('pay', Order::class);
+        $this->authorize('voidPayment', Order::class);
         $data = $request->validate(['reason' => ['required', 'string', 'max:255']]);
 
         return new PaymentResource($payments->void($payment, $data['reason'])->load('creator'));
