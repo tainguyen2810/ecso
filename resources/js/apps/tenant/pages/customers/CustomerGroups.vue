@@ -5,6 +5,7 @@ import PageHeader from '../../PageHeader.vue';
 import CustomersNav from './CustomersNav.vue';
 import { priceTierLabels } from './labels';
 import { paymentMethods } from '../orders/labels';
+import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
@@ -29,7 +30,7 @@ const loadError = ref<string | null>(null);
 
 const dialog = ref(false);
 const editing = ref<CustomerGroup | null>(null);
-const form = reactive({ name: '', code: '', description: '', price_tier: 'retail', discount_percent: '0', payment_method: '', payment_terms_days: '', credit_limit: '' });
+const form = reactive({ name: '', code: '', description: '', price_tier: 'retail', discount_percent: '0', payment_method: '', payment_terms_days: '', credit_limit: '', is_active: true });
 const saving = ref(false);
 const error = ref<ApiError | null>(null);
 
@@ -52,7 +53,7 @@ function edit(g: CustomerGroup | null) {
     Object.assign(form, {
         name: g?.name ?? '', code: g?.code ?? '', description: g?.description ?? '', price_tier: g?.price_tier ?? 'retail',
         discount_percent: g ? String(Number(g.discount_percent)) : '0', payment_method: g?.payment_method ?? '',
-        payment_terms_days: g?.payment_terms_days != null ? String(g.payment_terms_days) : '', credit_limit: g?.credit_limit != null ? String(Number(g.credit_limit)) : '',
+        payment_terms_days: g?.payment_terms_days != null ? String(g.payment_terms_days) : '', credit_limit: g?.credit_limit != null ? String(Number(g.credit_limit)) : '', is_active: g?.is_active !== false,
     });
     dialog.value = true;
 }
@@ -115,7 +116,7 @@ async function remove(g: CustomerGroup) {
                 <tbody class="divide-y">
                     <tr v-for="g in rows" :key="g.id" class="hover:bg-muted/30">
                         <td class="px-4 py-3">
-                            <div class="font-medium">{{ g.name }}</div>
+                            <div class="font-medium">{{ g.name }} <Badge v-if="g.is_active === false" tone="muted">Ngừng sử dụng</Badge></div>
                             <div class="text-xs text-muted-foreground"><span class="font-mono">{{ g.code }}</span><span v-if="g.description"> · {{ g.description }}</span></div>
                         </td>
                         <td class="px-4 py-3">{{ priceTierLabels[g.price_tier] }}</td>
@@ -150,6 +151,7 @@ async function remove(g: CustomerGroup) {
             <FormField label="Thanh toán quen dùng" for="g-pay" class="sm:col-span-2">
                 <Select id="g-pay" v-model="form.payment_method" :options="[{ value: '', label: 'Không đặt' }, ...Object.entries(paymentMethods).map(([value, label]) => ({ value, label }))]" />
             </FormField>
+            <label class="flex items-center gap-2 text-sm sm:col-span-2"><input v-model="form.is_active" type="checkbox" class="size-4" data-testid="g-active" /> Đang sử dụng (bỏ chọn để không xếp thêm khách mới vào nhóm; khách đang trong nhóm giữ nguyên)</label>
             <FormField label="Mô tả" for="g-desc" class="sm:col-span-2"><Input id="g-desc" v-model="form.description" /></FormField>
             <p v-if="error && !error.body.errors" class="text-sm text-destructive sm:col-span-2">{{ error.message }}</p>
         </form>

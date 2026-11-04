@@ -400,7 +400,8 @@ class ManualOrderService
             $customer = Customer::query()->where('ulid', $data['customer_id'])->first()
                 ?? throw ValidationException::withMessages(['customer_id' => 'Khách hàng không tồn tại.']);
         } elseif (! empty($data['customer']['name'])) {
-            $customer = $this->customers->findOrCreate($data['customer']);
+            $type = empty($data['channel_id']) ? null : SalesChannel::query()->where('ulid', $data['channel_id'])->value('type');
+            $customer = $this->customers->findOrCreate($data['customer'] + ['source' => $type]);
         }
 
         if ($customer !== null && $customer->status === 'inactive' && (int) $customer->id !== $current) {

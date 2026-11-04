@@ -15,7 +15,7 @@ import { paymentMethods } from '../orders/labels';
 import { printInvoice } from '../orders/invoice';
 import { printShopFrom } from '../orders/printShop';
 import { useSettingsStore } from '@/shared/stores/settings';
-import { addToCart, cartTotals, emptyCart, quickCash, type Cart } from './pos';
+import { addToCart, applyGroup, cartTotals, emptyCart, quickCash, syncGroupDiscount, type Cart } from './pos';
 import ShiftPanel from './ShiftPanel.vue';
 import type { CashShift, Customer, OrderDetail, SalesChannel, Variant, Warehouse } from '@/shared/types';
 
@@ -152,9 +152,18 @@ watch(customerQuery, (q) => {
 
 function pickCustomer(c: Customer) {
     cart.value.customer = { id: c.id, name: c.name, phone: c.phone, code: c.code };
+    applyGroup(cart.value, c.group);
+    if (c.group?.payment_method && posMethods.value.includes(c.group.payment_method as never)) cart.value.method = c.group.payment_method as Cart['method'];
     customerQuery.value = '';
     customerResults.value = [];
 }
+
+function dropCustomer() {
+    cart.value.customer = null;
+    if (cart.value.discountAuto) cart.value.discount = 0;
+    applyGroup(cart.value, null);
+}
+watch(() => cartTotals({ ...cart.value, discount: 0 }).subtotal, () => syncGroupDiscount(cart.value));
 
 function newCart() {
     carts.value.push(freshCart(Math.max(...carts.value.map((c) => c.no)) + 1));
@@ -307,7 +316,7 @@ const quick = computed(() => quickCash(totals.value.total));
             <div class="relative border-b p-2">
                 <div v-if="cart.customer" class="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1.5 text-sm" data-testid="pos-customer">
                     <span class="flex items-center gap-1.5"><UserRound class="size-4" /> {{ cart.customer.name }} <span class="text-xs text-muted-foreground">{{ cart.customer.phone }}</span></span>
-                    <Button variant="ghost" size="icon" class="size-6" @click="cart.customer = null"><X /></Button>
+                    <Button variant="ghost" size="icon" class="size-6" @click="dropCustomer"><X /></Button>
                 </div>
                 <template v-else>
                     <Input v-model="customerQuery" placeholder="Khách lẻ · tìm khách theo tên/SĐT để ghi nợ, tích lịch sử" class="h-8 text-sm" data-testid="pos-customer-search" />
@@ -349,7 +358,7 @@ const quick = computed(() => quickCash(totals.value.total));
 
             <div class="space-y-2 border-t p-3 text-sm">
                 <div class="flex justify-between"><span class="text-muted-foreground">Tiền hàng ({{ totals.quantity }} sp)</span><span class="tabular-nums">{{ formatMoney(totals.subtotal) }}</span></div>
-                <div class="flex items-center justify-between"><span class="text-muted-foreground">Giảm giá</span><input v-model="cart.discount" type="number" min="0" :disabled="!canEditPrice" class="h-7 w-28 rounded-md border bg-card px-2 text-right tabular-nums disabled:bg-muted/50" data-testid="pos-discount" /></div>
+                <div class="flex items-center justify-between"><span class="text-muted-foreground">Giảm giá<template v-if="cart.discountAuto"> (nhóm {{ cart.groupPercent }}%)</template><template v-if="cart.tier === 'wholesale'"> · giá buôn</template></span><input v-model="cart.discount" type="number" min="0" :disabled="!canEditPrice" class="h-7 w-28 rounded-md border bg-card px-2 text-right tabular-nums disabled:bg-muted/50" data-testid="pos-discount" @input="cart.discountAuto = false" /></div>
                 <div class="flex justify-between text-lg font-semibold"><span>Khách phải trả</span><span class="tabular-nums" data-testid="pos-total">{{ formatMoney(totals.total) }}</span></div>
 
                 <div class="grid gap-1" :style="{ gridTemplateColumns: `repeat(${Math.max(posMethods.length, 1)}, minmax(0, 1fr))` }">

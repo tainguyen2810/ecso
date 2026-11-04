@@ -295,6 +295,7 @@ export interface CustomerGroup {
     price_tier: 'retail' | 'wholesale';
     discount_percent: string;
     payment_method: string | null;
+    is_active?: boolean;
     payment_terms_days?: number | null;
     credit_limit?: string | null;
     customers_count: number | null;
@@ -332,6 +333,9 @@ export interface Customer {
     id: string;
     code: string;
     name: string;
+    type?: 'individual' | 'company';
+    source?: string | null;
+    invoice?: { name: string | null; address: string | null; email: string | null };
     phone: string | null;
     email: string | null;
     address: string | null;
@@ -342,6 +346,7 @@ export interface Customer {
         price_tier: 'retail' | 'wholesale';
         discount_percent: string;
         payment_method: string | null;
+        is_active?: boolean;
         payment_terms_days?: number | null;
         credit_limit?: string | null;
     } | null;

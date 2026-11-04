@@ -84,6 +84,7 @@ class CustomerGroupController extends Controller
             'payment_method' => ['nullable', Rule::in(OrderPayment::METHODS)],
             'payment_terms_days' => ['nullable', 'integer', 'min:0', 'max:365'],
             'credit_limit' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
+            'is_active' => ['sometimes', 'boolean'],
         ], [
             'name.unique' => 'Đã có nhóm cùng tên.',
             'code.unique' => 'Mã nhóm đã được dùng.',

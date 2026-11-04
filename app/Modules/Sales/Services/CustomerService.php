@@ -185,14 +185,20 @@ class CustomerService
             ->unique(fn ($t) => mb_strtolower($t))->take(20)->values()->all();
     }
 
-    public function group(?string $ulid): ?CustomerGroup
+    /** @param  list<int>  $keep  groups a customer may stay in even when retired (the one they are in now) */
+    public function group(?string $ulid, array $keep = []): ?CustomerGroup
     {
         if (blank($ulid)) {
             return null;
         }
 
-        return CustomerGroup::query()->where('ulid', $ulid)->first()
+        $group = CustomerGroup::query()->where('ulid', $ulid)->first()
             ?? throw ValidationException::withMessages(['group_id' => 'Nhóm khách hàng không tồn tại.']);
+        if (! $group->is_active && ! in_array($group->id, $keep, true)) {
+            throw ValidationException::withMessages(['group_id' => "Nhóm {$group->name} đã ngừng sử dụng."]);
+        }
+
+        return $group;
     }
 
     public function member(?string $ulid): ?User
@@ -237,13 +243,13 @@ class CustomerService
      */
     private function fill(Customer $customer, array $data): void
     {
-        $customer->fill(array_intersect_key($data, array_flip(['name', 'email', 'address', 'note', 'birthday', 'gender', 'tax_code', 'status', 'payment_terms_days', 'credit_limit'])));
+        $customer->fill(array_intersect_key($data, array_flip(['name', 'type', 'source', 'email', 'address', 'note', 'birthday', 'gender', 'tax_code', 'invoice_name', 'invoice_address', 'invoice_email', 'status', 'payment_terms_days', 'credit_limit'])));
 
         if (array_key_exists('tags', $data)) {
             $customer->tags = $this->tags((array) $data['tags']) ?: null;
         }
         if (array_key_exists('group_id', $data)) {
-            $customer->customer_group_id = $this->group($data['group_id'])?->id;
+            $customer->customer_group_id = $this->group($data['group_id'], array_filter([$customer->customer_group_id]))?->id;
         }
         if (array_key_exists('assigned_user_id', $data)) {
             $customer->assigned_user_id = $this->member($data['assigned_user_id'])?->id;

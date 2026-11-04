@@ -9,7 +9,7 @@ import DebtEntryDialog from './DebtEntryDialog.vue';
 import DebtReceiptDialog from './DebtReceiptDialog.vue';
 import Pager from './Pager.vue';
 import { usePaged } from './usePaged';
-import { customerStatus, genderLabels, priceTierLabels } from './labels';
+import { customerSources, customerStatus, customerTypes, genderLabels, priceTierLabels } from './labels';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -458,9 +458,15 @@ const thead = 'border-b bg-slate-50 text-left text-[11px] uppercase tracking-wid
                         <div><dt class="text-xs text-muted-foreground">Email</dt><dd class="break-all">{{ customer.email ?? '—' }}</dd></div>
                         <div><dt class="text-xs text-muted-foreground">Ngày sinh</dt><dd>{{ customer.birthday ? formatDate(customer.birthday) : '—' }}</dd></div>
                         <div><dt class="text-xs text-muted-foreground">Giới tính</dt><dd>{{ customer.gender ? genderLabels[customer.gender] : '—' }}</dd></div>
+                        <div><dt class="text-xs text-muted-foreground">Loại khách</dt><dd>{{ customerTypes[customer.type ?? 'individual'] }}</dd></div>
+                        <div><dt class="text-xs text-muted-foreground">Nguồn</dt><dd>{{ customer.source ? (customerSources[customer.source] ?? customer.source) : '—' }}</dd></div>
                         <div><dt class="text-xs text-muted-foreground">Mã số thuế</dt><dd>{{ customer.tax_code ?? '—' }}</dd></div>
                         <div><dt class="text-xs text-muted-foreground">Phụ trách</dt><dd>{{ customer.assignee?.name ?? '—' }}</dd></div>
                         <div class="col-span-2"><dt class="text-xs text-muted-foreground">Địa chỉ</dt><dd>{{ customer.address ?? '—' }}</dd></div>
+                        <div v-if="customer.invoice?.name || customer.invoice?.address || customer.invoice?.email" class="col-span-2" data-testid="customer-invoice">
+                            <dt class="text-xs text-muted-foreground">Xuất hóa đơn</dt>
+                            <dd>{{ customer.invoice.name }}<span v-if="customer.invoice.address" class="block text-muted-foreground">{{ customer.invoice.address }}</span><span v-if="customer.invoice.email" class="block break-all text-muted-foreground">{{ customer.invoice.email }}</span></dd>
+                        </div>
                         <div v-if="customer.tags.length" class="col-span-2">
                             <dt class="text-xs text-muted-foreground">Tags</dt>
                             <dd class="mt-1 flex flex-wrap gap-1">

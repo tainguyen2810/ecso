@@ -8,7 +8,7 @@ import Tabs from '../../components/Tabs.vue';
 import CustomerDialog from './CustomerDialog.vue';
 import CustomerImportDialog from './CustomerImportDialog.vue';
 import CustomersNav from './CustomersNav.vue';
-import { customerStatus, genderLabels, months } from './labels';
+import { customerSources, customerStatus, customerTypes, genderLabels, months } from './labels';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -45,15 +45,16 @@ const exporting = ref(false);
 
 // Filters live in the URL so a filtered list (VIP customers in debt, birthdays this month) can be bookmarked or shared.
 const q = (key: string) => (typeof route.query[key] === 'string' ? (route.query[key] as string) : '');
-const EXTRA = ['gender', 'birth_month', 'assigned', 'tag', 'spent_min', 'spent_max', 'orders_min', 'last_order_from', 'last_order_to', 'created_from', 'created_to'] as const;
+const EXTRA = ['type', 'source', 'gender', 'birth_month', 'assigned', 'tag', 'spent_min', 'spent_max', 'orders_min', 'last_order_from', 'last_order_to', 'created_from', 'created_to'] as const;
 const filters = reactive({
     q: q('q'),
     view: q('view') || 'all',
     group: q('group'),
     sort: q('sort') || 'newest',
+    dir: q('dir'),
     ...Object.fromEntries(EXTRA.map((k) => [k, q(k)])),
     page: 1,
-}) as { q: string; view: string; group: string; sort: string; page: number } & Record<(typeof EXTRA)[number], string>;
+}) as { q: string; view: string; group: string; sort: string; dir: string; page: number } & Record<(typeof EXTRA)[number], string>;
 const moreFilters = ref(EXTRA.some((k) => filters[k]));
 const activeExtra = computed(() => EXTRA.filter((k) => filters[k]).length);
 function clearExtra() {
@@ -107,6 +108,28 @@ function resetColumns() {
     }
 }
 
+/** The list's filters as the API takes them (the export uses the same, so the file holds what the list shows). */
+function apiParams(): Record<string, string | number | undefined> {
+    const { page: _page, view, ...rest } = filters;
+    const params = Object.fromEntries(Object.entries(rest).filter(([k, v]) => v && !(k === 'sort' && v === 'newest')));
+    return { ...params, status: ['active', 'inactive'].includes(view) ? view : undefined, debt: view === 'debt' ? 1 : undefined, overdue: view === 'overdue' ? 1 : undefined };
+}
+
+/** Column header sort: first click sorts the column (names A → Z, figures largest first), the next one reverses it. */
+function sortBy(sort: string) {
+    if (filters.sort === sort) {
+        const natural = sort === 'name' ? 'asc' : 'desc';
+        filters.dir = (filters.dir || natural) === 'asc' ? 'desc' : 'asc';
+    } else {
+        filters.sort = sort;
+        filters.dir = '';
+    }
+}
+function sortMark(sort: string): string {
+    if (filters.sort !== sort) return '';
+    return (filters.dir || (sort === 'name' ? 'asc' : 'desc')) === 'asc' ? '↑' : '↓';
+}
+
 async function load() {
     loading.value = true;
     loadError.value = null;
@@ -116,10 +139,7 @@ async function load() {
         // Only while still on the list: a slow load must not pull the user back from a page they opened.
         const key = (o: Record<string, unknown>) => JSON.stringify(Object.entries(o).filter(([, v]) => v).sort(([a], [b]) => a.localeCompare(b)));
         if (key(query) !== key(route.query) && route.name === 'customers') router.replace({ query });
-        const { view: _view, ...params } = query;
-        const { data } = await api.get('/customers', {
-            params: { ...params, status: ['active', 'inactive'].includes(view) ? view : undefined, debt: view === 'debt' ? 1 : undefined, overdue: view === 'overdue' ? 1 : undefined, page },
-        });
+        const { data } = await api.get('/customers', { params: { ...apiParams(), page } });
         rows.value = data.data;
         meta.value = data.meta;
         selected.value = new Set();
@@ -143,7 +163,7 @@ watch(() => filters.q, () => {
     clearTimeout(timer);
     timer = setTimeout(() => ((filters.page = 1), load()), 300);
 });
-watch(() => [filters.view, filters.group, filters.sort, ...EXTRA.map((k) => filters[k])], () => {
+watch(() => [filters.view, filters.group, filters.sort, filters.dir, ...EXTRA.map((k) => filters[k])], () => {
     clearTimeout(timer);
     timer = setTimeout(() => ((filters.page = 1), load()), 250);
 });
@@ -195,8 +215,9 @@ async function applyBulk() {
 async function exportFile(onlySelected: boolean) {
     exporting.value = true;
     try {
-        const ids = onlySelected ? `&ids=${[...selected.value].join(',')}` : '';
-        await downloadFile(`/customers/export?format=xlsx${ids}`, 'khach-hang.xlsx');
+        const params = onlySelected ? { ids: [...selected.value].join(',') } : apiParams();
+        const query = new URLSearchParams(Object.entries({ format: 'xlsx', ...params }).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)]));
+        await downloadFile(`/customers/export?${query}`, 'khach-hang.xlsx');
     } catch (e) {
         toast.error((e as ApiError).message);
     } finally {
@@ -264,6 +285,14 @@ async function exportFile(onlySelected: boolean) {
             </div>
         </div>
         <div v-if="moreFilters" class="flex flex-wrap items-end gap-3 border-b bg-muted/30 px-4 py-3 text-sm" data-testid="extra-filters">
+            <label class="grid gap-1">
+                <span class="text-xs text-muted-foreground">Loại khách</span>
+                <Select v-model="filters.type" class="w-36" aria-label="Loại khách" :options="[{ value: '', label: 'Tất cả' }, ...Object.entries(customerTypes).map(([value, label]) => ({ value, label }))]" />
+            </label>
+            <label class="grid gap-1">
+                <span class="text-xs text-muted-foreground">Nguồn khách</span>
+                <Select v-model="filters.source" class="w-36" aria-label="Nguồn khách" :options="[{ value: '', label: 'Tất cả' }, ...Object.entries(customerSources).map(([value, label]) => ({ value, label }))]" />
+            </label>
             <label class="grid gap-1">
                 <span class="text-xs text-muted-foreground">Giới tính</span>
                 <Select v-model="filters.gender" class="w-32" aria-label="Giới tính" :options="[{ value: '', label: 'Tất cả' }, ...Object.entries(genderLabels).map(([value, label]) => ({ value, label }))]" />
@@ -339,21 +368,34 @@ async function exportFile(onlySelected: boolean) {
         >
             <Button v-if="canImport && !filters.q" variant="outline" @click="importOpen = true"><Upload /> Nhập từ Excel</Button>
         </EmptyState>
-        <div v-else class="overflow-x-auto" :class="loading && 'opacity-60'">
+        <ul v-else class="divide-y sm:hidden" :class="loading && 'opacity-60'" data-testid="customer-cards">
+            <li v-for="c in rows" :key="c.id" class="flex items-start gap-3 px-4 py-3 text-sm">
+                <input v-if="canManage" type="checkbox" class="mt-1 size-4" :checked="selected.has(c.id)" :aria-label="`Chọn ${c.name}`" @change="toggle(c.id)" />
+                <RouterLink :to="`/customers/${c.id}`" class="min-w-0 flex-1">
+                    <div class="flex items-center gap-1.5"><span class="truncate font-medium">{{ c.name }}</span><Badge v-if="c.status === 'inactive'" tone="muted">Ngừng</Badge><Badge v-if="c.group">{{ c.group.name }}</Badge></div>
+                    <div class="text-xs text-muted-foreground">{{ c.code }}<template v-if="c.phone"> · {{ c.phone }}</template></div>
+                    <div class="mt-1 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+                        <span>{{ formatNumber(c.orders_count) }} đơn · {{ formatMoney(c.total_spent) }}</span>
+                        <span v-if="Number(c.debt) > 0" class="font-medium text-destructive">Nợ {{ formatMoney(c.debt) }}<template v-if="Number(c.overdue) > 0"> (quá hạn {{ formatMoney(c.overdue) }})</template></span>
+                    </div>
+                </RouterLink>
+            </li>
+        </ul>
+        <div v-if="rows.length && !loadError" class="hidden overflow-x-auto sm:block" :class="loading && 'opacity-60'">
             <table class="w-full text-sm" data-testid="customer-table">
                 <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                     <tr>
                         <th v-if="canManage" class="w-10 px-4 py-2.5"><input type="checkbox" class="size-4" :checked="allSelected" aria-label="Chọn tất cả trên trang" @change="toggleAll" /></th>
-                        <th class="px-4 py-2.5 font-medium">Khách hàng</th>
+                        <th class="px-4 py-2.5 font-medium" :aria-sort="filters.sort === 'name' ? (sortMark('name') === '↑' ? 'ascending' : 'descending') : undefined"><button type="button" class="inline-flex items-center gap-1 uppercase hover:text-foreground" :data-testid="`sort-name`" @click="sortBy('name')">Khách hàng<span class="text-primary">{{ sortMark('name') }}</span></button></th>
                         <th v-if="show('phone')" class="px-4 py-2.5 font-medium">Điện thoại</th>
                         <th v-if="show('group')" class="px-4 py-2.5 font-medium">Nhóm</th>
                         <th v-if="show('assignee')" class="px-4 py-2.5 font-medium">Phụ trách</th>
                         <th v-if="show('tags')" class="px-4 py-2.5 font-medium">Tags</th>
-                        <th v-if="show('orders')" class="px-4 py-2.5 text-right font-medium">Số đơn</th>
-                        <th v-if="show('spent')" class="px-4 py-2.5 text-right font-medium">Tổng chi tiêu</th>
-                        <th v-if="show('debt')" class="px-4 py-2.5 text-right font-medium">Công nợ</th>
-                        <th v-if="show('overdue')" class="px-4 py-2.5 text-right font-medium">Nợ quá hạn</th>
-                        <th v-if="show('last_order')" class="px-4 py-2.5 font-medium">Mua gần nhất</th>
+                        <th v-if="show('orders')" class="px-4 py-2.5 font-medium text-right" :aria-sort="filters.sort === 'orders' ? (sortMark('orders') === '↑' ? 'ascending' : 'descending') : undefined"><button type="button" class="inline-flex items-center gap-1 uppercase hover:text-foreground" :data-testid="`sort-orders`" @click="sortBy('orders')">Số đơn<span class="text-primary">{{ sortMark('orders') }}</span></button></th>
+                        <th v-if="show('spent')" class="px-4 py-2.5 font-medium text-right" :aria-sort="filters.sort === 'spent' ? (sortMark('spent') === '↑' ? 'ascending' : 'descending') : undefined"><button type="button" class="inline-flex items-center gap-1 uppercase hover:text-foreground" :data-testid="`sort-spent`" @click="sortBy('spent')">Tổng chi tiêu<span class="text-primary">{{ sortMark('spent') }}</span></button></th>
+                        <th v-if="show('debt')" class="px-4 py-2.5 font-medium text-right" :aria-sort="filters.sort === 'debt' ? (sortMark('debt') === '↑' ? 'ascending' : 'descending') : undefined"><button type="button" class="inline-flex items-center gap-1 uppercase hover:text-foreground" :data-testid="`sort-debt`" @click="sortBy('debt')">Công nợ<span class="text-primary">{{ sortMark('debt') }}</span></button></th>
+                        <th v-if="show('overdue')" class="px-4 py-2.5 font-medium text-right" :aria-sort="filters.sort === 'overdue' ? (sortMark('overdue') === '↑' ? 'ascending' : 'descending') : undefined"><button type="button" class="inline-flex items-center gap-1 uppercase hover:text-foreground" :data-testid="`sort-overdue`" @click="sortBy('overdue')">Nợ quá hạn<span class="text-primary">{{ sortMark('overdue') }}</span></button></th>
+                        <th v-if="show('last_order')" class="px-4 py-2.5 font-medium" :aria-sort="filters.sort === 'recent' ? (sortMark('recent') === '↑' ? 'ascending' : 'descending') : undefined"><button type="button" class="inline-flex items-center gap-1 uppercase hover:text-foreground" :data-testid="`sort-recent`" @click="sortBy('recent')">Mua gần nhất<span class="text-primary">{{ sortMark('recent') }}</span></button></th>
                         <th v-if="show('birthday')" class="px-4 py-2.5 font-medium">Ngày sinh</th>
                         <th v-if="show('status')" class="px-4 py-2.5 font-medium">Trạng thái</th>
                         <th v-if="show('created')" class="px-4 py-2.5 font-medium">Ngày thêm</th>

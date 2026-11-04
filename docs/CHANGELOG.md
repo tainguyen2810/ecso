@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### Khách hàng, đợt C: nhóm áp vào đơn, hạn mức, hồ sơ doanh nghiệp, danh sách (2026-11-04)
+- **Nhóm khách áp vào đơn và POS**: chọn khách thì đơn lấy chính sách giá (lẻ/buôn), **chiết khấu % của nhóm** (tự tính lại khi giỏ đổi, dừng khi người bán tự nhập chiết khấu) và hình thức thanh toán quen dùng. Nhân viên không có quyền sửa giá vẫn được cho đúng chiết khấu nhóm, không hơn (kiểm tra ở máy chủ).
+- **Cảnh báo hạn mức nợ** khi tạo đơn: nợ hiện tại + phần chưa thu của đơn vượt hạn mức của khách/nhóm thì hiện cảnh báo (không chặn).
+- Tạo đơn: chọn nhanh **địa chỉ giao đã lưu** của khách (người nhận, số điện thoại, địa chỉ).
+- Khách có **loại** (Cá nhân/Doanh nghiệp), **nguồn** (loại kênh của đơn đầu tiên, Giới thiệu, Nhập từ file…) và **thông tin xuất hóa đơn** (tên đơn vị, địa chỉ — mã hóa khi lưu, email). Lọc danh sách theo loại và nguồn.
+- Nhóm khách **ngừng sử dụng**: không xếp thêm khách vào, khách đang trong nhóm giữ nguyên.
+- Danh sách: bấm tiêu đề cột để sắp xếp tăng/giảm; **Xuất Excel theo đúng bộ lọc đang xem** (nhật ký ghi bộ lọc đã dùng); trên điện thoại hiện dạng thẻ thay cho bảng.
+
 ### Khách hàng, đợt B: hồ sơ 7 tab, nợ đầu kỳ, hạn thanh toán (2026-11-04)
 - **Trang khách 7 tab**: Tổng quan (thói quen mua: đơn đầu tiên, giá trị trung bình, chu kỳ mua, số ngày chưa mua lại, giá trị hàng trả; thẻ công nợ có hạn mức đã dùng), Đơn hàng, Công nợ, Thanh toán, Trả hàng, Địa chỉ, Ghi chú và hoạt động. Đơn, thanh toán, trả hàng và lịch sử hoạt động phân trang ở máy chủ (`/customers/{id}/orders|payments|returns|activity`), không còn giới hạn 50 đơn.
 - **Nợ đầu kỳ và phiếu điều chỉnh công nợ** (bảng `customer_debt_entries`, số chứng từ NDK-/DCN-): mỗi khách một chứng từ đầu kỳ, điều chỉnh tăng/giảm phải có lý do, không sửa được, chỉ hủy kèm lý do. Quyền mới `customers.debt_adjust` (Quản lý, Kế toán; vai trò riêng nào có quyền xóa khách được cấp thêm khi cập nhật).

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addToCart, cartTotals, emptyCart, quickCash } from './pos';
+import { addToCart, applyGroup, cartTotals, emptyCart, quickCash, syncGroupDiscount } from './pos';
 import type { Variant } from '@/shared/types';
 
 const v = (id: string, price: number): Variant => ({ id, sku: id, barcode: null, name: null, options: {}, ref_price: price, weight_gram: null, product: { id: 'p', name: 'Áo' } as never });
@@ -27,5 +27,27 @@ describe('POS cart', () => {
         expect(quickCash(230000)).toEqual([230000, 250000, 300000, 400000, 500000]);
         expect(quickCash(500000)).toEqual([500000, 600000]);
         expect(quickCash(0)).toEqual([]);
+    });
+});
+
+describe('customer group on the cart', () => {
+    const variant = { id: 'v2', sku: 'B', name: null, ref_price: '100000', wholesale_price: '80000', product: { name: 'Áo' } } as never;
+
+    it('sells at the wholesale price and gives the group discount until a discount is typed', () => {
+        const cart = emptyCart(1);
+        addToCart(cart, variant);
+        cart.lines[0]!.quantity = 2;
+        applyGroup(cart, { price_tier: 'wholesale', discount_percent: '5' });
+        expect(cart.lines[0]!.unit_price).toBe(80000);
+        expect(cart.discount).toBe(8000);
+        addToCart(cart, variant);
+        syncGroupDiscount(cart);
+        expect(cart.discount).toBe(12000);
+        cart.discountAuto = false;
+        cart.lines[0]!.quantity = 1;
+        syncGroupDiscount(cart);
+        expect(cart.discount).toBe(12000);
+        applyGroup(cart, null);
+        expect(cart.lines[0]!.unit_price).toBe(100000);
     });
 });

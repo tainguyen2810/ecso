@@ -35,15 +35,20 @@ class Customer extends Model
 
     public const GENDERS = ['male', 'female', 'other'];
 
+    public const TYPES = ['individual', 'company'];
+
+    /** Where the customer came from: the type of the sales channel of their first order, a referral, or a file import. */
+    public const SOURCES = [...SalesChannel::TYPES, 'referral', 'import'];
+
     protected $attributes = ['status' => 'active'];
 
-    protected $fillable = ['name', 'email', 'address', 'note', 'birthday', 'gender', 'tax_code', 'tags', 'status', 'payment_terms_days', 'credit_limit'];
+    protected $fillable = ['name', 'type', 'source', 'email', 'address', 'note', 'birthday', 'gender', 'tax_code', 'invoice_name', 'invoice_address', 'invoice_email', 'tags', 'status', 'payment_terms_days', 'credit_limit'];
 
     protected $hidden = ['id', 'tenant_id', 'phone_hash', 'created_by', 'customer_group_id', 'assigned_user_id'];
 
     protected function casts(): array
     {
-        return ['phone' => 'encrypted', 'address' => 'encrypted', 'birthday' => 'date', 'tags' => 'array', 'credit_limit' => 'decimal:2'];
+        return ['phone' => 'encrypted', 'address' => 'encrypted', 'invoice_address' => 'encrypted', 'birthday' => 'date', 'tags' => 'array', 'credit_limit' => 'decimal:2'];
     }
 
     public function setPhone(?string $phone): void
