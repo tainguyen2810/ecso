@@ -77,7 +77,11 @@ class OrderDraftController extends Controller
         return $data;
     }
 
-    /** Drafts of colleagues are seen only with orders.view.all, like their orders. @return Builder<OrderDraft> */
+    /**
+     * Drafts of colleagues are seen only with orders.view.all, like their orders.
+     *
+     * @return Builder<OrderDraft>
+     */
     private function visible(): Builder
     {
         $query = OrderDraft::query();
