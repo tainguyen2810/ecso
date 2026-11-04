@@ -14,7 +14,7 @@ import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
-import { formatDateTime, formatMoney } from '@/shared/lib/utils';
+import { formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { paymentMethods } from '../orders/labels';
 import { downloadCsv, presetRange, toCsv } from './range';
 
@@ -36,6 +36,8 @@ interface Book {
     out: number;
     closing: number;
     by_method: { method: string; in: number; out: number }[];
+    count: number;
+    truncated: boolean;
     rows: Entry[];
 }
 
@@ -139,6 +141,9 @@ function exportCsv() {
                 </div>
                 <Button variant="outline" size="sm" class="ml-auto" @click="exportCsv"><Download /> Xuất CSV</Button>
             </div>
+            <p v-if="data.truncated" class="border-b bg-amber-50 px-4 py-2 text-xs text-amber-800" data-testid="cashbook-truncated">
+                Kỳ này có {{ formatNumber(data.count) }} dòng, chỉ hiện {{ formatNumber(data.rows.length) }} dòng mới nhất. Tồn đầu kỳ, tổng thu chi và tồn cuối kỳ vẫn tính đủ cả kỳ. Chọn khoảng ngày ngắn hơn để xem hết.
+            </p>
             <EmptyState v-if="!data.rows.length" :icon="Wallet" title="Không có phiếu thu chi" description="Chưa có khoản thu, hoàn hay chi nào trong kỳ này." />
             <EmptyState v-else-if="!rows.length" :icon="Search" title="Không có dòng phù hợp" description="Thử đổi tab hoặc từ khóa tìm kiếm." />
             <div v-else class="overflow-x-auto" :class="loading && 'opacity-60'">

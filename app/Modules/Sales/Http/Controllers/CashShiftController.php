@@ -108,4 +108,13 @@ class CashShiftController extends Controller
 
         return new CashShiftResource($shifts->close($shift, $data)->load(['user', 'warehouse', 'closer', 'movements.creator']));
     }
+
+    /** Opens a closed shift again to correct it (shift supervisors only, reason required, logged). */
+    public function reopen(Request $request, CashShift $shift, CashShiftService $shifts): CashShiftResource
+    {
+        $this->authorize('viewAll', CashShift::class);
+        $data = $request->validate(['reason' => ['required', 'string', 'max:255']]);
+
+        return new CashShiftResource($shifts->reopen($shift, $data['reason'])->load(['user', 'warehouse', 'closer', 'movements.creator']));
+    }
 }

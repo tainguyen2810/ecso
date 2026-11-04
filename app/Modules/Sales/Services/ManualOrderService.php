@@ -17,9 +17,11 @@ use App\Modules\Orders\Services\ExchangeService;
 use App\Modules\Orders\Services\OrderIngestor;
 use App\Modules\Orders\Services\OrderStockSync;
 use App\Modules\Orders\Support\OrderTags;
+use App\Modules\Sales\Models\CashShift;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Sales\Models\SalesChannel;
+use App\Modules\Tenancy\Support\TenantSettings;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -67,6 +69,7 @@ class ManualOrderService
             $channel = SalesChannel::query()->where('ulid', $data['channel_id'])->where('is_active', true)->first()
                 ?? throw ValidationException::withMessages(['channel_id' => 'Kênh bán không tồn tại hoặc đã tắt.']);
             $warehouse = $this->warehouse($data['warehouse_id'] ?? null, $channel);
+            $shift = $this->counterShift((bool) ($data['counter'] ?? false));
             $customer = $this->customer($data);
             $target = match ($data['stage'] ?? 'pending') {
                 'confirmed' => OrderStatus::READY_TO_PACK,
@@ -81,6 +84,7 @@ class ManualOrderService
                 'external_order_id' => $number,
                 'sales_channel_id' => $channel->id,
                 'warehouse_id' => $warehouse->id,
+                'cash_shift_id' => $shift?->id,
                 'created_by' => Auth::id(),
                 'assigned_to' => Auth::id(),
                 'placed_at' => isset($data['placed_at']) ? now()->parse($data['placed_at']) : now(),
@@ -408,6 +412,23 @@ class ManualOrderService
         }
 
         return $customer;
+    }
+
+    /**
+     * The seller's open shift, so the sale and its money count in that shift. A till sale (POS screen) is refused
+     * without one when the shop requires shifts; an order typed in the back office never needs one.
+     */
+    private function counterShift(bool $atCounter): ?CashShift
+    {
+        if (! Auth::check()) {
+            return null;
+        }
+        $shift = CashShift::query()->where('open_user_id', Auth::id())->first();
+        if ($shift === null && $atCounter && TenantSettings::current()->get('sales.pos_require_shift')) {
+            throw ValidationException::withMessages(['shift' => 'Chưa mở ca bán hàng. Mở ca và đếm tiền đầu ca trước khi bán tại quầy.']);
+        }
+
+        return $shift;
     }
 
     private function warehouse(?string $ulid, ?SalesChannel $channel): Warehouse

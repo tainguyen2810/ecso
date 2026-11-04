@@ -18,7 +18,7 @@ import { api, ApiError, idempotent, newIdempotencyKey } from '@/shared/lib/api';
 import { cn, formatDateTime, formatMoney, initials } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
-import { actionLabels, capabilityLabels, deadlineLabel, historySource, manualActionOrder, mappingStatus, marketplaceNames, orderStatus, paymentMethodNames, paymentMethods, paymentStatus, returnStatus, returnTypes } from './labels';
+import { actionLabels, capabilityLabels, deadlineLabel, historySource, manualActionOrder, mappingStatus, marketplaceNames, orderStatus, paymentMethodNames, paymentMethods, paymentStatus, refundStatus, returnState, returnStatus, returnTypes } from './labels';
 import PrintDialog from './PrintDialog.vue';
 import { downloadPackingSlips } from './packingSlip';
 import { orderWorkflow } from './workflow';
@@ -266,6 +266,8 @@ async function createReturn() {
                         <span v-if="order.external_number && order.external_number !== order.external_order_id" class="font-mono text-sm text-muted-foreground" data-testid="external-number">#{{ order.external_number }}</span>
                         <Badge v-if="(isManual || isWebsite) && order.payment_status" :tone="paymentStatus[order.payment_status]?.tone" data-testid="payment-status">{{ paymentStatus[order.payment_status]?.label }}</Badge>
                         <Badge v-if="order.deleted_on_channel_at" tone="danger" data-testid="deleted-on-channel">Đã xóa trên website</Badge>
+                        <Badge v-if="order.refund_status && refundStatus[order.refund_status]" :tone="refundStatus[order.refund_status]!.tone" data-testid="refund-status">{{ refundStatus[order.refund_status]!.label }}</Badge>
+                        <Badge v-if="order.return_state && returnState[order.return_state]" :tone="returnState[order.return_state]!.tone" data-testid="return-state">{{ returnState[order.return_state]!.label }}</Badge>
                         <span v-for="t in order.tags ?? []" :key="t" class="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">#{{ t }}</span>
                     </div>
                     <p class="mt-1 text-sm text-muted-foreground">

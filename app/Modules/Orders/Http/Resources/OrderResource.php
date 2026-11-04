@@ -24,6 +24,12 @@ class OrderResource extends JsonResource
             'paid_amount' => $this->paid_amount,
             'refunded_amount' => $this->refunded_amount,
             'payment_status' => $this->payment_status,
+            // none | partial | full: money paid back to the buyer, next to payment_status (which counts payments only).
+            'refund_status' => match (true) {
+                bccomp((string) $this->refunded_amount, '0', 2) <= 0 => 'none',
+                bccomp((string) $this->refunded_amount, (string) $this->paid_amount, 2) >= 0 => 'full',
+                default => 'partial',
+            },
             'balance_due' => $this->isManual() && $this->status !== OrderStatus::CANCELLED ? $this->balanceDue() : null,
             'external_order_id' => $this->external_order_id,
             'status' => $this->status,

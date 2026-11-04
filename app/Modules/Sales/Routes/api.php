@@ -36,6 +36,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::get('pos/shifts/{shift}', [CashShiftController::class, 'show']);
     Route::post('pos/shifts/{shift}/movements', [CashShiftController::class, 'move']);
     Route::post('pos/shifts/{shift}/close', [CashShiftController::class, 'close']);
+    Route::post('pos/shifts/{shift}/reopen', [CashShiftController::class, 'reopen']);
 
     Route::post('sales-orders', [SalesOrderController::class, 'store'])->middleware(['throttle:120,1,sales.sales-orders', 'idempotent']);
     Route::put('sales-orders/{order}', [SalesOrderController::class, 'update']);

@@ -35,6 +35,7 @@ class SalesOrderController extends Controller
             'payments.*.reference' => ['nullable', 'string', 'max:100'],
             'exchange_return_id' => ['nullable', 'string'],
             'placed_at' => ['nullable', 'date', 'before_or_equal:now'],
+            'counter' => ['sometimes', 'boolean'], // sold at the till (POS screen): needs an open shift
         ]);
         $this->guardSettings($request, $data);
 

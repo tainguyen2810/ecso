@@ -200,6 +200,7 @@ export interface OrderSummary {
     paid_amount?: string;
     refunded_amount?: string;
     payment_status?: 'unpaid' | 'partial' | 'paid' | null;
+    refund_status?: 'none' | 'partial' | 'full';
     balance_due?: string | null;
     external_order_id: string;
     status: string;
@@ -269,6 +270,8 @@ export interface OrderDetail extends OrderSummary {
     actions: Record<string, { allowed: boolean; capability: string }>;
     capabilities: Record<string, string>;
     editable: boolean;
+    /** How much of what was shipped has come back on returns. */
+    return_state?: 'none' | 'partial' | 'full';
     payments: OrderPaymentData[];
     created_by: string | null;
     exchanged_from?: { id: string; number: string; credit: string; order: { id: string; external_order_id: string } }[];
@@ -392,6 +395,9 @@ export interface OrderReturnData {
     exchange_credit?: string;
     exchange_order?: { id: string; external_order_id: string; total: string } | null;
     goods_value?: string;
+    /** Refunds booked from this return, and what may still be refunded. */
+    refunded?: string;
+    refundable?: string;
     note: string | null;
     expects_goods: boolean;
     next: string[];

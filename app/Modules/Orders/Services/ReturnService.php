@@ -13,6 +13,8 @@ use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
 use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Orders\Models\OrderReturnLine;
+use App\Modules\Sales\Models\OrderPayment;
+use App\Modules\Sales\Services\PaymentService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -113,6 +115,63 @@ class ReturnService
 
             return $return;
         });
+    }
+
+    /**
+     * Pays money back to the buyer from a return of a manual order: a refund entry linked to the return, so the
+     * return never pays back more than the goods are worth (less any exchange set-off and earlier refunds).
+     * Marketplace orders are refunded by the marketplace, not here.
+     *
+     * @param  array{method: string, amount: string|int|float, reference?: string|null, note?: string|null}  $data
+     */
+    public function refund(OrderReturn $return, array $data): OrderReturn
+    {
+        return DB::transaction(function () use ($return, $data) {
+            $return = OrderReturn::query()->whereKey($return->id)->lockForUpdate()->firstOrFail();
+            $order = $return->order()->firstOrFail();
+            if (! $order->isManual()) {
+                throw ValidationException::withMessages(['order' => 'Đơn sàn do sàn hoàn tiền cho khách.']);
+            }
+            if ($return->status === OrderReturn::REJECTED) {
+                throw ValidationException::withMessages(['status' => 'Phiếu trả đã bị từ chối.']);
+            }
+
+            $amount = bcadd((string) $data['amount'], '0', 2);
+            $left = $return->refundable();
+            if (bccomp($amount, $left, 2) > 0) {
+                throw ValidationException::withMessages(['amount' => 'Số tiền hoàn vượt quá số còn được hoàn của phiếu ('.number_format((float) $left, 0, ',', '.').' đ).']);
+            }
+
+            // PaymentService re-checks against what the buyer actually paid on the order.
+            app(PaymentService::class)->record($order, [
+                'kind' => OrderPayment::REFUND,
+                'method' => $data['method'],
+                'amount' => $amount,
+                'reference' => $data['reference'] ?? $return->number,
+                'note' => $data['note'] ?? "Hoàn tiền phiếu trả {$return->number}",
+                'order_return_id' => $return->id,
+            ]);
+            $this->audit->record('return.refunded', $return, ['number' => $return->number, 'amount' => $amount, 'method' => $data['method']]);
+
+            return $return->refresh();
+        });
+    }
+
+    /**
+     * How much of what left the warehouse has come back on returns: none, partial or full. Rejected returns do not
+     * count; a return counts from when it is recorded.
+     */
+    public function returnState(Order $order): string
+    {
+        $items = $order->items()->get();
+        $shipped = array_sum($this->shippedQuantities($order, $items->all()));
+        $returned = (int) $this->returnedQuantities($order)->sum();
+
+        return match (true) {
+            $returned <= 0 => 'none',
+            $shipped > 0 && $returned >= $shipped => 'full',
+            default => 'partial',
+        };
     }
 
     public function move(OrderReturn $return, string $to, ?string $note = null): OrderReturn

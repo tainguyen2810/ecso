@@ -27,7 +27,7 @@ export interface TenantSettingsData {
     tax: { sale_rate: number; purchase_rate: number; prices_include_tax: boolean };
     pricing: { sale_price: 'retail' | 'wholesale'; staff_edit_price: boolean };
     payments: { methods: Record<PaymentMethodKey, boolean>; default_pos: PaymentMethodKey; default_online: PaymentMethodKey; bank_accounts: BankAccount[] };
-    sales: { allow_change_sale_time: boolean; invoice_copies: number; pos_require_cash: boolean; pos_auto_print: boolean };
+    sales: { allow_change_sale_time: boolean; invoice_copies: number; pos_require_cash: boolean; pos_auto_print: boolean; pos_require_shift: boolean };
     reasons: CancelReason[];
     print: { defaults: Record<'sale' | 'purchase' | 'receipt' | 'stocktake' | 'cash', PrintSize>; show_logo: boolean; show_qr: boolean; show_signatures: boolean; footer: string | null };
 }

@@ -26,7 +26,7 @@ class TenantSettings
             'default_online' => 'bank_transfer',
             'bank_accounts' => [],
         ],
-        'sales' => ['allow_change_sale_time' => false, 'invoice_copies' => 1, 'pos_require_cash' => false, 'pos_auto_print' => true],
+        'sales' => ['allow_change_sale_time' => false, 'invoice_copies' => 1, 'pos_require_cash' => false, 'pos_auto_print' => true, 'pos_require_shift' => true],
         'reasons' => [
             ['label' => 'Khách đổi ý', 'cancel' => true, 'return' => true],
             ['label' => 'Hết hàng', 'cancel' => true, 'return' => false],
