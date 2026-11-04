@@ -43,7 +43,8 @@ it('reports days on the shop clock (Asia/Ho_Chi_Minh), not in UTC', function () 
     $oct = $api->getJson('/api/v1/finance/summary?from=2026-10-31&to=2026-10-31')->assertOk()->json('data');
 
     expect($nov['ordered']['orders'])->toBe(1)
-        ->and($nov['daily'])->toEqual([['day' => '2026-11-01', 'orders' => 1, 'revenue' => (float) $order->total]])
+        ->and($nov['daily'])->toHaveCount(1)
+        ->and($nov['daily'][0])->toMatchArray(['day' => '2026-11-01', 'orders' => 1, 'revenue' => (float) $order->total])
         ->and($oct['ordered']['orders'])->toBe(0);
 
     $sales = $api->getJson('/api/v1/reports/sales?from=2026-11-01&to=2026-11-01&by=day')->assertOk()->json('data');

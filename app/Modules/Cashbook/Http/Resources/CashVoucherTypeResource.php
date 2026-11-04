@@ -16,6 +16,7 @@ class CashVoucherTypeResource extends JsonResource
             'direction' => $this->direction,
             'name' => $this->name,
             'counts_in_pnl' => $this->counts_in_pnl,
+            'pnl_group' => $this->pnl_group,
             'description' => $this->description,
             'is_active' => $this->is_active,
             'vouchers_count' => $this->whenCounted('vouchers'),
