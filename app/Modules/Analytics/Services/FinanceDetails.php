@@ -36,6 +36,7 @@ class FinanceDetails
             'awaiting' => $this->orders($this->profit->scoped(RevenuePolicy::awaitingCompletion($this->base(), 'o', $from, $to), $scope)),
             'cancelled' => $this->orders($this->profit->scoped($this->base()->whereBetween('o.placed_at', [$from, $to])->where('o.status', OrderStatus::CANCELLED), $scope)),
             'returns' => $this->returns($from, $to, $scope),
+            default => throw new \InvalidArgumentException("Unknown finance metric {$metric}."),
         };
 
         $rows = $query->limit(self::LIMIT + 1)->get();
