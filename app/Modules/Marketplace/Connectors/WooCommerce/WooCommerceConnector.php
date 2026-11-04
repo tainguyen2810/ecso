@@ -22,7 +22,8 @@ use App\Modules\Orders\Domain\OrderStatus;
 use Carbon\CarbonImmutable;
 
 /**
- * WooCommerce store (REST API v3, verified against woocommerce.github.io/woocommerce-rest-api-docs).
+ * WooCommerce store (REST API v3, written against woocommerce.github.io/woocommerce-rest-api-docs; tested with the
+ * simulated store in tests/Support/FakeWooStore.php, not yet against a live store).
  *
  * A store is connected with REST API keys (granted by the owner through Woo's /wc-auth/v1/authorize screen, or typed
  * in), not through a marketplace app. Woo only has coarse order statuses; ECSO's packing stages are stored on the

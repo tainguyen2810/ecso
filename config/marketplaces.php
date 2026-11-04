@@ -20,7 +20,7 @@ return [
 
     'connectors' => [
         'fake' => FakeConnector::class,
-        // Verified against the WooCommerce REST API v3 docs; a store connects with its own API keys (no partner app).
+        // WooCommerce REST API v3 (see API-CAPABILITY-MATRIX); a store connects with its own API keys (no partner app).
         'woocommerce' => WooCommerceConnector::class,
         // Skeleton: all capabilities UNKNOWN until verified with official docs and partner credentials.
         'shopee' => ShopeeConnector::class,
