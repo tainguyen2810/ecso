@@ -9,13 +9,15 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * A dated note on a customer (call, complaint, preference), kept as a timeline.
+ * A dated note on a customer, kept as a timeline: a plain note, or a contact (call, message, meeting, complaint).
  */
 class CustomerNote extends Model
 {
     use BelongsToTenant, HasPublicUlid;
 
-    protected $fillable = ['body'];
+    public const KINDS = ['note', 'call', 'message', 'meeting', 'complaint'];
+
+    protected $fillable = ['body', 'kind'];
 
     protected $hidden = ['id', 'tenant_id', 'customer_id', 'created_by'];
 

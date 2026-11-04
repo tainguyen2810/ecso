@@ -10,7 +10,7 @@ import DebtReceiptDialog from './DebtReceiptDialog.vue';
 import MergeDialog from './MergeDialog.vue';
 import Pager from './Pager.vue';
 import { usePaged } from './usePaged';
-import { customerSources, customerStatus, customerTypes, genderLabels, priceTierLabels } from './labels';
+import { customerSources, customerStatus, customerTypes, genderLabels, noteKinds, priceTierLabels } from './labels';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -19,13 +19,14 @@ import Dialog from '@/shared/ui/Dialog.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import FormField from '@/shared/ui/FormField.vue';
 import Input from '@/shared/ui/Input.vue';
+import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError, downloadFile } from '@/shared/lib/api';
 import { cn, formatDate, formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { marketplaceNames, orderStatus, paymentMethodNames, paymentMethods, paymentStatus, returnStatus, returnTypes } from '../orders/labels';
-import type { Customer, CustomerActivity, CustomerAddress, CustomerLedgerEntry, CustomerNote, CustomerSummary, OrderPaymentData, OrderReturnData, OrderSummary } from '@/shared/types';
+import type { Customer, CustomerActivity, CustomerAddress, CustomerLedgerEntry, CustomerNote, CustomerSummary, CustomerTask, OrderPaymentData, OrderReturnData, OrderSummary } from '@/shared/types';
 
 type Detail = Customer & { orders: OrderSummary[]; payments: OrderPaymentData[]; addresses: CustomerAddress[]; notes: CustomerNote[]; summary?: CustomerSummary };
 
@@ -138,6 +139,49 @@ const creditUse = computed(() => {
     return limit > 0 ? Math.min(100, Math.round((Number(customer.value!.debt ?? 0) / limit) * 100)) : null;
 });
 
+// Follow-ups on this customer.
+const tasks = ref<CustomerTask[]>([]);
+const taskForm = reactive({ title: '', due_at: '' });
+const taskSaving = ref(false);
+async function loadTasks() {
+    try {
+        tasks.value = (await api.get(`/customers/${route.params.id}/tasks`)).data.data;
+    } catch {
+        tasks.value = [];
+    }
+}
+watch(tab, (t) => t === 'notes' && loadTasks(), { immediate: true });
+async function addTask() {
+    taskSaving.value = true;
+    try {
+        await api.post(`${base()}/tasks`, { title: taskForm.title.trim(), due_at: taskForm.due_at.replace('T', ' ') });
+        Object.assign(taskForm, { title: '', due_at: '' });
+        activityPage.loaded.value = false;
+        await Promise.all([loadTasks(), activityPage.load()]);
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    } finally {
+        taskSaving.value = false;
+    }
+}
+async function doneTask(t: CustomerTask) {
+    try {
+        await api.post(`${base()}/tasks/${t.id}/done`);
+        await Promise.all([loadTasks(), activityPage.load()]);
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    }
+}
+async function removeTask(t: CustomerTask) {
+    if (!window.confirm(`Xóa việc "${t.title}"?`)) return;
+    try {
+        await api.delete(`${base()}/tasks/${t.id}`);
+        await loadTasks();
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    }
+}
+
 // Merge another card into this one: pick it, then review the merge.
 const canMerge = computed(() => tenant.can('customers.merge'));
 const pickOpen = ref(false);
@@ -188,6 +232,9 @@ const activityLabels: Record<string, string> = {
     'customer.debt_collected': 'Thu nợ',
     'customer.imported': 'Nhập từ file',
     'customer.merged': 'Gộp khách',
+    'customer.task_created': 'Hẹn việc',
+    'customer.task_done': 'Xong việc',
+    'customer.auto_grouped': 'Tự xếp nhóm',
 };
 const fieldLabels: Record<string, string> = {
     name: 'tên', phone: 'số điện thoại', email: 'email', address: 'địa chỉ', customer_group_id: 'nhóm', group: 'nhóm', status: 'trạng thái',
@@ -211,6 +258,8 @@ function activityDetail(a: CustomerActivity): string {
     if (c.amount !== undefined) parts.push(formatMoney(String(c.amount)));
     if (c.voucher) parts.push(`phiếu ${c.voucher}`);
     if (c.merged) parts.push(`gộp ${c.merged} vào khách này`);
+    if (c.title) parts.push(String(c.title));
+    if (c.group) parts.push(`nhóm ${c.group}`);
     if (c.reason) parts.push(String(c.reason));
     return parts.join(' · ');
 }
@@ -256,12 +305,13 @@ async function removeAddress(a: CustomerAddress) {
 
 // Note timeline.
 const noteBody = ref('');
+const noteKind = ref('note');
 const noteSaving = ref(false);
 async function addNote() {
     if (!noteBody.value.trim()) return;
     noteSaving.value = true;
     try {
-        const { data } = await api.post(`/customers/${customer.value!.id}/notes`, { body: noteBody.value.trim() });
+        const { data } = await api.post(`/customers/${customer.value!.id}/notes`, { body: noteBody.value.trim(), kind: noteKind.value });
         customer.value!.notes.unshift(data.data);
         noteBody.value = '';
     } catch (e) {
@@ -342,6 +392,14 @@ const thead = 'border-b bg-slate-50 text-left text-[11px] uppercase tracking-wid
                             <div class="border-t px-5 py-2.5"><button type="button" class="text-sm text-primary hover:underline" @click="tab = 'debt'">Xem sổ công nợ</button></div>
                         </Card>
                     </div>
+                    <Card v-if="customer.summary?.top_products?.length" title="Sản phẩm hay mua" data-testid="top-products">
+                        <ul class="divide-y text-sm">
+                            <li v-for="p in customer.summary.top_products" :key="`${p.sku}-${p.name}-${p.variant_name}`" class="flex items-center gap-3 px-5 py-2.5">
+                                <div class="min-w-0 flex-1"><p class="truncate">{{ p.name }}<span v-if="p.variant_name" class="text-muted-foreground"> · {{ p.variant_name }}</span></p><p class="font-mono text-xs text-muted-foreground">{{ p.sku }}</p></div>
+                                <span class="text-right text-xs text-muted-foreground">{{ formatNumber(p.quantity) }} sp · {{ p.orders }} đơn<span class="block font-medium text-foreground tabular-nums">{{ formatMoney(p.amount) }}</span></span>
+                            </li>
+                        </ul>
+                    </Card>
                     <Card title="Đơn gần đây">
                         <ul v-if="customer.orders.length" class="divide-y text-sm">
                             <li v-for="o in customer.orders.slice(0, 5)" :key="o.id" class="flex cursor-pointer items-center gap-3 px-5 py-2.5 hover:bg-muted/30" @click="$router.push(`/orders/${o.id}`)">
@@ -464,15 +522,34 @@ const thead = 'border-b bg-slate-50 text-left text-[11px] uppercase tracking-wid
                     <div v-if="canManage" class="border-t px-5 py-2.5"><Button variant="outline" size="sm" data-testid="add-address" @click="editAddress(null)"><Plus /> Thêm địa chỉ giao hàng</Button></div>
                 </Card>
 
-                <Card v-else-if="tab === 'notes'">
+                <Card v-if="tab === 'notes'" title="Việc cần làm với khách" data-testid="customer-tasks">
+                    <form class="grid gap-2 border-b p-4 sm:grid-cols-[1fr_12rem_auto]" @submit.prevent="addTask">
+                        <Input v-model="taskForm.title" placeholder="Gọi lại báo giá, nhắc thanh toán…" maxlength="200" data-testid="task-title" />
+                        <Input v-model="taskForm.due_at" type="datetime-local" aria-label="Hạn" data-testid="task-due" />
+                        <Button type="submit" variant="outline" :loading="taskSaving" :disabled="!taskForm.title.trim() || !taskForm.due_at" data-testid="task-add"><CalendarClock /> Hẹn</Button>
+                    </form>
+                    <ul v-if="tasks.length" class="divide-y text-sm">
+                        <li v-for="t in tasks" :key="t.id" class="flex items-center gap-3 px-5 py-2.5" :class="t.done_at && 'opacity-60'">
+                            <input type="checkbox" class="size-4" :checked="!!t.done_at" :disabled="!!t.done_at" :aria-label="`Xong: ${t.title}`" @change="doneTask(t)" />
+                            <div class="min-w-0 flex-1">
+                                <p :class="t.done_at && 'line-through'">{{ t.title }}</p>
+                                <p class="text-xs" :class="t.late ? 'font-medium text-destructive' : 'text-muted-foreground'">{{ t.late ? 'Trễ hẹn · ' : '' }}{{ formatDateTime(t.due_at) }}<template v-if="t.assignee"> · {{ t.assignee }}</template></p>
+                            </div>
+                            <Button variant="ghost" size="sm" aria-label="Xóa việc" @click="removeTask(t)"><Trash2 /></Button>
+                        </li>
+                    </ul>
+                    <p v-else class="px-5 py-4 text-sm text-muted-foreground">Chưa có việc nào.</p>
+                </Card>
+                <Card v-if="tab === 'notes'">
                     <form class="flex gap-2 border-b p-4" @submit.prevent="addNote">
+                        <Select v-model="noteKind" class="w-32 shrink-0" aria-label="Loại liên hệ" :options="Object.entries(noteKinds).map(([value, k]) => ({ value, label: k.label }))" data-testid="note-kind" />
                         <Input v-model="noteBody" placeholder="Ghi lại cuộc gọi, khiếu nại, sở thích của khách…" maxlength="2000" data-testid="note-input" />
                         <Button type="submit" :loading="noteSaving" :disabled="!noteBody.trim()" data-testid="note-add">Thêm</Button>
                     </form>
                     <ul v-if="customer.notes.length" class="divide-y text-sm">
                         <li v-for="n in customer.notes" :key="n.id" class="flex items-start gap-3 px-5 py-3">
                             <div class="flex-1">
-                                <p class="whitespace-pre-line">{{ n.body }}</p>
+                                <p class="whitespace-pre-line"><Badge v-if="n.kind && n.kind !== 'note'" :tone="noteKinds[n.kind]?.tone" class="mr-1.5">{{ noteKinds[n.kind]?.label }}</Badge>{{ n.body }}</p>
                                 <p class="mt-1 text-xs text-muted-foreground">{{ n.author ?? 'Không rõ' }} · {{ formatDateTime(n.created_at) }}</p>
                             </div>
                             <Button v-if="n.mine || canManage" variant="ghost" size="sm" aria-label="Xóa ghi chú" @click="removeNote(n)"><Trash2 /></Button>

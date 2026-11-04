@@ -27,6 +27,9 @@ Schedule::command('ecso:orders:reconcile')->everyFifteenMinutes()->withoutOverla
 // Fee check: actual marketplace fees vs fee tables, loss orders (round 3 WooCommerce/pricing).
 Schedule::command('ecso:marketplace:check-fees')->dailyAt('06:00')->withoutOverlapping()->onOneServer();
 
+// Customers who reached a group's buying threshold join it (only customers with no group yet).
+Schedule::command('ecso:customers:auto-group')->dailyAt('03:30')->withoutOverlapping()->onOneServer();
+
 // Monitoring alerts (queues, failed jobs, scheduler, circuits, disk) — Phase 8.
 Schedule::command('ecso:monitor')->everyFiveMinutes()->withoutOverlapping()->onOneServer();
 

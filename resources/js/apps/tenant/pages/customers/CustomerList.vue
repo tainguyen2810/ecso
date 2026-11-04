@@ -8,7 +8,7 @@ import Tabs from '../../components/Tabs.vue';
 import CustomerDialog from './CustomerDialog.vue';
 import CustomerImportDialog from './CustomerImportDialog.vue';
 import CustomersNav from './CustomersNav.vue';
-import { customerSources, customerStatus, customerTypes, genderLabels, months } from './labels';
+import { customerSources, customerStatus, customerTypes, genderLabels, months, segments } from './labels';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -52,9 +52,10 @@ const filters = reactive({
     group: q('group'),
     sort: q('sort') || 'newest',
     dir: q('dir'),
+    segment: q('segment'),
     ...Object.fromEntries(EXTRA.map((k) => [k, q(k)])),
     page: 1,
-}) as { q: string; view: string; group: string; sort: string; dir: string; page: number } & Record<(typeof EXTRA)[number], string>;
+}) as { q: string; view: string; group: string; sort: string; dir: string; segment: string; page: number } & Record<(typeof EXTRA)[number], string>;
 const moreFilters = ref(EXTRA.some((k) => filters[k]));
 const activeExtra = computed(() => EXTRA.filter((k) => filters[k]).length);
 function clearExtra() {
@@ -163,7 +164,7 @@ watch(() => filters.q, () => {
     clearTimeout(timer);
     timer = setTimeout(() => ((filters.page = 1), load()), 300);
 });
-watch(() => [filters.view, filters.group, filters.sort, filters.dir, ...EXTRA.map((k) => filters[k])], () => {
+watch(() => [filters.view, filters.group, filters.segment, filters.sort, filters.dir, ...EXTRA.map((k) => filters[k])], () => {
     clearTimeout(timer);
     timer = setTimeout(() => ((filters.page = 1), load()), 250);
 });
@@ -255,6 +256,14 @@ async function exportFile(onlySelected: boolean) {
                 <Input v-model="filters.q" class="pl-8" placeholder="Tên, mã khách, email, số điện thoại (đủ số hoặc 4 số cuối)…" data-testid="customer-q" />
             </div>
             <Select v-model="filters.group" class="w-full sm:w-44" aria-label="Nhóm" :options="[{ value: '', label: 'Mọi nhóm' }, ...groups.map((g) => ({ value: g.id, label: g.name })), { value: 'none', label: 'Chưa xếp nhóm' }]" />
+            <Select
+                v-model="filters.segment"
+                class="w-full sm:w-44"
+                aria-label="Phân khúc"
+                :title="segments.find((x) => x.value === filters.segment)?.hint"
+                :options="[{ value: '', label: 'Mọi phân khúc' }, ...segments.map((x) => ({ value: x.value, label: x.label }))]"
+                data-testid="customer-segment"
+            />
             <Button variant="outline" size="sm" data-testid="more-filters" :class="cn(moreFilters && 'bg-muted')" @click="moreFilters = !moreFilters">
                 <SlidersHorizontal /> Bộ lọc khác<span v-if="activeExtra" class="rounded-full bg-primary px-1.5 text-xs text-primary-foreground">{{ activeExtra }}</span>
             </Button>

@@ -30,7 +30,7 @@ const loadError = ref<string | null>(null);
 
 const dialog = ref(false);
 const editing = ref<CustomerGroup | null>(null);
-const form = reactive({ name: '', code: '', description: '', price_tier: 'retail', discount_percent: '0', payment_method: '', payment_terms_days: '', credit_limit: '', is_active: true });
+const form = reactive({ name: '', code: '', description: '', price_tier: 'retail', discount_percent: '0', payment_method: '', payment_terms_days: '', credit_limit: '', is_active: true, auto_min_spent: '', auto_min_orders: '' });
 const saving = ref(false);
 const error = ref<ApiError | null>(null);
 
@@ -54,6 +54,7 @@ function edit(g: CustomerGroup | null) {
         name: g?.name ?? '', code: g?.code ?? '', description: g?.description ?? '', price_tier: g?.price_tier ?? 'retail',
         discount_percent: g ? String(Number(g.discount_percent)) : '0', payment_method: g?.payment_method ?? '',
         payment_terms_days: g?.payment_terms_days != null ? String(g.payment_terms_days) : '', credit_limit: g?.credit_limit != null ? String(Number(g.credit_limit)) : '', is_active: g?.is_active !== false,
+        auto_min_spent: g?.auto_min_spent != null ? String(Number(g.auto_min_spent)) : '', auto_min_orders: g?.auto_min_orders != null ? String(g.auto_min_orders) : '',
     });
     dialog.value = true;
 }
@@ -117,6 +118,7 @@ async function remove(g: CustomerGroup) {
                     <tr v-for="g in rows" :key="g.id" class="hover:bg-muted/30">
                         <td class="px-4 py-3">
                             <div class="font-medium">{{ g.name }} <Badge v-if="g.is_active === false" tone="muted">Ngừng sử dụng</Badge></div>
+                            <div v-if="g.auto_min_spent != null || g.auto_min_orders != null" class="text-xs text-muted-foreground">Tự xếp khi {{ [g.auto_min_spent != null ? `chi tiêu từ ${formatMoney(g.auto_min_spent)}` : '', g.auto_min_orders != null ? `từ ${g.auto_min_orders} đơn` : ''].filter(Boolean).join(' và ') }}</div>
                             <div class="text-xs text-muted-foreground"><span class="font-mono">{{ g.code }}</span><span v-if="g.description"> · {{ g.description }}</span></div>
                         </td>
                         <td class="px-4 py-3">{{ priceTierLabels[g.price_tier] }}</td>
@@ -151,6 +153,14 @@ async function remove(g: CustomerGroup) {
             <FormField label="Thanh toán quen dùng" for="g-pay" class="sm:col-span-2">
                 <Select id="g-pay" v-model="form.payment_method" :options="[{ value: '', label: 'Không đặt' }, ...Object.entries(paymentMethods).map(([value, label]) => ({ value, label }))]" />
             </FormField>
+            <fieldset class="rounded-md border px-3 py-2 sm:col-span-2">
+                <legend class="px-1 text-sm font-medium">Tự xếp khách vào nhóm</legend>
+                <p class="mb-2 text-xs text-muted-foreground">Mỗi đêm, khách chưa có nhóm đạt ngưỡng dưới đây được xếp vào nhóm này (đặt cả hai thì phải đạt cả hai). Khách đã được xếp nhóm bằng tay không bị đổi. Để trống để tắt.</p>
+                <div class="grid gap-3 sm:grid-cols-2">
+                    <FormField label="Tổng chi tiêu từ" for="g-auto-spent" :error="error?.field('auto_min_spent')"><Input id="g-auto-spent" v-model="form.auto_min_spent" type="number" min="0" step="any" data-testid="g-auto-spent" /></FormField>
+                    <FormField label="Số đơn từ" for="g-auto-orders" :error="error?.field('auto_min_orders')"><Input id="g-auto-orders" v-model="form.auto_min_orders" type="number" min="1" step="1" /></FormField>
+                </div>
+            </fieldset>
             <label class="flex items-center gap-2 text-sm sm:col-span-2"><input v-model="form.is_active" type="checkbox" class="size-4" data-testid="g-active" /> Đang sử dụng (bỏ chọn để không xếp thêm khách mới vào nhóm; khách đang trong nhóm giữ nguyên)</label>
             <FormField label="Mô tả" for="g-desc" class="sm:col-span-2"><Input id="g-desc" v-model="form.description" /></FormField>
             <p v-if="error && !error.body.errors" class="text-sm text-destructive sm:col-span-2">{{ error.message }}</p>

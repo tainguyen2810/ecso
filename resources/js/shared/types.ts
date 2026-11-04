@@ -301,6 +301,8 @@ export interface CustomerGroup {
     is_active?: boolean;
     payment_terms_days?: number | null;
     credit_limit?: string | null;
+    auto_min_spent?: string | null;
+    auto_min_orders?: number | null;
     customers_count: number | null;
     created_at: string | null;
 }
@@ -316,6 +318,7 @@ export interface CustomerAddress {
 export interface CustomerNote {
     id: string;
     body: string;
+    kind?: 'note' | 'call' | 'message' | 'meeting' | 'complaint';
     author: string | null;
     mine: boolean;
     created_at: string | null;
@@ -378,6 +381,17 @@ export interface CustomerSummary {
     returned_value: string;
     terms_days: number | null;
     credit_limit: string | null;
+    top_products?: { name: string; variant_name: string | null; sku: string | null; quantity: number; amount: string; orders: number }[];
+}
+
+export interface CustomerTask {
+    id: string;
+    title: string;
+    due_at: string;
+    done_at: string | null;
+    late: boolean;
+    assignee: string | null;
+    customer: { id: string; code: string; name: string } | null;
 }
 
 export interface CustomerActivity {

@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Khách hàng, đợt E: chăm sóc khách, phân khúc, tự xếp nhóm (2026-11-04)
+- **Việc cần làm với khách** (bảng `customer_tasks`): hẹn gọi lại, gửi báo giá, nhắc thanh toán… có hạn và người phụ trách (mặc định người tạo); đánh dấu xong, việc trễ hẹn hiện màu đỏ. `GET /customer-tasks?mine=1&due=late|today|week|all` cho danh sách việc của mình.
+- **Ghi chú có loại liên hệ**: Ghi chú, Cuộc gọi, Tin nhắn, Gặp mặt, Khiếu nại.
+- **Phân khúc khách** trong danh sách (tính lại từ đơn thật mỗi lần): Cần liên hệ (việc đến hạn/trễ), Lâu không mua (90 ngày), Mua thường xuyên (≥ 3 đơn trong 180 ngày), Giá trị cao (10% khách chi tiêu nhiều nhất), Khách mới (30 ngày). Xuất Excel theo phân khúc đang chọn.
+- **Tự xếp khách vào nhóm**: nhóm có thể đặt ngưỡng tổng chi tiêu và/hoặc số đơn; lệnh `ecso:customers:auto-group` chạy mỗi đêm lúc 03:30, chỉ xếp khách **chưa có nhóm** (khách đã xếp tay không bị đổi), ghi nhật ký từng khách.
+- Trang khách: thẻ **Sản phẩm hay mua** (5 sản phẩm mua nhiều nhất, theo số lượng, từ đơn không hủy/hoàn).
+
 ### Khách hàng, đợt D: một khách trên mọi kênh, khách trùng và gộp khách (2026-11-04)
 - **Nhận diện khách từ kênh** (`App\Modules\Sales\Services\CustomerResolver`): tìm thẻ khách theo thứ tự chắc chắn — mã khách trên gian hàng (bảng mới `customer_identities`), số điện thoại đầy đủ, email (không phân biệt hoa thường; hai thẻ cùng email thì không chọn thẻ nào). **Không bao giờ ghép theo tên.** Kênh chỉ điền vào ô còn trống của thẻ, không xóa dữ liệu đang có. Mã khách trên gian hàng được nhớ để lần sau vẫn nhận ra dù khách đổi số.
 - **Khách trùng** (Khách hàng → Khách trùng, quyền mới `customers.merge`): liệt kê các thẻ trùng email, trùng mã số thuế, và trùng tên (chỉ là gợi ý). ECSO không tự gộp.

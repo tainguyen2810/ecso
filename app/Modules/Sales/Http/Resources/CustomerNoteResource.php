@@ -14,6 +14,7 @@ class CustomerNoteResource extends JsonResource
         return [
             'id' => $this->ulid,
             'body' => $this->body,
+            'kind' => $this->kind ?? 'note',
             'author' => $this->whenLoaded('author', fn () => $this->author?->name),
             'mine' => $this->created_by === $request->user()?->id,
             'created_at' => $this->created_at?->toIso8601String(),

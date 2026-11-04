@@ -5,6 +5,7 @@ namespace App\Modules\Sales\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Http\Resources\OrderResource;
+use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Sales\Http\Resources\CustomerAddressResource;
 use App\Modules\Sales\Http\Resources\CustomerNoteResource;
@@ -21,6 +22,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class CustomerController extends Controller
@@ -61,6 +63,7 @@ class CustomerController extends Controller
             'created_from' => ['nullable', 'date'],
             'created_to' => ['nullable', 'date'],
             'source' => ['nullable', Rule::in(Customer::SOURCES)],
+            'segment' => ['nullable', Rule::in(array_keys(Customer::SEGMENTS))],
             'type' => ['nullable', Rule::in(Customer::TYPES)],
             'sort' => ['nullable', Rule::in(['newest', 'name', 'spent', 'debt', 'recent', 'orders', 'overdue'])],
             'dir' => ['nullable', Rule::in(['asc', 'desc'])],
@@ -128,6 +131,13 @@ class CustomerController extends Controller
             'returned_value' => bcadd($returned, '0', 2),
             'terms_days' => $customer->payment_terms_days ?? $customer->customerGroup?->payment_terms_days,
             'credit_limit' => $customer->credit_limit !== null ? (string) $customer->credit_limit : ($customer->customerGroup?->credit_limit !== null ? (string) $customer->customerGroup->credit_limit : null),
+            // What they buy most, by quantity, from the same orders.
+            'top_products' => DB::table('order_items as i')->join('orders as o', 'o.id', '=', 'i.order_id')
+                ->where('o.customer_id', $customer->id)->whereNotIn('o.status', [OrderStatus::CANCELLED, OrderStatus::RETURNED])
+                ->groupBy('i.name', 'i.variant_name', 'i.seller_sku')
+                ->selectRaw('i.name, i.variant_name, i.seller_sku as sku, SUM(i.quantity) as quantity, SUM(i.unit_price * i.quantity - i.discount) as amount, COUNT(DISTINCT o.id) as orders')
+                ->orderByDesc('quantity')->limit(5)->get()
+                ->map(fn ($r) => ['name' => $r->name, 'variant_name' => $r->variant_name, 'sku' => $r->sku, 'quantity' => (int) $r->quantity, 'amount' => bcadd((string) $r->amount, '0', 2), 'orders' => (int) $r->orders])->all(),
         ];
     }
 
@@ -178,6 +188,42 @@ class CustomerController extends Controller
     }
 
     /**
+     * Customer segments (Customer::SEGMENTS), computed from real orders each time.
+     *
+     * @param  Builder<Customer>  $query
+     * @return Builder<Customer>
+     */
+    public static function segment(Builder $query, string $segment): Builder
+    {
+        $counted = "'".OrderStatus::CANCELLED."','".OrderStatus::RETURNED."'";
+
+        return match ($segment) {
+            // Bought before, nothing for LAPSED_DAYS.
+            'lapsed' => $query->having('orders_count', '>', 0)->having('last_order_at', '<', now()->subDays(Customer::LAPSED_DAYS)),
+            // FREQUENT_ORDERS orders or more in the last FREQUENT_DAYS.
+            'frequent' => $query->whereRaw('(SELECT COUNT(*) FROM orders fo WHERE fo.customer_id = customers.id AND fo.status NOT IN ('.$counted.') AND fo.placed_at >= ?) >= ?', [now()->subDays(Customer::FREQUENT_DAYS), Customer::FREQUENT_ORDERS]),
+            // The top tenth of buyers by spending.
+            'high_value' => $query->having('total_spent', '>=', self::topSpendThreshold())->having('total_spent', '>', 0),
+            'new' => $query->where('customers.created_at', '>=', now()->subDays(Customer::NEW_DAYS)),
+            'follow_up' => $query->whereExists(fn ($t) => $t->from('customer_tasks')->whereColumn('customer_tasks.customer_id', 'customers.id')->whereNull('customer_tasks.done_at')->where('customer_tasks.due_at', '<=', now()->endOfDay())),
+            default => $query,
+        };
+    }
+
+    /** Spending of the buyer at the 90th percentile (the lowest spend that is still in the top tenth). */
+    private static function topSpendThreshold(): float
+    {
+        // Same figure as withStats()'s total_spent: orders of the customer, cancelled and returned ones left out.
+        $spends = Order::query()->whereNotNull('customer_id')->whereNotIn('status', [OrderStatus::CANCELLED, OrderStatus::RETURNED])
+            ->groupBy('customer_id')->havingRaw('SUM(total) > 0')->orderByRaw('SUM(total) DESC')->toBase()->pluck(DB::raw('SUM(total)'));
+        if ($spends->isEmpty()) {
+            return INF;
+        }
+
+        return (float) $spends[max(0, (int) ceil($spends->count() * 0.1) - 1)];
+    }
+
+    /**
      * @param  Builder<Customer>  $query
      * @param  array<string, mixed>  $filters
      * @return Builder<Customer>
@@ -224,6 +270,7 @@ class CustomerController extends Controller
             ->when($filters['status'] ?? null, fn ($q, $s) => $q->where('customers.status', $s))
             ->when($filters['gender'] ?? null, fn ($q, $g) => $q->where('customers.gender', $g))
             ->when($filters['source'] ?? null, fn ($q, $v) => $q->where('customers.source', $v))
+            ->when($filters['segment'] ?? null, fn ($q, $segment) => self::segment($q, $segment))
             ->when($filters['type'] ?? null, fn ($q, $v) => $q->where('customers.type', $v))
             ->when($filters['birth_month'] ?? null, fn ($q, $m) => $q->whereMonth('customers.birthday', (int) $m))
             ->when($filters['tag'] ?? null, fn ($q, $t) => $q->whereJsonContains('customers.tags', $t))

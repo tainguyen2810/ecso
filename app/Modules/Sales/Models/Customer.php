@@ -37,6 +37,19 @@ class Customer extends Model
 
     public const TYPES = ['individual', 'company'];
 
+    /** Segments of the customer list; the figures they use are below. */
+    public const SEGMENTS = [
+        'lapsed' => 'Lâu không mua', 'frequent' => 'Mua thường xuyên', 'high_value' => 'Giá trị cao', 'new' => 'Khách mới', 'follow_up' => 'Cần liên hệ',
+    ];
+
+    public const LAPSED_DAYS = 90;
+
+    public const FREQUENT_DAYS = 180;
+
+    public const FREQUENT_ORDERS = 3;
+
+    public const NEW_DAYS = 30;
+
     /** Where the customer came from: the type of the sales channel of their first order, a referral, or a file import. */
     public const SOURCES = [...SalesChannel::TYPES, 'referral', 'import'];
 

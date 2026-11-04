@@ -19,13 +19,13 @@ class CustomerGroup extends Model
 
     public const PRICE_TIERS = ['retail', 'wholesale'];
 
-    protected $fillable = ['code', 'name', 'description', 'price_tier', 'discount_percent', 'payment_method', 'payment_terms_days', 'credit_limit', 'is_active'];
+    protected $fillable = ['code', 'name', 'description', 'price_tier', 'discount_percent', 'payment_method', 'payment_terms_days', 'credit_limit', 'is_active', 'auto_min_spent', 'auto_min_orders'];
 
     protected $hidden = ['id', 'tenant_id'];
 
     protected function casts(): array
     {
-        return ['discount_percent' => 'decimal:2', 'credit_limit' => 'decimal:2', 'is_active' => 'boolean'];
+        return ['discount_percent' => 'decimal:2', 'credit_limit' => 'decimal:2', 'is_active' => 'boolean', 'auto_min_spent' => 'decimal:2'];
     }
 
     /** @return HasMany<Customer, $this> */
