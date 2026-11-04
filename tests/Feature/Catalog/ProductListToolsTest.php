@@ -39,7 +39,7 @@ it('lists deleted products in the recycle bin and restores them with their SKUs'
 
     expect(collect($this->api->getJson('/api/v1/products')->json('data'))->pluck('id'))->not->toContain($id);
     $bin = $this->api->getJson('/api/v1/products?trashed=1')->assertOk()->json('data');
-    expect($bin)->toHaveCount(1)->and($bin[0]['id'])->toBe($id)->and($bin[0]['variants'][0]['sku'])->toBe('TEA_03');
+    expect($bin)->toHaveCount(1)->and($bin[0]['id'])->toBe($id)->and($bin[0]['variants'][0]['sku'])->toBe('TEA_03')->and($bin[0]['variants_count'])->toBe(1);
     // Searching the bin finds deleted SKUs too.
     expect($this->api->getJson('/api/v1/products?trashed=1&q=TEA_03')->json('data'))->toHaveCount(1);
 
