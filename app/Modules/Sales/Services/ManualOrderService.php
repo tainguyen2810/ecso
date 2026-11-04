@@ -18,6 +18,7 @@ use App\Modules\Orders\Services\OrderIngestor;
 use App\Modules\Orders\Services\OrderStockSync;
 use App\Modules\Orders\Support\OrderTags;
 use App\Modules\Sales\Models\Customer;
+use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Sales\Models\SalesChannel;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -144,8 +145,13 @@ class ManualOrderService
                 throw ValidationException::withMessages(['order' => 'Chỉ sửa được đơn chưa đóng gói.']);
             }
 
-            $customer = array_key_exists('customer_id', $data) || isset($data['customer']) ? $this->customer($data) : $order->customer;
+            $previousCustomer = $order->customer_id !== null ? (int) $order->customer_id : null;
+            $customer = array_key_exists('customer_id', $data) || isset($data['customer']) ? $this->customer($data, $previousCustomer) : $order->customer;
             $this->fillDetails($order, $data, $customer);
+            if (($order->customer_id !== null ? (int) $order->customer_id : null) !== $previousCustomer) {
+                // Payments follow the order to its new buyer, so their payment history and debt stay right.
+                OrderPayment::query()->where('order_id', $order->id)->update(['customer_id' => $order->customer_id]);
+            }
 
             if (isset($data['warehouse_id']) || isset($data['lines'])) {
                 $ids = $order->items()->pluck('id')->map(fn ($id) => (int) $id)->all();
@@ -382,18 +388,26 @@ class ManualOrderService
         $order->forceFill(['subtotal' => $subtotal, 'total' => $total])->save();
     }
 
-    /** @param array<string, mixed> $data */
-    private function customer(array $data): ?Customer
+    /**
+     * The order's buyer. A customer who stopped trading cannot be put on an order (the one already on it can stay).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function customer(array $data, ?int $current = null): ?Customer
     {
+        $customer = null;
         if (! empty($data['customer_id'])) {
-            return Customer::query()->where('ulid', $data['customer_id'])->first()
+            $customer = Customer::query()->where('ulid', $data['customer_id'])->first()
                 ?? throw ValidationException::withMessages(['customer_id' => 'Khách hàng không tồn tại.']);
-        }
-        if (! empty($data['customer']['name'])) {
-            return $this->customers->findOrCreate($data['customer']);
+        } elseif (! empty($data['customer']['name'])) {
+            $customer = $this->customers->findOrCreate($data['customer']);
         }
 
-        return null;
+        if ($customer !== null && $customer->status === 'inactive' && (int) $customer->id !== $current) {
+            throw ValidationException::withMessages(['customer_id' => "Khách {$customer->code} · {$customer->name} đã ngừng giao dịch. Chuyển khách về \"Đang giao dịch\" trước khi tạo đơn."]);
+        }
+
+        return $customer;
     }
 
     private function warehouse(?string $ulid, ?SalesChannel $channel): Warehouse

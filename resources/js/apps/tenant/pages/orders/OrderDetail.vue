@@ -14,7 +14,7 @@ import Input from '@/shared/ui/Input.vue';
 import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
-import { api, ApiError } from '@/shared/lib/api';
+import { api, ApiError, idempotent, newIdempotencyKey } from '@/shared/lib/api';
 import { cn, formatDateTime, formatMoney, initials } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
@@ -45,6 +45,8 @@ settingsStore.load().catch(() => {});
 const cancelReasons = computed(() => (settingsStore.data?.reasons ?? []).filter((r) => r.cancel).map((r) => r.label));
 const returnReasons = computed(() => (settingsStore.data?.reasons ?? []).filter((r) => r.return).map((r) => r.label));
 const returnOpen = ref(false);
+// Same rule as the API: order handling staff, or warehouse staff receiving a parcel back.
+const canCreateReturn = computed(() => tenant.can('orders.update') || tenant.can('returns.inspect'));
 const returnForm = ref({ type: 'return', reason: '', refund_amount: '', lines: {} as Record<number, number> });
 const returnErrors = ref<ApiError | null>(null);
 
@@ -63,7 +65,7 @@ async function load() {
 onMounted(async () => {
     await load();
     // From "Tạo đơn trả hàng" on the returns list: open the return form straight away.
-    if (route.query.return === '1' && order.value && tenant.can('returns.inspect')) openReturn();
+    if (route.query.return === '1' && order.value && canCreateReturn.value) openReturn();
     api.get('/orders/assignees').then(({ data }) => (assignees.value = data.data)).catch(() => {});
     api.get('/orders/tags').then(({ data }) => (tagSuggestions.value = data.data)).catch(() => {});
 });
@@ -102,11 +104,14 @@ function startAction(action: string) {
     } else act(action);
 }
 
+// One key per opening of the payment dialog: pressing Save twice records one payment.
+let payKey = '';
 function openPay(kind: 'payment' | 'refund') {
     const o = order.value!;
     const refundable = Number(o.paid_amount ?? 0) - Number(o.refunded_amount ?? 0);
     payError.value = null;
     payForm.value = { kind, method: o.is_cod && kind === 'payment' ? 'cod' : 'cash', amount: kind === 'payment' ? Number(o.balance_due ?? 0) : refundable, reference: '', note: '' };
+    payKey = newIdempotencyKey();
     payOpen.value = true;
 }
 
@@ -115,7 +120,7 @@ async function pay() {
     payError.value = null;
     try {
         const f = payForm.value;
-        await api.post(`/orders/${order.value!.id}/payments`, { ...f, amount: Number(f.amount), reference: f.reference || null, note: f.note || null });
+        await api.post(`/orders/${order.value!.id}/payments`, { ...f, amount: Number(f.amount), reference: f.reference || null, note: f.note || null }, idempotent(payKey));
         toast.success(f.kind === 'refund' ? 'Đã ghi nhận hoàn tiền.' : 'Đã ghi nhận thanh toán.');
         payOpen.value = false;
         await load();
@@ -208,9 +213,11 @@ async function print() {
     }
 }
 
+let returnKey = '';
 function openReturn() {
     returnErrors.value = null;
-    returnForm.value = { type: 'return', reason: '', refund_amount: '', lines: Object.fromEntries(order.value!.items.map((i) => [i.id, i.quantity])) };
+    returnKey = newIdempotencyKey();
+    returnForm.value = { type: 'return', reason: '', refund_amount: '', lines: Object.fromEntries(order.value!.items.map((i) => [i.id, i.returnable ?? 0])) };
     returnOpen.value = true;
 }
 
@@ -224,7 +231,7 @@ async function createReturn() {
             reason: f.reason || null,
             refund_amount: f.refund_amount === '' ? null : Number(f.refund_amount),
             lines: f.type === 'return' ? Object.entries(f.lines).filter(([, q]) => Number(q) > 0).map(([id, q]) => ({ order_item_id: Number(id), quantity: Number(q) })) : [],
-        });
+        }, idempotent(returnKey));
         toast.success('Đã tạo phiếu trả hàng.');
         returnOpen.value = false;
         await load();
@@ -259,7 +266,7 @@ async function createReturn() {
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                     <Button v-if="!isManual" variant="outline" size="sm" :loading="busy === 'sync'" @click="sync"><RefreshCw /> Đồng bộ từ sàn</Button>
-                    <Button v-if="isManual && order.editable && tenant.can('orders.create')" variant="outline" size="sm" data-testid="edit-order" @click="$router.push(`/orders/${order.id}/edit`)"><Pencil /> Sửa đơn</Button>
+                    <Button v-if="isManual && order.editable && tenant.can('orders.create') && tenant.can('orders.update')" variant="outline" size="sm" data-testid="edit-order" @click="$router.push(`/orders/${order.id}/edit`)"><Pencil /> Sửa đơn</Button>
                     <Button v-if="isManual" variant="outline" size="sm" data-testid="print-invoice" @click="printOpen = true"><ReceiptText /> In đơn hàng</Button>
                     <Button v-if="tenant.can('orders.print')" variant="outline" size="sm" :loading="busy === 'print'" @click="print"><Printer /> In phiếu</Button>
                     <Button v-if="tenant.can('orders.create')" variant="outline" size="sm" data-testid="copy-order" @click="$router.push({ path: '/orders/new', query: { copy: order.id } })"><Copy /> Sao chép</Button>
@@ -499,7 +506,7 @@ async function createReturn() {
                 </Card>
 
                 <Card caps title="Trả hàng / hoàn tiền">
-                    <template v-if="tenant.can('returns.inspect')" #actions>
+                    <template v-if="canCreateReturn" #actions>
                         <Button size="sm" variant="outline" data-testid="create-return" @click="openReturn"><Undo2 /> Tạo</Button>
                     </template>
                     <ul v-if="order.returns.length" class="divide-y text-sm">
@@ -579,8 +586,11 @@ async function createReturn() {
                     <tbody class="divide-y">
                         <tr v-for="i in order.items" :key="i.id">
                             <td class="py-2">{{ i.name }} <span class="text-xs text-muted-foreground">{{ i.variant_name }}</span></td>
-                            <td class="py-2 text-right tabular-nums">{{ i.quantity }}</td>
-                            <td class="py-2"><Input v-model.number="returnForm.lines[i.id]" type="number" min="0" :max="i.quantity" class="text-right" /></td>
+                            <td class="py-2 text-right tabular-nums">
+                                {{ i.quantity }}
+                                <span v-if="i.returnable !== i.quantity" class="block text-[11px] text-muted-foreground" data-testid="returnable">còn trả được {{ i.returnable }}</span>
+                            </td>
+                            <td class="py-2"><Input v-model.number="returnForm.lines[i.id]" type="number" min="0" :max="i.returnable" :disabled="i.returnable === 0" class="text-right" /></td>
                         </tr>
                     </tbody>
                 </table>

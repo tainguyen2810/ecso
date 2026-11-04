@@ -17,10 +17,10 @@ class ReturnPolicy extends PermissionPolicy
         return $this->allows('returns.view');
     }
 
-    /** Recording a return/refund request is order handling. */
+    /** Recording a return/refund request: order handling staff, or warehouse staff receiving a parcel back. */
     public function create(User $user): bool
     {
-        return $this->allows('orders.update');
+        return $this->allows('orders.update') || $this->allows('returns.inspect');
     }
 
     /** Approving, receiving and inspecting goods (inspection adds stock back). */

@@ -127,7 +127,7 @@ class CustomerController extends Controller
 
     public function bulk(Request $request, CustomerService $customers): JsonResponse
     {
-        $this->authorize('update', Customer::class);
+        $this->authorize($request->input('action') === 'delete' ? 'delete' : 'update', Customer::class);
         $data = $request->validate([
             'ids' => ['required', 'array', 'min:1', 'max:500'],
             'ids.*' => ['string'],

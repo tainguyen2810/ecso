@@ -158,7 +158,7 @@ const tabs = computed(() => [
             <Badge :tone="customerStatus[customer.status]?.tone" data-testid="customer-status">{{ customerStatus[customer.status]?.label }}</Badge>
             <Button v-if="tenant.can('orders.create')" @click="$router.push({ path: '/orders/new', query: { customer: customer.id } })"><Plus /> Tạo đơn</Button>
             <Button v-if="canManage" variant="outline" data-testid="edit-customer" @click="dialog = true"><Pencil /> Sửa</Button>
-            <Button v-if="canManage && !customer.orders_count" variant="ghost" title="Xóa" @click="remove"><Trash2 /></Button>
+            <Button v-if="tenant.can('customers.delete') && !customer.orders_count" variant="ghost" title="Xóa" @click="remove"><Trash2 /></Button>
         </PageHeader>
 
         <div class="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -196,7 +196,7 @@ const tabs = computed(() => [
                     <div v-else-if="ledger === null" class="p-4"><Skeleton class="h-24" /></div>
                     <p v-else-if="!ledger.length" class="px-5 py-4 text-sm text-muted-foreground">Chưa phát sinh công nợ.</p>
                     <div v-else class="overflow-x-auto">
-                        <p class="border-b px-5 py-2.5 text-xs text-muted-foreground">Mỗi đơn (trừ đơn hủy, đơn hoàn) cộng vào nợ, mỗi lần thu tiền trừ đi. Mới nhất ở trên.</p>
+                        <p class="border-b px-5 py-2.5 text-xs text-muted-foreground">Đơn bán qua kênh riêng (trừ đơn hủy, hoàn toàn bộ, giao thất bại và đơn COD) cộng vào nợ; trả hàng và thu tiền trừ đi, hoàn tiền cộng lại. Mới nhất ở trên.</p>
                         <table class="w-full text-sm">
                             <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                                 <tr><th class="px-4 py-2 font-medium">Thời gian</th><th class="px-4 py-2 font-medium">Chứng từ</th><th class="px-4 py-2 font-medium">Diễn giải</th><th class="px-4 py-2 text-right font-medium">Phát sinh</th><th class="px-4 py-2 text-right font-medium">Còn nợ</th></tr>
