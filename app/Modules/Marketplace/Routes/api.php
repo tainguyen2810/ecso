@@ -3,6 +3,7 @@
 use App\Modules\Marketplace\Http\Controllers\FakeMarketplaceController;
 use App\Modules\Marketplace\Http\Controllers\ListingController;
 use App\Modules\Marketplace\Http\Controllers\MarketplaceAccountController;
+use App\Modules\Marketplace\Http\Controllers\MarketplacePricingController;
 use App\Modules\Marketplace\Http\Controllers\PriceController;
 use App\Modules\Marketplace\Http\Controllers\WebhookController;
 use App\Modules\Marketplace\Http\Controllers\WooCommerceController;
@@ -44,6 +45,21 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::post('price-changes/{change}/reject', [PriceController::class, 'reject']);
     Route::get('products/{product}/prices', [PriceController::class, 'product']);
     Route::put('products/{product}/price-source', [PriceController::class, 'setSource']);
+
+    Route::prefix('marketplace-pricing')->controller(MarketplacePricingController::class)->group(function () {
+        Route::get('rules', 'rules');
+        Route::put('rules/{account}', 'saveRules');
+        Route::post('rules/{account}/use-actual', 'useActual');
+        Route::get('board', 'board');
+        Route::post('board/apply', 'apply');
+        Route::post('board/lock', 'lock');
+        Route::get('board/export', 'export')->middleware('throttle:20,1,marketplace.pricing.export');
+        Route::get('fees', 'fees');
+        Route::post('settlements/import', 'import')->middleware('throttle:20,1,marketplace.pricing.import');
+        Route::get('settlements/template', 'template');
+        Route::post('alerts/{alert}/apply', 'applyAlert');
+        Route::post('alerts/{alert}/dismiss', 'dismissAlert');
+    });
 
     Route::get('marketplace-accounts/{account}/listings', [ListingController::class, 'index']);
     Route::post('marketplace-accounts/{account}/listings/confirm-suggestions', [ListingController::class, 'confirmSuggestions']);

@@ -4,6 +4,18 @@
 
 ## [Unreleased]
 
+### Phí sàn và giá sàn, đợt 3 (2026-11-04)
+- **Bảng phí sàn** cho từng gian hàng (Cấu hình → Thuế và chính sách giá), gồm hoa hồng %, thanh toán %, dịch vụ %, phí cố định mỗi đơn, làm tròn lên và lãi tối thiểu trên giá vốn. Có thể đặt hoa hồng riêng theo danh mục. Khi chưa lưu thì bảng hiện số tham khảo (`config/marketplaces.php`, `pricing.reference_fees`), cần kiểm tra lại theo hợp đồng.
+- Công thức giá sàn: (giá gốc + phí cố định) ÷ (1 − tổng % phí), làm tròn lên. Giá không được thấp hơn mức để còn giá vốn + lãi tối thiểu sau phí. Website WooCommerce vẫn bán theo giá gốc, không cộng phí sàn.
+- **Bảng giá sàn** (`/marketplaces/prices`) so giá hiện tại với giá tính ra trên từng gian hàng, có các tab Chờ duyệt / Lỗ sau phí / Đang khóa. Người dùng áp dụng từng dòng hoặc tất cả, và khóa giá. Tùy chọn "Tự áp dụng giá mới" áp ngay khi giá gốc hoặc bảng phí đổi.
+- Sàn chưa cấp API đổi giá thì **Áp dụng** ghi giá vào **file giá** (.xlsx), người dùng tải lên công cụ cập nhật hàng loạt của sàn. Lần đồng bộ sau thấy sàn hiện đúng giá mới thì ECSO tự đánh dấu xong. Hiện chưa sàn nào trong ECSO có API đổi giá được duyệt, nên mọi sàn đi đường file giá.
+- **Kiểm tra phí sàn** (`/settings/pricing/fees`): nhập file đối soát (.xlsx/.csv), ECSO tính phí thực tế 30 ngày theo gian hàng và theo danh mục, bỏ đơn hủy và hoàn.
+  - Lệnh `ecso:marketplace:check-fees` chạy mỗi ngày lúc 06:00. Khi tổng phí lệch từ 0,5 điểm % (cần đủ 20 đơn), lệnh báo cảnh báo lệch phí. Nó cũng báo các đơn bán lỗ sau phí trong 7 ngày. Cảnh báo mới được gửi email cho người có quyền cài đặt.
+  - Tùy chọn "Tự cập nhật bảng phí" (mặc định tắt) cho ECSO tự sửa bảng phí theo số thực tế.
+- File đối soát được nhận theo tên cột: file mẫu của ECSO, cộng một số tên cột dự kiến của Shopee/TikTok/Lazada. **Tên cột của sàn chưa được đối chiếu với file đối soát thật.** File không nhận ra cột thì bị từ chối kèm danh sách cột tìm thấy, ECSO không đoán.
+- Migration `2026_11_11_120000_add_marketplace_pricing` thêm các bảng `channel_price_rules`, `marketplace_settlements`, `fee_alerts`. API nằm dưới `marketplace-pricing/*` (bảng phí, bảng giá, áp dụng, khóa, file giá, phí thực tế, nhập đối soát, file mẫu, xử lý cảnh báo).
+- Sửa: ô nhập (`Input`) nhận giá trị rỗng `null`.
+
 ### WooCommerce đợt 2: giá hai chiều (2026-11-04)
 - **Nguồn giá** từng SKU (`product_variants.price_source`): Tự động (còn hàng thì ECSO giữ giá, hết hàng thì website giữ), ECSO giữ, Website giữ. Đổi ở trang sản phẩm (`PUT /products/{id}/price-source`).
 - ECSO giữ giá: sửa giá bán lẻ trong ECSO thì đẩy lên **giá thường** (`regular_price`) của Woo qua batch API (`PushPricesJob`); ai sửa giá trên website sẽ bị trả lại và ghi "Đã trả lại giá ECSO". ECSO không đụng giá khuyến mãi trên Woo.

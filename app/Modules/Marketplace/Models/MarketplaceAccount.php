@@ -91,4 +91,10 @@ class MarketplaceAccount extends Model
     {
         return $this->hasMany(ListingVariant::class);
     }
+
+    /** @return HasMany<ChannelPriceRule, $this> */
+    public function priceRules(): HasMany
+    {
+        return $this->hasMany(ChannelPriceRule::class);
+    }
 }

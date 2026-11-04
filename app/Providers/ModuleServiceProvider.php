@@ -25,6 +25,7 @@ use App\Modules\Inventory\Models\StockTransfer;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Policies\InventoryPolicy;
 use App\Modules\Inventory\Policies\WarehousePolicy;
+use App\Modules\Marketplace\Console\CheckFeesCommand;
 use App\Modules\Marketplace\Console\PushDueInventoryCommand;
 use App\Modules\Marketplace\Events\ListingMappingChanged;
 use App\Modules\Marketplace\Events\WebhookReceived;
@@ -32,6 +33,7 @@ use App\Modules\Marketplace\Listeners\PlanInventoryPush;
 use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Policies\MarketplacePolicy;
+use App\Modules\Marketplace\Services\MarketplacePriceBoard;
 use App\Modules\Marketplace\Services\PriceSync;
 use App\Modules\Orders\Console\ReconcileOrdersCommand;
 use App\Modules\Orders\Events\OrderImported;
@@ -123,7 +125,13 @@ class ModuleServiceProvider extends ServiceProvider
         Event::listen(ListingMappingChanged::class, RemapOrderItems::class);
         Event::listen(ListingMappingChanged::class, PlanInventoryPush::class);
         // A retail price changed in ECSO goes to the websites where ECSO holds the price.
-        ProductVariant::updated(fn (ProductVariant $variant) => app(PriceSync::class)->variantUpdated($variant));
+        ProductVariant::updated(function (ProductVariant $variant) {
+            app(PriceSync::class)->variantUpdated($variant);
+            // Shops whose fee table applies new prices by itself follow the new base price.
+            if ($variant->wasChanged('ref_price')) {
+                app(MarketplacePriceBoard::class)->variantChanged($variant);
+            }
+        });
 
         foreach (self::API_MODULES as $module) {
             Route::middleware('api')->prefix('api/v1')->group(app_path("Modules/{$module}/Routes/api.php"));
@@ -132,7 +140,7 @@ class ModuleServiceProvider extends ServiceProvider
         $this->configureAuthLinks();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, LowStockDigestCommand::class, PushDueInventoryCommand::class, ReconcileOrdersCommand::class, BillingSweepCommand::class, MonitorCommand::class, DemoTenantCommand::class]);
+            $this->commands([CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, LowStockDigestCommand::class, PushDueInventoryCommand::class, CheckFeesCommand::class, ReconcileOrdersCommand::class, BillingSweepCommand::class, MonitorCommand::class, DemoTenantCommand::class]);
         }
     }
 

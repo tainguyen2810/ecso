@@ -84,6 +84,22 @@ return [
         'authorize_ttl' => 900,
     ],
 
+    // Marketplace prices from fees (round 3). Starting fee tables are reference figures only (public rates change
+    // often and differ per seller programme): the owner checks them, or takes the actual fees from settlement data.
+    'pricing' => [
+        'reference_fees' => [
+            'shopee' => ['commission_pct' => 9, 'payment_pct' => 4.91, 'service_pct' => 0, 'fixed_fee' => 0],
+            'tiktok' => ['commission_pct' => 8, 'payment_pct' => 5, 'service_pct' => 0, 'fixed_fee' => 0],
+            'lazada' => ['commission_pct' => 8, 'payment_pct' => 4, 'service_pct' => 0, 'fixed_fee' => 0],
+            'tiki' => ['commission_pct' => 10, 'payment_pct' => 0, 'service_pct' => 0, 'fixed_fee' => 0],
+        ],
+        // Fee check: window, the gap (percentage points) that raises an alert, and the fewest orders worth comparing.
+        'check_days' => 30,
+        'drift_points' => 0.5,
+        'min_orders' => 20,
+        'loss_days' => 7,
+    ],
+
     // Polling window overlap so an order updated during a sync is not missed.
     'order_sync_overlap_minutes' => 5,
 ];
