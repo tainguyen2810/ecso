@@ -400,6 +400,9 @@ async function createReturn() {
                             <dt class="text-muted-foreground">Tiền hàng</dt><dd class="text-right tabular-nums">{{ formatMoney(order.subtotal) }}</dd>
                             <dt class="text-muted-foreground">Phí vận chuyển</dt><dd class="text-right tabular-nums">{{ formatMoney(order.shipping_fee) }}</dd>
                             <dt class="text-muted-foreground">Giảm giá</dt><dd class="text-right tabular-nums">−{{ formatMoney(order.discount) }}</dd>
+                            <template v-if="Number(order.tax_amount ?? 0) > 0">
+                                <dt class="text-muted-foreground">{{ order.prices_include_tax === false ? 'Thuế GTGT' : 'Trong đó thuế GTGT' }} {{ Number(order.tax_rate) }}%</dt><dd class="text-right tabular-nums" data-testid="order-tax">{{ formatMoney(order.tax_amount!) }}</dd>
+                            </template>
                             <dt class="mt-1 border-t pt-2 font-semibold">Khách trả</dt><dd class="mt-1 border-t pt-2 text-right text-lg font-bold tabular-nums text-blue-600">{{ formatMoney(order.total) }}</dd>
                         </dl>
                     </div>
