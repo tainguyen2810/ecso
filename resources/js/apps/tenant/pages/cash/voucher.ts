@@ -2,7 +2,7 @@ import { formatDateTime, formatMoney } from '@/shared/lib/utils';
 import { paymentMethods } from '../orders/labels';
 
 export type Direction = 'receipt' | 'payment';
-export type Source = 'voucher' | 'order_payment' | 'supplier_payment';
+export type Source = 'voucher' | 'order_payment' | 'supplier_payment' | 'shift_movement';
 export type PartyKind = 'customer' | 'supplier' | 'staff' | 'carrier' | 'other';
 
 export interface VoucherRow {
@@ -16,7 +16,7 @@ export interface VoucherRow {
     method: string;
     amount: number;
     paid_at: string;
-    document: { kind: 'order' | 'purchase'; id: string; number: string } | null;
+    document: { kind: 'order' | 'purchase' | 'shift'; id: string; number: string } | null;
     reference: string | null;
     note: string | null;
     created_by: string | null;
@@ -45,7 +45,7 @@ export const partyKinds: Record<PartyKind, string> = {
     other: 'Đối tượng khác',
 };
 
-export const sourceLabels: Record<Source, string> = { voucher: 'Lập tay', order_payment: 'Tự động từ đơn hàng', supplier_payment: 'Tự động từ trả NCC' };
+export const sourceLabels: Record<Source, string> = { voucher: 'Lập tay', order_payment: 'Tự động từ đơn hàng', supplier_payment: 'Tự động từ trả NCC', shift_movement: 'Tự động từ ca bán hàng' };
 
 /** Code shown for a row: the voucher number, or the source document for automatic rows. */
 export function voucherCode(v: VoucherRow): string {
@@ -54,6 +54,7 @@ export function voucherCode(v: VoucherRow): string {
 
 export function documentLink(v: Pick<VoucherRow, 'document'>): string | null {
     if (!v.document) return null;
+    if (v.document.kind === 'shift') return '/pos/shifts';
     return v.document.kind === 'order' ? `/orders/${v.document.id}` : `/purchasing/${v.document.id}`;
 }
 
