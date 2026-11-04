@@ -41,20 +41,37 @@ class CustomerImporter
 
     public const STATUSES = ['đang giao dịch' => 'active', 'ngừng giao dịch' => 'inactive', 'active' => 'active', 'inactive' => 'inactive'];
 
+    /** Rows imported at once, while the user waits (config ecso.customer_import.sync_rows); a larger file is checked and imported in the background. */
     public const MAX_ROWS = 5000;
+
+    /** Rows of one file imported in the background (config ecso.customer_import.background_rows). */
+    public const BACKGROUND_MAX_ROWS = 30000;
+
+    public static function syncRows(): int
+    {
+        return (int) config('ecso.customer_import.sync_rows', self::MAX_ROWS);
+    }
+
+    public static function backgroundRows(): int
+    {
+        return (int) config('ecso.customer_import.background_rows', self::BACKGROUND_MAX_ROWS);
+    }
 
     public function __construct(private readonly CustomerService $customers) {}
 
     /**
-     * @return array{rows: array<int, array<string, string>>, errors: list<array{row: int, message: string}>}
+     * Reads at most $max rows; `more` tells that the file has more (no error is added for it, the caller decides).
+     *
+     * @return array{rows: array<int, array<string, string>>, errors: list<array{row: int, message: string}>, more: bool}
      */
-    public function read(string $path, string $extension): array
+    public function read(string $path, string $extension, int $max = self::MAX_ROWS): array
     {
         $reader = strtolower($extension) === 'xlsx' ? new XlsxReader : new CsvReader;
         $reader->open($path);
 
         $rows = [];
         $errors = [];
+        $more = false;
         $header = null;
         $line = 0;
         $byHeader = array_flip(array_map(fn ($h) => mb_strtolower($h), self::COLUMNS));
@@ -79,8 +96,8 @@ class CustomerImporter
                 if (implode('', $cells) === '') {
                     continue;
                 }
-                if (count($rows) >= self::MAX_ROWS) {
-                    $errors[] = ['row' => $line, 'message' => 'Tệp vượt quá '.self::MAX_ROWS.' dòng.'];
+                if (count($rows) >= $max) {
+                    $more = true;
                     break 2;
                 }
 
@@ -97,14 +114,15 @@ class CustomerImporter
 
         $reader->close();
 
-        return ['rows' => $rows, 'errors' => $errors];
+        return ['rows' => $rows, 'errors' => $errors, 'more' => $more];
     }
 
     /**
      * @param  array<int, array<string, string>>  $rows  keyed by file line number
+     * @param  (callable(int): void)|null  $progress  told how many rows are written so far, every 100 rows
      * @return array{created: int, updated: int, errors: list<array{row: int, message: string}>, dry_run: bool}
      */
-    public function import(array $rows, bool $dryRun = false): array
+    public function import(array $rows, bool $dryRun = false, ?callable $progress = null): array
     {
         $byCode = Customer::query()->pluck('id', 'code')->mapWithKeys(fn ($id, $code) => [mb_strtolower($code) => $id]);
         $byPhone = Customer::query()->whereNotNull('phone_hash')->pluck('id', 'phone_hash');
@@ -206,12 +224,16 @@ class CustomerImporter
             return ['created' => $errors ? 0 : $created, 'updated' => $errors ? 0 : $updated, 'errors' => $errors, 'dry_run' => $dryRun];
         }
 
-        DB::transaction(function () use ($plans) {
+        DB::transaction(function () use ($plans, $progress) {
             $existing = Customer::query()->whereIn('id', array_filter(array_column($plans, 'id')))->get()->keyBy('id');
+            $done = 0;
             foreach ($plans as $plan) {
                 $plan['id'] === null
                     ? $this->customers->create($plan['data'] + ['source' => 'import'])
                     : $this->customers->update($existing[$plan['id']], $plan['data']);
+                if ($progress !== null && ++$done % 100 === 0) {
+                    $progress($done);
+                }
             }
         });
 

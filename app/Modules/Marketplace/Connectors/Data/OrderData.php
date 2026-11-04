@@ -53,5 +53,10 @@ final class OrderData
         public readonly ?string $paymentStatus = null,
         public readonly bool $ownsCustomer = false,
         public readonly ?array $refunds = null,
+        // The buyer's account on a marketplace (Shopee buyer_user_id / buyer_username, TikTok user_id): an id that
+        // stays the same across orders, unlike the masked phone. Lets ECSO know a returning buyer without keeping
+        // their contact details.
+        public readonly ?string $buyerAccountId = null,
+        public readonly ?string $buyerAccountName = null,
     ) {}
 }

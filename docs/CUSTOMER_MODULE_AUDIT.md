@@ -187,8 +187,8 @@ Mỗi đợt: một PR, test + CI xanh, tự merge vào `main`, gửi lệnh `su
 - **Đợt D**: thêm bảng `customer_identities` và `CustomerResolver`. Thứ tự nhận diện là mã khách trên kênh, rồi số điện thoại, rồi email (chỉ khi email khớp đúng một thẻ). Không bao giờ ghép theo tên. Kênh chỉ điền vào ô còn trống. Có trang Khách trùng, gộp có xem trước và chọn từng trường. Thẻ bị gộp được lưu (mã hóa) trong `customer_merges`. Chỉ gộp được khách cùng cửa hàng. Test: `CustomerMergeTest`.
 - **Đợt E**: việc cần làm với khách (có hạn, người phụ trách, trễ hẹn), ghi chú có loại liên hệ, phân khúc khách tính từ đơn thật, tự xếp nhóm theo ngưỡng chi tiêu hoặc số đơn (`ecso:customers:auto-group` chạy lúc 03:30, chỉ xếp khách chưa có nhóm) và thẻ sản phẩm hay mua. Test: `CustomerCareTest`.
 
-**Còn lại, chưa làm** (chờ người dùng quyết định):
-- Ẩn khách hoặc xóa mềm. Hiện tại khách đã có đơn thì không xóa được, và có thể chuyển sang trạng thái ngừng giao dịch.
-- Nhập file lớn qua hàng đợi.
-- Đơn WooCommerce chuyển sang dùng `CustomerResolver`. Việc này do thread WooCommerce làm.
-- Shopee và TikTok chưa có kết nối thật nên chưa ghi định danh khách từ hai sàn này.
+**Sau đợt E** (người dùng chọn 04/11/2026):
+- Ẩn khách: dùng trạng thái "Ngừng giao dịch" có sẵn, không làm xóa mềm.
+- Nhập file lớn chạy ngầm: file trên 5.000 dòng (tối đa 30.000) được kiểm tra rồi nhập ở nền, vẫn theo nguyên tắc có lỗi thì không nhập dòng nào. Test: `CustomerImportBackgroundTest`.
+- Đơn WooCommerce dùng `CustomerResolver`: thread WooCommerce làm.
+- Khách trên sàn: đơn có mã tài khoản người mua được gắn vào thẻ khách theo mã đó (thẻ chỉ có tên). Đã kiểm tra trên sàn giả lập; Shopee/TikTok thật dùng được ngay khi connector điền `buyerAccountId`. Test: `MarketplaceBuyerTest`, `SalesCustomerIdentityConcurrencyTest`.

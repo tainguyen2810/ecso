@@ -15,11 +15,13 @@ use InvalidArgumentException;
 class FakeMarketplace
 {
     private const BUYERS = [
-        ['Nguyễn Văn An', '0901234567', '12 Lê Lợi, P. Bến Nghé, Q.1, TP.HCM'],
-        ['Trần Thị Bình', '0912345678', '45 Hàng Bài, Q. Hoàn Kiếm, Hà Nội'],
-        ['Lê Hoàng Cường', '0987654321', '88 Nguyễn Văn Linh, Q. Hải Châu, Đà Nẵng'],
-        ['Phạm Thu Dung', '0934567890', '7 Trần Hưng Đạo, TP. Cần Thơ'],
-        ['Võ Minh Em', '0978123456', '210 Lạch Tray, Q. Ngô Quyền, Hải Phòng'],
+        // name, phone, address, buyer account id and user name on the marketplace (as Shopee buyer_user_id /
+        // buyer_username and TikTok user_id send them)
+        ['Nguyễn Văn An', '0901234567', '12 Lê Lợi, P. Bến Nghé, Q.1, TP.HCM', '700100001', 'an.nguyen'],
+        ['Trần Thị Bình', '0912345678', '45 Hàng Bài, Q. Hoàn Kiếm, Hà Nội', '700100002', 'binhtran88'],
+        ['Lê Hoàng Cường', '0987654321', '88 Nguyễn Văn Linh, Q. Hải Châu, Đà Nẵng', '700100003', 'cuong.le'],
+        ['Phạm Thu Dung', '0934567890', '7 Trần Hưng Đạo, TP. Cần Thơ', '700100004', 'dungpham'],
+        ['Võ Minh Em', '0978123456', '210 Lạch Tray, Q. Ngô Quyền, Hải Phòng', '700100005', 'em.vo'],
     ];
 
     /**
@@ -92,7 +94,7 @@ class FakeMarketplace
             'shipping_fee' => $shipping,
             'discount' => 0,
             'total' => $subtotal + $shipping,
-            'buyer' => ['name' => $buyer[0], 'phone' => $buyer[1], 'address' => $buyer[2]],
+            'buyer' => ['name' => $buyer[0], 'phone' => $buyer[1], 'address' => $buyer[2], 'user_id' => $buyer[3], 'username' => $buyer[4]],
             'carrier' => 'Giao Hàng Giả Lập',
             'tracking_number' => null,
             'note' => null,

@@ -148,6 +148,8 @@ class FakeConnector implements MarketplaceConnector
             buyerNote: $data['note'] ?? null,
             cancelReason: $data['cancel_reason'] ?? null,
             raw: $data,
+            buyerAccountId: isset($data['buyer']['user_id']) ? (string) $data['buyer']['user_id'] : null,
+            buyerAccountName: $data['buyer']['username'] ?? null,
         );
     }
 

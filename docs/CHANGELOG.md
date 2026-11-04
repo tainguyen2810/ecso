@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Khách hàng: nhập file lớn chạy ngầm, nhận khách quay lại trên sàn (2026-11-04)
+- **Nhập file khách lớn chạy ngầm**: file trên 5.000 dòng (tối đa 30.000 dòng, 20 MB) được kiểm tra rồi nhập ở nền (bảng `customer_imports`, job `ImportCustomersJob`). Vẫn kiểm tra toàn bộ trước, có lỗi thì không nhập dòng nào; lúc nhập kiểm tra lại (dữ liệu có thể đã đổi) và ghi trong một giao dịch, lỗi giữa chừng thì không có dòng nào được ghi. Có thanh tiến độ, đóng cửa sổ vẫn chạy, danh sách khách hiện tiến độ. Mỗi cửa hàng nhập một tệp một lúc; tệp xóa ngay khi xong, tệp đã kiểm tra mà không nhập bị xóa sau 24 giờ. Đo thử 30.000 dòng: kiểm tra khoảng 1 giây, nhập khoảng 2,5 phút.
+- **Nhận khách quay lại trên sàn**: đơn sàn có mã tài khoản người mua (Shopee `buyer_user_id`, TikTok `user_id`) được gắn vào một thẻ khách theo mã đó (`customer_identities`), đơn sau của cùng tài khoản về cùng thẻ dù số điện thoại bị che khác nhau. Thẻ chỉ có tên (tên người nhận hoặc tên tài khoản); số điện thoại và địa chỉ của sàn chỉ nằm trên đơn. Không bao giờ ghép theo tên. Đơn sàn tính vào số đơn và tổng mua của khách, không tính vào công nợ. Hai đơn của cùng người mua mới đến cùng lúc chỉ tạo một thẻ. Đã chạy trên sàn giả lập; Shopee/TikTok thật dùng được ngay khi kết nối điền hai trường này.
+
 ### Đơn WooCommerce nhận diện khách như các kênh khác (2026-11-04)
 - Đơn website tìm thẻ khách theo thứ tự: **mã khách trên website** (khách có tài khoản), rồi **số điện thoại**, rồi **email** (chỉ khi đúng một khách có email đó). Không bao giờ ghép theo tên. Khách có tài khoản đổi số điện thoại hay email vẫn về đúng một thẻ.
 - Đơn sau không ghi đè thẻ khách: chỉ điền các ô thẻ đang trống. Đơn vẫn giữ thông tin liên hệ của chính nó.

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\Idempotent;
+use App\Modules\Sales\Models\CustomerImport;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schedule;
@@ -43,3 +44,7 @@ Schedule::command('ecso:billing:sweep')->hourly()->withoutOverlapping()->onOneSe
 // Idempotency keys of sales and payments are only needed for retries: kept two days.
 Schedule::call(fn () => DB::table('idempotency_keys')->where('created_at', '<', now()->subDays(Idempotent::KEEP_DAYS))->delete())
     ->name('idempotency-keys-prune')->dailyAt('03:10')->onOneServer();
+
+// Customer files checked but never imported are dropped after a day (they hold phones and addresses); a background
+// import stuck for two hours (its worker died) is marked failed: its transaction was rolled back.
+Schedule::call(fn () => CustomerImport::pruneStale())->name('customer-imports-prune')->hourlyAt(23)->onOneServer();
