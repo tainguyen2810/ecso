@@ -42,6 +42,8 @@ test('customer list: views, extra filters, column picker and bulk tag', async ({
     await page.getByRole('checkbox', { name: 'Phụ trách' }).check();
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('customer-table').locator('thead')).toContainText('Tags');
+    await page.reload(); // the choice is remembered on this browser
+    await expect(page.getByTestId('customer-table').locator('thead')).toContainText('Phụ trách');
     await shot(page, '02-customer-filters');
 
     await page.getByLabel('Chọn tất cả trên trang').check();
@@ -50,6 +52,11 @@ test('customer list: views, extra filters, column picker and bulk tag', async ({
     await shot(page, '03-customer-bulk');
     await page.getByTestId('bulk-apply').click();
     await expect(page.getByTestId('customer-table')).toContainText('Tết 2027');
+
+    await page.getByTestId('column-picker').click();
+    await page.getByRole('button', { name: 'Về mặc định' }).click();
+    await expect(page.getByTestId('customer-table').locator('thead')).not.toContainText('Phụ trách');
+    await expect(page.getByTestId('customer-table').locator('thead')).toContainText('Mua gần nhất');
 });
 
 test('customer detail: profile, group terms, debt book, addresses and notes', async ({ page }) => {

@@ -17,6 +17,7 @@ use App\Modules\Sales\Services\CustomerLedger;
 use App\Modules\Sales\Services\CustomerService;
 use App\Modules\Sales\Support\PhoneNumber;
 use App\Modules\Tenancy\Models\TenantUser;
+use App\Shared\Support\ReportRange;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -127,7 +128,7 @@ class CustomerController extends Controller
             'average_order' => $n ? bcdiv((string) $row->total, (string) $n, 2) : null,
             // Average days between two purchases (needs at least two orders).
             'purchase_interval_days' => $n > 1 && $first && $last ? round($first->diffInDays($last) / ($n - 1), 1) : null,
-            'days_since_last_order' => $last ? (int) $last->startOfDay()->diffInDays(now()->startOfDay()) : null,
+            'days_since_last_order' => $last ? (int) $last->setTimezone(ReportRange::timezone())->startOfDay()->diffInDays(ReportRange::now()->startOfDay()) : null,
             'returned_value' => bcadd($returned, '0', 2),
             'terms_days' => $customer->payment_terms_days ?? $customer->customerGroup?->payment_terms_days,
             'credit_limit' => $customer->credit_limit !== null ? (string) $customer->credit_limit : ($customer->customerGroup?->credit_limit !== null ? (string) $customer->customerGroup->credit_limit : null),
@@ -274,15 +275,16 @@ class CustomerController extends Controller
             ->when($filters['type'] ?? null, fn ($q, $v) => $q->where('customers.type', $v))
             ->when($filters['birth_month'] ?? null, fn ($q, $m) => $q->whereMonth('customers.birthday', (int) $m))
             ->when($filters['tag'] ?? null, fn ($q, $t) => $q->whereJsonContains('customers.tags', $t))
-            ->when($filters['created_from'] ?? null, fn ($q, $d) => $q->whereDate('customers.created_at', '>=', $d))
-            ->when($filters['created_to'] ?? null, fn ($q, $d) => $q->whereDate('customers.created_at', '<=', $d))
+            // Dates are days on the shop's clock; timestamps are UTC (ReportRange converts the bounds).
+            ->when($filters['created_from'] ?? null, fn ($q, $d) => $q->where('customers.created_at', '>=', ReportRange::date($d)))
+            ->when($filters['created_to'] ?? null, fn ($q, $d) => $q->where('customers.created_at', '<', ReportRange::date($d)->addDay()))
             ->when(! empty($filters['debt']), fn ($q) => $q->having('debt', '>', 0))
             ->when(! empty($filters['overdue']), fn ($q) => $q->having('overdue', '>', 0))
             ->when(isset($filters['spent_min']), fn ($q) => $q->having('total_spent', '>=', $filters['spent_min']))
             ->when(isset($filters['spent_max']), fn ($q) => $q->having('total_spent', '<=', $filters['spent_max']))
             ->when(isset($filters['orders_min']), fn ($q) => $q->having('orders_count', '>=', (int) $filters['orders_min']))
-            ->when($filters['last_order_from'] ?? null, fn ($q, $d) => $q->having('last_order_at', '>=', $d.' 00:00:00'))
-            ->when($filters['last_order_to'] ?? null, fn ($q, $d) => $q->having('last_order_at', '<=', $d.' 23:59:59'));
+            ->when($filters['last_order_from'] ?? null, fn ($q, $d) => $q->having('last_order_at', '>=', ReportRange::date($d)))
+            ->when($filters['last_order_to'] ?? null, fn ($q, $d) => $q->having('last_order_at', '<', ReportRange::date($d)->addDay()));
     }
 
     /** @return array<string, mixed> */
