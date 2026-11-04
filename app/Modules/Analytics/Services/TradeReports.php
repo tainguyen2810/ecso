@@ -2,6 +2,7 @@
 
 namespace App\Modules\Analytics\Services;
 
+use App\Modules\Analytics\Support\RevenuePolicy;
 use App\Modules\Analytics\Support\Search;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\OrderReturn;
@@ -23,20 +24,19 @@ class TradeReports
     public function __construct(private readonly TenantContext $context) {}
 
     /**
-     * Sales per SKU for orders placed in the range (cancelled and returned orders excluded). Line discounts are
+     * Sales per SKU for orders whose revenue is recognised in the range (RevenuePolicy, as in the sales report and
+     * Tài chính), so every line has shipped and carries its cost. Line discounts are
      * per SKU; order-level discounts are not spread over lines, so they show only in the sales report totals.
      *
      * @return array<string, mixed>
      */
     public function salesByProduct(CarbonImmutable $from, CarbonImmutable $to, ?string $q = null): array
     {
-        $grouped = DB::table('order_items as i')
+        $grouped = RevenuePolicy::recognized(DB::table('order_items as i')
             ->join('orders as o', 'o.id', '=', 'i.order_id')
             ->leftJoin('product_variants as v', 'v.id', '=', 'i.product_variant_id')
             ->leftJoin('products as p', 'p.id', '=', 'v.product_id')
-            ->where('o.tenant_id', $this->tenant())
-            ->whereBetween('o.placed_at', [$from, $to])
-            ->whereNotIn('o.status', self::EXCLUDED)
+            ->where('o.tenant_id', $this->tenant()), 'o', $from, $to)
             ->when($q, fn ($w) => $w->where(fn ($s) => $s->where('v.sku', 'like', Search::contains($q))->orWhere('p.name', 'like', Search::contains($q))->orWhere('i.name', 'like', Search::contains($q))))
             ->groupBy('i.product_variant_id', 'v.ulid', 'v.sku', 'v.name', 'p.name')
             ->selectRaw('v.ulid, v.sku, v.name as variant_name, p.name as product_name, MAX(i.name) as item_name, MAX(i.seller_sku) as seller_sku, '
@@ -77,7 +77,7 @@ class TradeReports
             'missing_cost_lines' => (int) $all->missing,
         ];
 
-        return ['range' => $this->range($from, $to), 'rows' => $out, 'totals' => $totals, ...$this->truncation(count($out), (int) $all->n)];
+        return ['range' => $this->range($from, $to), 'basis' => 'completed', 'rows' => $out, 'totals' => $totals, ...$this->truncation(count($out), (int) $all->n)];
     }
 
     /**

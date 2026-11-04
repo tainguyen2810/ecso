@@ -46,6 +46,8 @@ it('reports days on the shop clock (Asia/Ho_Chi_Minh), not in UTC', function () 
         ->and($nov['daily'])->toEqual([['day' => '2026-11-01', 'orders' => 1, 'revenue' => (float) $order->total]])
         ->and($oct['ordered']['orders'])->toBe(0);
 
+    // The sales report dates an order by when its revenue is recognised (here: completed at the same moment).
+    Order::withoutGlobalScopes()->whereKey($order->id)->update(['status' => OrderStatus::COMPLETED, 'delivered_at' => '2026-10-31 17:30:00', 'completed_at' => '2026-10-31 17:30:00']);
     $sales = $api->getJson('/api/v1/reports/sales?from=2026-11-01&to=2026-11-01&by=day')->assertOk()->json('data');
     expect(collect($sales['rows'])->firstWhere('label', '2026-11-01')['orders'])->toBe(1);
     expect($api->getJson('/api/v1/orders?from=2026-11-01&to=2026-11-01')->assertOk()->json('meta.total'))->toBe(1)

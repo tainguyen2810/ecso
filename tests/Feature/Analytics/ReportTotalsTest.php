@@ -151,5 +151,5 @@ it('splits delivery status into groups that add up to every order, and reports s
         ->and($delivery->sum())->toBe(3);
 
     expect((float) $overview['sales']['shipping'])->toEqual(30000.0)
-        ->and($overview['sales']['basis'])->toBe('placed');
+        ->and($overview['sales']['basis'])->toBe('completed');
 });

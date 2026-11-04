@@ -2,6 +2,7 @@
 
 namespace App\Modules\Analytics\Services;
 
+use App\Modules\Analytics\Support\RevenuePolicy;
 use App\Modules\Analytics\Support\Search;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Purchasing\Services\OnOrderQuery;
@@ -26,7 +27,7 @@ class OrderReports
     /**
      * One row per order (Sapo "Thống kê theo đơn hàng").
      *
-     * @param  array{q?: string|null, channel?: int|null, warehouse?: int|null}  $filters
+     * @param  array{q?: string|null, channel?: int|null, warehouse?: int|null, basis?: string}  $filters
      * @return array<string, mixed>
      */
     public function byOrder(CarbonImmutable $from, CarbonImmutable $to, array $filters = []): array
@@ -75,13 +76,13 @@ class OrderReports
             'gross_profit' => round((float) $all->total - (float) $all->shipping_fee - (float) $all->cogs, 2),
         ];
 
-        return ['range' => $this->range($from, $to), 'rows' => $rows, 'totals' => $totals, ...$this->truncation(count($rows), $totals['orders'])];
+        return ['range' => $this->range($from, $to), 'basis' => $filters['basis'] ?? 'placed', 'rows' => $rows, 'totals' => $totals, ...$this->truncation(count($rows), $totals['orders'])];
     }
 
     /**
      * One row per order line (Sapo "Báo cáo bán hàng chi tiết").
      *
-     * @param  array{q?: string|null, channel?: int|null, warehouse?: int|null}  $filters
+     * @param  array{q?: string|null, channel?: int|null, warehouse?: int|null, basis?: string}  $filters
      * @return array<string, mixed>
      */
     public function lines(CarbonImmutable $from, CarbonImmutable $to, array $filters = []): array
@@ -134,7 +135,7 @@ class OrderReports
             'gross_profit' => round((float) $all->amount - (float) $all->cogs, 2),
         ];
 
-        return ['range' => $this->range($from, $to), 'rows' => $rows, 'totals' => $totals, ...$this->truncation(count($rows), $totals['lines'])];
+        return ['range' => $this->range($from, $to), 'basis' => $filters['basis'] ?? 'placed', 'rows' => $rows, 'totals' => $totals, ...$this->truncation(count($rows), $totals['lines'])];
     }
 
     /**
@@ -227,18 +228,21 @@ class OrderReports
         ], ...$this->truncation(count($out), (int) $all->n)];
     }
 
-    /** @param  array{q?: string|null, channel?: int|null, warehouse?: int|null}  $filters */
+    /** @param  array{q?: string|null, channel?: int|null, warehouse?: int|null, basis?: string}  $filters */
     private function orders(CarbonImmutable $from, CarbonImmutable $to, array $filters): Builder
     {
         $like = isset($filters['q']) ? Search::contains($filters['q']) : null;
 
-        return DB::table('orders as o')
+        $query = DB::table('orders as o')
             ->leftJoin('customers as c', 'c.id', '=', 'o.customer_id')
             ->leftJoin('marketplace_accounts as ma', 'ma.id', '=', 'o.marketplace_account_id')
             ->leftJoin('sales_channels as sc', 'sc.id', '=', 'o.sales_channel_id')
-            ->where('o.tenant_id', $this->tenant())
-            ->whereBetween('o.placed_at', [$from, $to])
-            ->whereNotIn('o.status', self::EXCLUDED)
+            ->where('o.tenant_id', $this->tenant());
+        $query = ($filters['basis'] ?? 'placed') === 'completed'
+            ? RevenuePolicy::recognized($query, 'o', $from, $to)
+            : $query->whereBetween('o.placed_at', [$from, $to])->whereNotIn('o.status', self::EXCLUDED);
+
+        return $query
             ->when($filters['channel'] ?? null, fn (Builder $w, int $id) => $w->where('o.sales_channel_id', $id))
             ->when($filters['warehouse'] ?? null, fn (Builder $w, int $id) => $w->where('o.warehouse_id', $id))
             ->when($like, fn (Builder $w) => $w->where(fn (Builder $s) => $s->where('o.external_order_id', 'like', $like)->orWhere('c.name', 'like', $like)));

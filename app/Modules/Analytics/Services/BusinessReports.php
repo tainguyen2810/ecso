@@ -2,6 +2,7 @@
 
 namespace App\Modules\Analytics\Services;
 
+use App\Modules\Analytics\Support\RevenuePolicy;
 use App\Modules\Analytics\Support\Search;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Sales\Models\OrderPayment;
@@ -53,11 +54,11 @@ class BusinessReports
             ->groupBy('order_id')
             ->selectRaw('order_id, SUM(COALESCE(cost_snapshot, 0) * quantity) as cogs, SUM(CASE WHEN cost_snapshot IS NULL AND mapping_status <> \'service\' THEN 1 ELSE 0 END) as missing, SUM(quantity) as units');
 
-        $base = DB::table('orders')
+        // Orders whose revenue is recognised in the period (RevenuePolicy: marketplaces at completion, own channels at
+        // delivery), the same orders as Tài chính and Lãi lỗ. Their goods have shipped, so their cost is captured.
+        $base = RevenuePolicy::recognized(DB::table('orders')
             ->leftJoinSub($costs, 'c', 'c.order_id', '=', 'orders.id')
-            ->where('orders.tenant_id', $this->tenant())
-            ->whereBetween('orders.placed_at', [$from, $to])
-            ->whereNotIn('orders.status', self::EXCLUDED);
+            ->where('orders.tenant_id', $this->tenant()), 'orders', $from, $to);
 
         $metrics = 'COUNT(*) as orders, COALESCE(SUM(c.units), 0) as units, COALESCE(SUM(orders.total), 0) as revenue, '
             .'COALESCE(SUM(orders.subtotal - orders.discount), 0) as goods, COALESCE(SUM(orders.shipping_fee), 0) as shipping, COALESCE(SUM(c.cogs), 0) as cogs, COALESCE(SUM(c.missing), 0) as missing';
@@ -85,8 +86,8 @@ class BusinessReports
                 ->selectRaw("COALESCE(warehouses.name, 'Chưa gán kho') as label, NULL as kind, {$metrics}")
                 ->orderByDesc('revenue')->get(),
             default => (clone $base)
-                ->groupByRaw(ReportRange::day('orders.placed_at', $from))
-                ->selectRaw(ReportRange::day('orders.placed_at', $from)." as label, NULL as kind, {$metrics}")
+                ->groupByRaw(ReportRange::day(RevenuePolicy::dateSql('orders'), $from))
+                ->selectRaw(ReportRange::day(RevenuePolicy::dateSql('orders'), $from)." as label, NULL as kind, {$metrics}")
                 ->orderBy('label')->get(),
         };
 
@@ -97,15 +98,19 @@ class BusinessReports
         $totals = $this->salesRow((clone $base)->selectRaw("'total' as label, NULL as kind, {$metrics}")->first());
         $cancelled = DB::table('orders')->where('tenant_id', $this->tenant())->whereBetween('placed_at', [$from, $to])
             ->whereIn('status', self::EXCLUDED)->selectRaw('COUNT(*) as n, COALESCE(SUM(total), 0) as total')->first();
+        // Marketplace orders delivered in the period that the marketplace has not completed yet: not revenue yet.
+        $awaiting = RevenuePolicy::awaitingCompletion(DB::table('orders')->where('orders.tenant_id', $this->tenant()), 'orders', $from, $to)
+            ->selectRaw('COUNT(*) as n, COALESCE(SUM(orders.subtotal - orders.discount), 0) as goods')->first();
 
         return [
             'range' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
             'by' => $by,
             'rows' => $rows,
-            // Which date puts an order in the period: 'placed' (ngày đặt). Labels on the pages follow it.
-            'basis' => 'placed',
-            'totals' => [...$totals, 'basis' => 'placed'],
+            // Which date puts an order in the period: 'completed' (ngày ghi nhận doanh thu, RevenuePolicy).
+            'basis' => 'completed',
+            'totals' => [...$totals, 'basis' => 'completed'],
             'excluded' => ['orders' => (int) $cancelled->n, 'revenue' => (float) $cancelled->total],
+            'awaiting' => ['orders' => (int) $awaiting->n, 'goods' => round((float) $awaiting->goods, 2)],
         ];
     }
 
