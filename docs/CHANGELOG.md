@@ -41,6 +41,7 @@
 - Sửa: đơn Woo chuyển "Đã hoàn tiền" (refunded) trước khi giao thì thành Đã hủy và nhả hàng giữ, không trừ kho. Đơn đã giao rồi mới hoàn thì mở phiếu trả hàng; kho chỉ cộng lại khi nhận và kiểm hàng.
 - Sửa: Enter trong ô tìm SKU khi quét hai mã liên tiếp nhanh hơn kết quả tìm kiếm không còn bỏ sót mã đầu.
 - Migration `2026_11_12_100000_add_woo_order_details`. Chỉ thử với cửa hàng Woo giả lập trong test, chưa thử với website thật.
+
 ### Tài chính, vòng C–E: phí sàn, lợi nhuận nhiều tầng, lọc theo shop (2026-11-04)
 - **Một nguồn số liệu lợi nhuận** (`App\Modules\Analytics\Support\ProfitFigures`) cho trang Tài chính và Báo cáo lãi lỗ: doanh thu thuần, giá vốn, lợi nhuận gộp, **lợi nhuận đóng góp** (gộp − phí sàn + phí ship khách trả − chi phí bán hàng) và **lợi nhuận quản trị ước tính** (đóng góp − hao hụt kho − chi phí vận hành, chi phí khác + thu nhập khác). Ghi rõ là số ước tính, chưa phải lợi nhuận kế toán.
 - **Phí sàn** tách 3 loại: *đã xác nhận* (từ file đối soát đã nhập), *ước tính* (theo bảng phí của shop cho đơn chưa đối soát), *chưa biết* (shop chưa có bảng phí: đếm số đơn, không tính là 0). Đơn kênh riêng, POS, website không có phí sàn.
