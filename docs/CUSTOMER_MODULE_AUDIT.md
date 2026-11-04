@@ -182,3 +182,13 @@ Mỗi đợt: một PR, test + CI xanh, tự merge vào `main`, gửi lệnh `su
 ## Trạng thái triển khai
 
 - **Đợt A** (duyệt 04/11/2026): sửa L1–L5, L7–L10 và tách quyền. Quyết định của người dùng: đơn COD và đơn giao thất bại **không** tính vào công nợ khách. L6 (khách không SĐT) giữ nguyên theo nguyên tắc "không gộp khách chỉ vì trùng tên": người bán tìm và chọn khách có sẵn trong form đơn.
+- **Đợt B**: trang khách có 7 tab, có phân trang ở máy chủ. Có nợ đầu kỳ và phiếu điều chỉnh. Mỗi chứng từ phải có lý do, không sửa được, chỉ hủy kèm lý do. Khi thu nợ, khoản nợ đầu kỳ và điều chỉnh được trả trước, ghi bằng một phiếu thu trong Sổ quỹ (không tính vào lãi lỗ). Có hạn thanh toán và hạn mức nợ theo khách hoặc theo nhóm. Nợ quá hạn hiện ở trang khách, trong danh sách và trong báo cáo. Sổ công nợ xuất được ra Excel. Test: `CustomerDebtEntriesTest`.
+- **Đợt C**: chiết khấu %, chính sách giá và hình thức thanh toán của nhóm được áp vào đơn và POS. Máy chủ kiểm tra để nhân viên không có quyền sửa giá chỉ được đúng chiết khấu nhóm. Khi tạo đơn có cảnh báo hạn mức (không chặn) và chọn được địa chỉ đã lưu. Thêm loại khách, nguồn khách, thông tin xuất hóa đơn (địa chỉ được mã hóa) và nhóm ngừng sử dụng. Danh sách sắp xếp được theo cột, xuất theo đúng bộ lọc và hiện dạng thẻ trên điện thoại. Test: `CustomerProfileTest`.
+- **Đợt D**: thêm bảng `customer_identities` và `CustomerResolver`. Thứ tự nhận diện là mã khách trên kênh, rồi số điện thoại, rồi email (chỉ khi email khớp đúng một thẻ). Không bao giờ ghép theo tên. Kênh chỉ điền vào ô còn trống. Có trang Khách trùng, gộp có xem trước và chọn từng trường. Thẻ bị gộp được lưu (mã hóa) trong `customer_merges`. Chỉ gộp được khách cùng cửa hàng. Test: `CustomerMergeTest`.
+- **Đợt E**: việc cần làm với khách (có hạn, người phụ trách, trễ hẹn), ghi chú có loại liên hệ, phân khúc khách tính từ đơn thật, tự xếp nhóm theo ngưỡng chi tiêu hoặc số đơn (`ecso:customers:auto-group` chạy lúc 03:30, chỉ xếp khách chưa có nhóm) và thẻ sản phẩm hay mua. Test: `CustomerCareTest`.
+
+**Còn lại, chưa làm** (chờ người dùng quyết định):
+- Ẩn khách hoặc xóa mềm. Hiện tại khách đã có đơn thì không xóa được, và có thể chuyển sang trạng thái ngừng giao dịch.
+- Nhập file lớn qua hàng đợi.
+- Đơn WooCommerce chuyển sang dùng `CustomerResolver`. Việc này do thread WooCommerce làm.
+- Shopee và TikTok chưa có kết nối thật nên chưa ghi định danh khách từ hai sàn này.
