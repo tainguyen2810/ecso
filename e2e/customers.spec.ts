@@ -62,7 +62,16 @@ test('customer detail: profile, group terms, debt book, addresses and notes', as
 
     await page.getByTestId('customer-tabs').getByRole('button', { name: /Công nợ/ }).click();
     await expect(page.getByTestId('customer-ledger')).toContainText('Ghi nhận đơn hàng');
+    await page.getByTestId('debt-adjust').click();
+    await page.getByTestId('de-amount').fill('20000');
+    await page.getByTestId('de-reason').fill('Phí giao lại lần hai');
+    await page.getByTestId('de-save').click();
+    await expect(page.getByTestId('customer-ledger')).toContainText('Điều chỉnh công nợ: Phí giao lại lần hai');
     await shot(page, '05-customer-ledger');
+
+    await page.getByTestId('customer-tabs').getByRole('button', { name: /Trả hàng/ }).click();
+    await page.getByTestId('customer-tabs').getByRole('button', { name: /Ghi chú và hoạt động/ }).click();
+    await expect(page.getByTestId('customer-activity')).toContainText('Điều chỉnh công nợ');
 
     await page.getByTestId('customer-tabs').getByRole('button', { name: /Địa chỉ/ }).click();
     await expect(page.getByText('Kho Long Biên')).toBeVisible();

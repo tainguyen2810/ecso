@@ -82,6 +82,8 @@ class CustomerGroupController extends Controller
             'price_tier' => ['required', Rule::in(CustomerGroup::PRICE_TIERS)],
             'discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'payment_method' => ['nullable', Rule::in(OrderPayment::METHODS)],
+            'payment_terms_days' => ['nullable', 'integer', 'min:0', 'max:365'],
+            'credit_limit' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
         ], [
             'name.unique' => 'Đã có nhóm cùng tên.',
             'code.unique' => 'Mã nhóm đã được dùng.',

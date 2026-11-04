@@ -22,6 +22,7 @@ class CustomerResource extends JsonResource
             'group' => $this->whenLoaded('customerGroup', fn () => $this->customerGroup ? [
                 'id' => $this->customerGroup->ulid, 'code' => $this->customerGroup->code, 'name' => $this->customerGroup->name,
                 'price_tier' => $this->customerGroup->price_tier, 'discount_percent' => (string) $this->customerGroup->discount_percent, 'payment_method' => $this->customerGroup->payment_method,
+                'payment_terms_days' => $this->customerGroup->payment_terms_days, 'credit_limit' => $this->customerGroup->credit_limit !== null ? (string) $this->customerGroup->credit_limit : null,
             ] : null),
             'assignee' => $this->whenLoaded('assignee', fn () => $this->assignee ? ['id' => $this->assignee->ulid, 'name' => $this->assignee->name] : null),
             'birthday' => $this->birthday?->toDateString(),
@@ -32,7 +33,10 @@ class CustomerResource extends JsonResource
             'note' => $this->note,
             'orders_count' => $this->orders_count !== null ? (int) $this->orders_count : null,
             'total_spent' => $this->total_spent !== null ? (string) $this->total_spent : null,
-            'debt' => $this->debt !== null ? (string) $this->debt : null,
+            'debt' => $this->debt !== null ? bcadd((string) $this->debt, '0', 2) : null,
+            'overdue' => $this->overdue !== null ? bcadd((string) $this->overdue, '0', 2) : null,
+            'payment_terms_days' => $this->payment_terms_days,
+            'credit_limit' => $this->credit_limit !== null ? (string) $this->credit_limit : null,
             'last_order_at' => $this->last_order_at ? Carbon::parse($this->last_order_at)->toIso8601String() : null,
             'created_at' => $this->created_at?->toIso8601String(),
         ];

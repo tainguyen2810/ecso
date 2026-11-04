@@ -22,6 +22,7 @@ use Illuminate\Support\Carbon;
  * @property-read int|string|null $orders_count
  * @property-read int|string|null $total_spent
  * @property-read int|string|null $debt
+ * @property-read int|string|null $overdue
  * @property-read string|null $last_order_at
  * @property list<string>|null $tags
  * @property Carbon|null $birthday
@@ -36,13 +37,13 @@ class Customer extends Model
 
     protected $attributes = ['status' => 'active'];
 
-    protected $fillable = ['name', 'email', 'address', 'note', 'birthday', 'gender', 'tax_code', 'tags', 'status'];
+    protected $fillable = ['name', 'email', 'address', 'note', 'birthday', 'gender', 'tax_code', 'tags', 'status', 'payment_terms_days', 'credit_limit'];
 
     protected $hidden = ['id', 'tenant_id', 'phone_hash', 'created_by', 'customer_group_id', 'assigned_user_id'];
 
     protected function casts(): array
     {
-        return ['phone' => 'encrypted', 'address' => 'encrypted', 'birthday' => 'date', 'tags' => 'array'];
+        return ['phone' => 'encrypted', 'address' => 'encrypted', 'birthday' => 'date', 'tags' => 'array', 'credit_limit' => 'decimal:2'];
     }
 
     public function setPhone(?string $phone): void
@@ -55,7 +56,7 @@ class Customer extends Model
 
     /**
      * Adds orders_count, total_spent, last_order_at (cancelled and returned orders do not count, as in the sales
-     * reports) and debt, which follows CustomerDebt: own-channel orders less their returns and net payments.
+     * reports), debt and its overdue part, which follow CustomerDebt.
      *
      * @param  Builder<Customer>  $query
      * @return Builder<Customer>
@@ -65,13 +66,12 @@ class Customer extends Model
         $excluded = "'".OrderStatus::CANCELLED."','".OrderStatus::RETURNED."'";
         $base = fn (string $select) => Order::query()->selectRaw($select)
             ->whereColumn('orders.customer_id', 'customers.id')->whereRaw("orders.status NOT IN ({$excluded})");
-        $debt = CustomerDebt::constrain(Order::query()->whereColumn('orders.customer_id', 'customers.id'))
-            ->selectRaw('GREATEST(COALESCE(SUM('.CustomerDebt::dueSql().'), 0), 0)');
 
         return $query->select('customers.*')
             ->selectSub($base('COUNT(*)'), 'orders_count')
             ->selectSub($base('COALESCE(SUM(total), 0)'), 'total_spent')
-            ->selectSub($debt, 'debt')
+            ->selectRaw(CustomerDebt::customerDebtSql().' as debt')
+            ->selectRaw(CustomerDebt::customerOverdueSql().' as overdue')
             ->selectSub($base('MAX(placed_at)'), 'last_order_at');
     }
 
@@ -103,6 +103,12 @@ class Customer extends Model
     public function orders(): HasMany
     {
         return $this->hasMany(Order::class);
+    }
+
+    /** @return HasMany<CustomerDebtEntry, $this> */
+    public function debtEntries(): HasMany
+    {
+        return $this->hasMany(CustomerDebtEntry::class);
     }
 
     /** @return HasMany<OrderPayment, $this> */

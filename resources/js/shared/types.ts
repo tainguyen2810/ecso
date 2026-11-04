@@ -293,6 +293,8 @@ export interface CustomerGroup {
     price_tier: 'retail' | 'wholesale';
     discount_percent: string;
     payment_method: string | null;
+    payment_terms_days?: number | null;
+    credit_limit?: string | null;
     customers_count: number | null;
     created_at: string | null;
 }
@@ -314,7 +316,8 @@ export interface CustomerNote {
 }
 
 export interface CustomerLedgerEntry {
-    type: 'order' | 'return' | 'payment' | 'refund';
+    type: 'order' | 'return' | 'payment' | 'refund' | 'opening' | 'adjustment' | 'receipt';
+    entry_id?: string;
     ref: string | null;
     order_id: string | null;
     at: string | null;
@@ -330,7 +333,16 @@ export interface Customer {
     phone: string | null;
     email: string | null;
     address: string | null;
-    group: { id: string; code: string; name: string; price_tier: 'retail' | 'wholesale'; discount_percent: string; payment_method: string | null } | null;
+    group: {
+        id: string;
+        code: string;
+        name: string;
+        price_tier: 'retail' | 'wholesale';
+        discount_percent: string;
+        payment_method: string | null;
+        payment_terms_days?: number | null;
+        credit_limit?: string | null;
+    } | null;
     assignee: { id: string; name: string } | null;
     birthday: string | null;
     gender: 'male' | 'female' | 'other' | null;
@@ -341,8 +353,29 @@ export interface Customer {
     orders_count: number | null;
     total_spent: string | null;
     debt: string | null;
+    overdue?: string | null;
+    payment_terms_days?: number | null;
+    credit_limit?: string | null;
     last_order_at: string | null;
     created_at: string | null;
+}
+
+export interface CustomerSummary {
+    first_order_at: string | null;
+    average_order: string | null;
+    purchase_interval_days: number | null;
+    days_since_last_order: number | null;
+    returned_value: string;
+    terms_days: number | null;
+    credit_limit: string | null;
+}
+
+export interface CustomerActivity {
+    id: number;
+    action: string;
+    actor: string | null;
+    changes: Record<string, unknown> | null;
+    at: string | null;
 }
 
 export interface OrderReturnLineData {

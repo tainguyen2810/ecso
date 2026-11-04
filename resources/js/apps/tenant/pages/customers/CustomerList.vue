@@ -70,6 +70,7 @@ const COLUMNS = [
     { key: 'orders', label: 'Số đơn' },
     { key: 'spent', label: 'Tổng chi tiêu' },
     { key: 'debt', label: 'Công nợ' },
+    { key: 'overdue', label: 'Nợ quá hạn' },
     { key: 'last_order', label: 'Mua gần nhất' },
     { key: 'birthday', label: 'Ngày sinh' },
     { key: 'status', label: 'Trạng thái' },
@@ -117,7 +118,7 @@ async function load() {
         if (key(query) !== key(route.query) && route.name === 'customers') router.replace({ query });
         const { view: _view, ...params } = query;
         const { data } = await api.get('/customers', {
-            params: { ...params, status: ['active', 'inactive'].includes(view) ? view : undefined, debt: view === 'debt' ? 1 : undefined, page },
+            params: { ...params, status: ['active', 'inactive'].includes(view) ? view : undefined, debt: view === 'debt' ? 1 : undefined, overdue: view === 'overdue' ? 1 : undefined, page },
         });
         rows.value = data.data;
         meta.value = data.meta;
@@ -221,6 +222,7 @@ async function exportFile(onlySelected: boolean) {
                     { value: 'active', label: 'Đang giao dịch' },
                     { value: 'inactive', label: 'Ngừng giao dịch' },
                     { value: 'debt', label: 'Đang nợ' },
+                    { value: 'overdue', label: 'Nợ quá hạn' },
                 ]"
                 variant="underline"
                 data-testid="customer-view"
@@ -245,6 +247,7 @@ async function exportFile(onlySelected: boolean) {
                     { value: 'spent', label: 'Chi tiêu nhiều' },
                     { value: 'orders', label: 'Nhiều đơn nhất' },
                     { value: 'debt', label: 'Nợ nhiều' },
+                    { value: 'overdue', label: 'Quá hạn nhiều' },
                     { value: 'name', label: 'Tên A → Z' },
                 ]"
             />
@@ -349,6 +352,7 @@ async function exportFile(onlySelected: boolean) {
                         <th v-if="show('orders')" class="px-4 py-2.5 text-right font-medium">Số đơn</th>
                         <th v-if="show('spent')" class="px-4 py-2.5 text-right font-medium">Tổng chi tiêu</th>
                         <th v-if="show('debt')" class="px-4 py-2.5 text-right font-medium">Công nợ</th>
+                        <th v-if="show('overdue')" class="px-4 py-2.5 text-right font-medium">Nợ quá hạn</th>
                         <th v-if="show('last_order')" class="px-4 py-2.5 font-medium">Mua gần nhất</th>
                         <th v-if="show('birthday')" class="px-4 py-2.5 font-medium">Ngày sinh</th>
                         <th v-if="show('status')" class="px-4 py-2.5 font-medium">Trạng thái</th>
@@ -372,6 +376,7 @@ async function exportFile(onlySelected: boolean) {
                         <td v-if="show('orders')" class="px-4 py-3 text-right tabular-nums">{{ formatNumber(c.orders_count) }}</td>
                         <td v-if="show('spent')" class="px-4 py-3 text-right tabular-nums">{{ formatMoney(c.total_spent) }}</td>
                         <td v-if="show('debt')" class="px-4 py-3 text-right tabular-nums" :class="Number(c.debt) > 0 ? 'font-medium text-destructive' : 'text-muted-foreground'">{{ Number(c.debt) > 0 ? formatMoney(c.debt) : '—' }}</td>
+                        <td v-if="show('overdue')" class="px-4 py-3 text-right tabular-nums" :class="Number(c.overdue) > 0 ? 'font-medium text-destructive' : 'text-muted-foreground'">{{ Number(c.overdue) > 0 ? formatMoney(c.overdue) : '—' }}</td>
                         <td v-if="show('last_order')" class="whitespace-nowrap px-4 py-3 text-muted-foreground">{{ formatDateTime(c.last_order_at) }}</td>
                         <td v-if="show('birthday')" class="whitespace-nowrap px-4 py-3">{{ c.birthday ? formatDate(c.birthday) : '—' }}</td>
                         <td v-if="show('status')" class="px-4 py-3"><Badge :tone="customerStatus[c.status]?.tone">{{ customerStatus[c.status]?.label }}</Badge></td>

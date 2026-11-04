@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Khách hàng, đợt B: hồ sơ 7 tab, nợ đầu kỳ, hạn thanh toán (2026-11-04)
+- **Trang khách 7 tab**: Tổng quan (thói quen mua: đơn đầu tiên, giá trị trung bình, chu kỳ mua, số ngày chưa mua lại, giá trị hàng trả; thẻ công nợ có hạn mức đã dùng), Đơn hàng, Công nợ, Thanh toán, Trả hàng, Địa chỉ, Ghi chú và hoạt động. Đơn, thanh toán, trả hàng và lịch sử hoạt động phân trang ở máy chủ (`/customers/{id}/orders|payments|returns|activity`), không còn giới hạn 50 đơn.
+- **Nợ đầu kỳ và phiếu điều chỉnh công nợ** (bảng `customer_debt_entries`, số chứng từ NDK-/DCN-): mỗi khách một chứng từ đầu kỳ, điều chỉnh tăng/giảm phải có lý do, không sửa được, chỉ hủy kèm lý do. Quyền mới `customers.debt_adjust` (Quản lý, Kế toán; vai trò riêng nào có quyền xóa khách được cấp thêm khi cập nhật).
+- **Thu nợ** trả nợ đầu kỳ/điều chỉnh trước (ghi một phiếu thu "Thu nợ khách hàng" trong Sổ quỹ, không tính vào lãi lỗ), phần còn lại trả các đơn cũ nhất. Hủy phiếu thu ở Sổ quỹ thì khoản nợ được trả lại.
+- **Hạn thanh toán và hạn mức nợ** cho từng khách và từng nhóm (khách đặt riêng thì ưu tiên hơn nhóm). Đơn quá hạn thanh toán và chứng từ quá hạn trả được tính là **nợ quá hạn**: hiện ở trang khách, cột và tab "Nợ quá hạn" trong danh sách, cột "Quá hạn" trong báo cáo Công nợ khách hàng.
+- Sổ công nợ xuất được ra Excel. Lịch sử hoạt động của khách ghi các lần sửa, nhập file, chứng từ công nợ và thu nợ.
+
 ### Khách hàng, đợt A: công nợ thống nhất (2026-11-04)
 - **Một quy tắc công nợ dùng chung** (`App\Modules\Sales\Services\CustomerDebt`): trang khách, danh sách khách, sổ công nợ, báo cáo Công nợ phải thu, màn hình thu nợ ở Sổ quỹ và tóm tắt khách trong chi tiết đơn giờ cùng một con số. Nợ một đơn = tổng đơn − giá trị trả hàng đã duyệt − (đã thu − đã hoàn). Chỉ tính đơn kênh riêng; không tính đơn sàn, đơn COD, đơn hủy, đơn hoàn toàn bộ, đơn giao thất bại. Không lưu số cộng dồn nên đơn đồng bộ/sửa lại không bao giờ bị cộng nợ hai lần.
 - Trả hàng một phần (đã duyệt trở đi) giờ giảm công nợ. Sổ công nợ có thêm dòng **Trả hàng** và **Hoàn tiền**, mỗi dòng trỏ về đơn gốc.

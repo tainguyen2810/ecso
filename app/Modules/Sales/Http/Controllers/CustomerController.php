@@ -3,12 +3,15 @@
 namespace App\Modules\Sales\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Http\Resources\OrderResource;
+use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Sales\Http\Resources\CustomerAddressResource;
 use App\Modules\Sales\Http\Resources\CustomerNoteResource;
 use App\Modules\Sales\Http\Resources\CustomerResource;
 use App\Modules\Sales\Http\Resources\PaymentResource;
 use App\Modules\Sales\Models\Customer;
+use App\Modules\Sales\Services\CustomerDebt;
 use App\Modules\Sales\Services\CustomerLedger;
 use App\Modules\Sales\Services\CustomerService;
 use App\Modules\Sales\Support\PhoneNumber;
@@ -17,6 +20,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 
 class CustomerController extends Controller
@@ -29,6 +33,7 @@ class CustomerController extends Controller
             'group' => ['nullable', 'string', 'max:40'],
             'status' => ['nullable', Rule::in(Customer::STATUSES)],
             'debt' => ['nullable', 'boolean'],
+            'overdue' => ['nullable', 'boolean'],
             'gender' => ['nullable', Rule::in(Customer::GENDERS)],
             'birth_month' => ['nullable', 'integer', 'between:1,12'],
             'assigned' => ['nullable', 'string', 'max:40'],
@@ -40,7 +45,7 @@ class CustomerController extends Controller
             'last_order_to' => ['nullable', 'date'],
             'created_from' => ['nullable', 'date'],
             'created_to' => ['nullable', 'date'],
-            'sort' => ['nullable', Rule::in(['newest', 'name', 'spent', 'debt', 'recent', 'orders'])],
+            'sort' => ['nullable', Rule::in(['newest', 'name', 'spent', 'debt', 'recent', 'orders', 'overdue'])],
             'per_page' => ['nullable', 'integer', 'min:5', 'max:100'],
         ]);
 
@@ -49,6 +54,7 @@ class CustomerController extends Controller
             'name' => $query->orderBy('customers.name'),
             'spent' => $query->orderByDesc('total_spent'),
             'debt' => $query->orderByDesc('debt'),
+            'overdue' => $query->orderByDesc('overdue'),
             'recent' => $query->orderByDesc('last_order_at'),
             'orders' => $query->orderByDesc('orders_count'),
             default => $query->orderByDesc('customers.id'),
@@ -85,11 +91,39 @@ class CustomerController extends Controller
         $stats = Customer::query()->withStats()->with(['customerGroup', 'assignee'])->whereKey($customer->id)->firstOrFail();
 
         return (new CustomerResource($stats))->additional(['data' => [
+            'summary' => $this->summary($customer),
             'orders' => OrderResource::collection($customer->orders()->with('channel')->orderByDesc('placed_at')->limit(50)->get()),
             'payments' => PaymentResource::collection($customer->payments()->with(['order', 'creator'])->orderByDesc('paid_at')->limit(20)->get()),
             'addresses' => CustomerAddressResource::collection($customer->addresses()->orderBy('id')->get()),
             'notes' => CustomerNoteResource::collection($customer->notes()->with('author:id,name')->latest('id')->limit(100)->get()),
         ]])->response();
+    }
+
+    /**
+     * Buying habits from real orders (cancelled and returned ones left out, as in the sales reports).
+     *
+     * @return array<string, mixed>
+     */
+    private function summary(Customer $customer): array
+    {
+        $orders = $customer->orders()->whereNotIn('status', [OrderStatus::CANCELLED, OrderStatus::RETURNED]);
+        $row = (clone $orders)->selectRaw('COUNT(*) as n, COALESCE(SUM(total), 0) as total, MIN(placed_at) as first_at, MAX(placed_at) as last_at')->first();
+        $n = (int) ($row->n ?? 0);
+        $first = $row?->first_at ? Carbon::parse($row->first_at) : null;
+        $last = $row?->last_at ? Carbon::parse($row->last_at) : null;
+        $returned = (string) (OrderReturn::query()->whereIn('order_id', $customer->orders()->select('id'))
+            ->whereIn('status', CustomerDebt::COUNTED_RETURNS)->selectRaw('COALESCE(SUM('.CustomerDebt::returnValueSql('order_returns').'), 0) as v')->value('v') ?? '0');
+
+        return [
+            'first_order_at' => $first?->toIso8601String(),
+            'average_order' => $n ? bcdiv((string) $row->total, (string) $n, 2) : null,
+            // Average days between two purchases (needs at least two orders).
+            'purchase_interval_days' => $n > 1 && $first && $last ? round($first->diffInDays($last) / ($n - 1), 1) : null,
+            'days_since_last_order' => $last ? (int) $last->startOfDay()->diffInDays(now()->startOfDay()) : null,
+            'returned_value' => bcadd($returned, '0', 2),
+            'terms_days' => $customer->payment_terms_days ?? $customer->customerGroup?->payment_terms_days,
+            'credit_limit' => $customer->credit_limit !== null ? (string) $customer->credit_limit : ($customer->customerGroup?->credit_limit !== null ? (string) $customer->customerGroup->credit_limit : null),
+        ];
     }
 
     /**
@@ -175,6 +209,7 @@ class CustomerController extends Controller
             ->when($filters['created_from'] ?? null, fn ($q, $d) => $q->whereDate('customers.created_at', '>=', $d))
             ->when($filters['created_to'] ?? null, fn ($q, $d) => $q->whereDate('customers.created_at', '<=', $d))
             ->when(! empty($filters['debt']), fn ($q) => $q->having('debt', '>', 0))
+            ->when(! empty($filters['overdue']), fn ($q) => $q->having('overdue', '>', 0))
             ->when(isset($filters['spent_min']), fn ($q) => $q->having('total_spent', '>=', $filters['spent_min']))
             ->when(isset($filters['spent_max']), fn ($q) => $q->having('total_spent', '<=', $filters['spent_max']))
             ->when(isset($filters['orders_min']), fn ($q) => $q->having('orders_count', '>=', (int) $filters['orders_min']))
@@ -200,6 +235,8 @@ class CustomerController extends Controller
             'tags.*' => ['nullable', 'string', 'max:40'],
             'status' => ['sometimes', Rule::in(Customer::STATUSES)],
             'note' => ['nullable', 'string', 'max:1000'],
+            'payment_terms_days' => ['nullable', 'integer', 'min:0', 'max:365'],
+            'credit_limit' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
         ], ['code.regex' => 'Mã khách chỉ gồm chữ, số, dấu chấm, gạch ngang, gạch dưới.']);
     }
 }

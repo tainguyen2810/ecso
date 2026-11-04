@@ -10,6 +10,7 @@ use App\Modules\Inventory\Support\DocumentNumber;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Purchasing\Models\Supplier;
 use App\Modules\Sales\Models\Customer;
+use App\Modules\Sales\Models\CustomerDebtEntry;
 use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Sales\Services\CustomerDebt;
 use App\Modules\Sales\Services\PaymentService;
@@ -27,6 +28,9 @@ use Illuminate\Validation\ValidationException;
  */
 class CashVoucherService
 {
+    /** Receipt type of debt receipts that settle opening balances and adjustments (created when first needed). */
+    public const DEBT_RECEIPT_TYPE = 'Thu nợ khách hàng';
+
     /** Types every business starts with: [direction, name, counts_in_pnl]. */
     public const DEFAULT_TYPES = [
         [CashVoucher::RECEIPT, 'Thu nhập khác', true],
@@ -165,20 +169,46 @@ class CashVoucherService
     }
 
     /**
+     * One receipt from a customer: it first settles what opening balances and adjustments leave owing (as a cash
+     * voucher linked to a debt receipt entry), then the unpaid orders, oldest first (as payments of those orders).
+     *
      * @param  array{method: string, amount: string|int|float, reference?: string|null, note?: string|null, paid_at?: string|null}  $data
-     * @return Collection<int, OrderPayment>
+     * @return array{payments: Collection<int, OrderPayment>, voucher: CashVoucher|null}
      */
-    public function collectCustomerDebt(Customer $customer, array $data): Collection
+    public function collectCustomerDebt(Customer $customer, array $data): array
     {
         return DB::transaction(function () use ($customer, $data) {
             $remaining = bcadd((string) $data['amount'], '0', 2);
             if (bccomp($remaining, '0', 2) <= 0) {
                 throw ValidationException::withMessages(['amount' => 'Số tiền phải lớn hơn 0.']);
             }
+            Customer::query()->whereKey($customer->id)->lockForUpdate()->first();
             $orders = $this->unpaidOrders($customer, lock: true);
             $debt = $this->debt->forCustomer($customer);
             if (bccomp($remaining, $debt, 2) > 0) {
                 throw ValidationException::withMessages(['amount' => 'Số tiền vượt quá công nợ của khách ('.number_format((float) $debt, 0, ',', '.').' đ).']);
+            }
+
+            $voucher = null;
+            $entries = $this->debt->entriesBalance($customer);
+            if (bccomp($entries, '0', 2) > 0) {
+                $take = bccomp($remaining, $entries, 2) > 0 ? $entries : $remaining;
+                $type = CashVoucherType::query()->firstOrCreate(
+                    ['direction' => CashVoucher::RECEIPT, 'name' => self::DEBT_RECEIPT_TYPE],
+                    ['counts_in_pnl' => false, 'description' => 'Thu công nợ đầu kỳ hoặc công nợ điều chỉnh của khách hàng.'],
+                );
+                $voucher = $this->record([
+                    'direction' => CashVoucher::RECEIPT, 'type' => $type->ulid, 'party_kind' => 'customer', 'party_id' => $customer->ulid,
+                    'method' => $data['method'], 'amount' => $take, 'counts_in_pnl' => false,
+                    'reference' => $data['reference'] ?? null, 'note' => $data['note'] ?? 'Thu nợ đầu kỳ / điều chỉnh', 'paid_at' => $data['paid_at'] ?? null,
+                ]);
+                $entry = new CustomerDebtEntry;
+                $entry->forceFill([
+                    'number' => $voucher->number, 'customer_id' => $customer->id, 'kind' => CustomerDebtEntry::RECEIPT,
+                    'amount' => bcsub('0', $take, 2), 'entry_date' => $voucher->paid_at->toDateString(),
+                    'reason' => 'Thu nợ, phiếu '.$voucher->number, 'cash_voucher_id' => $voucher->id, 'created_by' => Auth::id(),
+                ])->save();
+                $remaining = bcsub($remaining, $take, 2);
             }
 
             $payments = collect();
@@ -202,11 +232,11 @@ class CashVoucherService
                 $remaining = bcsub($remaining, $take, 2);
             }
             if (bccomp($remaining, '0', 2) > 0) {
-                throw ValidationException::withMessages(['amount' => 'Các đơn còn nợ chỉ nhận thêm được '.number_format((float) bcsub((string) $data['amount'], $remaining, 2), 0, ',', '.').' đ.']);
+                throw ValidationException::withMessages(['amount' => 'Công nợ còn nhận thêm được '.number_format((float) bcsub((string) $data['amount'], $remaining, 2), 0, ',', '.').' đ.']);
             }
-            $this->audit->record('customer.debt_collected', $customer, ['amount' => $data['amount'], 'orders' => $payments->count()]);
+            $this->audit->record('customer.debt_collected', $customer, ['amount' => $data['amount'], 'orders' => $payments->count(), 'voucher' => $voucher?->number]);
 
-            return $payments;
+            return ['payments' => $payments, 'voucher' => $voucher];
         });
     }
 

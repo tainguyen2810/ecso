@@ -82,21 +82,40 @@ class LedgerReports
             ->leftJoin('customers as c', 'c.id', '=', 'o.customer_id')
             ->where('o.tenant_id', $this->tenant())
             ->groupBy('o.customer_id', 'c.ulid', 'c.code', 'c.name', 'c.phone_last4')
-            ->havingRaw("SUM({$owed}) > 0")
             ->selectRaw("c.ulid, c.code, c.name, c.phone_last4, SUM(CASE WHEN {$due} > 0 THEN 1 ELSE 0 END) as orders, SUM(o.total - {$returned}) as total, "
                 ."SUM(o.paid_amount - o.refunded_amount) as paid, SUM({$owed}) as due, MIN(CASE WHEN {$due} > 0 THEN o.placed_at END) as oldest")
-            ->orderByDesc('due')->limit(2000)->get()
-            ->map(fn ($r) => [
-                'customer' => $r->ulid ? ['id' => $r->ulid, 'code' => $r->code, 'name' => $r->name, 'phone_last4' => $r->phone_last4] : null,
-                'orders' => (int) $r->orders,
-                'total' => round((float) $r->total, 2),
-                'paid' => round((float) $r->paid, 2),
-                'due' => round((float) $r->due, 2),
-                'oldest_at' => $r->oldest ? CarbonImmutable::parse($r->oldest)->toIso8601String() : null,
-                'age_days' => $r->oldest ? (int) CarbonImmutable::parse($r->oldest)->startOfDay()->diffInDays(CarbonImmutable::now()->startOfDay()) : null,
-            ])->all();
+            ->get()->keyBy(fn ($r) => $r->ulid ?? '');
+        // Opening balances and adjustments of customers, with or without orders.
+        $entries = DB::table('customers as c')->where('c.tenant_id', $this->tenant())
+            ->whereExists(fn ($q) => $q->from('customer_debt_entries as x')->whereColumn('x.customer_id', 'c.id'))
+            ->selectRaw('c.ulid, c.code, c.name, c.phone_last4, '.CustomerDebt::entriesSql('c.id').' as balance, '
+                .'(SELECT MIN(x.entry_date) FROM customer_debt_entries x WHERE x.customer_id = c.id AND x.voided_at IS NULL AND x.amount > 0) as since')
+            ->get();
+        foreach ($entries as $e) {
+            $row = $rows[$e->ulid] ?? (object) ['ulid' => $e->ulid, 'code' => $e->code, 'name' => $e->name, 'phone_last4' => $e->phone_last4, 'orders' => 0, 'total' => 0, 'paid' => 0, 'due' => 0, 'oldest' => null];
+            $row->total += (float) $e->balance;
+            $row->due += (float) $e->balance;
+            if ($e->since && (float) $e->balance > 0 && (! $row->oldest || $e->since < $row->oldest)) {
+                $row->oldest = $e->since;
+            }
+            $rows[$e->ulid] = $row;
+        }
 
-        return ['rows' => $rows, 'totals' => ['customers' => count($rows), 'orders' => array_sum(array_column($rows, 'orders')), 'due' => round(array_sum(array_column($rows, 'due')), 2)]];
+        $rows = $rows->filter(fn ($r) => (float) $r->due > 0.004)->sortByDesc(fn ($r) => (float) $r->due)->take(2000)->values();
+        $overdue = DB::table('customers as c')->where('c.tenant_id', $this->tenant())->whereIn('c.ulid', $rows->pluck('ulid')->filter()->all())
+            ->selectRaw('c.ulid, '.CustomerDebt::customerOverdueSql('c').' as overdue')->pluck('overdue', 'ulid');
+        $rows = $rows->map(fn ($r) => [
+            'customer' => $r->ulid ? ['id' => $r->ulid, 'code' => $r->code, 'name' => $r->name, 'phone_last4' => $r->phone_last4] : null,
+            'orders' => (int) $r->orders,
+            'total' => round((float) $r->total, 2),
+            'paid' => round((float) $r->paid, 2),
+            'due' => round((float) $r->due, 2),
+            'overdue' => round((float) ($overdue[$r->ulid ?? ''] ?? 0), 2),
+            'oldest_at' => $r->oldest ? CarbonImmutable::parse($r->oldest)->toIso8601String() : null,
+            'age_days' => $r->oldest ? (int) CarbonImmutable::parse($r->oldest)->startOfDay()->diffInDays(CarbonImmutable::now()->startOfDay()) : null,
+        ])->all();
+
+        return ['rows' => $rows, 'totals' => ['customers' => count($rows), 'orders' => array_sum(array_column($rows, 'orders')), 'due' => round(array_sum(array_column($rows, 'due')), 2), 'overdue' => round(array_sum(array_column($rows, 'overdue')), 2)]];
     }
 
     /**

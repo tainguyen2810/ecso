@@ -29,6 +29,7 @@ final class PermissionRegistry
             'customers.import' => 'Nhập khách hàng từ file',
             'customers.export' => 'Xuất danh sách khách hàng (có số điện thoại, địa chỉ)',
             'customers.delete' => 'Xóa khách hàng',
+            'customers.debt_adjust' => 'Nhập công nợ đầu kỳ, điều chỉnh và hủy chứng từ công nợ khách',
         ],
         'products' => [
             'products.view' => 'Xem sản phẩm',
@@ -87,7 +88,7 @@ final class PermissionRegistry
             Role::OWNER => ['name' => 'Chủ doanh nghiệp', 'rank' => 100, 'permissions' => $all],
             Role::ADMIN => ['name' => 'Quản trị doanh nghiệp', 'rank' => 90, 'permissions' => array_values(array_diff($all, ['billing.manage']))],
             Role::MANAGER => ['name' => 'Quản lý vận hành', 'rank' => 70, 'permissions' => [
-                ...self::READ_ALL, 'orders.update', 'orders.assign', 'orders.print', 'orders.create', 'orders.payment', 'orders.price', 'orders.shifts', 'customers.manage', 'customers.import', 'customers.export', 'customers.delete', 'products.manage',
+                ...self::READ_ALL, 'orders.update', 'orders.assign', 'orders.print', 'orders.create', 'orders.payment', 'orders.price', 'orders.shifts', 'customers.manage', 'customers.import', 'customers.export', 'customers.delete', 'customers.debt_adjust', 'products.manage',
                 'inventory.receive', 'inventory.adjust', 'inventory.adjust.approve', 'inventory.transfer', 'purchasing.manage', 'purchasing.payment',
                 'returns.inspect', 'finance.view', 'finance.vouchers', 'members.view',
             ]],
@@ -101,7 +102,7 @@ final class PermissionRegistry
             ]],
             Role::ACCOUNTANT => ['name' => 'Kế toán', 'rank' => 40, 'permissions' => [
                 'dashboard.view', 'orders.view', 'products.view', 'inventory.view', 'purchasing.view',
-                'returns.view', 'finance.view', 'finance.vouchers', 'reports.view', 'billing.view', 'customers.view', 'orders.payment', 'orders.shifts', 'purchasing.payment',
+                'returns.view', 'finance.view', 'finance.vouchers', 'reports.view', 'billing.view', 'customers.view', 'customers.debt_adjust', 'orders.payment', 'orders.shifts', 'purchasing.payment',
             ]],
             Role::VIEWER => ['name' => 'Chỉ xem', 'rank' => 10, 'permissions' => self::READ_ALL],
         ];

@@ -237,7 +237,7 @@ class CustomerService
      */
     private function fill(Customer $customer, array $data): void
     {
-        $customer->fill(array_intersect_key($data, array_flip(['name', 'email', 'address', 'note', 'birthday', 'gender', 'tax_code', 'status'])));
+        $customer->fill(array_intersect_key($data, array_flip(['name', 'email', 'address', 'note', 'birthday', 'gender', 'tax_code', 'status', 'payment_terms_days', 'credit_limit'])));
 
         if (array_key_exists('tags', $data)) {
             $customer->tags = $this->tags((array) $data['tags']) ?: null;
