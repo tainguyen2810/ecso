@@ -140,7 +140,7 @@ class NewListingService
             $variant->restore();
         }
 
-        return $found->toBase()->mapWithKeys(fn (ProductVariant $v) => [mb_strtolower($v->sku) => $v->id]);
+        return $found->toBase()->mapWithKeys(fn (ProductVariant $v) => [mb_strtolower($v->sku) => (int) $v->id]);
     }
 
     /** The store's first category, found by name (top level) or created. */

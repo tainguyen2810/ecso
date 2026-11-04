@@ -70,7 +70,10 @@ class ProductVariant extends Model
     /** Sold in orders, POS and on the marketplaces: the variant and its product are both active. */
     public function isSellable(): bool
     {
-        return $this->status === Product::STATUS_ACTIVE && ($this->product?->status ?? Product::STATUS_ACTIVE) === Product::STATUS_ACTIVE;
+        /** @var Product|null $product a soft-deleted product loads as null */
+        $product = $this->product;
+
+        return $this->status === Product::STATUS_ACTIVE && ($product === null || $product->status === Product::STATUS_ACTIVE);
     }
 
     /**
