@@ -21,6 +21,9 @@ class FakeWooStore
     /** @var array<int, array<string, mixed>> */
     public array $orders = [];
 
+    /** @var array<int, array<int, array<string, mixed>>> order id => refunds (orders/{id}/refunds) */
+    public array $refunds = [];
+
     /** Order ids whose read answers 503 (a busy store), and whether listing orders fails. */
     public array $failOrders = [];
 
@@ -83,6 +86,24 @@ class FakeWooStore
             'line_items' => $items, 'meta_data' => []];
     }
 
+    /**
+     * Refunds an order the way the Woo admin does: a refund record (lines point at the order lines through the
+     * _refunded_item_id meta, quantities negative) and its summary on the order.
+     *
+     * @param  array<int, array{0: int, 1: int}>  $lines  [order line id, quantity]
+     */
+    public function refund(int $orderId, int $amount, array $lines = [], string $reason = ''): array
+    {
+        $id = $this->nextId++;
+        $this->refunds[$orderId][$id] = ['id' => $id, 'date_created_gmt' => now()->utc()->format('Y-m-d\TH:i:s'), 'amount' => (string) $amount, 'reason' => $reason,
+            'line_items' => array_map(fn ($l) => ['id' => $this->nextId++, 'quantity' => -$l[1], 'total' => (string) -($amount / max(1, count($lines))),
+                'meta_data' => [['key' => '_refunded_item_id', 'value' => (string) $l[0]]]], $lines)];
+        $this->orders[$orderId]['refunds'][] = ['id' => $id, 'reason' => $reason, 'total' => (string) -$amount];
+        $this->orders[$orderId]['date_modified_gmt'] = now()->addSecond()->utc()->format('Y-m-d\TH:i:s');
+
+        return $this->orders[$orderId];
+    }
+
     /** Signs a webhook body the way Woo does. */
     public function signed(string $topic, array $payload, ?string $secret = null, ?string $source = null): array
     {
@@ -130,6 +151,7 @@ class FakeWooStore
             $path === 'orders' => $this->page(array_values(array_filter($this->orders, fn ($o) => in_array($o['status'], explode(',', $query['status'] ?? $o['status']), true)
                 && (! isset($query['after']) || $o['date_created_gmt'] >= $query['after']))), $query),
             (bool) preg_match('#^orders/(\d+)$#', $path, $m) && in_array((int) $m[1], $this->failOrders, true) => Http::response(['code' => 'internal_server_error', 'message' => 'Busy'], 503),
+            (bool) preg_match('#^orders/(\d+)/refunds$#', $path, $m) => $this->page(array_values($this->refunds[(int) $m[1]] ?? []), $query),
             (bool) preg_match('#^orders/(\d+)/notes$#', $path, $m) => Http::response(['id' => $this->nextId++, 'note' => $request->data()['note']], 201),
             (bool) preg_match('#^orders/(\d+)$#', $path, $m) && $method === 'PUT' => $this->updateOrder((int) $m[1], $request->data()),
             (bool) preg_match('#^orders/(\d+)$#', $path, $m) => Http::response($this->orders[(int) $m[1]] ?? ['code' => 'woocommerce_rest_shop_order_invalid_id', 'message' => 'Invalid ID.'], isset($this->orders[(int) $m[1]]) ? 200 : 404),

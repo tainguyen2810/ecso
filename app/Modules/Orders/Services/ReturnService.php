@@ -63,7 +63,7 @@ class ReturnService
     /**
      * A return or refund recorded by a user (or later imported from the marketplace).
      *
-     * @param  array{type: string, reason?: string|null, refund_amount?: string|float|null, lines?: array<int, array{order_item_id: int, quantity: int}>}  $data
+     * @param  array{type: string, reason?: string|null, refund_amount?: string|float|null, lines?: array<int, array{order_item_id: int, quantity: int}>, source_key?: string|null}  $data
      */
     public function create(Order $order, array $data): OrderReturn
     {
@@ -95,6 +95,7 @@ class ReturnService
                 'refund_amount' => $data['refund_amount'] ?? null,
                 'warehouse_id' => $order->warehouse_id,
                 'created_by' => Auth::id(),
+                'source_key' => $data['source_key'] ?? null,
             ], $data['type'] === OrderReturn::TYPE_REFUND_ONLY ? [] : $lines);
 
             $this->audit->record('return.created', $return, ['order' => $order->external_order_id, 'type' => $return->type]);

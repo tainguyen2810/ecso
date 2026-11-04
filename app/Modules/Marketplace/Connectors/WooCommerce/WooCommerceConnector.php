@@ -138,9 +138,12 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
 
     public function getOrder(MarketplaceAccount $account, string $externalOrderId): OrderData
     {
-        $order = WooClient::forAccount($account)->get('orders/'.rawurlencode($externalOrderId));
+        $client = WooClient::forAccount($account);
+        $order = $client->get('orders/'.rawurlencode($externalOrderId));
+        // The order only lists refund totals; lines and quantities come from the refunds resource.
+        $refunds = ! empty($order['refunds']) ? (array) $client->get('orders/'.rawurlencode($externalOrderId).'/refunds', ['per_page' => 100]) : [];
 
-        return $this->toOrderData($order);
+        return $this->toOrderData($order, $refunds);
     }
 
     public function listOrders(MarketplaceAccount $account, CarbonImmutable $from, CarbonImmutable $to, ?string $cursor = null): OrderPage
@@ -191,9 +194,30 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
         }
     }
 
-    /** @param  array<string, mixed>  $o */
-    public function toOrderData(array $o): OrderData
+    /**
+     * @param  array<string, mixed>  $o
+     * @param  array<int, array<string, mixed>>  $refundDetails  from orders/{id}/refunds
+     */
+    public function toOrderData(array $o, array $refundDetails = []): OrderData
     {
+        $refunds = array_map(fn ($r) => [
+            'id' => (string) $r['id'],
+            'amount' => number_format(abs((float) ($r['amount'] ?? $r['total'] ?? 0)), 2, '.', ''),
+            'reason' => filled($r['reason'] ?? null) ? mb_substr((string) $r['reason'], 0, 255) : null,
+            'refunded_at' => filled($r['date_created_gmt'] ?? null) ? CarbonImmutable::parse($r['date_created_gmt'], 'UTC') : null,
+            'lines' => array_values(array_filter(array_map(fn ($l) => [
+                'external_item_id' => (string) (collect($l['meta_data'] ?? [])->firstWhere('key', '_refunded_item_id')['value'] ?? ''),
+                'quantity' => abs((int) ($l['quantity'] ?? 0)),
+                'amount' => number_format(abs((float) ($l['total'] ?? 0)), 2, '.', ''),
+            ], (array) ($r['line_items'] ?? [])), fn ($l) => $l['external_item_id'] !== '' && $l['quantity'] > 0)),
+        ], $refundDetails);
+        $refundedQty = [];
+        foreach ($refunds as $r) {
+            foreach ($r['lines'] as $l) {
+                $refundedQty[$l['external_item_id']] = ($refundedQty[$l['external_item_id']] ?? 0) + $l['quantity'];
+            }
+        }
+
         $date = fn (?string $v) => filled($v) ? CarbonImmutable::parse($v, 'UTC') : null;
         $stage = collect($o['meta_data'] ?? [])->firstWhere('key', self::STAGE_META)['value'] ?? null;
         $raw = (string) ($o['status'] ?? '');
@@ -221,6 +245,7 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
                 unitPrice: number_format($lineSubtotal / $qty, 2, '.', ''),
                 discount: number_format(max(0, $lineSubtotal - $lineTotal), 2, '.', ''),
                 tax: number_format((float) ($line['total_tax'] ?? 0), 2, '.', ''),
+                refundedQuantity: min($qty, $refundedQty[(string) $line['id']] ?? 0),
             );
         }
 
@@ -272,6 +297,8 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
             // does not prove the carrier has paid the shop, so ECSO does not mark it paid.
             paymentStatus: $paidAt !== null && ! $isCod ? Order::PAYMENT_PAID : Order::PAYMENT_UNPAID,
             ownsCustomer: true,
+            // Details are read only when the order has refunds; an order without any has none to keep.
+            refunds: $refundDetails !== [] || empty($o['refunds']) ? $refunds : null,
         );
     }
 

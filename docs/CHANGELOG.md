@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Đồng bộ đơn WooCommerce, vòng D: hoàn tiền (2026-11-04)
+- ECSO đọc **từng lần hoàn tiền** của đơn Woo (`orders/{id}/refunds`) và lưu vào `order_refunds`: số tiền, lý do, dòng hàng và số lượng. Mỗi lần hoàn chỉ lưu một lần, webhook gửi lặp không tạo trùng. Tổng đã hoàn cập nhật vào đơn.
+- Hoàn **một phần trước khi giao**: số lượng đã hoàn không còn được giữ hàng và không bị xuất kho (`order_items.refunded_quantity`).
+- Hoàn **sau khi đã giao** có dòng hàng: ECSO mở một phiếu trả hàng "Yêu cầu trả" cho đúng các dòng đó. Kho chỉ cộng lại khi nhận và kiểm hàng trên phiếu, không bao giờ cộng thẳng từ lệnh hoàn tiền. Hoàn chỉ tiền (phí ship, bồi thường) thì chỉ lưu số tiền.
+- Chi tiết đơn (API) có thêm `refunds` và `refunded_quantity` từng dòng.
+- Migration `2026_11_12_120000_add_order_refunds`. Chỉ thử với cửa hàng Woo giả lập.
+
 ### Đồng bộ đơn WooCommerce, vòng C (2026-11-04)
 - **Ánh xạ trạng thái riêng từng website** (`settings.status_map`), ưu tiên hơn ánh xạ chung. Dùng cho trạng thái do plugin thêm (ví dụ `dang-giao`). Lưu ánh xạ xong, các đơn đang "Chưa ánh xạ" với trạng thái đó được chuyển ngay. Đối soát hỏi Woo cả các trạng thái riêng này. API: `GET/PUT marketplace-accounts/{id}/status-map`.
 - **Công tắc một chiều / hai chiều** (`settings.push_status`, mặc định hai chiều như trước). Một chiều: xác nhận, đóng gói, bàn giao, hủy chỉ làm trong ECSO, không ghi lên website. Khi website còn ở trạng thái trước ECSO, ECSO giữ trạng thái của mình và không báo xung đột. Khi website đi xa hơn (ví dụ hoàn tất), website thắng.

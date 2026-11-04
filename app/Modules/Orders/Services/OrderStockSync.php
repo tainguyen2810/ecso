@@ -71,7 +71,11 @@ class OrderStockSync
     private function holdAll(Order $order, $mapped, Warehouse $warehouse): void
     {
         foreach ($mapped as $item) {
-            $this->ledger->hold(Order::STOCK_REFERENCE, $item->id, $warehouse, $item->variant, $item->quantity);
+            // Units refunded on the store before shipping are not held (and so never shipped).
+            $quantity = $item->quantity - (int) $item->refunded_quantity;
+            if ($quantity > 0) {
+                $this->ledger->hold(Order::STOCK_REFERENCE, $item->id, $warehouse, $item->variant, $quantity);
+            }
         }
     }
 

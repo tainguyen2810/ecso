@@ -15,5 +15,7 @@ final class OrderItemData
         public readonly string $unitPrice,
         public readonly string $discount = '0',
         public readonly string $tax = '0',
+        /** Units refunded on the store (WooCommerce refunds by line). */
+        public readonly int $refundedQuantity = 0,
     ) {}
 }

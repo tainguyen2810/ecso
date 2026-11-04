@@ -11,10 +11,13 @@ use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Events\OrderImported;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
+use App\Modules\Orders\Models\OrderRefund;
+use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Orders\Models\OrderStatusHistory;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Services\CustomerService;
 use App\Modules\Sales\Support\PhoneNumber;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -47,6 +50,7 @@ class OrderIngestor
         private readonly OrderStockSync $stock,
         private readonly CustomerService $customers,
         private readonly ReservationLedger $ledger,
+        private readonly ReturnService $returns,
     ) {}
 
     /**
@@ -105,10 +109,13 @@ class OrderIngestor
                 $order->forceFill(['cancelled_at' => null, 'cancel_reason' => null]);
             }
             $order->save();
-            $this->upsertItems($account, $order, $data->items, rebuild: $restoring
+            $this->upsertItems($account, $order, $data->items, $data->refunds !== null, rebuild: $restoring
                 // Only the seller's own store edits orders; a snapshot without lines never empties an order.
                 || ($data->ownsCustomer && $data->items !== [] && $wasOpen && OrderStatus::policy($status) === OrderStatus::RESERVE
-                    && $this->linesChanged($order, $data->items)));
+                    && $this->linesChanged($order, $data->items, $data->refunds !== null)));
+            if ($data->refunds) {
+                $this->recordRefunds($order, $data->refunds);
+            }
 
             if ($from !== $status) {
                 OrderStatusHistory::query()->create([
@@ -264,7 +271,7 @@ class OrderIngestor
     /**
      * @param  array<int, OrderItemData>  $items
      */
-    private function upsertItems(MarketplaceAccount $account, Order $order, array $items, bool $rebuild = false): void
+    private function upsertItems(MarketplaceAccount $account, Order $order, array $items, bool $withRefunds = false, bool $rebuild = false): void
     {
         if ($rebuild) {
             // The store changed the lines of an order that has not shipped (or restored a deleted one): give back
@@ -273,7 +280,7 @@ class OrderIngestor
             $ids = $order->items()->pluck('id')->map(fn ($id) => (int) $id)->all();
             $this->ledger->releaseAll(Order::STOCK_REFERENCE, $ids, "Đơn {$order->external_order_id} đổi trên website");
             $order->items()->delete();
-        } elseif ($items !== [] && ! $order->wasRecentlyCreated && OrderStatus::isShipped($order->status) && $this->linesChanged($order, $items)) {
+        } elseif ($items !== [] && ! $order->wasRecentlyCreated && OrderStatus::isShipped($order->status) && $this->linesChanged($order, $items, false)) {
             $order->forceFill(['sync_warning' => 'Đơn đã sửa số lượng hoặc dòng hàng trên website sau khi ra khỏi kho; ECSO giữ số lượng đã xuất, cần kiểm tra.'])->save();
         }
         $existing = $order->items()->get()->keyBy('external_item_id');
@@ -294,6 +301,9 @@ class OrderIngestor
                 'discount' => $data->discount,
                 'tax' => $data->tax,
             ]);
+            if ($withRefunds || ! $item->exists) {
+                $item->refunded_quantity = $data->refundedQuantity;
+            }
 
             // The internal SKU is fixed once set, because stock may already be held against it.
             if ($item->product_variant_id === null && $listing?->isMapped()) {
@@ -309,12 +319,53 @@ class OrderIngestor
      *
      * @param  array<int, OrderItemData>  $items
      */
-    private function linesChanged(Order $order, array $items): bool
+    private function linesChanged(Order $order, array $items, bool $withRefunds): bool
     {
-        $now = collect($items)->mapWithKeys(fn (OrderItemData $i) => [$i->externalItemId => $i->quantity])->sortKeys()->all();
-        $before = $order->items()->pluck('quantity', 'external_item_id')->map(fn ($q) => (int) $q)->sortKeys()->all();
+        // Units refunded on the store before shipping are not to be shipped: they count as removed.
+        $now = collect($items)->mapWithKeys(fn (OrderItemData $i) => [$i->externalItemId => $i->quantity - ($withRefunds ? $i->refundedQuantity : 0)])->sortKeys()->all();
+        $before = $order->items()->get(['external_item_id', 'quantity', 'refunded_quantity'])
+            ->mapWithKeys(fn (OrderItem $i) => [$i->external_item_id => $i->quantity - ($withRefunds ? $i->refunded_quantity : 0)])->sortKeys()->all();
 
         return $now != $before;
+    }
+
+    /**
+     * Keeps each store refund once. A refund of lines that already left the warehouse opens a return request for
+     * them: stock comes back only when the parcel is received and inspected, never from the refund itself.
+     *
+     * @param  list<array{id: string, amount: string, reason: string|null, refunded_at: CarbonImmutable|null, lines: list<array{external_item_id: string, quantity: int, amount: string}>}>  $refunds
+     */
+    private function recordRefunds(Order $order, array $refunds): void
+    {
+        $known = OrderRefund::query()->where('order_id', $order->id)->pluck('external_refund_id')->all();
+        $items = $order->items()->get()->keyBy('external_item_id');
+        $shipped = OrderStatus::isShipped($order->status);
+
+        foreach ($refunds as $r) {
+            if (in_array($r['id'], $known, true)) {
+                continue;
+            }
+            $lines = array_map(fn ($l) => $l + ['order_item_id' => $items->get($l['external_item_id'])?->id], $r['lines']);
+            $refund = OrderRefund::query()->create([
+                'order_id' => $order->id, 'external_refund_id' => $r['id'], 'amount' => $r['amount'], 'reason' => $r['reason'],
+                'lines' => $lines, 'refunded_at' => $r['refunded_at'] ?? now(),
+            ]);
+
+            $returnLines = array_values(array_filter(array_map(fn ($l) => $l['order_item_id'] ? ['order_item_id' => $l['order_item_id'], 'quantity' => $l['quantity']] : null, $lines)));
+            if (! $shipped || $returnLines === []) {
+                continue;
+            }
+            try {
+                $return = $this->returns->create($order, [
+                    'type' => OrderReturn::TYPE_RETURN, 'reason' => 'Hoàn tiền trên website'.($r['reason'] ? ": {$r['reason']}" : ''),
+                    'refund_amount' => $r['amount'], 'lines' => $returnLines, 'source_key' => "store-refund:{$r['id']}",
+                ]);
+                $refund->forceFill(['order_return_id' => $return->id])->save();
+            } catch (ValidationException $e) {
+                // More units refunded than are left to return (already returned): the refund is kept, the user checks.
+                $order->forceFill(['sync_warning' => 'Hoàn tiền trên website: '.collect($e->errors())->flatten()->first()])->save();
+            }
+        }
     }
 
     /**

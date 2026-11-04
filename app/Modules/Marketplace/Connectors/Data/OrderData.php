@@ -12,6 +12,8 @@ final class OrderData
      * @param  array<string, mixed>  $raw
      * @param  array{billing?: array<string, string>, shipping?: array<string, string>}|null  $addresses
      * @param  list<string>  $couponCodes
+     * @param  list<array{id: string, amount: string, reason: string|null, refunded_at: CarbonImmutable|null, lines: list<array{external_item_id: string, quantity: int, amount: string}>}>|null  $refunds
+     *                                                                                                                                                                                                      null = not read (keep what ECSO has)
      */
     public function __construct(
         public readonly string $externalOrderId,
@@ -50,5 +52,6 @@ final class OrderData
         /** Payment status from the store's data (paid online, or null when it cannot be known, e.g. COD). */
         public readonly ?string $paymentStatus = null,
         public readonly bool $ownsCustomer = false,
+        public readonly ?array $refunds = null,
     ) {}
 }
