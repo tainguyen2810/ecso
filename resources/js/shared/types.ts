@@ -348,6 +348,11 @@ export interface CustomerGroup {
     price_tier: 'retail' | 'wholesale';
     discount_percent: string;
     payment_method: string | null;
+    is_active?: boolean;
+    payment_terms_days?: number | null;
+    credit_limit?: string | null;
+    auto_min_spent?: string | null;
+    auto_min_orders?: number | null;
     customers_count: number | null;
     created_at: string | null;
 }
@@ -363,13 +368,15 @@ export interface CustomerAddress {
 export interface CustomerNote {
     id: string;
     body: string;
+    kind?: 'note' | 'call' | 'message' | 'meeting' | 'complaint';
     author: string | null;
     mine: boolean;
     created_at: string | null;
 }
 
 export interface CustomerLedgerEntry {
-    type: 'order' | 'return' | 'payment' | 'refund';
+    type: 'order' | 'return' | 'payment' | 'refund' | 'opening' | 'adjustment' | 'receipt';
+    entry_id?: string;
     ref: string | null;
     order_id: string | null;
     at: string | null;
@@ -382,10 +389,23 @@ export interface Customer {
     id: string;
     code: string;
     name: string;
+    type?: 'individual' | 'company';
+    source?: string | null;
+    invoice?: { name: string | null; address: string | null; email: string | null };
     phone: string | null;
     email: string | null;
     address: string | null;
-    group: { id: string; code: string; name: string; price_tier: 'retail' | 'wholesale'; discount_percent: string; payment_method: string | null } | null;
+    group: {
+        id: string;
+        code: string;
+        name: string;
+        price_tier: 'retail' | 'wholesale';
+        discount_percent: string;
+        payment_method: string | null;
+        is_active?: boolean;
+        payment_terms_days?: number | null;
+        credit_limit?: string | null;
+    } | null;
     assignee: { id: string; name: string } | null;
     birthday: string | null;
     gender: 'male' | 'female' | 'other' | null;
@@ -396,8 +416,40 @@ export interface Customer {
     orders_count: number | null;
     total_spent: string | null;
     debt: string | null;
+    overdue?: string | null;
+    payment_terms_days?: number | null;
+    credit_limit?: string | null;
     last_order_at: string | null;
     created_at: string | null;
+}
+
+export interface CustomerSummary {
+    first_order_at: string | null;
+    average_order: string | null;
+    purchase_interval_days: number | null;
+    days_since_last_order: number | null;
+    returned_value: string;
+    terms_days: number | null;
+    credit_limit: string | null;
+    top_products?: { name: string; variant_name: string | null; sku: string | null; quantity: number; amount: string; orders: number }[];
+}
+
+export interface CustomerTask {
+    id: string;
+    title: string;
+    due_at: string;
+    done_at: string | null;
+    late: boolean;
+    assignee: string | null;
+    customer: { id: string; code: string; name: string } | null;
+}
+
+export interface CustomerActivity {
+    id: number;
+    action: string;
+    actor: string | null;
+    changes: Record<string, unknown> | null;
+    at: string | null;
 }
 
 export interface OrderReturnLineData {

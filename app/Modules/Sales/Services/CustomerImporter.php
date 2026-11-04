@@ -210,7 +210,7 @@ class CustomerImporter
             $existing = Customer::query()->whereIn('id', array_filter(array_column($plans, 'id')))->get()->keyBy('id');
             foreach ($plans as $plan) {
                 $plan['id'] === null
-                    ? $this->customers->create($plan['data'])
+                    ? $this->customers->create($plan['data'] + ['source' => 'import'])
                     : $this->customers->update($existing[$plan['id']], $plan['data']);
             }
         });

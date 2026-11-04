@@ -8,6 +8,9 @@ export interface CartLine {
     quantity: number;
     unit_price: number;
     discount: number;
+    /** List prices, to switch the line when the buyer's group sells at another price. */
+    retail?: number;
+    wholesale?: number;
 }
 
 export interface Cart {
@@ -20,6 +23,10 @@ export interface Cart {
     received: number | string;
     /** Idempotency key of the payment in progress: kept until the sale succeeds, so a retry cannot sell twice. */
     key?: string;
+    /** Price policy and order discount (%) of the buyer's group; `discountAuto` until someone types a discount. */
+    tier?: 'retail' | 'wholesale';
+    groupPercent?: number;
+    discountAuto?: boolean;
     /** Paid with several methods ("Chia nhiều hình thức"): one row per method; null = one method (`method`). */
     split?: SplitRow[] | null;
 }
@@ -55,7 +62,30 @@ export function addToCart(cart: Cart, v: Variant): void {
         line.quantity += 1;
         return;
     }
-    cart.lines.push({ variant_id: v.id!, sku: v.sku, name: (v.product?.name ?? v.sku) + (v.name ? ` · ${v.name}` : ''), quantity: 1, unit_price: Number(v.ref_price) || 0, discount: 0 });
+    const retail = Number(v.ref_price) || 0;
+    const wholesale = Number(v.wholesale_price) || 0;
+    cart.lines.push({ variant_id: v.id!, sku: v.sku, name: (v.product?.name ?? v.sku) + (v.name ? ` · ${v.name}` : ''), quantity: 1, unit_price: linePrice(cart, { retail, wholesale }), discount: 0, retail, wholesale });
+}
+
+/** The list price for the cart's price policy: wholesale when the group buys wholesale and the SKU has one. */
+export function linePrice(cart: Cart, l: { retail?: number; wholesale?: number }): number {
+    return cart.tier === 'wholesale' && (l.wholesale ?? 0) > 0 ? l.wholesale! : (l.retail ?? 0);
+}
+
+/** Applies the buyer's group to the cart: price policy on every line, and its discount on the cart. */
+export function applyGroup(cart: Cart, group: { price_tier: 'retail' | 'wholesale'; discount_percent: string } | null | undefined): void {
+    cart.tier = group?.price_tier ?? 'retail';
+    cart.lines.forEach((l) => l.retail !== undefined && (l.unit_price = linePrice(cart, l)));
+    cart.groupPercent = Number(group?.discount_percent ?? 0);
+    cart.discountAuto = cart.groupPercent > 0;
+    syncGroupDiscount(cart);
+}
+
+/** Keeps the group discount in step with the cart while it is automatic. */
+export function syncGroupDiscount(cart: Cart): void {
+    if (!cart.discountAuto) return;
+    const subtotal = cartTotals({ ...cart, discount: 0 }).subtotal;
+    cart.discount = Math.round((subtotal * (cart.groupPercent ?? 0)) / 100);
 }
 
 /** Totals of a cart; with a tax rule, the VAT on the goods after discount (added to the total when prices exclude it). */

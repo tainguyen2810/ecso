@@ -11,6 +11,7 @@ use App\Modules\Sales\Models\CustomerNote;
 use App\Modules\Sales\Support\PhoneNumber;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -55,7 +56,8 @@ class CustomerProfileController extends Controller
     {
         // Anyone who can see the customer can log a note (a call, a complaint); only managers edit the profile.
         $this->authorize('view', $customer);
-        $data = $request->validate(['body' => ['required', 'string', 'max:2000']]);
+        $data = $request->validate(['body' => ['required', 'string', 'max:2000'], 'kind' => ['nullable', Rule::in(CustomerNote::KINDS)]]);
+        $data['kind'] ??= 'note';
         $note = new CustomerNote($data);
         $note->forceFill(['customer_id' => $customer->id, 'created_by' => $request->user()->id])->save();
 

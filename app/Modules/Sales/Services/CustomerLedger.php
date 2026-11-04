@@ -4,6 +4,7 @@ namespace App\Modules\Sales\Services;
 
 use App\Modules\Orders\Models\Order;
 use App\Modules\Sales\Models\Customer;
+use App\Modules\Sales\Models\CustomerDebtEntry;
 use App\Modules\Sales\Models\OrderPayment;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -11,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * The customer's debt book, built from the same orders and the same rule as the debt figure (CustomerDebt): an order
  * adds its total, a counted return takes its value off, a payment takes its amount off and a refund puts its amount
- * back. Each line points to its source document. Newest first, with the balance after each line; the last balance is
+ * back; opening balances, adjustments and their receipts add or take off their signed amount. Each line points to its source document. Newest first, with the balance after each line; the last balance is
  * the customer's debt (negative when the shop owes the customer).
  */
 class CustomerLedger
@@ -19,7 +20,7 @@ class CustomerLedger
     public const LIMIT = 300;
 
     /**
-     * @return list<array{type: string, ref: string|null, order_id: string|null, at: string|null, note: string|null, change: string, balance: string}>
+     * @return list<array{type: string, ref: string|null, order_id: string|null, entry_id?: string, at: string|null, note: string|null, change: string, balance: string}>
      */
     public function entries(Customer $customer): array
     {
@@ -57,6 +58,19 @@ class CustomerLedger
                 'at' => $p->paid_at->toIso8601String(),
                 'note' => $p->method === OrderPayment::EXCHANGE ? ($refund ? 'Bù trừ đổi hàng (đơn gốc)' : 'Bù trừ đổi hàng (đơn mới)') : ($refund ? 'Hoàn tiền' : 'Thu tiền'),
                 'change' => $refund ? bcadd((string) $p->amount, '0', 2) : bcsub('0', (string) $p->amount, 2),
+            ];
+        }
+
+        $entries = CustomerDebtEntry::query()->where('customer_id', $customer->id)->whereNull('voided_at')
+            ->where(fn ($q) => $q->whereNull('cash_voucher_id')->orWhereHas('voucher', fn ($v) => $v->whereNull('voided_at')))
+            ->get(['ulid', 'number', 'kind', 'amount', 'entry_date', 'reason', 'created_at']);
+        $labels = [CustomerDebtEntry::OPENING => 'Công nợ đầu kỳ', CustomerDebtEntry::ADJUSTMENT => 'Điều chỉnh công nợ', CustomerDebtEntry::RECEIPT => 'Thu nợ'];
+        foreach ($entries as $e) {
+            $lines[] = [
+                'type' => $e->kind, 'ref' => $e->number, 'order_id' => null, 'entry_id' => $e->ulid,
+                // The document date, at the moment it was entered (keeps same-day documents in their order).
+                'at' => $e->entry_date->copy()->setTimeFrom($e->created_at ?? now())->toIso8601String(),
+                'note' => $labels[$e->kind].($e->kind === CustomerDebtEntry::RECEIPT ? '' : ': '.$e->reason), 'change' => bcadd((string) $e->amount, '0', 2),
             ];
         }
 

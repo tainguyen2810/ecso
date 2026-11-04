@@ -51,12 +51,18 @@ class CustomerTransferController extends Controller
     public function export(Request $request, CustomerExporter $exporter, AuditLogger $audit): StreamedResponse
     {
         $this->authorize('export', Customer::class);
-        $data = $request->validate(['format' => ['nullable', 'in:csv,xlsx'], 'ids' => ['nullable', 'string', 'max:20000']]);
+        $data = $request->validate(['format' => ['nullable', 'in:csv,xlsx'], 'ids' => ['nullable', 'string', 'max:20000'], ...CustomerController::filterRules()]);
         $ids = filled($data['ids'] ?? null) ? array_values(array_filter(explode(',', $data['ids']))) : null;
+        // Without ticked rows, the file holds what the list shows: the same filters and order.
+        $filters = array_filter(array_diff_key($data, array_flip(['format', 'ids', 'per_page', 'sort', 'dir'])), fn ($v) => $v !== null && $v !== '');
         // The file carries phones and addresses in clear: who took it, and which customers, is kept.
-        $audit->record('customer.exported', null, ['format' => $data['format'] ?? 'xlsx', 'scope' => $ids === null ? 'all' : count($ids).' selected']);
+        $audit->record('customer.exported', null, [
+            'format' => $data['format'] ?? 'xlsx',
+            'scope' => $ids !== null ? count($ids).' selected' : ($filters ? 'filtered' : 'all'),
+            'filters' => $filters ?: null,
+        ]);
 
-        return $exporter->stream($data['format'] ?? 'xlsx', $ids);
+        return $exporter->stream($data['format'] ?? 'xlsx', $ids, $ids === null ? $data : []);
     }
 
     public function template(): StreamedResponse

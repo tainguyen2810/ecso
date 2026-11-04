@@ -100,6 +100,7 @@ class CashVoucherController extends Controller
 
         return response()->json(['data' => [
             'debt' => (float) $debt->forCustomer($customer),
+            'other' => max(0, (float) $debt->entriesBalance($customer)),
             'orders' => $orders->map(fn (Order $o) => [
                 'id' => $o->ulid,
                 'number' => $o->external_order_id,
@@ -120,8 +121,10 @@ class CashVoucherController extends Controller
             'note' => ['nullable', 'string', 'max:500'],
             'paid_at' => ['nullable', 'date', 'before_or_equal:now'],
         ]);
-        $payments = $service->collectCustomerDebt($customer, $data)->each->load('creator');
+        $result = $service->collectCustomerDebt($customer, $data);
 
-        return PaymentResource::collection($payments)->response()->setStatusCode(201);
+        return PaymentResource::collection($result['payments']->each->load('creator'))
+            ->additional(['voucher' => $result['voucher'] ? ['id' => $result['voucher']->ulid, 'number' => $result['voucher']->number, 'amount' => (string) $result['voucher']->amount] : null])
+            ->response()->setStatusCode(201);
     }
 }

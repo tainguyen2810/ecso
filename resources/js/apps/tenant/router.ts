@@ -52,6 +52,7 @@ const routes: RouteRecordRaw[] = [
             { path: 'orders/:id/edit', name: 'order-edit', component: () => import('./pages/orders/OrderForm.vue'), meta: { permission: 'orders.create', nav: 'orders' } },
             { path: 'customers', name: 'customers', component: () => import('./pages/customers/CustomerList.vue'), meta: { permission: 'customers.view', nav: 'customers' } },
             { path: 'customers/groups', name: 'customer-groups', component: () => import('./pages/customers/CustomerGroups.vue'), meta: { permission: 'customers.view', nav: 'customers' } },
+            { path: 'customers/duplicates', name: 'customer-duplicates', component: () => import('./pages/customers/CustomerDuplicates.vue'), meta: { permission: 'customers.merge', nav: 'customers' } },
             { path: 'customers/:id', name: 'customer-show', component: () => import('./pages/customers/CustomerDetail.vue'), meta: { permission: 'customers.view', nav: 'customers' } },
             { path: 'pos/shifts', name: 'pos-shifts', component: () => import('./pages/sales/Shifts.vue'), meta: { anyPermission: ['orders.create', 'orders.shifts'], nav: 'pos' } },
             { path: 'pos', name: 'pos', component: () => import('./pages/sales/Pos.vue'), meta: { permission: 'orders.create', nav: 'pos' } },

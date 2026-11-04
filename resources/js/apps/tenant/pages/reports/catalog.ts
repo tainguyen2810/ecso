@@ -408,7 +408,7 @@ export const reports: Record<string, DetailReport> = {
     receivables: {
         key: 'receivables',
         title: 'Công nợ khách hàng',
-        description: 'Đơn bán ở kênh riêng chưa thu đủ tiền, gom theo khách hàng.',
+        description: 'Đơn bán ở kênh riêng chưa thu đủ tiền (không tính đơn COD, giao thất bại), cộng nợ đầu kỳ và điều chỉnh, gom theo khách hàng.',
         endpoint: '/reports/receivables',
         permission: 'finance.view',
         period: 'none',
@@ -417,6 +417,7 @@ export const reports: Record<string, DetailReport> = {
             { label: 'Khách còn nợ', value: d.totals.customers, type: 'number' },
             { label: 'Đơn chưa thu đủ', value: d.totals.orders, type: 'number' },
             { label: 'Tổng phải thu', value: d.totals.due, type: 'money' },
+            { label: 'Nợ quá hạn', value: d.totals.overdue ?? 0, type: 'money' },
         ],
         columns: () => [
             { key: 'customer', label: 'Khách hàng', value: (r) => r.customer?.name ?? 'Khách lẻ', sub: (r) => r.customer?.code ?? null, link: (r) => (r.customer ? `/customers/${r.customer.id}` : null) },
@@ -424,6 +425,7 @@ export const reports: Record<string, DetailReport> = {
             { key: 'total', label: 'Giá trị đơn', type: 'money' },
             { key: 'paid', label: 'Đã trả', type: 'money' },
             { key: 'due', label: 'Còn nợ', type: 'money', total: true, tone: () => 'danger' },
+            { key: 'overdue', label: 'Quá hạn', type: 'money', total: true, tone: (r) => (Number(r.overdue) > 0 ? 'danger' : undefined) },
             { key: 'age_days', label: 'Nợ lâu nhất', value: (r) => (r.age_days === null ? '—' : `${r.age_days} ngày`), tone: (r) => (r.age_days > 30 ? 'danger' : undefined) },
         ],
     },

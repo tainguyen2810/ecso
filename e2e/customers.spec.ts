@@ -62,7 +62,16 @@ test('customer detail: profile, group terms, debt book, addresses and notes', as
 
     await page.getByTestId('customer-tabs').getByRole('button', { name: /Công nợ/ }).click();
     await expect(page.getByTestId('customer-ledger')).toContainText('Ghi nhận đơn hàng');
+    await page.getByTestId('debt-adjust').click();
+    await page.getByTestId('de-amount').fill('20000');
+    await page.getByTestId('de-reason').fill('Phí giao lại lần hai');
+    await page.getByTestId('de-save').click();
+    await expect(page.getByTestId('customer-ledger')).toContainText('Điều chỉnh công nợ: Phí giao lại lần hai');
     await shot(page, '05-customer-ledger');
+
+    await page.getByTestId('customer-tabs').getByRole('button', { name: /Trả hàng/ }).click();
+    await page.getByTestId('customer-tabs').getByRole('button', { name: /Ghi chú và hoạt động/ }).click();
+    await expect(page.getByTestId('customer-activity')).toContainText('Điều chỉnh công nợ');
 
     await page.getByTestId('customer-tabs').getByRole('button', { name: /Địa chỉ/ }).click();
     await expect(page.getByText('Kho Long Biên')).toBeVisible();
@@ -72,9 +81,14 @@ test('customer detail: profile, group terms, debt book, addresses and notes', as
     await expect(page.getByText('99 Phố Huế, Hai Bà Trưng, Hà Nội')).toBeVisible();
 
     await page.getByTestId('customer-tabs').getByRole('button', { name: /Ghi chú/ }).click();
+    await page.getByTestId('note-kind').selectOption('call');
     await page.getByTestId('note-input').fill('Khách muốn nhận báo giá sỉ mới qua Zalo.');
     await page.getByTestId('note-add').click();
     await expect(page.getByText('Khách muốn nhận báo giá sỉ mới qua Zalo.')).toBeVisible();
+    await page.getByTestId('task-title').fill('Gửi báo giá sỉ tháng sau');
+    await page.getByTestId('task-due').fill('2030-01-15T09:00');
+    await page.getByTestId('task-add').click();
+    await expect(page.getByTestId('customer-tasks')).toContainText('Gửi báo giá sỉ tháng sau');
     await shot(page, '06-customer-notes');
 
     await page.getByTestId('edit-customer').click();
@@ -93,4 +107,15 @@ test('customer import: template, preview with row errors', async ({ page }) => {
     });
     await expect(page.getByTestId('customer-import-preview')).toContainText('Dòng 3');
     await shot(page, '08-customer-import-errors');
+});
+
+test('duplicate customers: listed for review, merge previewed before anything moves', async ({ page }) => {
+    await login(page, 'owner@demo.test');
+    await page.goto('/customers/duplicates');
+    await expect(page.getByTestId('duplicate-groups')).toContainText('Trùng mã số thuế');
+    await expect(page.getByTestId('duplicate-groups')).toContainText('Công ty TNHH Thương mại PMT');
+    await page.getByTestId('duplicate-groups').getByRole('button', { name: /Gộp vào/ }).first().click();
+    await expect(page.getByTestId('merge-preview')).toContainText('Thông tin khác nhau');
+    await shot(page, '09-customer-merge');
+    await page.getByRole('dialog').getByRole('button', { name: 'Hủy' }).click();
 });

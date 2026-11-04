@@ -1,11 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, Banknote, CalendarClock, HandCoins, MapPin, Pencil, Plus, ShoppingCart, Trash2 } from 'lucide-vue-next';
+import { ArrowLeft, Ban, Banknote, CalendarClock, Download, HandCoins, Link2, MapPin, Merge, Pencil, Plus, ShoppingCart, Trash2 } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Tabs from '../../components/Tabs.vue';
 import CustomerDialog from './CustomerDialog.vue';
-import { customerStatus, genderLabels, priceTierLabels } from './labels';
+import DebtEntryDialog from './DebtEntryDialog.vue';
+import DebtReceiptDialog from './DebtReceiptDialog.vue';
+import MergeDialog from './MergeDialog.vue';
+import Pager from './Pager.vue';
+import { usePaged } from './usePaged';
+import { customerSources, customerStatus, customerTypes, genderLabels, noteKinds, priceTierLabels } from './labels';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -14,15 +19,16 @@ import Dialog from '@/shared/ui/Dialog.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import FormField from '@/shared/ui/FormField.vue';
 import Input from '@/shared/ui/Input.vue';
+import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
-import { api, ApiError } from '@/shared/lib/api';
+import { api, ApiError, downloadFile } from '@/shared/lib/api';
 import { cn, formatDate, formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
-import { orderStatus, paymentMethodNames, paymentMethods, paymentStatus } from '../orders/labels';
-import type { Customer, CustomerAddress, CustomerLedgerEntry, CustomerNote, OrderPaymentData, OrderSummary } from '@/shared/types';
+import { marketplaceNames, orderStatus, paymentMethodNames, paymentMethods, paymentStatus, returnStatus, returnTypes } from '../orders/labels';
+import type { Customer, CustomerActivity, CustomerAddress, CustomerLedgerEntry, CustomerNote, CustomerSummary, CustomerTask, OrderPaymentData, OrderReturnData, OrderSummary } from '@/shared/types';
 
-type Detail = Customer & { orders: OrderSummary[]; payments: OrderPaymentData[]; addresses: CustomerAddress[]; notes: CustomerNote[] };
+type Detail = Customer & { orders: OrderSummary[]; payments: OrderPaymentData[]; addresses: CustomerAddress[]; notes: CustomerNote[]; summary?: CustomerSummary };
 
 const route = useRoute();
 const router = useRouter();
@@ -33,8 +39,8 @@ const customer = ref<Detail | null>(null);
 const loading = ref(true);
 const loadError = ref<string | null>(null);
 const dialog = ref(false);
-const tab = ref(typeof route.query.tab === 'string' ? route.query.tab : 'orders');
-watch(tab, (t) => router.replace({ query: t === 'orders' ? {} : { tab: t } }));
+const tab = ref(typeof route.query.tab === 'string' ? route.query.tab : 'overview');
+watch(tab, (t) => router.replace({ query: t === 'overview' ? {} : { tab: t } }));
 
 async function load() {
     loading.value = true;
@@ -42,7 +48,7 @@ async function load() {
     try {
         const { data } = await api.get(`/customers/${route.params.id}`);
         customer.value = data.data;
-        if (tab.value === 'debt') loadLedger();
+        openTab(tab.value);
     } catch (e) {
         loadError.value = (e as ApiError).message;
     } finally {
@@ -73,7 +79,190 @@ async function loadLedger() {
         ledgerError.value = (e as ApiError).message;
     }
 }
-watch(tab, (t) => t === 'debt' && ledger.value === null && loadLedger());
+
+// Server-paged tabs, loaded the first time they are opened.
+const base = () => `/customers/${route.params.id}`;
+const ordersPage = usePaged<OrderSummary>(() => `${base()}/orders`);
+const paymentsPage = usePaged<OrderPaymentData>(() => `${base()}/payments`);
+const returnsPage = usePaged<OrderReturnData>(() => `${base()}/returns`);
+const activityPage = usePaged<CustomerActivity>(() => `${base()}/activity`);
+function openTab(t: string) {
+    if (t === 'debt' && ledger.value === null) loadLedger();
+    if (t === 'orders') ordersPage.ensure();
+    if (t === 'payments') paymentsPage.ensure();
+    if (t === 'returns') returnsPage.ensure();
+    if (t === 'notes') activityPage.ensure();
+}
+watch(tab, openTab);
+
+// Debt documents: receipts, opening balance, adjustments.
+const canCollect = computed(() => tenant.can('orders.payment'));
+const canAdjust = computed(() => tenant.can('customers.debt_adjust'));
+const receiptDialog = ref(false);
+const entryDialog = ref(false);
+const entryKind = ref<'opening' | 'adjustment'>('adjustment');
+const hasOpening = computed(() => (ledger.value ?? []).some((l) => l.type === 'opening'));
+function newEntry(kind: 'opening' | 'adjustment') {
+    entryKind.value = kind;
+    entryDialog.value = true;
+}
+async function debtChanged() {
+    ledger.value = null;
+    paymentsPage.loaded.value = false;
+    activityPage.loaded.value = false;
+    await load();
+}
+async function voidEntry(l: CustomerLedgerEntry) {
+    const reason = window.prompt(`Hủy chứng từ ${l.ref}? Nhập lý do:`);
+    if (!reason?.trim()) return;
+    try {
+        await api.post(`${base()}/debt-entries/${l.entry_id}/void`, { reason: reason.trim() });
+        toast.success('Đã hủy chứng từ.');
+        await debtChanged();
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    }
+}
+const exporting = ref(false);
+async function exportLedger() {
+    exporting.value = true;
+    try {
+        await downloadFile(`${base()}/ledger/export`, `cong-no-${customer.value!.code}.xlsx`);
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    } finally {
+        exporting.value = false;
+    }
+}
+const creditUse = computed(() => {
+    const limit = Number(customer.value?.summary?.credit_limit ?? 0);
+    return limit > 0 ? Math.min(100, Math.round((Number(customer.value!.debt ?? 0) / limit) * 100)) : null;
+});
+
+// Follow-ups on this customer.
+const tasks = ref<CustomerTask[]>([]);
+const taskForm = reactive({ title: '', due_at: '' });
+const taskSaving = ref(false);
+async function loadTasks() {
+    try {
+        tasks.value = (await api.get(`/customers/${route.params.id}/tasks`)).data.data;
+    } catch {
+        tasks.value = [];
+    }
+}
+watch(tab, (t) => t === 'notes' && loadTasks(), { immediate: true });
+async function addTask() {
+    taskSaving.value = true;
+    try {
+        await api.post(`${base()}/tasks`, { title: taskForm.title.trim(), due_at: taskForm.due_at.replace('T', ' ') });
+        Object.assign(taskForm, { title: '', due_at: '' });
+        activityPage.loaded.value = false;
+        await Promise.all([loadTasks(), activityPage.load()]);
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    } finally {
+        taskSaving.value = false;
+    }
+}
+async function doneTask(t: CustomerTask) {
+    try {
+        await api.post(`${base()}/tasks/${t.id}/done`);
+        await Promise.all([loadTasks(), activityPage.load()]);
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    }
+}
+async function removeTask(t: CustomerTask) {
+    if (!window.confirm(`Xóa việc "${t.title}"?`)) return;
+    try {
+        await api.delete(`${base()}/tasks/${t.id}`);
+        await loadTasks();
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    }
+}
+
+// Merge another card into this one: pick it, then review the merge.
+const canMerge = computed(() => tenant.can('customers.merge'));
+const pickOpen = ref(false);
+const pickQuery = ref('');
+const pickResults = ref<Customer[]>([]);
+const mergeOpen = ref(false);
+const mergeSource = ref('');
+let pickTimer: ReturnType<typeof setTimeout> | undefined;
+watch(pickQuery, (q) => {
+    clearTimeout(pickTimer);
+    if (!q.trim()) return void (pickResults.value = []);
+    pickTimer = setTimeout(async () => {
+        const { data } = await api.get('/customers', { params: { q, per_page: 8 } });
+        pickResults.value = (data.data as Customer[]).filter((c) => c.id !== customer.value?.id);
+    }, 250);
+});
+function pickForMerge(c: Customer) {
+    mergeSource.value = c.id;
+    pickOpen.value = false;
+    pickQuery.value = '';
+    mergeOpen.value = true;
+}
+async function merged() {
+    ledger.value = null;
+    for (const p of [ordersPage, paymentsPage, returnsPage, activityPage]) p.loaded.value = false;
+    await Promise.all([load(), loadLinks()]);
+}
+
+// Channel ids and past merges.
+const links = ref<{ identities: { source: string; external_id: string; label: string | null; last_seen_at: string | null }[]; merges: { id: string; code: string; name: string; by: string | null; at: string | null }[] } | null>(null);
+async function loadLinks() {
+    try {
+        links.value = (await api.get(`/customers/${route.params.id}/links`)).data.data;
+    } catch {
+        links.value = null;
+    }
+}
+onMounted(loadLinks);
+
+// Activity log wording.
+const activityLabels: Record<string, string> = {
+    'customer.created': 'Tạo khách hàng',
+    'customer.updated': 'Sửa thông tin',
+    'customer.bulk_updated': 'Cập nhật hàng loạt',
+    'customer.debt_opening': 'Ghi công nợ đầu kỳ',
+    'customer.debt_adjustment': 'Điều chỉnh công nợ',
+    'customer.debt_voided': 'Hủy chứng từ công nợ',
+    'customer.debt_collected': 'Thu nợ',
+    'customer.imported': 'Nhập từ file',
+    'customer.merged': 'Gộp khách',
+    'customer.task_created': 'Hẹn việc',
+    'customer.task_done': 'Xong việc',
+    'customer.auto_grouped': 'Tự xếp nhóm',
+};
+const fieldLabels: Record<string, string> = {
+    name: 'tên', phone: 'số điện thoại', email: 'email', address: 'địa chỉ', customer_group_id: 'nhóm', group: 'nhóm', status: 'trạng thái',
+    birthday: 'ngày sinh', gender: 'giới tính', tax_code: 'mã số thuế', tags: 'tags', note: 'ghi chú', assigned_user_id: 'phụ trách',
+    payment_terms_days: 'hạn thanh toán', credit_limit: 'hạn mức nợ',
+};
+function activityDetail(a: CustomerActivity): string {
+    const c = (a.changes ?? {}) as Record<string, unknown>;
+    if (c.fields && typeof c.fields === 'object') {
+        return Object.entries(c.fields as Record<string, unknown>)
+            .map(([k, v]) => {
+                const name = fieldLabels[k] ?? k;
+                const diff = v as { from?: unknown; to?: unknown } | string;
+                if (typeof diff === 'object' && diff && 'to' in diff) return `${name}: ${diff.from ?? '—'} → ${diff.to ?? '—'}`;
+                return `đổi ${name}`;
+            })
+            .join('; ');
+    }
+    const parts: string[] = [];
+    if (c.number) parts.push(String(c.number));
+    if (c.amount !== undefined) parts.push(formatMoney(String(c.amount)));
+    if (c.voucher) parts.push(`phiếu ${c.voucher}`);
+    if (c.merged) parts.push(`gộp ${c.merged} vào khách này`);
+    if (c.title) parts.push(String(c.title));
+    if (c.group) parts.push(`nhóm ${c.group}`);
+    if (c.reason) parts.push(String(c.reason));
+    return parts.join(' · ');
+}
 
 // Extra delivery addresses.
 const addressDialog = ref(false);
@@ -116,12 +305,13 @@ async function removeAddress(a: CustomerAddress) {
 
 // Note timeline.
 const noteBody = ref('');
+const noteKind = ref('note');
 const noteSaving = ref(false);
 async function addNote() {
     if (!noteBody.value.trim()) return;
     noteSaving.value = true;
     try {
-        const { data } = await api.post(`/customers/${customer.value!.id}/notes`, { body: noteBody.value.trim() });
+        const { data } = await api.post(`/customers/${customer.value!.id}/notes`, { body: noteBody.value.trim(), kind: noteKind.value });
         customer.value!.notes.unshift(data.data);
         noteBody.value = '';
     } catch (e) {
@@ -141,12 +331,16 @@ async function removeNote(n: CustomerNote) {
 }
 
 const tabs = computed(() => [
+    { value: 'overview', label: 'Tổng quan' },
     { value: 'orders', label: 'Đơn hàng', count: customer.value?.orders_count ?? null },
     { value: 'debt', label: 'Công nợ' },
-    { value: 'payments', label: 'Thu / hoàn tiền' },
+    { value: 'payments', label: 'Thanh toán' },
+    { value: 'returns', label: 'Trả hàng' },
     { value: 'addresses', label: 'Địa chỉ', count: (customer.value?.addresses.length ?? 0) + (customer.value?.address ? 1 : 0) },
-    { value: 'notes', label: 'Ghi chú', count: customer.value?.notes.length ?? null },
+    { value: 'notes', label: 'Ghi chú và hoạt động', count: customer.value?.notes.length ?? null },
 ]);
+const th = 'px-4 py-2 font-medium';
+const thead = 'border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground';
 </script>
 
 <template>
@@ -158,13 +352,14 @@ const tabs = computed(() => [
             <Badge :tone="customerStatus[customer.status]?.tone" data-testid="customer-status">{{ customerStatus[customer.status]?.label }}</Badge>
             <Button v-if="tenant.can('orders.create')" @click="$router.push({ path: '/orders/new', query: { customer: customer.id } })"><Plus /> Tạo đơn</Button>
             <Button v-if="canManage" variant="outline" data-testid="edit-customer" @click="dialog = true"><Pencil /> Sửa</Button>
+            <Button v-if="canMerge" variant="outline" data-testid="merge-customer" @click="pickOpen = true"><Merge /> Gộp khách</Button>
             <Button v-if="tenant.can('customers.delete') && !customer.orders_count" variant="ghost" title="Xóa" @click="remove"><Trash2 /></Button>
         </PageHeader>
 
         <div class="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <KpiCard label="Số đơn" :icon="ShoppingCart" :value="formatNumber(customer.orders_count)" />
             <KpiCard label="Tổng chi tiêu (không tính đơn hủy/hoàn)" :icon="Banknote" tone="blue" :value="formatMoney(customer.total_spent)" />
-            <KpiCard label="Còn nợ" :icon="HandCoins" :tone="Number(customer.debt) > 0 ? 'red' : 'slate'" :value="formatMoney(customer.debt)"><template #value><span data-testid="customer-debt">{{ formatMoney(customer.debt) }}</span></template></KpiCard>
+            <KpiCard label="Còn nợ" :icon="HandCoins" :tone="Number(customer.debt) > 0 ? 'red' : 'slate'" :value="formatMoney(customer.debt)"><template #value><span data-testid="customer-debt">{{ formatMoney(customer.debt) }}</span></template><span v-if="Number(customer.overdue) > 0" class="font-medium text-destructive" data-testid="customer-overdue">Quá hạn {{ formatMoney(customer.overdue) }}</span></KpiCard>
             <KpiCard label="Mua gần nhất" :icon="CalendarClock" :value="customer.last_order_at ? formatDate(customer.last_order_at) : null" />
         </div>
 
@@ -172,56 +367,137 @@ const tabs = computed(() => [
             <div class="min-w-0 space-y-4 lg:col-span-2">
                 <div class="rounded-lg border bg-card px-3 shadow-xs"><Tabs v-model="tab" :tabs="tabs" variant="underline" data-testid="customer-tabs" /></div>
 
-                <Card v-if="tab === 'orders'">
-                    <table v-if="customer.orders.length" class="w-full text-sm">
-                        <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                            <tr><th class="px-4 py-2 font-medium">Mã đơn</th><th class="px-4 py-2 font-medium">Ngày</th><th class="px-4 py-2 font-medium">Trạng thái</th><th class="px-4 py-2 font-medium">Thanh toán</th><th class="px-4 py-2 text-right font-medium">Tổng</th></tr>
-                        </thead>
-                        <tbody class="divide-y">
-                            <tr v-for="o in customer.orders" :key="o.id" class="cursor-pointer hover:bg-muted/30" @click="$router.push(`/orders/${o.id}`)">
-                                <td class="px-4 py-2.5 font-mono text-xs font-medium">{{ o.external_order_id }}<div class="font-sans text-muted-foreground">{{ o.channel?.name }}</div></td>
-                                <td class="px-4 py-2.5 text-muted-foreground">{{ formatDateTime(o.placed_at) }}</td>
-                                <td class="px-4 py-2.5"><Badge :tone="orderStatus[o.status]?.tone">{{ orderStatus[o.status]?.label }}</Badge></td>
-                                <td class="px-4 py-2.5"><Badge v-if="o.payment_status" :tone="paymentStatus[o.payment_status]?.tone">{{ paymentStatus[o.payment_status]?.label }}</Badge></td>
-                                <td class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(o.total) }}</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                    <p v-else class="px-5 py-4 text-sm text-muted-foreground">Chưa có đơn.</p>
-                    <p v-if="customer.orders.length >= 50" class="border-t px-5 py-2.5 text-xs text-muted-foreground">Đang hiện 50 đơn gần nhất.</p>
-                </Card>
+                <template v-if="tab === 'overview'">
+                    <div class="grid gap-4 md:grid-cols-2">
+                        <Card title="Thói quen mua hàng">
+                            <dl class="space-y-2 px-5 py-4 text-sm" data-testid="customer-summary">
+                                <div class="flex justify-between"><dt class="text-muted-foreground">Đơn đầu tiên</dt><dd>{{ customer.summary?.first_order_at ? formatDate(customer.summary.first_order_at) : '—' }}</dd></div>
+                                <div class="flex justify-between"><dt class="text-muted-foreground">Giá trị trung bình mỗi đơn</dt><dd class="tabular-nums">{{ customer.summary?.average_order ? formatMoney(customer.summary.average_order) : '—' }}</dd></div>
+                                <div class="flex justify-between"><dt class="text-muted-foreground">Chu kỳ mua</dt><dd>{{ customer.summary?.purchase_interval_days != null ? `${formatNumber(customer.summary.purchase_interval_days)} ngày/lần` : '—' }}</dd></div>
+                                <div class="flex justify-between"><dt class="text-muted-foreground">Chưa mua lại</dt><dd>{{ customer.summary?.days_since_last_order != null ? `${formatNumber(customer.summary.days_since_last_order)} ngày` : '—' }}</dd></div>
+                                <div class="flex justify-between"><dt class="text-muted-foreground">Giá trị hàng trả</dt><dd class="tabular-nums">{{ formatMoney(customer.summary?.returned_value ?? 0) }}</dd></div>
+                            </dl>
+                        </Card>
+                        <Card title="Công nợ">
+                            <dl class="space-y-2 px-5 py-4 text-sm">
+                                <div class="flex justify-between"><dt class="text-muted-foreground">Còn nợ</dt><dd class="font-semibold tabular-nums">{{ formatMoney(customer.debt) }}</dd></div>
+                                <div class="flex justify-between"><dt class="text-muted-foreground">Quá hạn</dt><dd :class="cn('tabular-nums', Number(customer.overdue) > 0 && 'font-semibold text-destructive')">{{ formatMoney(customer.overdue ?? 0) }}</dd></div>
+                                <div class="flex justify-between"><dt class="text-muted-foreground">Hạn thanh toán</dt><dd>{{ customer.summary?.terms_days != null ? `${customer.summary.terms_days} ngày` : 'Chưa đặt' }}</dd></div>
+                                <div class="flex justify-between"><dt class="text-muted-foreground">Hạn mức nợ</dt><dd class="tabular-nums">{{ customer.summary?.credit_limit != null ? formatMoney(customer.summary.credit_limit) : 'Không giới hạn' }}</dd></div>
+                                <div v-if="creditUse !== null">
+                                    <div class="h-1.5 overflow-hidden rounded-full bg-muted"><div :class="cn('h-full rounded-full', creditUse >= 100 ? 'bg-destructive' : creditUse >= 80 ? 'bg-amber-500' : 'bg-primary')" :style="{ width: `${creditUse}%` }" /></div>
+                                    <p class="mt-1 text-xs text-muted-foreground">Đã dùng {{ creditUse }}% hạn mức</p>
+                                </div>
+                            </dl>
+                            <div class="border-t px-5 py-2.5"><button type="button" class="text-sm text-primary hover:underline" @click="tab = 'debt'">Xem sổ công nợ</button></div>
+                        </Card>
+                    </div>
+                    <Card v-if="customer.summary?.top_products?.length" title="Sản phẩm hay mua" data-testid="top-products">
+                        <ul class="divide-y text-sm">
+                            <li v-for="p in customer.summary.top_products" :key="`${p.sku}-${p.name}-${p.variant_name}`" class="flex items-center gap-3 px-5 py-2.5">
+                                <div class="min-w-0 flex-1"><p class="truncate">{{ p.name }}<span v-if="p.variant_name" class="text-muted-foreground"> · {{ p.variant_name }}</span></p><p class="font-mono text-xs text-muted-foreground">{{ p.sku }}</p></div>
+                                <span class="text-right text-xs text-muted-foreground">{{ formatNumber(p.quantity) }} sp · {{ p.orders }} đơn<span class="block font-medium text-foreground tabular-nums">{{ formatMoney(p.amount) }}</span></span>
+                            </li>
+                        </ul>
+                    </Card>
+                    <Card title="Đơn gần đây">
+                        <ul v-if="customer.orders.length" class="divide-y text-sm">
+                            <li v-for="o in customer.orders.slice(0, 5)" :key="o.id" class="flex cursor-pointer items-center gap-3 px-5 py-2.5 hover:bg-muted/30" @click="$router.push(`/orders/${o.id}`)">
+                                <span class="font-mono text-xs font-medium">{{ o.external_order_id }}</span>
+                                <span class="flex-1 text-muted-foreground">{{ formatDateTime(o.placed_at) }}</span>
+                                <Badge :tone="orderStatus[o.status]?.tone">{{ orderStatus[o.status]?.label }}</Badge>
+                                <span class="w-28 text-right tabular-nums">{{ formatMoney(o.total) }}</span>
+                            </li>
+                        </ul>
+                        <p v-else class="px-5 py-4 text-sm text-muted-foreground">Chưa có đơn.</p>
+                    </Card>
+                </template>
 
-                <Card v-else-if="tab === 'debt'" data-testid="customer-ledger">
-                    <ErrorState v-if="ledgerError" :message="ledgerError" @retry="loadLedger" />
-                    <div v-else-if="ledger === null" class="p-4"><Skeleton class="h-24" /></div>
-                    <p v-else-if="!ledger.length" class="px-5 py-4 text-sm text-muted-foreground">Chưa phát sinh công nợ.</p>
-                    <div v-else class="overflow-x-auto">
-                        <p class="border-b px-5 py-2.5 text-xs text-muted-foreground">Đơn bán qua kênh riêng (trừ đơn hủy, hoàn toàn bộ, giao thất bại và đơn COD) cộng vào nợ; trả hàng và thu tiền trừ đi, hoàn tiền cộng lại. Mới nhất ở trên.</p>
+                <Card v-else-if="tab === 'orders'">
+                    <ErrorState v-if="ordersPage.error.value" :message="ordersPage.error.value" @retry="ordersPage.load(ordersPage.meta.value.current_page)" />
+                    <div v-else-if="!ordersPage.loaded.value" class="p-4"><Skeleton class="h-24" /></div>
+                    <div v-else-if="ordersPage.rows.value.length" class="overflow-x-auto">
                         <table class="w-full text-sm">
-                            <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                                <tr><th class="px-4 py-2 font-medium">Thời gian</th><th class="px-4 py-2 font-medium">Chứng từ</th><th class="px-4 py-2 font-medium">Diễn giải</th><th class="px-4 py-2 text-right font-medium">Phát sinh</th><th class="px-4 py-2 text-right font-medium">Còn nợ</th></tr>
-                            </thead>
+                            <thead :class="thead"><tr><th :class="th">Mã đơn</th><th :class="th">Ngày</th><th :class="th">Trạng thái</th><th :class="th">Thanh toán</th><th :class="[th, 'text-right']">Tổng</th></tr></thead>
                             <tbody class="divide-y">
-                                <tr v-for="(l, i) in ledger" :key="i">
-                                    <td class="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{{ formatDateTime(l.at) }}</td>
-                                    <td class="px-4 py-2.5 font-mono text-xs"><RouterLink v-if="l.order_id" :to="`/orders/${l.order_id}`" class="text-primary hover:underline">{{ l.ref }}</RouterLink></td>
-                                    <td class="px-4 py-2.5">{{ l.note }}</td>
-                                    <td :class="cn('px-4 py-2.5 text-right tabular-nums', Number(l.change) < 0 ? 'text-success' : '')">{{ Number(l.change) > 0 ? '+' : '' }}{{ formatMoney(l.change) }}</td>
-                                    <td class="px-4 py-2.5 text-right font-medium tabular-nums">{{ formatMoney(l.balance) }}</td>
+                                <tr v-for="o in ordersPage.rows.value" :key="o.id" class="cursor-pointer hover:bg-muted/30" @click="$router.push(`/orders/${o.id}`)">
+                                    <td class="px-4 py-2.5 font-mono text-xs font-medium">{{ o.external_order_id }}<div class="font-sans text-muted-foreground">{{ o.channel?.name }}</div></td>
+                                    <td class="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{{ formatDateTime(o.placed_at) }}</td>
+                                    <td class="px-4 py-2.5"><Badge :tone="orderStatus[o.status]?.tone">{{ orderStatus[o.status]?.label }}</Badge></td>
+                                    <td class="px-4 py-2.5"><Badge v-if="o.payment_status" :tone="paymentStatus[o.payment_status]?.tone">{{ paymentStatus[o.payment_status]?.label }}</Badge></td>
+                                    <td class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(o.total) }}</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
+                    <p v-else class="px-5 py-4 text-sm text-muted-foreground">Chưa có đơn.</p>
+                    <Pager :meta="ordersPage.meta.value" :loading="ordersPage.loading.value" @page="ordersPage.load" />
+                </Card>
+
+                <Card v-else-if="tab === 'debt'" data-testid="customer-ledger">
+                    <div class="flex flex-wrap items-center gap-2 border-b px-4 py-2.5">
+                        <Button v-if="canCollect && Number(customer.debt) > 0" size="sm" data-testid="debt-collect" @click="receiptDialog = true"><HandCoins /> Thu nợ</Button>
+                        <Button v-if="canAdjust && ledger !== null && !hasOpening" variant="outline" size="sm" data-testid="debt-opening" @click="newEntry('opening')"><Plus /> Nợ đầu kỳ</Button>
+                        <Button v-if="canAdjust" variant="outline" size="sm" data-testid="debt-adjust" @click="newEntry('adjustment')"><Pencil /> Điều chỉnh</Button>
+                        <Button variant="ghost" size="sm" class="ml-auto" :loading="exporting" @click="exportLedger"><Download /> Xuất Excel</Button>
+                    </div>
+                    <ErrorState v-if="ledgerError" :message="ledgerError" @retry="loadLedger" />
+                    <div v-else-if="ledger === null" class="p-4"><Skeleton class="h-24" /></div>
+                    <p v-else-if="!ledger.length" class="px-5 py-4 text-sm text-muted-foreground">Chưa phát sinh công nợ.</p>
+                    <div v-else class="overflow-x-auto">
+                        <p class="border-b px-5 py-2.5 text-xs text-muted-foreground">Đơn bán qua kênh riêng (trừ đơn hủy, hoàn toàn bộ, giao thất bại và đơn COD) cộng vào nợ; trả hàng và thu tiền trừ đi, hoàn tiền cộng lại. Nợ đầu kỳ và phiếu điều chỉnh là chứng từ riêng, chỉ hủy được kèm lý do. Mới nhất ở trên.</p>
+                        <table class="w-full text-sm">
+                            <thead :class="thead"><tr><th :class="th">Thời gian</th><th :class="th">Chứng từ</th><th :class="th">Diễn giải</th><th :class="[th, 'text-right']">Phát sinh</th><th :class="[th, 'text-right']">Còn nợ</th><th class="w-10" /></tr></thead>
+                            <tbody class="divide-y">
+                                <tr v-for="(l, i) in ledger" :key="i">
+                                    <td class="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{{ formatDateTime(l.at) }}</td>
+                                    <td class="whitespace-nowrap px-4 py-2.5 font-mono text-xs"><RouterLink v-if="l.order_id" :to="`/orders/${l.order_id}`" class="text-primary hover:underline">{{ l.ref }}</RouterLink><span v-else>{{ l.ref }}</span></td>
+                                    <td class="px-4 py-2.5">{{ l.note }}</td>
+                                    <td :class="cn('whitespace-nowrap px-4 py-2.5 text-right tabular-nums', Number(l.change) < 0 ? 'text-success' : '')">{{ Number(l.change) > 0 ? '+' : '' }}{{ formatMoney(l.change) }}</td>
+                                    <td class="whitespace-nowrap px-4 py-2.5 text-right font-medium tabular-nums">{{ formatMoney(l.balance) }}</td>
+                                    <td class="px-2 py-1.5"><Button v-if="canAdjust && l.entry_id && l.type !== 'receipt'" variant="ghost" size="sm" :aria-label="`Hủy ${l.ref}`" title="Hủy chứng từ" @click="voidEntry(l)"><Ban /></Button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <p class="border-t px-5 py-2.5 text-xs text-muted-foreground">Phiếu thu nợ đầu kỳ nằm trong Sổ quỹ; hủy phiếu ở đó thì khoản nợ được trả lại.</p>
+                    </div>
                 </Card>
 
                 <Card v-else-if="tab === 'payments'">
-                    <ul v-if="customer.payments.length" class="divide-y text-sm">
-                        <li v-for="p in customer.payments" :key="p.id" class="flex items-center justify-between px-5 py-2.5" :class="p.voided_at && 'opacity-50 line-through'">
-                            <div><div>{{ p.kind === 'refund' ? 'Hoàn' : 'Thu' }} · {{ paymentMethodNames[p.method] ?? p.method }}</div><div class="text-xs text-muted-foreground">{{ p.order?.number }} · {{ formatDateTime(p.paid_at) }}</div></div>
-                            <span class="tabular-nums" :class="p.kind === 'refund' ? 'text-destructive' : 'text-success'">{{ p.kind === 'refund' ? '−' : '+' }}{{ formatMoney(p.amount) }}</span>
+                    <ErrorState v-if="paymentsPage.error.value" :message="paymentsPage.error.value" @retry="paymentsPage.load()" />
+                    <div v-else-if="!paymentsPage.loaded.value" class="p-4"><Skeleton class="h-24" /></div>
+                    <ul v-else-if="paymentsPage.rows.value.length" class="divide-y text-sm">
+                        <li v-for="p in paymentsPage.rows.value" :key="p.id" class="flex items-center justify-between gap-3 px-5 py-2.5" :class="p.voided_at && 'opacity-50 line-through'">
+                            <div class="min-w-0">
+                                <div>{{ p.kind === 'refund' ? 'Hoàn' : 'Thu' }} · {{ paymentMethodNames[p.method] ?? p.method }}<span v-if="p.reference" class="text-muted-foreground"> · {{ p.reference }}</span></div>
+                                <div class="text-xs text-muted-foreground"><RouterLink v-if="p.order" :to="`/orders/${p.order.id}`" class="text-primary hover:underline">{{ p.order.number }}</RouterLink> · {{ formatDateTime(p.paid_at) }}</div>
+                            </div>
+                            <span class="whitespace-nowrap tabular-nums" :class="p.kind === 'refund' ? 'text-destructive' : 'text-success'">{{ p.kind === 'refund' ? '−' : '+' }}{{ formatMoney(p.amount) }}</span>
                         </li>
                     </ul>
-                    <p v-else class="px-5 py-4 text-sm text-muted-foreground">Chưa có.</p>
+                    <p v-else class="px-5 py-4 text-sm text-muted-foreground">Chưa có phiếu thu hoặc hoàn tiền.</p>
+                    <Pager :meta="paymentsPage.meta.value" :loading="paymentsPage.loading.value" @page="paymentsPage.load" />
+                </Card>
+
+                <Card v-else-if="tab === 'returns'">
+                    <ErrorState v-if="returnsPage.error.value" :message="returnsPage.error.value" @retry="returnsPage.load()" />
+                    <div v-else-if="!returnsPage.loaded.value" class="p-4"><Skeleton class="h-24" /></div>
+                    <div v-else-if="returnsPage.rows.value.length" class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead :class="thead"><tr><th :class="th">Phiếu</th><th :class="th">Đơn gốc</th><th :class="th">Loại</th><th :class="th">Trạng thái</th><th :class="[th, 'text-right']">Giá trị</th></tr></thead>
+                            <tbody class="divide-y">
+                                <tr v-for="r in returnsPage.rows.value" :key="r.id" class="cursor-pointer hover:bg-muted/30" @click="$router.push(`/returns/${r.id}`)">
+                                    <td class="px-4 py-2.5 font-mono text-xs font-medium">{{ r.number }}<div class="font-sans text-muted-foreground">{{ formatDateTime(r.created_at) }}</div></td>
+                                    <td class="px-4 py-2.5 font-mono text-xs">{{ r.order?.external_order_id }}</td>
+                                    <td class="px-4 py-2.5">{{ returnTypes[r.type] ?? r.type }}</td>
+                                    <td class="px-4 py-2.5"><Badge :tone="returnStatus[r.status]?.tone">{{ returnStatus[r.status]?.label ?? r.status }}</Badge></td>
+                                    <td class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{{ formatMoney(r.refund_amount ?? r.goods_value ?? 0) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p v-else class="px-5 py-4 text-sm text-muted-foreground">Khách chưa trả hàng.</p>
+                    <Pager :meta="returnsPage.meta.value" :loading="returnsPage.loading.value" @page="returnsPage.load" />
                 </Card>
 
                 <Card v-else-if="tab === 'addresses'">
@@ -246,21 +522,52 @@ const tabs = computed(() => [
                     <div v-if="canManage" class="border-t px-5 py-2.5"><Button variant="outline" size="sm" data-testid="add-address" @click="editAddress(null)"><Plus /> Thêm địa chỉ giao hàng</Button></div>
                 </Card>
 
-                <Card v-else-if="tab === 'notes'">
+                <Card v-if="tab === 'notes'" title="Việc cần làm với khách" data-testid="customer-tasks">
+                    <form class="grid gap-2 border-b p-4 sm:grid-cols-[1fr_12rem_auto]" @submit.prevent="addTask">
+                        <Input v-model="taskForm.title" placeholder="Gọi lại báo giá, nhắc thanh toán…" maxlength="200" data-testid="task-title" />
+                        <Input v-model="taskForm.due_at" type="datetime-local" aria-label="Hạn" data-testid="task-due" />
+                        <Button type="submit" variant="outline" :loading="taskSaving" :disabled="!taskForm.title.trim() || !taskForm.due_at" data-testid="task-add"><CalendarClock /> Hẹn</Button>
+                    </form>
+                    <ul v-if="tasks.length" class="divide-y text-sm">
+                        <li v-for="t in tasks" :key="t.id" class="flex items-center gap-3 px-5 py-2.5" :class="t.done_at && 'opacity-60'">
+                            <input type="checkbox" class="size-4" :checked="!!t.done_at" :disabled="!!t.done_at" :aria-label="`Xong: ${t.title}`" @change="doneTask(t)" />
+                            <div class="min-w-0 flex-1">
+                                <p :class="t.done_at && 'line-through'">{{ t.title }}</p>
+                                <p class="text-xs" :class="t.late ? 'font-medium text-destructive' : 'text-muted-foreground'">{{ t.late ? 'Trễ hẹn · ' : '' }}{{ formatDateTime(t.due_at) }}<template v-if="t.assignee"> · {{ t.assignee }}</template></p>
+                            </div>
+                            <Button variant="ghost" size="sm" aria-label="Xóa việc" @click="removeTask(t)"><Trash2 /></Button>
+                        </li>
+                    </ul>
+                    <p v-else class="px-5 py-4 text-sm text-muted-foreground">Chưa có việc nào.</p>
+                </Card>
+                <Card v-if="tab === 'notes'">
                     <form class="flex gap-2 border-b p-4" @submit.prevent="addNote">
+                        <Select v-model="noteKind" class="w-32 shrink-0" aria-label="Loại liên hệ" :options="Object.entries(noteKinds).map(([value, k]) => ({ value, label: k.label }))" data-testid="note-kind" />
                         <Input v-model="noteBody" placeholder="Ghi lại cuộc gọi, khiếu nại, sở thích của khách…" maxlength="2000" data-testid="note-input" />
                         <Button type="submit" :loading="noteSaving" :disabled="!noteBody.trim()" data-testid="note-add">Thêm</Button>
                     </form>
                     <ul v-if="customer.notes.length" class="divide-y text-sm">
                         <li v-for="n in customer.notes" :key="n.id" class="flex items-start gap-3 px-5 py-3">
                             <div class="flex-1">
-                                <p class="whitespace-pre-line">{{ n.body }}</p>
+                                <p class="whitespace-pre-line"><Badge v-if="n.kind && n.kind !== 'note'" :tone="noteKinds[n.kind]?.tone" class="mr-1.5">{{ noteKinds[n.kind]?.label }}</Badge>{{ n.body }}</p>
                                 <p class="mt-1 text-xs text-muted-foreground">{{ n.author ?? 'Không rõ' }} · {{ formatDateTime(n.created_at) }}</p>
                             </div>
                             <Button v-if="n.mine || canManage" variant="ghost" size="sm" aria-label="Xóa ghi chú" @click="removeNote(n)"><Trash2 /></Button>
                         </li>
                     </ul>
                     <p v-else class="px-5 py-4 text-sm text-muted-foreground">Chưa có ghi chú.</p>
+                </Card>
+                <Card v-if="tab === 'notes'" title="Lịch sử hoạt động" data-testid="customer-activity">
+                    <ErrorState v-if="activityPage.error.value" :message="activityPage.error.value" @retry="activityPage.load()" />
+                    <div v-else-if="!activityPage.loaded.value" class="p-4"><Skeleton class="h-16" /></div>
+                    <ol v-else-if="activityPage.rows.value.length" class="divide-y text-sm">
+                        <li v-for="a in activityPage.rows.value" :key="a.id" class="px-5 py-2.5">
+                            <div><span class="font-medium">{{ activityLabels[a.action] ?? a.action }}</span><span v-if="activityDetail(a)" class="text-muted-foreground"> · {{ activityDetail(a) }}</span></div>
+                            <div class="text-xs text-muted-foreground">{{ a.actor ?? 'Hệ thống' }} · {{ formatDateTime(a.at) }}</div>
+                        </li>
+                    </ol>
+                    <p v-else class="px-5 py-4 text-sm text-muted-foreground">Chưa có hoạt động.</p>
+                    <Pager :meta="activityPage.meta.value" :loading="activityPage.loading.value" @page="activityPage.load" />
                 </Card>
             </div>
 
@@ -271,9 +578,15 @@ const tabs = computed(() => [
                         <div><dt class="text-xs text-muted-foreground">Email</dt><dd class="break-all">{{ customer.email ?? '—' }}</dd></div>
                         <div><dt class="text-xs text-muted-foreground">Ngày sinh</dt><dd>{{ customer.birthday ? formatDate(customer.birthday) : '—' }}</dd></div>
                         <div><dt class="text-xs text-muted-foreground">Giới tính</dt><dd>{{ customer.gender ? genderLabels[customer.gender] : '—' }}</dd></div>
+                        <div><dt class="text-xs text-muted-foreground">Loại khách</dt><dd>{{ customerTypes[customer.type ?? 'individual'] }}</dd></div>
+                        <div><dt class="text-xs text-muted-foreground">Nguồn</dt><dd>{{ customer.source ? (customerSources[customer.source] ?? customer.source) : '—' }}</dd></div>
                         <div><dt class="text-xs text-muted-foreground">Mã số thuế</dt><dd>{{ customer.tax_code ?? '—' }}</dd></div>
                         <div><dt class="text-xs text-muted-foreground">Phụ trách</dt><dd>{{ customer.assignee?.name ?? '—' }}</dd></div>
                         <div class="col-span-2"><dt class="text-xs text-muted-foreground">Địa chỉ</dt><dd>{{ customer.address ?? '—' }}</dd></div>
+                        <div v-if="customer.invoice?.name || customer.invoice?.address || customer.invoice?.email" class="col-span-2" data-testid="customer-invoice">
+                            <dt class="text-xs text-muted-foreground">Xuất hóa đơn</dt>
+                            <dd>{{ customer.invoice.name }}<span v-if="customer.invoice.address" class="block text-muted-foreground">{{ customer.invoice.address }}</span><span v-if="customer.invoice.email" class="block break-all text-muted-foreground">{{ customer.invoice.email }}</span></dd>
+                        </div>
                         <div v-if="customer.tags.length" class="col-span-2">
                             <dt class="text-xs text-muted-foreground">Tags</dt>
                             <dd class="mt-1 flex flex-wrap gap-1">
@@ -284,6 +597,20 @@ const tabs = computed(() => [
                         <div class="col-span-2"><dt class="text-xs text-muted-foreground">Ngày thêm</dt><dd>{{ formatDateTime(customer.created_at) }}</dd></div>
                     </dl>
                 </Card>
+                <Card v-if="links && (links.identities.length || links.merges.length)" title="Kênh liên kết và lịch sử gộp" data-testid="customer-links">
+                    <ul class="divide-y text-sm">
+                        <li v-for="i in links.identities" :key="i.source + i.external_id" class="flex items-center gap-2 px-5 py-2.5">
+                            <Link2 class="size-4 text-muted-foreground" />
+                            <span class="flex-1">{{ marketplaceNames[i.source] ?? i.source }} · <span class="font-mono text-xs">{{ i.label ?? i.external_id }}</span></span>
+                            <span class="text-xs text-muted-foreground">{{ i.last_seen_at ? formatDate(i.last_seen_at) : '' }}</span>
+                        </li>
+                        <li v-for="m in links.merges" :key="m.id" class="flex items-center gap-2 px-5 py-2.5">
+                            <Merge class="size-4 text-muted-foreground" />
+                            <span class="flex-1">Đã gộp {{ m.name }} <span class="font-mono text-xs text-muted-foreground">{{ m.code }}</span></span>
+                            <span class="text-xs text-muted-foreground">{{ m.by ?? '' }} · {{ formatDate(m.at) }}</span>
+                        </li>
+                    </ul>
+                </Card>
                 <Card title="Nhóm và điều khoản mua hàng">
                     <dl v-if="customer.group" class="space-y-2 px-5 py-4 text-sm">
                         <div class="flex justify-between"><dt class="text-muted-foreground">Nhóm</dt><dd><RouterLink :to="{ path: '/customers', query: { group: customer.group.id } }" class="text-primary hover:underline">{{ customer.group.name }}</RouterLink></dd></div>
@@ -292,11 +619,29 @@ const tabs = computed(() => [
                         <div class="flex justify-between"><dt class="text-muted-foreground">Thanh toán quen dùng</dt><dd>{{ customer.group.payment_method ? paymentMethods[customer.group.payment_method] : '—' }}</dd></div>
                     </dl>
                     <p v-else class="px-5 py-4 text-sm text-muted-foreground">Chưa xếp nhóm.<button v-if="canManage" type="button" class="ml-1 text-primary hover:underline" @click="dialog = true">Xếp nhóm</button></p>
+                    <dl class="space-y-2 border-t px-5 py-4 text-sm">
+                        <div class="flex justify-between"><dt class="text-muted-foreground">Hạn thanh toán</dt><dd>{{ customer.summary?.terms_days != null ? `${customer.summary.terms_days} ngày` : '—' }}<span v-if="customer.payment_terms_days == null && customer.summary?.terms_days != null" class="text-xs text-muted-foreground"> (theo nhóm)</span></dd></div>
+                        <div class="flex justify-between"><dt class="text-muted-foreground">Hạn mức nợ</dt><dd class="tabular-nums">{{ customer.summary?.credit_limit != null ? formatMoney(customer.summary.credit_limit) : '—' }}<span v-if="customer.credit_limit == null && customer.summary?.credit_limit != null" class="text-xs text-muted-foreground"> (theo nhóm)</span></dd></div>
+                    </dl>
                 </Card>
             </div>
         </div>
 
         <CustomerDialog v-model:open="dialog" :customer="customer" @saved="load" />
+        <DebtReceiptDialog v-model:open="receiptDialog" :customer-id="customer.id" :debt="Number(customer.debt ?? 0)" @saved="debtChanged" />
+        <Dialog v-model:open="pickOpen" title="Gộp khách khác vào khách này" :description="`Tìm thẻ khách trùng để gộp vào ${customer.name} (${customer.code}). Thẻ được tìm sẽ bị gộp và xóa khỏi danh sách.`">
+            <Input v-model="pickQuery" placeholder="Tên, mã khách, email, số điện thoại…" data-testid="merge-search" />
+            <ul v-if="pickResults.length" class="mt-2 divide-y rounded-md border text-sm">
+                <li v-for="c in pickResults" :key="c.id">
+                    <button type="button" class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-muted" @click="pickForMerge(c)">
+                        <span><span class="font-medium">{{ c.name }}</span> <span class="font-mono text-xs text-muted-foreground">{{ c.code }}</span><span class="block text-xs text-muted-foreground">{{ [c.phone, c.email].filter(Boolean).join(' · ') }}</span></span>
+                        <span class="text-xs text-muted-foreground">{{ formatNumber(c.orders_count) }} đơn</span>
+                    </button>
+                </li>
+            </ul>
+        </Dialog>
+        <MergeDialog v-model:open="mergeOpen" :keep-id="customer.id" :source-id="mergeSource" @merged="merged" />
+        <DebtEntryDialog v-model:open="entryDialog" :customer-id="customer.id" :kind="entryKind" @saved="debtChanged" />
         <Dialog v-model:open="addressDialog" :title="editingAddress ? 'Sửa địa chỉ giao hàng' : 'Thêm địa chỉ giao hàng'" description="Số điện thoại và địa chỉ được mã hóa khi lưu.">
             <form id="address-form" class="grid gap-3 sm:grid-cols-2" @submit.prevent="saveAddress">
                 <FormField label="Tên gợi nhớ" for="a-label"><Input id="a-label" v-model="addressForm.label" placeholder="Nhà riêng, Công ty…" /></FormField>

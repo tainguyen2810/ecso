@@ -2,6 +2,7 @@
 
 namespace App\Modules\Sales\Services;
 
+use App\Modules\Sales\Http\Controllers\CustomerController;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Support\Carbon;
@@ -20,8 +21,9 @@ class CustomerExporter
 
     /**
      * @param  list<string>|null  $ids
+     * @param  array<string, mixed>  $filters  the list's filters and sort (CustomerController::filterRules())
      */
-    public function stream(string $format, ?array $ids = null): StreamedResponse
+    public function stream(string $format, ?array $ids = null, array $filters = []): StreamedResponse
     {
         $format = $format === 'csv' ? 'csv' : 'xlsx';
         $filename = 'khach-hang-'.now()->format('Ymd-His').'.'.$format;
@@ -32,7 +34,7 @@ class CustomerExporter
         $tenant = $context->tenant();
         $membership = $context->membership();
 
-        return response()->streamDownload(fn () => TenantContext::run($tenant, fn () => $this->write($format, $ids), $membership), $filename, [
+        return response()->streamDownload(fn () => TenantContext::run($tenant, fn () => $this->write($format, $ids, $filters), $membership), $filename, [
             'Content-Type' => $format === 'xlsx'
                 ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
                 : 'text/csv; charset=UTF-8',
@@ -41,8 +43,9 @@ class CustomerExporter
 
     /**
      * @param  list<string>|null  $ids
+     * @param  array<string, mixed>  $filters
      */
-    private function write(string $format, ?array $ids): void
+    private function write(string $format, ?array $ids, array $filters): void
     {
         $writer = $format === 'xlsx' ? new XlsxWriter : new CsvWriter;
         $writer->openToFile('php://output');
@@ -50,9 +53,9 @@ class CustomerExporter
         $genders = ['male' => 'Nam', 'female' => 'Nữ', 'other' => 'Khác'];
         $statuses = ['active' => 'Đang giao dịch', 'inactive' => 'Ngừng giao dịch'];
 
-        Customer::query()->withStats()->with(['customerGroup:id,code,name', 'assignee:id,name'])
-            ->when($ids !== null, fn ($q) => $q->whereIn('customers.ulid', $ids))
-            ->orderBy('customers.id')
+        $query = Customer::query()->withStats()->with(['customerGroup:id,code,name', 'assignee:id,name'])
+            ->when($ids !== null, fn ($q) => $q->whereIn('customers.ulid', $ids));
+        CustomerController::sorted(CustomerController::filtered($query, $filters), $filters)
             ->chunk(500, function ($customers) use ($writer, $genders, $statuses) {
                 foreach ($customers as $c) {
                     $writer->addRow(Row::fromValues([
