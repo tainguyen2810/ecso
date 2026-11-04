@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Middleware\Idempotent;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schedule;
 
 // Heartbeat read by /health/ready to prove the scheduler is running.
@@ -33,3 +35,7 @@ Schedule::command('ecso:monitor')->everyFiveMinutes()->withoutOverlapping()->onO
 
 // Subscriptions: trial end, renewal invoices, scheduled downgrades, past due -> Free (Phase 6).
 Schedule::command('ecso:billing:sweep')->hourly()->withoutOverlapping()->onOneServer();
+
+// Idempotency keys of sales and payments are only needed for retries: kept two days.
+Schedule::call(fn () => DB::table('idempotency_keys')->where('created_at', '<', now()->subDays(Idempotent::KEEP_DAYS))->delete())
+    ->name('idempotency-keys-prune')->dailyAt('03:10')->onOneServer();

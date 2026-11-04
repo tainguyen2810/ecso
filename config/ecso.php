@@ -21,6 +21,14 @@ return [
         'due_soon_hours' => 6,
     ],
 
+    // Detail reports list at most this many rows on screen; their totals always cover every row.
+    'reports' => [
+        'row_limit' => (int) env('ECSO_REPORT_ROW_LIMIT', 2000),
+        'customer_row_limit' => 500,
+        // "Xuất CSV" of a cut table fetches every row of the filter, up to this many.
+        'export_row_limit' => 50000,
+    ],
+
     // Minimum PHP extensions checked by `php artisan ecso:check-env`.
     'required_extensions' => [
         'bcmath', 'ctype', 'curl', 'dom', 'fileinfo', 'intl', 'mbstring', 'openssl',

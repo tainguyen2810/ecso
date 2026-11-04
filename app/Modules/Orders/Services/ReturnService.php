@@ -8,10 +8,12 @@ use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Services\InventoryService;
 use App\Modules\Inventory\Services\ReservationLedger;
 use App\Modules\Inventory\Support\DocumentNumber;
+use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
 use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Orders\Models\OrderReturnLine;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -68,18 +70,27 @@ class ReturnService
     public function create(Order $order, array $data): OrderReturn
     {
         return DB::transaction(function () use ($order, $data) {
-            Order::query()->whereKey($order->id)->lockForUpdate()->first();
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
             $items = $order->items()->get()->keyBy('id');
-            $alreadyReturned = OrderReturnLine::query()
-                ->whereIn('order_return_id', OrderReturn::query()->where('order_id', $order->id)->where('status', '!=', OrderReturn::REJECTED)->select('id'))
-                ->selectRaw('order_item_id, SUM(quantity) as qty')->groupBy('order_item_id')->pluck('qty', 'order_item_id');
+            $alreadyReturned = $this->returnedQuantities($order);
+
+            $shipped = $this->shippedQuantities($order, $items->all());
 
             $lines = [];
+            $seen = [];
             foreach ($data['lines'] ?? [] as $i => $line) {
                 $item = $items[$line['order_item_id']] ?? throw ValidationException::withMessages(["lines.{$i}.order_item_id" => 'Sản phẩm không thuộc đơn này.']);
-                $left = $item->quantity - (int) ($alreadyReturned[$item->id] ?? 0);
+                if (isset($seen[$item->id])) {
+                    throw ValidationException::withMessages(["lines.{$i}.order_item_id" => 'Một sản phẩm chỉ được chọn một lần trong phiếu trả.']);
+                }
+                $seen[$item->id] = true;
+
+                // Only what actually left the warehouse can come back, minus what earlier returns already cover.
+                $left = max(0, $shipped[$item->id] - (int) ($alreadyReturned[$item->id] ?? 0));
                 if ($line['quantity'] > $left) {
-                    throw ValidationException::withMessages(["lines.{$i}.quantity" => "Chỉ còn {$left} sản phẩm có thể trả."]);
+                    throw ValidationException::withMessages(["lines.{$i}.quantity" => $shipped[$item->id] === 0
+                        ? 'Hàng của dòng này chưa xuất kho nên không thể trả. Hãy sửa hoặc hủy đơn.'
+                        : "Chỉ còn {$left} sản phẩm có thể trả."]);
                 }
                 $lines[] = ['item' => $item, 'quantity' => (int) $line['quantity']];
             }
@@ -149,8 +160,13 @@ class ReturnService
 
             $byId = $return->lines()->get()->keyBy('id');
             $restock = [];
+            $seen = [];
             foreach ($lines as $i => $input) {
                 $line = $byId[$input['line_id']] ?? throw ValidationException::withMessages(["lines.{$i}.line_id" => 'Dòng không thuộc phiếu này.']);
+                if (isset($seen[$line->id])) {
+                    throw ValidationException::withMessages(["lines.{$i}.line_id" => 'Mỗi dòng của phiếu chỉ được kiểm một lần.']);
+                }
+                $seen[$line->id] = true;
                 if ($input['received_qty'] > $line->quantity) {
                     throw ValidationException::withMessages(["lines.{$i}.received_qty" => "Không được nhận quá {$line->quantity}."]);
                 }
@@ -185,6 +201,53 @@ class ReturnService
 
             return $return;
         });
+    }
+
+    /**
+     * What can still be returned per order item: shipped minus what earlier returns (not rejected) already cover.
+     *
+     * @return array<int, int> order item id => quantity
+     */
+    public function returnableQuantities(Order $order): array
+    {
+        $items = $order->items()->get();
+        $shipped = $this->shippedQuantities($order, $items->all());
+        $returned = $this->returnedQuantities($order);
+
+        return $items->mapWithKeys(fn (OrderItem $i) => [$i->id => max(0, $shipped[$i->id] - (int) ($returned[$i->id] ?? 0))])->all();
+    }
+
+    /** @return Collection<int, int|string> order item id => quantity on returns that are not rejected */
+    private function returnedQuantities(Order $order): Collection
+    {
+        return OrderReturnLine::query()
+            ->whereIn('order_return_id', OrderReturn::query()->where('order_id', $order->id)->where('status', '!=', OrderReturn::REJECTED)->select('id'))
+            ->selectRaw('order_item_id, SUM(quantity) as qty')->groupBy('order_item_id')->pluck('qty', 'order_item_id');
+    }
+
+    /**
+     * Quantity of each order item that left the warehouse. A SKU line counts what its reservation shipped; a line with
+     * no stock (service, or not linked to a SKU) counts its full quantity once the order has been handed over.
+     *
+     * @param  array<int, OrderItem>  $items
+     * @return array<int, int> order item id => quantity
+     */
+    public function shippedQuantities(Order $order, array $items): array
+    {
+        $snapshot = $this->ledger->snapshot(Order::STOCK_REFERENCE, array_map(fn (OrderItem $i) => (int) $i->id, $items));
+        $orderShipped = OrderStatus::isShipped((string) $order->status);
+
+        $out = [];
+        foreach ($items as $item) {
+            $reservation = $snapshot[$item->id] ?? null;
+            $out[$item->id] = match (true) {
+                $reservation !== null => $reservation['status'] === 'consumed' ? (int) $reservation['quantity'] : 0,
+                $item->product_variant_id === null && $orderShipped => (int) $item->quantity,
+                default => 0,
+            };
+        }
+
+        return $out;
     }
 
     /**

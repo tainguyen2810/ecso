@@ -22,6 +22,7 @@ use App\Modules\Orders\Services\OrderActions;
 use App\Modules\Orders\Services\OrderExporter;
 use App\Modules\Orders\Services\OrderQuery;
 use App\Modules\Orders\Services\OrderSync;
+use App\Modules\Orders\Services\ReturnService;
 use App\Modules\Orders\Support\OrderTags;
 use App\Modules\Sales\Http\Resources\PaymentResource;
 use App\Modules\Sales\Models\Customer;
@@ -72,9 +73,10 @@ class OrderController extends Controller
         return $exporter->stream($this->filters($request), $request->user()->id);
     }
 
-    public function show(Order $order, ReservationLedger $ledger, ConnectorRegistry $connectors): JsonResponse
+    public function show(Order $order, ReservationLedger $ledger, ConnectorRegistry $connectors, ReturnService $returnService): JsonResponse
     {
         $this->authorize('view', $order);
+        $returnable = $returnService->returnableQuantities($order);
         $order->load(['account', 'channel', 'customer', 'creator', 'warehouse', 'assignee', 'items.variant.product', 'items.listingVariant', 'payments.creator']);
         $reservations = $ledger->snapshot(Order::STOCK_REFERENCE, $order->items->pluck('id')->all());
         $capabilities = $connectors->has($order->marketplace) ? $connectors->for($order->marketplace)->capabilities() : Capability::allUnknown();
@@ -88,6 +90,8 @@ class OrderController extends Controller
                 'external_sku_id' => $i->external_sku_id,
                 'quantity' => $i->quantity,
                 'refunded_quantity' => (int) $i->refunded_quantity,
+                // Shipped and not yet covered by a return: the most a new return may take back.
+                'returnable' => $returnable[$i->id] ?? 0,
                 'unit_price' => $i->unit_price,
                 'discount' => $i->discount,
                 'tax' => $i->tax,

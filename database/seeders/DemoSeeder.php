@@ -177,7 +177,7 @@ class DemoSeeder extends Seeder
             ['name' => 'Phạm Minh Tuấn', 'phone' => '0987654321', 'address' => '45 Lý Thường Kiệt, Hà Nội', 'group_id' => $wholesale->ulid, 'gender' => 'male', 'tax_code' => '0109876543', 'tags' => ['Đại lý']],
             ['name' => 'Đỗ Thu Trang', 'phone' => '0909111222', 'address' => '8 Trần Phú, Đà Nẵng', 'birthday' => '1995-02-20', 'gender' => 'female'],
             ['name' => 'Võ Quốc Bảo', 'phone' => '0933444555', 'address' => '102 Hai Bà Trưng, Quận 3, TP.HCM', 'group_id' => $vip->ulid, 'gender' => 'male', 'tags' => ['Khách quen']],
-            ['name' => 'Ngô Thanh Hà', 'phone' => '0977888999', 'address' => '5 Lê Duẩn, Huế', 'status' => 'inactive'],
+            ['name' => 'Ngô Thanh Hà', 'phone' => '0977888999', 'address' => '5 Lê Duẩn, Huế'],
         ])->map(fn ($p) => $customers->create($p));
         $people[1]->addresses()->create(['label' => 'Kho Long Biên', 'recipient' => 'Anh Tuấn', 'phone' => '0987654321', 'address' => '22 Ngọc Lâm, Long Biên, Hà Nội']);
         (new CustomerNote(['body' => 'Hẹn thanh toán phần còn lại vào cuối tháng.']))->forceFill(['customer_id' => $people[1]->id, 'created_by' => Auth::id()])->save();
@@ -211,6 +211,8 @@ class DemoSeeder extends Seeder
         // Shipped with COD still to collect, and a delivered order on credit (customer debt).
         $shipped = $orders->create(['channel_id' => $facebook->ulid, 'customer_id' => $people[4]->ulid, 'shipping_fee' => 30000, 'is_cod' => true, 'stage' => 'confirmed', 'lines' => [$line(5, 1)]]);
         $orders->transition($shipped, 'handover', ['carrier' => 'GHTK', 'tracking_number' => 'S2611031234']);
+        // She stopped trading after this last order (no new orders can be made for her).
+        $people[4]->forceFill(['status' => 'inactive'])->save();
         $credit = $orders->create(['channel_id' => $zalo->ulid, 'customer_id' => $people[1]->ulid, 'stage' => 'completed', 'lines' => [$line(3, 6)]]);
         $payments->record($credit, ['method' => 'cash', 'amount' => 300000]);
         // Cancelled before packing.
