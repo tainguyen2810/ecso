@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\Idempotent;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schedule;
@@ -32,6 +33,6 @@ Schedule::command('ecso:monitor')->everyFiveMinutes()->withoutOverlapping()->onO
 // Subscriptions: trial end, renewal invoices, scheduled downgrades, past due -> Free (Phase 6).
 Schedule::command('ecso:billing:sweep')->hourly()->withoutOverlapping()->onOneServer();
 
-// Idempotency keys answer repeats for 48 hours (audit round A), then they are pruned.
-Schedule::call(fn () => DB::table('idempotency_keys')->where('created_at', '<', now()->subHours(48))->delete())
-    ->name('prune-idempotency-keys')->dailyAt('03:15')->onOneServer();
+// Idempotency keys of sales and payments are only needed for retries: kept two days.
+Schedule::call(fn () => DB::table('idempotency_keys')->where('created_at', '<', now()->subDays(Idempotent::KEEP_DAYS))->delete())
+    ->name('idempotency-keys-prune')->dailyAt('03:10')->onOneServer();

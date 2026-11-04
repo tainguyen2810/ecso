@@ -113,7 +113,7 @@ it('keeps keys per user and per business', function () {
 
     // A first request still running (no answer stored yet) makes the repeat wait with 409, not run twice.
     ($this->receive)(1, 100, ['Idempotency-Key' => 'busy'])->assertCreated();
-    DB::table('idempotency_keys')->where('key', 'busy')->update(['status_code' => null, 'response_body' => null]);
+    DB::table('idempotency_keys')->where('key', 'busy')->update(['status_code' => null, 'response' => null]);
     ($this->receive)(1, 100, ['Idempotency-Key' => 'busy'])->assertStatus(409);
     expect(balanceOf($this->warehouse, $this->variant)->on_hand)->toBe(3);
 });

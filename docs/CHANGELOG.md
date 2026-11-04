@@ -6,9 +6,20 @@
 
 ### Độ chính xác tồn kho, đợt A kiểm toán sản phẩm (2026-11-04)
 - **Kiểm hàng chốt số lúc đếm**: mỗi dòng đếm lưu `system_qty` (tồn hệ thống lúc đếm). Khi duyệt chỉ áp `số đếm − system_qty`, nên hàng bán ra hoặc nhập thêm giữa lúc đếm và lúc duyệt được giữ nguyên. Phiếu chờ duyệt hiện "Tồn lúc đếm", "Tồn hiện tại", "Sẽ áp dụng", "Tồn sau duyệt" và cảnh báo khi có nhập/xuất xen giữa. Phiếu cũ không có `system_qty` vẫn chạy như trước.
-- **Idempotency-Key**: middleware `idempotent` trên API Sản phẩm, Kho, Mua hàng. Gửi lại cùng khóa (bấm 2 lần, mạng gửi lại) trả lại kết quả lần đầu, không tạo phiếu thứ hai; khóa giữ 48 giờ (bảng `idempotency_keys`, dọn lúc 03:15). Các form tạo phiếu nhập, kiểm, chuyển, điều chỉnh giá vốn, đơn nhập, nhận hàng, trả NCC, chi tiền NCC, tạo sản phẩm đều gửi khóa.
+- **Idempotency-Key** (dùng chung middleware `idempotent` của đợt an toàn đơn hàng): bật cho toàn bộ API Sản phẩm, Kho, Mua hàng. Gửi lại cùng khóa (bấm 2 lần, mạng gửi lại) trả lại kết quả lần đầu, không tạo phiếu thứ hai. Các form tạo phiếu nhập, kiểm, chuyển, điều chỉnh giá vốn, đơn nhập, nhận hàng, trả NCC, chi tiền NCC, tạo sản phẩm đều gửi khóa.
 - **Giá vốn trên mọi biến động kho**: `stock_movements.unit_cost` ghi giá vốn bình quân lúc xuất/điều chỉnh/chuyển, `avg_cost_after` ghi giá vốn sau biến động. Hàng hoàn nhập kho mang giá vốn lúc bán (`cost_snapshot`). Báo cáo tồn theo ngày và sổ kho nhập-xuất tính giá trị theo giá vốn của ngày đó (`CostHistory`), không theo giá hiện tại. Phương pháp bình quân gia quyền giữ nguyên.
 - Cảnh báo tồn đầu không có giá vốn ở form sản phẩm và khi nhập file (`zero_cost_rows`).
+
+### Khách hàng, đợt A: công nợ thống nhất (2026-11-04)
+- **Một quy tắc công nợ dùng chung** (`App\Modules\Sales\Services\CustomerDebt`): trang khách, danh sách khách, sổ công nợ, báo cáo Công nợ phải thu, màn hình thu nợ ở Sổ quỹ và tóm tắt khách trong chi tiết đơn giờ cùng một con số. Nợ một đơn = tổng đơn − giá trị trả hàng đã duyệt − (đã thu − đã hoàn). Chỉ tính đơn kênh riêng; không tính đơn sàn, đơn COD, đơn hủy, đơn hoàn toàn bộ, đơn giao thất bại. Không lưu số cộng dồn nên đơn đồng bộ/sửa lại không bao giờ bị cộng nợ hai lần.
+- Trả hàng một phần (đã duyệt trở đi) giờ giảm công nợ. Sổ công nợ có thêm dòng **Trả hàng** và **Hoàn tiền**, mỗi dòng trỏ về đơn gốc.
+- `CustomerDebt::returnValueSql()` / `orderReturnsSql()` cho các báo cáo khác dùng chung cách tính giá trị trả hàng (cùng quy tắc với `OrderReturn::goodsValue()`).
+- "Mua gần nhất" không còn tính đơn đã hủy.
+- Đổi khách trên đơn đã có phiếu thu: phiếu thu chuyển theo sang khách mới.
+- Khách **Ngừng giao dịch** không được đưa vào đơn mới (đơn đang mở của họ vẫn sửa được).
+- Hai đơn tạo cùng lúc với cùng số điện thoại khách mới: đơn sau dùng lại khách vừa tạo thay vì báo lỗi.
+- Quyền mới `customers.import`, `customers.export`, `customers.delete` (tách khỏi `customers.manage`). Vai trò nào đang có `customers.manage` được giữ nguyên các quyền này khi cập nhật.
+- Nhật ký: sửa khách ghi rõ trường nào đổi (giá trị cũ → mới; dữ liệu cá nhân chỉ ghi "đã đổi"); xuất và nhập file khách được ghi nhật ký.
 
 ### Tài chính, vòng A: sửa số liệu sai (2026-11-04)
 - **Ngày theo giờ cửa hàng**: mọi báo cáo (Tài chính, Lãi lỗ, Tổng quan báo cáo, báo cáo bán hàng, trả hàng, thu chi), biểu đồ tổng quan đơn hàng, bộ lọc ngày của danh sách đơn và sổ quỹ đều tính ngày theo múi giờ cửa hàng (`tenants.timezone`, mặc định Asia/Ho_Chi_Minh), không còn theo UTC. Trước đây đơn từ 0h đến 7h sáng bị tính sang ngày hôm trước. Phần dùng chung: `App\Shared\Support\ReportRange`. Kết nối MySQL đổi mọi mốc thời gian được truyền vào truy vấn về UTC (`App\Shared\Database\LocalizedBindings`).

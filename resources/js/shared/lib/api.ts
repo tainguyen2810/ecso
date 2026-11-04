@@ -100,3 +100,17 @@ export async function downloadFile(url: string, fallbackName: string): Promise<v
     link.click();
     URL.revokeObjectURL(href);
 }
+
+/**
+ * A fresh key for the `Idempotency-Key` header. Send the same key again when retrying the same sale or payment
+ * (after a timeout or a double click): the server answers with the first result instead of running it twice.
+ */
+export function newIdempotencyKey(): string {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
+/** Request options carrying an idempotency key. */
+export function idempotent(key: string): { headers: Record<string, string> } {
+    return { headers: { 'Idempotency-Key': key } };
+}

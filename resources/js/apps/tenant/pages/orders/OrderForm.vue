@@ -13,7 +13,7 @@ import FormField from '@/shared/ui/FormField.vue';
 import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
-import { api, ApiError } from '@/shared/lib/api';
+import { api, ApiError, idempotent, newIdempotencyKey } from '@/shared/lib/api';
 import { cn, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useAuthStore } from '@/shared/stores/auth';
@@ -86,6 +86,8 @@ const canEditPrice = computed(() => (settings.data?.pricing.staff_edit_price ?? 
 const canBackdate = computed(() => !editId.value && !!settings.data?.sales.allow_change_sale_time);
 const payOptions = computed(() => enabledMethods(Object.entries(paymentMethods).filter(([k]) => k !== 'cod').map(([value, label]) => ({ value, label })), settings.data));
 const saving = ref(false);
+// One key per new order on this screen: a retry after a timeout or a double click cannot create a second order.
+const createKey = newIdempotencyKey();
 const error = ref<ApiError | null>(null);
 
 const num = (v: number | string) => Number(v) || 0;
@@ -445,7 +447,7 @@ async function submit() {
         } else {
             const payments = num(form.pay_amount) > 0 ? [{ method: form.pay_method, amount: num(form.pay_amount) }] : [];
             const placedAt = canBackdate.value && form.placed_at ? form.placed_at.replace('T', ' ') : null;
-            const { data } = await api.post('/sales-orders', { ...body, channel_id: form.channel_id, stage: form.stage, payments, exchange_return_id: exchange.value?.id ?? null, ...(placedAt ? { placed_at: placedAt } : {}) });
+            const { data } = await api.post('/sales-orders', { ...body, channel_id: form.channel_id, stage: form.stage, payments, exchange_return_id: exchange.value?.id ?? null, ...(placedAt ? { placed_at: placedAt } : {}) }, idempotent(createKey));
             toast.success(`Đã tạo đơn ${data.data.external_order_id}`);
             await router.push(`/orders/${data.data.id}`);
         }

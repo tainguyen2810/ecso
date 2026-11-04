@@ -2,6 +2,7 @@
 
 namespace App\Modules\Analytics\Services;
 
+use App\Modules\Analytics\Support\Search;
 use App\Modules\Inventory\Services\CostHistory;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Sales\Models\OrderPayment;
@@ -57,7 +58,7 @@ class BusinessReports
             ->whereNotIn('orders.status', self::EXCLUDED);
 
         $metrics = 'COUNT(*) as orders, COALESCE(SUM(c.units), 0) as units, COALESCE(SUM(orders.total), 0) as revenue, '
-            .'COALESCE(SUM(orders.subtotal - orders.discount), 0) as goods, COALESCE(SUM(c.cogs), 0) as cogs, COALESCE(SUM(c.missing), 0) as missing';
+            .'COALESCE(SUM(orders.subtotal - orders.discount), 0) as goods, COALESCE(SUM(orders.shipping_fee), 0) as shipping, COALESCE(SUM(c.cogs), 0) as cogs, COALESCE(SUM(c.missing), 0) as missing';
 
         $grouped = match ($by) {
             'channel' => (clone $base)
@@ -99,7 +100,9 @@ class BusinessReports
             'range' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
             'by' => $by,
             'rows' => $rows,
-            'totals' => $totals,
+            // Which date puts an order in the period: 'placed' (ngày đặt). Labels on the pages follow it.
+            'basis' => 'placed',
+            'totals' => [...$totals, 'basis' => 'placed'],
             'excluded' => ['orders' => (int) $cancelled->n, 'revenue' => (float) $cancelled->total],
         ];
     }
@@ -135,11 +138,10 @@ class BusinessReports
             ->where('m.tenant_id', $this->tenant())
             ->where('m.created_at', '<=', $to)
             ->when($warehouseId, fn ($w) => $w->where('m.warehouse_id', $warehouseId))
-            ->when($q, fn ($w) => $w->where(fn ($s) => $s->where('v.sku', 'like', "%{$q}%")->orWhere('p.name', 'like', "%{$q}%")))
+            ->when($q, fn ($w) => $w->where(fn ($s) => $s->where('v.sku', 'like', Search::contains($q))->orWhere('p.name', 'like', Search::contains($q))))
             ->groupBy('m.product_variant_id', 'v.ulid', 'v.sku', 'v.name', 'p.name', 'v.cost_price')
             ->selectRaw('m.product_variant_id as vid, v.ulid, v.sku, v.name as variant_name, p.name as product_name, v.cost_price, '.implode(', ', $sums), $bindings)
             ->orderBy('v.sku')
-            ->limit(2000)
             ->get();
         // Closing value at the cost of the end date, not today's.
         $costs = app(CostHistory::class)->at($this->tenant(), $to, $rows->pluck('vid')->map(fn ($id) => (int) $id)->all(), $rows->pluck('cost_price', 'vid')->all());
@@ -152,6 +154,13 @@ class BusinessReports
             $cols = [];
             foreach (array_keys(self::STOCK_COLUMNS) as $column) {
                 $cols[$column] = abs((int) $r->{$column});
+            }
+            if ($warehouseId === null) {
+                // Across all warehouses an internal transfer is neither new goods in nor goods sold out: only the
+                // part still on the road (sent, not yet received) changes the stock of the whole business.
+                $transfer = $cols['transfer_in'] - $cols['transfer_out'];
+                $cols['transfer_in'] = max(0, $transfer);
+                $cols['transfer_out'] = max(0, -$transfer);
             }
             $in = $cols['purchase_in'] + $cols['return_in'] + $cols['transfer_in'] + $cols['adjust_in'];
             $outQty = $cols['sale_out'] + $cols['supplier_out'] + $cols['damage_out'] + $cols['adjust_out'] + $cols['transfer_out'];
@@ -175,7 +184,18 @@ class BusinessReports
             $out[] = $row;
         }
 
-        return ['range' => ['from' => $from->toDateString(), 'to' => $to->toDateString()], 'rows' => $out, 'totals' => $totals];
+        $count = count($out);
+        $limit = (int) config('ecso.reports.row_limit', 2000);
+
+        return [
+            'range' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+            // Totals cover every SKU; the table lists the first STOCK_LEDGER_LIMIT.
+            'rows' => array_slice($out, 0, $limit),
+            'totals' => $totals,
+            'truncated' => $count > $limit,
+            'total_rows' => $count,
+            'limit' => $limit,
+        ];
     }
 
     /**
@@ -270,6 +290,7 @@ class BusinessReports
             'units' => (int) $r->units,
             'revenue' => round((float) $r->revenue, 2),
             'goods' => round($goods, 2),
+            'shipping' => round((float) $r->shipping, 2),
             'cogs' => round($cogs, 2),
             'gross_profit' => round($goods - $cogs, 2),
             'margin' => $goods > 0 ? round(($goods - $cogs) / $goods * 100, 1) : null,
@@ -286,7 +307,7 @@ class BusinessReports
         $byDay = collect($rows)->keyBy('label');
         $out = [];
         for ($d = $from->startOfDay(); $d->lte($to); $d = $d->addDay()) {
-            $out[] = $byDay->get($d->toDateString()) ?? ['label' => $d->toDateString(), 'kind' => null, 'orders' => 0, 'units' => 0, 'revenue' => 0.0, 'goods' => 0.0, 'cogs' => 0.0, 'gross_profit' => 0.0, 'margin' => null, 'missing_cost_lines' => 0];
+            $out[] = $byDay->get($d->toDateString()) ?? ['label' => $d->toDateString(), 'kind' => null, 'orders' => 0, 'units' => 0, 'revenue' => 0.0, 'goods' => 0.0, 'shipping' => 0.0, 'cogs' => 0.0, 'gross_profit' => 0.0, 'margin' => null, 'missing_cost_lines' => 0];
         }
 
         return $out;
