@@ -181,7 +181,7 @@ class DemoSeeder extends Seeder
         ])->map(fn ($p) => $customers->create($p));
         $people[1]->addresses()->create(['label' => 'Kho Long Biên', 'recipient' => 'Anh Tuấn', 'phone' => '0987654321', 'address' => '22 Ngọc Lâm, Long Biên, Hà Nội']);
         // A second card of the same business (same tax code), to show the duplicate check and the merge.
-        $customers->create(['name' => 'Cty TNHH Minh Tuấn', 'type' => 'company', 'tax_code' => '0109876543', 'source' => 'zalo', 'invoice_name' => 'CÔNG TY TNHH MINH TUẤN', 'invoice_email' => 'ketoan@minhtuan.example']);
+        $customers->create(['name' => 'Công ty TNHH Thương mại PMT', 'type' => 'company', 'tax_code' => '0109876543', 'source' => 'zalo', 'invoice_name' => 'CÔNG TY TNHH THƯƠNG MẠI PMT', 'invoice_email' => 'ketoan@pmt.example']);
         (new CustomerNote(['body' => 'Hẹn thanh toán phần còn lại vào cuối tháng.']))->forceFill(['customer_id' => $people[1]->id, 'created_by' => Auth::id()])->save();
 
         $variants = ProductVariant::query()->whereIn('id', DB::table('stock_balances')->where('tenant_id', app(TenantContext::class)->id())->whereRaw('on_hand - reserved > 30')->pluck('product_variant_id'))->orderBy('id')->limit(6)->get();
