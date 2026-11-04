@@ -124,6 +124,8 @@ export interface Warehouse {
     address: string | null;
     is_default: boolean;
     status: 'active' | 'inactive';
+    /** 'defective' holds damaged returns and never sells. */
+    purpose?: 'sale' | 'defective';
     sku_count?: number;
     on_hand?: number;
 }
@@ -480,6 +482,7 @@ export interface OrderReturnData {
     next: string[];
     order?: { id: string; external_order_id: string; status: string; marketplace: string; customer?: string | null };
     warehouse?: { id: string; code: string; name: string } | null;
+    damaged_warehouse?: { id: string; code: string; name: string } | null;
     lines?: OrderReturnLineData[];
     lines_count?: number;
     created_by?: string | null;

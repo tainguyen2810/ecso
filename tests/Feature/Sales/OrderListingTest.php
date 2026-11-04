@@ -72,3 +72,30 @@ it('keeps what each edit changed and shows it on the order', function () {
     $changes = actingInTenant($owner, $tenant)->getJson("/api/v1/orders/{$id}")->assertOk()->json('data.edits.0.changes');
     expect($changes)->toContain('SKU-A: SL 1 → 2', 'SKU-A: giá 100.000 → 90.000', 'Thêm SKU-B × 1', 'Phí giao hàng: 0 → 20.000', 'Tổng tiền: 100.000 → 250.000');
 });
+
+it('keeps order drafts without creating an order or holding stock', function () {
+    [$tenant, $owner] = tenantWithOwner();
+    $variant = makeVariant($tenant);
+    stockIn($tenant, $variant, 5);
+    $cashier = addMember($tenant, Role::ORDER_STAFF);
+    $body = ['title' => 'Chị Lan hỏi giá', 'total' => 300000, 'lines_count' => 1, 'payload' => ['lines' => [['variant_id' => $variant->ulid, 'quantity' => 2]]]];
+
+    $id = actingInTenant($cashier, $tenant)->postJson('/api/v1/order-drafts', $body)->assertCreated()->json('data.id');
+    expect(Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count())->toBe(0)
+        ->and(balanceOf(defaultWarehouse($tenant), $variant)->reserved)->toBe(0);
+
+    actingInTenant($cashier, $tenant)->putJson("/api/v1/order-drafts/{$id}", [...$body, 'title' => 'Chị Lan'])->assertOk()->assertJsonPath('data.title', 'Chị Lan');
+    actingInTenant($cashier, $tenant)->getJson("/api/v1/order-drafts/{$id}")->assertOk()->assertJsonPath('data.payload.lines.0.quantity', 2);
+    actingInTenant($owner, $tenant)->getJson('/api/v1/order-drafts')->assertOk()->assertJsonCount(1, 'data');
+
+    // Without orders.view.all a colleague's draft is not visible.
+    revoke(Role::ORDER_STAFF, 'orders.view.all');
+    $ownerDraft = actingInTenant($owner, $tenant)->postJson('/api/v1/order-drafts', $body)->json('data.id');
+    actingInTenant($cashier, $tenant)->getJson('/api/v1/order-drafts')->assertOk()->assertJsonCount(1, 'data');
+    actingInTenant($cashier, $tenant)->deleteJson("/api/v1/order-drafts/{$ownerDraft}")->assertNotFound();
+
+    actingInTenant($cashier, $tenant)->deleteJson("/api/v1/order-drafts/{$id}")->assertNoContent();
+    // Another shop never sees them.
+    [$other, $otherOwner] = tenantWithOwner('Shop B');
+    actingInTenant($otherOwner, $other)->getJson("/api/v1/order-drafts/{$ownerDraft}")->assertNotFound();
+});

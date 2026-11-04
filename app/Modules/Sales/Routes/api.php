@@ -9,6 +9,7 @@ use App\Modules\Sales\Http\Controllers\CustomerMergeController;
 use App\Modules\Sales\Http\Controllers\CustomerProfileController;
 use App\Modules\Sales\Http\Controllers\CustomerTaskController;
 use App\Modules\Sales\Http\Controllers\CustomerTransferController;
+use App\Modules\Sales\Http\Controllers\OrderDraftController;
 use App\Modules\Sales\Http\Controllers\PosController;
 use App\Modules\Sales\Http\Controllers\SalesChannelController;
 use App\Modules\Sales\Http\Controllers\SalesOrderController;
@@ -58,6 +59,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::post('pos/shifts/{shift}/close', [CashShiftController::class, 'close']);
     Route::post('pos/shifts/{shift}/reopen', [CashShiftController::class, 'reopen']);
 
+    Route::apiResource('order-drafts', OrderDraftController::class)->parameters(['order-drafts' => 'draft']);
     Route::post('sales-orders', [SalesOrderController::class, 'store'])->middleware(['throttle:120,1,sales.sales-orders', 'idempotent']);
     Route::put('sales-orders/{order}', [SalesOrderController::class, 'update']);
     Route::post('sales-orders/{order}/void-sale', [SalesOrderController::class, 'voidSale'])->middleware('idempotent');

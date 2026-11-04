@@ -70,7 +70,7 @@ class SalesChannelController extends Controller
     {
         $channel->fill($data);
         $channel->warehouse_id = empty($data['warehouse_id']) ? null
-            : (Warehouse::query()->where('ulid', $data['warehouse_id'])->value('id') ?? throw ValidationException::withMessages(['warehouse_id' => 'Kho không tồn tại.']));
+            : (Warehouse::query()->where('ulid', $data['warehouse_id'])->where('purpose', Warehouse::PURPOSE_SALE)->value('id') ?? throw ValidationException::withMessages(['warehouse_id' => 'Kho không tồn tại.']));
         $channel->save();
     }
 }

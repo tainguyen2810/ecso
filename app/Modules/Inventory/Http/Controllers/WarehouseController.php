@@ -30,7 +30,7 @@ class WarehouseController extends Controller
 
         $limit = $context->entitlements()->limit('limit.warehouses');
 
-        return WarehouseResource::collection($warehouses)->additional(['meta' => ['limit' => $limit, 'used' => $warehouses->count()]]);
+        return WarehouseResource::collection($warehouses)->additional(['meta' => ['limit' => $limit, 'used' => $warehouses->where('purpose', Warehouse::PURPOSE_SALE)->count()]]);
     }
 
     public function store(Request $request, WarehouseService $service, TenantContext $context): JsonResponse

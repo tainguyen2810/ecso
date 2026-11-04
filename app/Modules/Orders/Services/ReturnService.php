@@ -7,6 +7,7 @@ use App\Modules\Catalog\Services\ComboResolver;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Services\InventoryService;
 use App\Modules\Inventory\Services\ReservationLedger;
+use App\Modules\Inventory\Services\WarehouseService;
 use App\Modules\Inventory\Support\DocumentNumber;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
@@ -33,6 +34,7 @@ class ReturnService
         private readonly ReservationLedger $ledger,
         private readonly AuditLogger $audit,
         private readonly ComboResolver $combos,
+        private readonly WarehouseService $warehouses,
     ) {}
 
     /**
@@ -276,6 +278,7 @@ class ReturnService
 
             $byId = $return->lines()->get()->keyBy('id');
             $restock = [];
+            $damaged = [];
             $seen = [];
             foreach ($lines as $i => $input) {
                 $line = $byId[$input['line_id']] ?? throw ValidationException::withMessages(["lines.{$i}.line_id" => 'Dòng không thuộc phiếu này.']);
@@ -297,6 +300,10 @@ class ReturnService
                 if ($input['sellable_qty'] > 0) {
                     $restock[] = ['variant_id' => $line->product_variant_id, 'quantity' => $input['sellable_qty'], 'line_id' => $line->id];
                 }
+                // Damaged goods are kept on the books in the defective-goods warehouse, never in selling stock.
+                if ($input['damaged_qty'] > 0 && $line->product_variant_id !== null) {
+                    $damaged[] = ['variant_id' => $line->product_variant_id, 'quantity' => $input['damaged_qty'], 'line_id' => $line->id];
+                }
             }
 
             if ($restock !== []) {
@@ -305,15 +312,23 @@ class ReturnService
                 $this->inventory->restockReturn($warehouse, $restock, "restock:return:{$return->id}", $return, "Hàng hoàn {$return->number}");
             }
 
+            $defective = null;
+            if ($damaged !== []) {
+                $defective = $this->warehouses->defective();
+                $damagedLines = $this->withSoldCost($this->combos->expand($damaged), $damaged, $byId);
+                $this->inventory->restockReturn($defective, $damagedLines, "damaged:return:{$return->id}", $return, "Hàng lỗi từ phiếu trả {$return->number}");
+            }
+
             $return->forceFill([
                 'status' => OrderReturn::INSPECTED,
                 'warehouse_id' => $warehouse->id,
+                'damaged_warehouse_id' => $defective?->id,
                 'inspected_at' => now(),
                 'inspected_by' => Auth::id(),
                 'note' => $note ?? $return->note,
             ])->save();
 
-            $this->audit->record('return.inspected', $return, ['number' => $return->number, 'restocked' => array_sum(array_column($restock, 'quantity'))]);
+            $this->audit->record('return.inspected', $return, ['number' => $return->number, 'restocked' => array_sum(array_column($restock, 'quantity')), 'damaged' => array_sum(array_column($damaged, 'quantity'))]);
 
             return $return;
         });
