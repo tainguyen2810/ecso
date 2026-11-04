@@ -8,6 +8,7 @@ use App\Modules\Analytics\Services\LedgerReports;
 use App\Modules\Analytics\Services\OrderReports;
 use App\Modules\Analytics\Services\StockReports;
 use App\Modules\Analytics\Services\TradeReports;
+use App\Modules\Analytics\Support\ProfitFields;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Sales\Models\SalesChannel;
@@ -39,9 +40,23 @@ class ReportsController extends Controller
             'customers' => $customers['summary'],
             'delivery' => $orders->delivery($from, $to),
         ];
+        // The headline figures come from the same source as Tài chính and Lãi lỗ, so the two pages always agree:
+        // net revenue = goods − discounts − approved returns of recognised orders; cost less goods put back.
+        $profitLoss = $ledger->profitLoss($from, $to);
+        $pl = collect($profitLoss['lines'])->keyBy('key');
+        $profit = $this->context->can('finance.profit');
+        $data['recognized'] = [
+            'basis' => 'completed',
+            'revenue' => $pl['revenue']['current'],
+            'goods' => $pl['goods']['current'] - $pl['discount']['current'],
+            'returns' => $pl['returns']['current'],
+            'shipping' => $pl['shipping']['current'],
+            'cogs' => $profit ? $pl['cogs']['current'] : null,
+            'gross_profit' => $profit ? $pl['gross_profit']['current'] : null,
+            'margin' => $profit && $pl['revenue']['current'] > 0 ? round($pl['gross_profit']['current'] / $pl['revenue']['current'] * 100, 1) : null,
+            'missing_cost_lines' => $profit ? $profitLoss['missing_cost_lines'] : null,
+        ];
         if ($this->context->can('finance.view')) {
-            $pl = collect($ledger->profitLoss($from, $to)['lines'])->keyBy('key');
-            $profit = $this->context->can('finance.profit');
             $data['finance'] = [
                 'revenue' => $pl['revenue']['current'],
                 'profit' => $profit ? $pl['profit']['current'] : null,
@@ -68,7 +83,7 @@ class ReportsController extends Controller
         [$from, $to] = $this->range($request);
         $q = $request->validate(['q' => ['nullable', 'string', 'max:100']])['q'] ?? null;
 
-        return response()->json(['data' => $trade->salesByProduct($from, $to, $q)]);
+        return response()->json(['data' => ProfitFields::strip($trade->salesByProduct($from, $to, $q), $this->context->can('finance.profit'))]);
     }
 
     public function returns(Request $request, TradeReports $trade): JsonResponse
@@ -159,7 +174,7 @@ class ReportsController extends Controller
         $this->exporting($request, 'orders');
         [$from, $to] = $this->range($request);
 
-        return response()->json(['data' => $orders->byOrder($from, $to, $this->orderFilters($request))]);
+        return response()->json(['data' => ProfitFields::strip($orders->byOrder($from, $to, $this->orderFilters($request)), $this->context->can('finance.profit'))]);
     }
 
     /** Sapo "Báo cáo bán hàng chi tiết": one row per order line. */
@@ -169,7 +184,7 @@ class ReportsController extends Controller
         $this->exporting($request, 'sales-lines');
         [$from, $to] = $this->range($request);
 
-        return response()->json(['data' => $orders->lines($from, $to, $this->orderFilters($request))]);
+        return response()->json(['data' => ProfitFields::strip($orders->lines($from, $to, $this->orderFilters($request)), $this->context->can('finance.profit'))]);
     }
 
     public function stockDetail(Request $request, OrderReports $orders): JsonResponse
@@ -181,12 +196,15 @@ class ReportsController extends Controller
         return response()->json(['data' => $orders->stockDetail($this->warehouse($data['warehouse'] ?? null), $data['q'] ?? null)]);
     }
 
-    /** @return array{q: string|null, channel: int|null, warehouse: int|null} */
+    /** @return array{q: string|null, channel: int|null, warehouse: int|null, basis: string} */
     private function orderFilters(Request $request): array
     {
-        $data = $request->validate(['q' => ['nullable', 'string', 'max:100'], 'channel' => ['nullable', 'string'], 'warehouse' => ['nullable', 'string']]);
+        $data = $request->validate(['q' => ['nullable', 'string', 'max:100'], 'channel' => ['nullable', 'string'], 'warehouse' => ['nullable', 'string'], 'basis' => ['nullable', Rule::in(['placed', 'completed'])]]);
 
         return [
+            // placed: orders placed in the period (default); completed: orders whose revenue is recognised in it, as
+            // the sales dashboard counts them (its "click a day" opens this).
+            'basis' => $data['basis'] ?? 'placed',
             'q' => $data['q'] ?? null,
             'channel' => isset($data['channel']) ? SalesChannel::query()->where('ulid', $data['channel'])->firstOrFail()->id : null,
             'warehouse' => $this->warehouse($data['warehouse'] ?? null),
