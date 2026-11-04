@@ -32,7 +32,7 @@ interface PlData {
 }
 
 /** Lines whose increase is bad news: the change badge is red when they go up. */
-const COSTS = ['discount', 'returns', 'cogs', 'cogs_out', 'marketplace_fees', 'fees_confirmed', 'fees_estimated', 'selling_expenses', 'stock_loss', 'write_off', 'stocktake', 'operating_expenses', 'misc_expenses', 'other_expenses'];
+const COSTS = ['discount', 'sales_tax', 'returns', 'cogs', 'cogs_out', 'marketplace_fees', 'fees_confirmed', 'fees_estimated', 'selling_expenses', 'stock_loss', 'write_off', 'stocktake', 'operating_expenses', 'misc_expenses', 'other_expenses'];
 const DRILL: Record<string, { name: string; params?: Record<string, string>; query?: Record<string, string> }> = {
     sales: { name: 'report-sales' },
     products: { name: 'report-detail', params: { report: 'product-sales' } },

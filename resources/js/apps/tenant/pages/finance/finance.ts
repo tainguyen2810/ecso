@@ -82,7 +82,7 @@ export const feeStatusLabels: Record<string, string> = {
 
 /** How each figure is computed, shown as a tooltip and under the card. */
 export const formulas = {
-    net_revenue: 'Doanh thu thuần = tiền hàng của đơn đã ghi nhận − giảm giá − hàng trả đã duyệt. Không gồm phí ship khách trả.',
+    net_revenue: 'Doanh thu thuần = tiền hàng của đơn đã ghi nhận − giảm giá − thuế GTGT − hàng trả đã duyệt (chưa gồm thuế). Không gồm phí ship khách trả.',
     gross: 'Lợi nhuận gộp = doanh thu thuần − giá vốn (giá vốn lúc xuất kho − giá vốn hàng trả đã nhập lại kho).',
     contribution: 'Lợi nhuận đóng góp = lợi nhuận gộp − phí sàn (đã xác nhận + ước tính) + phí ship khách trả − chi phí bán hàng (phiếu chi nhóm bán hàng).',
     profit: 'Lợi nhuận quản trị = lợi nhuận đóng góp − hao hụt kho − chi phí vận hành và chi phí khác + thu nhập khác. Là số ước tính để quản lý, chưa phải lợi nhuận kế toán.',
