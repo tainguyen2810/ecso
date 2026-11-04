@@ -7,11 +7,11 @@ use App\Modules\Cashbook\Models\CashVoucher;
 use App\Modules\Cashbook\Models\CashVoucherType;
 use App\Modules\Identity\Models\User;
 use App\Modules\Inventory\Support\DocumentNumber;
-use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Purchasing\Models\Supplier;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\OrderPayment;
+use App\Modules\Sales\Services\CustomerDebt;
 use App\Modules\Sales\Services\PaymentService;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Support\Carbon;
@@ -50,6 +50,7 @@ class CashVoucherService
         private readonly AuditLogger $audit,
         private readonly PaymentService $payments,
         private readonly TenantContext $context,
+        private readonly CustomerDebt $debt,
     ) {}
 
     /** Creates the default types the first time a business opens its voucher types. */
@@ -153,20 +154,14 @@ class CashVoucherService
     }
 
     /**
-     * Unpaid own-channel orders of the customer, oldest first. Their balance is what a debt receipt can collect.
+     * The customer's orders still owing something (CustomerDebt), oldest first, each with its `debt_due`. What a
+     * debt receipt can collect.
      *
      * @return Collection<int, Order>
      */
     public function unpaidOrders(Customer $customer, bool $lock = false): Collection
     {
-        return Order::query()
-            ->where('customer_id', $customer->id)
-            ->where('marketplace', Order::SOURCE_MANUAL)
-            ->whereNotIn('status', [OrderStatus::CANCELLED, OrderStatus::RETURNED])
-            ->whereColumn('total', '>', 'paid_amount')
-            ->orderBy('placed_at')->orderBy('id')
-            ->when($lock, fn ($q) => $q->lockForUpdate())
-            ->get();
+        return $this->debt->openOrders($customer, $lock);
     }
 
     /**
@@ -181,7 +176,7 @@ class CashVoucherService
                 throw ValidationException::withMessages(['amount' => 'Số tiền phải lớn hơn 0.']);
             }
             $orders = $this->unpaidOrders($customer, lock: true);
-            $debt = $orders->reduce(fn (string $sum, Order $o) => bcadd($sum, $o->balanceDue(), 2), '0.00');
+            $debt = $this->debt->forCustomer($customer);
             if (bccomp($remaining, $debt, 2) > 0) {
                 throw ValidationException::withMessages(['amount' => 'Số tiền vượt quá công nợ của khách ('.number_format((float) $debt, 0, ',', '.').' đ).']);
             }
@@ -191,7 +186,12 @@ class CashVoucherService
                 if (bccomp($remaining, '0', 2) <= 0) {
                     break;
                 }
-                $take = bccomp($remaining, $order->balanceDue(), 2) > 0 ? $order->balanceDue() : $remaining;
+                // What this order still owes, and never more than the payment itself allows on it.
+                $due = self::due($order);
+                $take = bccomp($remaining, $due, 2) > 0 ? $due : $remaining;
+                if (bccomp($take, '0', 2) <= 0) {
+                    continue;
+                }
                 $payments->push($this->payments->record($order, [
                     'method' => $data['method'],
                     'amount' => $take,
@@ -201,10 +201,22 @@ class CashVoucherService
                 ]));
                 $remaining = bcsub($remaining, $take, 2);
             }
+            if (bccomp($remaining, '0', 2) > 0) {
+                throw ValidationException::withMessages(['amount' => 'Các đơn còn nợ chỉ nhận thêm được '.number_format((float) bcsub((string) $data['amount'], $remaining, 2), 0, ',', '.').' đ.']);
+            }
             $this->audit->record('customer.debt_collected', $customer, ['amount' => $data['amount'], 'orders' => $payments->count()]);
 
             return $payments;
         });
+    }
+
+    /** What an order from unpaidOrders() still owes and can take as a payment. */
+    public static function due(Order $order): string
+    {
+        $due = bcadd((string) $order->getAttribute('debt_due'), '0', 2);
+        $balance = $order->balanceDue();
+
+        return bccomp($due, $balance, 2) > 0 ? $balance : $due;
     }
 
     /** @return array{customer_id: int|null, supplier_id: int|null, staff_id: int|null, party_name: string} */

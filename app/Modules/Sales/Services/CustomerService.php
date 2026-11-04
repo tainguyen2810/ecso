@@ -9,6 +9,7 @@ use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\CustomerGroup;
 use App\Modules\Sales\Support\PhoneNumber;
 use App\Modules\Tenancy\Models\TenantUser;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -44,10 +45,36 @@ class CustomerService
         if (filled($data['code'] ?? null) && $data['code'] !== $customer->code) {
             $customer->code = $this->code($data['code'], $customer);
         }
+        $changes = $this->changes($customer);
         $customer->save();
-        $this->audit->record('customer.updated', $customer, ['code' => $customer->code]);
+        if ($changes) {
+            $this->audit->record('customer.updated', $customer, ['code' => $customer->code, 'fields' => $changes]);
+        }
 
         return $customer;
+    }
+
+    /** Personal data is logged as changed, never with its values. */
+    public const PRIVATE_FIELDS = ['phone', 'phone_hash', 'phone_last4', 'address', 'email', 'birthday', 'tax_code'];
+
+    /**
+     * Fields about to change, each with its old and new value (personal data only flagged as changed).
+     *
+     * @return array<string, array{from: mixed, to: mixed}|string>
+     */
+    private function changes(Customer $customer): array
+    {
+        $changes = [];
+        foreach (array_keys($customer->getDirty()) as $field) {
+            if (in_array($field, ['updated_at', 'phone_hash', 'phone_last4'], true)) {
+                continue;
+            }
+            $changes[$field] = in_array($field, self::PRIVATE_FIELDS, true)
+                ? 'changed'
+                : ['from' => $customer->getOriginal($field), 'to' => $customer->getAttribute($field)];
+        }
+
+        return $changes;
     }
 
     public function delete(Customer $customer): void
@@ -103,6 +130,7 @@ class CustomerService
                     default => throw ValidationException::withMessages(['action' => 'Thao tác không hợp lệ.']),
                 };
                 if ($customer->isDirty()) {
+                    $this->audit->record('customer.updated', $customer, ['code' => $customer->code, 'fields' => $this->changes($customer), 'bulk' => $action]);
                     $customer->save();
                     $updated++;
                 }
@@ -127,7 +155,15 @@ class CustomerService
             return $existing;
         }
 
-        return $this->create($data);
+        try {
+            return $this->create($data);
+        } catch (UniqueConstraintViolationException $e) {
+            // Another request created the same phone a moment ago: use that customer. The locking read sees rows
+            // committed after this transaction started.
+            $hash = PhoneNumber::hash($phone);
+
+            return ($hash ? Customer::query()->where('phone_hash', $hash)->lockForUpdate()->first() : null) ?? throw $e;
+        }
     }
 
     public function findByPhone(?string $phone): ?Customer

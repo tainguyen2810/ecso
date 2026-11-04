@@ -5,6 +5,7 @@ namespace App\Modules\Analytics\Services;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Purchasing\Models\Supplier;
+use App\Modules\Sales\Services\CustomerDebt;
 use App\Modules\Tenancy\Support\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -67,21 +68,23 @@ class LedgerReports
     }
 
     /**
-     * Own-channel orders not fully paid, per customer. Marketplace orders are left out: the marketplace collects.
+     * What each customer owes, by the same rule as the customer page (CustomerDebt). Walk-in buyers (no customer) are
+     * one line, and there an order paid in excess cannot offset another buyer's debt.
      *
      * @return array<string, mixed>
      */
     public function receivables(): array
     {
-        $due = 'o.total - (o.paid_amount - o.refunded_amount)';
-        $rows = DB::table('orders as o')
+        $due = CustomerDebt::dueSql('o');
+        $returned = CustomerDebt::orderReturnsSql('o.id');
+        $owed = "CASE WHEN o.customer_id IS NULL THEN GREATEST({$due}, 0) ELSE {$due} END";
+        $rows = CustomerDebt::constrain(DB::table('orders as o'), 'o')
             ->leftJoin('customers as c', 'c.id', '=', 'o.customer_id')
             ->where('o.tenant_id', $this->tenant())
-            ->whereNull('o.marketplace_account_id')
-            ->whereNotIn('o.status', [OrderStatus::CANCELLED, OrderStatus::RETURNED])
-            ->whereRaw("{$due} > 0")
             ->groupBy('o.customer_id', 'c.ulid', 'c.code', 'c.name', 'c.phone_last4')
-            ->selectRaw("c.ulid, c.code, c.name, c.phone_last4, COUNT(*) as orders, SUM(o.total) as total, SUM(o.paid_amount - o.refunded_amount) as paid, SUM({$due}) as due, MIN(o.placed_at) as oldest")
+            ->havingRaw("SUM({$owed}) > 0")
+            ->selectRaw("c.ulid, c.code, c.name, c.phone_last4, SUM(CASE WHEN {$due} > 0 THEN 1 ELSE 0 END) as orders, SUM(o.total - {$returned}) as total, "
+                ."SUM(o.paid_amount - o.refunded_amount) as paid, SUM({$owed}) as due, MIN(CASE WHEN {$due} > 0 THEN o.placed_at END) as oldest")
             ->orderByDesc('due')->limit(2000)->get()
             ->map(fn ($r) => [
                 'customer' => $r->ulid ? ['id' => $r->ulid, 'code' => $r->code, 'name' => $r->name, 'phone_last4' => $r->phone_last4] : null,

@@ -176,3 +176,9 @@ Test sẽ thêm (Pest, chạy trên CI MySQL 8):
 5. **Đợt E (P2)**: CRM, phân nhóm tự động, thống kê mở rộng.
 
 Mỗi đợt: một PR, test + CI xanh, tự merge vào `main`, gửi lệnh `sudo ecso-update main`.
+
+---
+
+## Trạng thái triển khai
+
+- **Đợt A** (duyệt 04/11/2026): sửa L1–L5, L7–L10 và tách quyền. Quyết định của người dùng: đơn COD và đơn giao thất bại **không** tính vào công nợ khách. L6 (khách không SĐT) giữ nguyên theo nguyên tắc "không gộp khách chỉ vì trùng tên": người bán tìm và chọn khách có sẵn trong form đơn.

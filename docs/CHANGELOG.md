@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+### Khách hàng, đợt A: công nợ thống nhất (2026-11-04)
+- **Một quy tắc công nợ dùng chung** (`App\Modules\Sales\Services\CustomerDebt`): trang khách, danh sách khách, sổ công nợ, báo cáo Công nợ phải thu, màn hình thu nợ ở Sổ quỹ và tóm tắt khách trong chi tiết đơn giờ cùng một con số. Nợ một đơn = tổng đơn − giá trị trả hàng đã duyệt − (đã thu − đã hoàn). Chỉ tính đơn kênh riêng; không tính đơn sàn, đơn COD, đơn hủy, đơn hoàn toàn bộ, đơn giao thất bại. Không lưu số cộng dồn nên đơn đồng bộ/sửa lại không bao giờ bị cộng nợ hai lần.
+- Trả hàng một phần (đã duyệt trở đi) giờ giảm công nợ. Sổ công nợ có thêm dòng **Trả hàng** và **Hoàn tiền**, mỗi dòng trỏ về đơn gốc.
+- `CustomerDebt::returnValueSql()` / `orderReturnsSql()` cho các báo cáo khác dùng chung cách tính giá trị trả hàng (cùng quy tắc với `OrderReturn::goodsValue()`).
+- "Mua gần nhất" không còn tính đơn đã hủy.
+- Đổi khách trên đơn đã có phiếu thu: phiếu thu chuyển theo sang khách mới.
+- Khách **Ngừng giao dịch** không được đưa vào đơn mới (đơn đang mở của họ vẫn sửa được).
+- Hai đơn tạo cùng lúc với cùng số điện thoại khách mới: đơn sau dùng lại khách vừa tạo thay vì báo lỗi.
+- Quyền mới `customers.import`, `customers.export`, `customers.delete` (tách khỏi `customers.manage`). Vai trò nào đang có `customers.manage` được giữ nguyên các quyền này khi cập nhật.
+- Nhật ký: sửa khách ghi rõ trường nào đổi (giá trị cũ → mới; dữ liệu cá nhân chỉ ghi "đã đổi"); xuất và nhập file khách được ghi nhật ký.
+
 ### Phí sàn và giá sàn, đợt 3 (2026-11-04)
 - **Bảng phí sàn** cho từng gian hàng (Cấu hình → Thuế và chính sách giá), gồm hoa hồng %, thanh toán %, dịch vụ %, phí cố định mỗi đơn, làm tròn lên và lãi tối thiểu trên giá vốn. Có thể đặt hoa hồng riêng theo danh mục. Khi chưa lưu thì bảng hiện số tham khảo (`config/marketplaces.php`, `pricing.reference_fees`), cần kiểm tra lại theo hợp đồng.
 - Công thức giá sàn: (giá gốc + phí cố định) ÷ (1 − tổng % phí), làm tròn lên. Giá không được thấp hơn mức để còn giá vốn + lãi tối thiểu sau phí. Website WooCommerce vẫn bán theo giá gốc, không cộng phí sàn.

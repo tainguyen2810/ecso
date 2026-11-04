@@ -29,6 +29,16 @@ class CustomerPolicy extends PermissionPolicy
 
     public function delete(User $user): bool
     {
-        return $this->allows('customers.manage');
+        return $this->allows('customers.delete');
+    }
+
+    public function import(User $user): bool
+    {
+        return $this->allows('customers.import');
+    }
+
+    public function export(User $user): bool
+    {
+        return $this->allows('customers.export');
     }
 }

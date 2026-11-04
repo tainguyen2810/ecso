@@ -11,6 +11,7 @@ use App\Modules\Identity\Models\User;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Sales\Http\Resources\PaymentResource;
 use App\Modules\Sales\Models\Customer;
+use App\Modules\Sales\Services\CustomerDebt;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -92,18 +93,18 @@ class CashVoucherController extends Controller
     }
 
     /** Debt still owed by a customer, order by order (oldest first), before taking a debt receipt. */
-    public function customerDebt(Customer $customer, CashVoucherService $service): JsonResponse
+    public function customerDebt(Customer $customer, CashVoucherService $service, CustomerDebt $debt): JsonResponse
     {
         $this->authorize('pay', Order::class);
         $orders = $service->unpaidOrders($customer);
 
         return response()->json(['data' => [
-            'debt' => (float) $orders->reduce(fn (string $sum, Order $o) => bcadd($sum, $o->balanceDue(), 2), '0.00'),
+            'debt' => (float) $debt->forCustomer($customer),
             'orders' => $orders->map(fn (Order $o) => [
                 'id' => $o->ulid,
                 'number' => $o->external_order_id,
                 'placed_at' => $o->placed_at?->toIso8601String(),
-                'due' => (float) $o->balanceDue(),
+                'due' => (float) CashVoucherService::due($o),
             ])->values(),
         ]]);
     }
