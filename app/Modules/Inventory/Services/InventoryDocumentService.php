@@ -250,16 +250,36 @@ class InventoryDocumentService
         });
     }
 
-    public function receiveTransfer(StockTransfer $transfer): StockTransfer
+    /**
+     * The receiving warehouse takes in everything that was sent (the transfer stays symmetric in the ledger). When
+     * fewer arrived ($received: line id => quantity counted), the missing part goes to a pending "thất lạc"
+     * adjustment of that warehouse: an approver confirms the loss, as for any write-off.
+     *
+     * @param  array<int, int>  $received
+     */
+    public function receiveTransfer(StockTransfer $transfer, array $received = [], ?string $note = null): StockTransfer
     {
-        return DB::transaction(function () use ($transfer) {
+        return DB::transaction(function () use ($transfer, $received, $note) {
             $locked = $this->lockTransfer($transfer, StockTransfer::IN_TRANSIT);
             $to = Warehouse::query()->findOrFail($locked->to_warehouse_id);
             $this->assertActive($to);
 
+            $short = [];
+            foreach ($locked->lines()->get() as $line) {
+                $got = array_key_exists($line->id, $received) ? $received[$line->id] : $line->quantity;
+                if ($got < 0 || $got > $line->quantity) {
+                    throw new InvalidStockOperation("Số thực nhận của dòng {$line->id} phải từ 0 đến {$line->quantity}.");
+                }
+                $line->forceFill(['received_qty' => $got])->save();
+                if ($got < $line->quantity) {
+                    $short[] = ['variant_id' => $line->product_variant_id, 'mode' => 'delta', 'quantity' => $got - $line->quantity, 'reason' => 'lost', 'note' => "Thiếu khi nhận {$locked->number}"];
+                }
+            }
+
             $this->inventory->transferIn($to, $this->transferLines($locked), "transfer:{$locked->id}:in", $locked);
-            $locked->forceFill(['status' => StockTransfer::RECEIVED, 'received_at' => now()])->save();
-            $this->audit->record('inventory.transfer.received', $locked, ['number' => $locked->number]);
+            $shortage = $short === [] ? null : $this->createAdjustment($to, $short, 'lost', trim("Thiếu hàng khi nhận phiếu chuyển {$locked->number}. ".($note ?? '')));
+            $locked->forceFill(['status' => StockTransfer::RECEIVED, 'received_at' => now(), 'shortage_adjustment_id' => $shortage?->id])->save();
+            $this->audit->record('inventory.transfer.received', $locked, ['number' => $locked->number, 'shortage' => $shortage?->number]);
 
             return $locked;
         });

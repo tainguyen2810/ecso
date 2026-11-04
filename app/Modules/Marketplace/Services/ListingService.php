@@ -83,7 +83,11 @@ class ListingService
         DB::transaction(function () use ($account, $product, &$counts) {
             $listing = MarketplaceListing::query()->updateOrCreate(
                 ['marketplace_account_id' => $account->id, 'external_product_id' => $product->externalProductId],
-                ['title' => $product->title, 'status' => $product->status, 'image_url' => $product->imageUrl, 'synced_at' => now()],
+                ['title' => $product->title, 'status' => $product->status, 'image_url' => $product->imageUrl, 'synced_at' => now(),
+                    // Kept for "approve new products": the ECSO product is created with these.
+                    'raw' => ['details' => $product->details, 'variants' => collect($product->variants)->mapWithKeys(fn ($v) => [$v['external_sku_id'] => array_filter([
+                        'options' => $v['options'] ?? [], 'weight_gram' => $v['weight_gram'] ?? null, 'barcode' => $v['barcode'] ?? null,
+                    ])])->all()]],
             );
             $counts['listings']++;
 

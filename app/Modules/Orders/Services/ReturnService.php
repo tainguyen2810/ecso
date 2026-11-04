@@ -7,6 +7,7 @@ use App\Modules\Catalog\Services\ComboResolver;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Services\InventoryService;
 use App\Modules\Inventory\Services\ReservationLedger;
+use App\Modules\Inventory\Services\WarehouseService;
 use App\Modules\Inventory\Support\DocumentNumber;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
@@ -33,6 +34,7 @@ class ReturnService
         private readonly ReservationLedger $ledger,
         private readonly AuditLogger $audit,
         private readonly ComboResolver $combos,
+        private readonly WarehouseService $warehouses,
     ) {}
 
     /**
@@ -67,7 +69,7 @@ class ReturnService
     /**
      * A return or refund recorded by a user (or later imported from the marketplace).
      *
-     * @param  array{type: string, reason?: string|null, refund_amount?: string|float|null, lines?: array<int, array{order_item_id: int, quantity: int}>}  $data
+     * @param  array{type: string, reason?: string|null, refund_amount?: string|float|null, lines?: array<int, array{order_item_id: int, quantity: int}>, source_key?: string|null}  $data
      */
     public function create(Order $order, array $data): OrderReturn
     {
@@ -108,6 +110,7 @@ class ReturnService
                 'refund_amount' => $data['refund_amount'] ?? null,
                 'warehouse_id' => $order->warehouse_id,
                 'created_by' => Auth::id(),
+                'source_key' => $data['source_key'] ?? null,
             ], $data['type'] === OrderReturn::TYPE_REFUND_ONLY ? [] : $lines);
 
             $this->audit->record('return.created', $return, ['order' => $order->external_order_id, 'type' => $return->type]);
@@ -151,6 +154,63 @@ class ReturnService
                 'order_return_id' => $return->id,
             ]);
             $this->audit->record('return.refunded', $return, ['number' => $return->number, 'amount' => $amount, 'method' => $data['method']]);
+
+            return $return->refresh();
+        });
+    }
+
+    /**
+     * "Hủy hóa đơn": undoes a completed sale of the seller's own channel in one step, for a sale rung up by mistake.
+     * Nothing is deleted: a return of everything still returnable is recorded and inspected (all goods back on the
+     * shelf of the order's warehouse) and what the buyer paid is refunded in the methods they paid with. Any part they
+     * still owed stays on the return, which lowers their debt.
+     */
+    public function voidSale(Order $order, string $reason): OrderReturn
+    {
+        return DB::transaction(function () use ($order, $reason) {
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+            if (! $order->isManual() || $order->status !== OrderStatus::COMPLETED) {
+                throw ValidationException::withMessages(['order' => 'Chỉ hủy được hóa đơn bán đã hoàn tất của kênh bán riêng.']);
+            }
+            if (OrderReturn::query()->where('order_id', $order->id)->where('status', '!=', OrderReturn::REJECTED)->exists()) {
+                throw ValidationException::withMessages(['order' => 'Đơn đã có phiếu trả hàng. Hãy xử lý tiếp trên phiếu trả.']);
+            }
+            $paid = OrderPayment::query()->where('order_id', $order->id)->whereNull('voided_at')->get();
+            if ($paid->contains('method', OrderPayment::EXCHANGE)) {
+                throw ValidationException::withMessages(['order' => 'Đơn đổi hàng: hãy làm phiếu trả hàng thay vì hủy hóa đơn.']);
+            }
+
+            $lines = collect($this->returnableQuantities($order))->filter(fn ($qty) => $qty > 0)
+                ->map(fn ($qty, $id) => ['order_item_id' => (int) $id, 'quantity' => (int) $qty])->values()->all();
+            if ($lines === []) {
+                throw ValidationException::withMessages(['order' => 'Không còn hàng nào để trả lại kho.']);
+            }
+
+            $return = $this->create($order, ['type' => OrderReturn::TYPE_RETURN, 'reason' => "Hủy hóa đơn: {$reason}", 'lines' => $lines]);
+            $this->move($return, OrderReturn::APPROVED);
+            $this->move($return, OrderReturn::RECEIVED);
+            $warehouse = Warehouse::query()->findOrFail($order->warehouse_id);
+            $this->inspect($return, $warehouse, $return->lines()->get()->map(fn (OrderReturnLine $l) => [
+                'line_id' => (int) $l->id, 'received_qty' => (int) $l->quantity, 'sellable_qty' => (int) $l->quantity, 'damaged_qty' => 0,
+            ])->all(), "Hủy hóa đơn: {$reason}");
+
+            // Pay back in each method the buyer used, never more than the return is worth.
+            $left = $return->refresh()->refundable();
+            $net = [];
+            foreach ($paid as $p) {
+                $net[$p->method] = bcadd($net[$p->method] ?? '0', $p->kind === OrderPayment::REFUND ? bcmul((string) $p->amount, '-1', 2) : (string) $p->amount, 2);
+            }
+            foreach ($net as $method => $amount) {
+                $amount = bccomp($amount, $left, 2) > 0 ? $left : $amount;
+                if (bccomp($amount, '0', 2) <= 0) {
+                    continue;
+                }
+                $this->refund($return, ['method' => $method, 'amount' => $amount, 'note' => "Hủy hóa đơn {$order->external_order_id}"]);
+                $left = bcsub($left, $amount, 2);
+            }
+            $this->move($return->refresh(), OrderReturn::CLOSED);
+
+            $this->audit->record('order.sale_voided', $order, ['order' => $order->external_order_id, 'reason' => $reason, 'return' => $return->number]);
 
             return $return->refresh();
         });
@@ -218,6 +278,7 @@ class ReturnService
 
             $byId = $return->lines()->get()->keyBy('id');
             $restock = [];
+            $damaged = [];
             $seen = [];
             foreach ($lines as $i => $input) {
                 $line = $byId[$input['line_id']] ?? throw ValidationException::withMessages(["lines.{$i}.line_id" => 'Dòng không thuộc phiếu này.']);
@@ -239,6 +300,10 @@ class ReturnService
                 if ($input['sellable_qty'] > 0) {
                     $restock[] = ['variant_id' => $line->product_variant_id, 'quantity' => $input['sellable_qty'], 'line_id' => $line->id];
                 }
+                // Damaged goods are kept on the books in the defective-goods warehouse, never in selling stock.
+                if ($input['damaged_qty'] > 0 && $line->product_variant_id !== null) {
+                    $damaged[] = ['variant_id' => $line->product_variant_id, 'quantity' => $input['damaged_qty'], 'line_id' => $line->id];
+                }
             }
 
             if ($restock !== []) {
@@ -247,15 +312,23 @@ class ReturnService
                 $this->inventory->restockReturn($warehouse, $restock, "restock:return:{$return->id}", $return, "Hàng hoàn {$return->number}");
             }
 
+            $defective = null;
+            if ($damaged !== []) {
+                $defective = $this->warehouses->defective();
+                $damagedLines = $this->withSoldCost($this->combos->expand($damaged), $damaged, $byId);
+                $this->inventory->restockReturn($defective, $damagedLines, "damaged:return:{$return->id}", $return, "Hàng lỗi từ phiếu trả {$return->number}");
+            }
+
             $return->forceFill([
                 'status' => OrderReturn::INSPECTED,
                 'warehouse_id' => $warehouse->id,
+                'damaged_warehouse_id' => $defective?->id,
                 'inspected_at' => now(),
                 'inspected_by' => Auth::id(),
                 'note' => $note ?? $return->note,
             ])->save();
 
-            $this->audit->record('return.inspected', $return, ['number' => $return->number, 'restocked' => array_sum(array_column($restock, 'quantity'))]);
+            $this->audit->record('return.inspected', $return, ['number' => $return->number, 'restocked' => array_sum(array_column($restock, 'quantity')), 'damaged' => array_sum(array_column($damaged, 'quantity'))]);
 
             return $return;
         });

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Marketplace\Listeners;
 
+use App\Modules\Catalog\Events\SaleStatusChanged;
 use App\Modules\Inventory\Events\AvailableStockChanged;
 use App\Modules\Marketplace\Events\ListingMappingChanged;
 use App\Modules\Marketplace\Models\ListingVariant;
@@ -14,7 +15,7 @@ class PlanInventoryPush
 {
     public function __construct(private readonly InventorySyncPlanner $planner) {}
 
-    public function handle(AvailableStockChanged|ListingMappingChanged $event): void
+    public function handle(AvailableStockChanged|ListingMappingChanged|SaleStatusChanged $event): void
     {
         $tenant = Tenant::query()->find($event->tenantId);
         if (! $tenant) {
@@ -22,7 +23,7 @@ class PlanInventoryPush
         }
 
         TenantContext::run($tenant, function () use ($event) {
-            $variantIds = $event instanceof AvailableStockChanged
+            $variantIds = $event instanceof AvailableStockChanged || $event instanceof SaleStatusChanged
                 ? $event->variantIds
                 : ListingVariant::query()->whereIn('id', $event->listingVariantIds)->whereNotNull('product_variant_id')->pluck('product_variant_id')->all();
 

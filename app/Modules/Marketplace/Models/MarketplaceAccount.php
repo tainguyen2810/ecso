@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $base_url
  * @property array<string, mixed>|null $settings per-store sync switches, auth mode, webhook ids
  * @property Carbon|null $connected_at
+ * @property Carbon|null $orders_since order sync starts here: orders created earlier are never taken in
  * @property Carbon|null $last_synced_at
  * @property Carbon|null $circuit_open_until
  * @property-read int|string|null $listings_total  aggregates of the shop list
@@ -47,6 +48,7 @@ class MarketplaceAccount extends Model
             'sync_enabled' => 'boolean',
             'settings' => 'array',
             'connected_at' => 'datetime',
+            'orders_since' => 'datetime',
             'last_synced_at' => 'datetime',
             'circuit_open_until' => 'datetime',
             'consecutive_failures' => 'integer',
@@ -54,10 +56,27 @@ class MarketplaceAccount extends Model
     }
 
     /** Per-store sync switches (WooCommerce store page); a missing switch means the default below. */
-    public const SYNC_DEFAULTS = ['sync_orders' => true, 'sync_stock' => true, 'sync_prices' => false, 'import_new_products' => true];
+    /** push_status: ECSO's order actions (confirm, pack, hand over, cancel) are written to the store ("hai chiều"). */
+    public const SYNC_DEFAULTS = ['sync_orders' => true, 'sync_stock' => true, 'sync_prices' => false, 'import_new_products' => true, 'push_status' => true];
 
     /** @var array<int, string> */
-    public const SETTING_KEYS = ['sync_orders', 'sync_stock', 'sync_prices', 'import_new_products'];
+    public const SETTING_KEYS = ['sync_orders', 'sync_stock', 'sync_prices', 'import_new_products', 'push_status'];
+
+    /** Minutes between two reconcile passes of this shop's orders. */
+    public const ORDER_SYNC_INTERVALS = [5, 15, 30];
+
+    /** @return array<string, string> this store's own raw status => internal status */
+    public function statusMap(): array
+    {
+        return (array) ($this->settings['status_map'] ?? []);
+    }
+
+    public function orderSyncInterval(): int
+    {
+        $minutes = (int) ($this->settings['order_sync_interval'] ?? 15);
+
+        return in_array($minutes, self::ORDER_SYNC_INTERVALS, true) ? $minutes : 15;
+    }
 
     public function syncs(string $what): bool
     {

@@ -49,7 +49,7 @@ async function load() {
 onMounted(async () => {
     // Both at once: the inspect form needs the warehouse list before it can be submitted.
     const [, list] = await Promise.all([load(), api.get('/warehouses')]);
-    warehouses.value = list.data.data.filter((w: Warehouse) => w.status === 'active');
+    warehouses.value = list.data.data.filter((w: Warehouse) => w.status === 'active' && w.purpose !== 'defective');
     inspect.value.warehouse_id = warehouses.value.find((w) => w.is_default)?.id ?? warehouses.value[0]?.id ?? '';
 });
 
@@ -174,7 +174,7 @@ async function submitInspect() {
                             <Select v-model="inspect.warehouse_id" :options="warehouses.map((w) => ({ value: w.id!, label: `${w.code} · ${w.name}` }))" />
                         </FormField>
                         <FormField label="Ghi chú kiểm hàng"><Input v-model="inspect.note" /></FormField>
-                        <p class="text-xs text-muted-foreground sm:col-span-2">Bán được + Hỏng phải bằng Nhận. Hàng hỏng không cộng kho.</p>
+                        <p class="text-xs text-muted-foreground sm:col-span-2">Bán được + Hỏng phải bằng Nhận. Hàng hỏng được nhập vào kho hàng lỗi (tự tạo nếu chưa có), không cộng vào tồn bán được.</p>
                         <p v-if="inspectError" class="text-sm text-destructive sm:col-span-2">{{ inspectError }}</p>
                         <div class="sm:col-span-2">
                             <Button :loading="busy === 'inspect'" :disabled="!inspect.warehouse_id || Object.keys(inspect.lines).some((id) => lineInvalid(Number(id)))" data-testid="submit-inspect" @click="submitInspect"><ClipboardCheck /> Xác nhận kiểm hàng</Button>
@@ -200,6 +200,7 @@ async function submitInspect() {
                         <span v-else>—</span>
                     </dd></div>
                     <div v-if="ret.warehouse"><dt class="text-xs text-muted-foreground">Kho nhập lại</dt><dd>{{ ret.warehouse.code }} · {{ ret.warehouse.name }}</dd></div>
+                    <div v-if="ret.damaged_warehouse" data-testid="return-damaged-warehouse"><dt class="text-xs text-muted-foreground">Hàng hỏng chuyển vào</dt><dd>{{ ret.damaged_warehouse.code }} · {{ ret.damaged_warehouse.name }}</dd></div>
                     <div><dt class="text-xs text-muted-foreground">Nhận hàng</dt><dd>{{ formatDateTime(ret.received_at) }}</dd></div>
                     <div><dt class="text-xs text-muted-foreground">Kiểm hàng</dt><dd>{{ formatDateTime(ret.inspected_at) }}<span v-if="ret.inspected_by"> · {{ ret.inspected_by }}</span></dd></div>
                     <div><dt class="text-xs text-muted-foreground">Đóng phiếu</dt><dd>{{ formatDateTime(ret.closed_at) }}</dd></div>

@@ -13,7 +13,10 @@ describe('POS cart', () => {
         cart.lines[1]!.discount = 5000;
         cart.discount = 15000;
         expect(cart.lines).toHaveLength(2);
-        expect(cartTotals(cart)).toEqual({ quantity: 3, subtotal: 245000, total: 230000 });
+        expect(cartTotals(cart)).toEqual({ quantity: 3, subtotal: 245000, tax: 0, total: 230000 });
+        // VAT is worked out on the goods after the cart discount.
+        expect(cartTotals(cart, { rate: 10, included: true })).toEqual({ quantity: 3, subtotal: 245000, tax: 20909, total: 230000 });
+        expect(cartTotals(cart, { rate: 10, included: false })).toEqual({ quantity: 3, subtotal: 245000, tax: 23000, total: 253000 });
     });
 
     it('never goes below zero', () => {

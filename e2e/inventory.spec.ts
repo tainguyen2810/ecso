@@ -115,6 +115,9 @@ test('transfers and warehouses', async ({ page }) => {
     await expect(page.getByTestId('receive')).toBeVisible();
     await shot(page, '13-transfer-in-transit');
     await page.getByTestId('receive').click();
+    // The receive dialog lists each line with the quantity received (all of it by default).
+    await expect(page.getByTestId('receive-confirm')).toBeVisible();
+    await page.getByTestId('receive-confirm').click();
     await expect(page.getByTestId('document-status')).toHaveText('Đã nhận');
     await shot(page, '14-transfer-received');
 

@@ -5,6 +5,7 @@ use App\Modules\Marketplace\Http\Controllers\ListingController;
 use App\Modules\Marketplace\Http\Controllers\MarketplaceAccountController;
 use App\Modules\Marketplace\Http\Controllers\MarketplacePricingController;
 use App\Modules\Marketplace\Http\Controllers\PriceController;
+use App\Modules\Marketplace\Http\Controllers\SyncLogController;
 use App\Modules\Marketplace\Http\Controllers\WebhookController;
 use App\Modules\Marketplace\Http\Controllers\WooCommerceController;
 use Illuminate\Support\Facades\Route;
@@ -38,6 +39,14 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::post('marketplace-accounts/{account}/sync-products', [MarketplaceAccountController::class, 'syncProducts'])->middleware('throttle:10,1,marketplace.marketplace-accounts.x.sync-products');
     Route::post('marketplace-accounts/{account}/push-stock', [MarketplaceAccountController::class, 'pushStock'])->middleware('throttle:10,1,marketplace.marketplace-accounts.x.push-stock');
     Route::get('marketplace-webhooks', [MarketplaceAccountController::class, 'webhooks']);
+    Route::get('sync-runs', [SyncLogController::class, 'runs']);
+    Route::get('sync-errors', [SyncLogController::class, 'errors']);
+    Route::post('sync-errors/{error}/retry', [SyncLogController::class, 'retry'])->middleware('throttle:30,1,marketplace.sync-errors.x.retry');
+    Route::post('sync-errors/{error}/resolve', [SyncLogController::class, 'resolve']);
+    Route::post('marketplace-accounts/{account}/sync-orders', [SyncLogController::class, 'syncNow'])->middleware('throttle:6,1,marketplace.marketplace-accounts.x.sync-orders');
+    Route::get('marketplace-accounts/{account}/status-map', [SyncLogController::class, 'statusMap']);
+    Route::put('marketplace-accounts/{account}/status-map', [SyncLogController::class, 'saveStatusMap']);
+    Route::post('marketplace-accounts/{account}/check-webhooks', [SyncLogController::class, 'checkWebhooks'])->middleware('throttle:6,1,marketplace.marketplace-accounts.x.check-webhooks');
 
     Route::get('marketplace-accounts/{account}/price-changes', [PriceController::class, 'pending']);
     Route::post('marketplace-accounts/{account}/price-changes/approve-all', [PriceController::class, 'approveAll']);

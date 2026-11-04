@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Access\Models\Permission;
 use App\Modules\Access\Models\Role;
 use App\Modules\Catalog\Models\Product;
 use App\Modules\Catalog\Models\ProductVariant;
@@ -205,4 +206,11 @@ function postOnce($user, $tenant, string $url, array $body, string $key)
     $test->flushHeaders(); // the next request of the test sends no key unless it asks for one
 
     return $response;
+}
+
+/** Takes one permission away from a system role, as a business tightening its staff rights would. */
+function revoke(string $role, string $permission): void
+{
+    Role::query()->whereNull('tenant_id')->where('key', $role)->firstOrFail()
+        ->permissions()->detach(Permission::query()->where('key', $permission)->value('id'));
 }

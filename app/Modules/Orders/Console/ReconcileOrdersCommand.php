@@ -6,10 +6,12 @@ use App\Modules\Marketplace\Connectors\Capability;
 use App\Modules\Marketplace\Connectors\ConnectorRegistry;
 use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
+use App\Modules\Marketplace\Models\SyncRun;
 use App\Modules\Orders\Services\OrderSync;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Console\Command;
+use Illuminate\Support\Carbon;
 
 /** Polls recently changed orders of every active shop, to recover webhooks that never arrived. */
 class ReconcileOrdersCommand extends Command
@@ -30,6 +32,11 @@ class ReconcileOrdersCommand extends Command
                 continue;
             }
 
+            // Runs every 5 minutes; each shop is read at its own interval (5, 15 or 30 minutes, set on the store page).
+            if (! $this->option('account') && ! $this->due($account)) {
+                continue;
+            }
+
             $tenant = Tenant::query()->find($account->tenant_id);
             try {
                 $counts = TenantContext::run($tenant, fn () => $sync->syncRecent(MarketplaceAccount::query()->findOrFail($account->id)));
@@ -40,5 +47,14 @@ class ReconcileOrdersCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    private function due(MarketplaceAccount $account): bool
+    {
+        $last = SyncRun::query()->withoutGlobalScopes()->where('marketplace_account_id', $account->id)
+            ->where('resource', 'orders')->where('trigger', 'schedule')->max('started_at');
+
+        // A minute of slack so a pass that started a little late does not skip a whole interval.
+        return $last === null || Carbon::parse($last)->addMinutes($account->orderSyncInterval() - 1)->lessThanOrEqualTo(now());
     }
 }

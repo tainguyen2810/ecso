@@ -24,7 +24,7 @@ class ProductVariant extends Model
     /** Who holds the selling price: auto (ECSO while in stock, else the website), ecso, woo. */
     public const PRICE_SOURCES = ['auto', 'ecso', 'woo'];
 
-    protected $fillable = ['sku', 'barcode', 'name', 'options', 'ref_price', 'price_source', 'wholesale_price', 'weight_gram', 'status'];
+    protected $fillable = ['sku', 'barcode', 'name', 'options', 'ref_price', 'price_source', 'wholesale_price', 'weight_gram', 'status', 'supplier_id', 'supplier_sku', 'length_mm', 'width_mm', 'height_mm'];
 
     protected function casts(): array
     {
@@ -65,5 +65,32 @@ class ProductVariant extends Model
     public static function normalizeSku(string $sku): string
     {
         return trim($sku);
+    }
+
+    /** Sold in orders, POS and on the marketplaces: the variant and its product are both active. */
+    public function isSellable(): bool
+    {
+        /** @var Product|null $product a soft-deleted product loads as null */
+        $product = $this->product;
+
+        return $this->status === Product::STATUS_ACTIVE && ($product === null || $product->status === Product::STATUS_ACTIVE);
+    }
+
+    /**
+     * Ids of the given variants that are stopped (the variant or its product is not active). Runs in the tenant scope.
+     *
+     * @param  array<int, int>  $ids
+     * @return array<int, int>
+     */
+    public static function stoppedIds(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return static::query()->whereIn('product_variants.id', $ids)
+            ->where(fn ($q) => $q->where('product_variants.status', '!=', Product::STATUS_ACTIVE)
+                ->orWhereHas('product', fn ($p) => $p->where('status', '!=', Product::STATUS_ACTIVE)))
+            ->pluck('product_variants.id')->map(fn ($id) => (int) $id)->all();
     }
 }

@@ -46,6 +46,12 @@ class OrderStockSync
             $this->returns->openAutomatic($order, OrderReturn::TYPE_FAILED_DELIVERY, 'failed-delivery', 'Giao hàng thất bại, hàng đang quay về');
         }
 
+        if ($order->status === OrderStatus::RETURNED && ! OrderReturn::query()->where('order_id', $order->id)->exists()) {
+            // The marketplace closed the order as returned/refunded after it shipped, without a return on record:
+            // open one so the goods go back into stock when they are received and inspected, never before.
+            $this->returns->openAutomatic($order, OrderReturn::TYPE_RETURN, 'returned', 'Đơn chuyển sang Đã hoàn trên sàn, chờ nhận hàng về kho');
+        }
+
         $this->refreshFlags($order, $items);
     }
 
@@ -65,7 +71,11 @@ class OrderStockSync
     private function holdAll(Order $order, $mapped, Warehouse $warehouse): void
     {
         foreach ($mapped as $item) {
-            $this->ledger->hold(Order::STOCK_REFERENCE, $item->id, $warehouse, $item->variant, $item->quantity);
+            // Units refunded on the store before shipping are not held (and so never shipped).
+            $quantity = $item->quantity - (int) $item->refunded_quantity;
+            if ($quantity > 0) {
+                $this->ledger->hold(Order::STOCK_REFERENCE, $item->id, $warehouse, $item->variant, $quantity);
+            }
         }
     }
 

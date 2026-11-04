@@ -110,6 +110,7 @@ async function update(w: Warehouse, payload: Record<string, unknown>, message: s
                 </div>
                 <div class="flex gap-1">
                     <Badge v-if="w.is_default" tone="default"><Star class="mr-1 size-3" /> Mặc định</Badge>
+                    <Badge v-if="w.purpose === 'defective'" tone="danger" data-testid="warehouse-defective">Kho hàng lỗi · không bán</Badge>
                     <Badge :tone="w.status === 'active' ? 'success' : 'muted'">{{ w.status === 'active' ? 'Hoạt động' : 'Ngừng' }}</Badge>
                 </div>
             </div>
@@ -120,7 +121,7 @@ async function update(w: Warehouse, payload: Record<string, unknown>, message: s
             </div>
             <div v-if="canManage" class="mt-4 flex flex-wrap gap-2 border-t pt-3">
                 <Button variant="ghost" size="sm" @click="openEdit(w)"><Pencil /> Sửa</Button>
-                <Button v-if="!w.is_default && w.status === 'active'" variant="ghost" size="sm" @click="update(w, { is_default: true }, `${w.code} là kho mặc định`)"><Star /> Đặt mặc định</Button>
+                <Button v-if="!w.is_default && w.status === 'active' && w.purpose !== 'defective'" variant="ghost" size="sm" @click="update(w, { is_default: true }, `${w.code} là kho mặc định`)"><Star /> Đặt mặc định</Button>
                 <Button v-if="!w.is_default" variant="ghost" size="sm" class="ml-auto" @click="update(w, { status: w.status === 'active' ? 'inactive' : 'active' }, 'Đã đổi trạng thái kho')">
                     {{ w.status === 'active' ? 'Ngừng hoạt động' : 'Kích hoạt lại' }}
                 </Button>

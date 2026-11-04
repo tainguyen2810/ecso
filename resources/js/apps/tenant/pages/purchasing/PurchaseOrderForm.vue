@@ -83,7 +83,7 @@ onMounted(async () => {
     // New lines take the purchase tax set in Cấu hình → Thuế.
     if (cfg) defaultVat.value = String(cfg.tax.purchase_rate);
     suppliers.value = s.data.data;
-    warehouses.value = (w.data.data as Warehouse[]).filter((x) => x.status === 'active');
+    warehouses.value = (w.data.data as Warehouse[]).filter((x) => x.status === 'active' && x.purpose !== 'defective');
     form.warehouse_id = (warehouses.value.find((x) => x.is_default) ?? warehouses.value[0])?.id ?? '';
     if (route.query.supplier) form.supplier_id = String(route.query.supplier);
 

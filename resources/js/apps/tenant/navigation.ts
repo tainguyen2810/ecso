@@ -69,6 +69,7 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
                     { label: 'Chuyển hàng', path: '/inventory/transfers', permission: 'inventory.view' },
                     { label: 'Nhà cung cấp', path: '/purchasing/suppliers', permission: 'purchasing.view' },
                     { label: 'Điều chỉnh giá vốn', path: '/inventory/cost-adjustments', permission: 'inventory.view' },
+                    { label: 'Đối soát tồn kho', path: '/inventory/reconciliation', permission: 'inventory.view' },
                 ] },
         ],
     },

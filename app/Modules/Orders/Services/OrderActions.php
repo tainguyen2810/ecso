@@ -6,6 +6,7 @@ use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Identity\Models\User;
 use App\Modules\Marketplace\Connectors\Capability;
 use App\Modules\Marketplace\Connectors\ConnectorRegistry;
+use App\Modules\Marketplace\Connectors\WooCommerce\WooCommerceConnector;
 use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Exceptions\UnsupportedCapability;
 use App\Modules\Orders\Domain\OrderStatus;
@@ -29,7 +30,16 @@ class OrderActions
         'cancel' => [OrderStatus::UNPAID, OrderStatus::PENDING_CONFIRMATION, OrderStatus::READY_TO_PACK, OrderStatus::PACKED],
     ];
 
+    /** action => status the order is in after it (for actions kept in ECSO) */
+    public const RESULTS = [
+        'confirm' => OrderStatus::READY_TO_PACK,
+        'pack' => OrderStatus::PACKED,
+        'handover' => OrderStatus::HANDED_OVER,
+        'cancel' => OrderStatus::CANCELLED,
+    ];
+
     public function __construct(
+        private readonly OrderIngestor $ingestor,
         private readonly ConnectorRegistry $connectors,
         private readonly OrderSync $sync,
         private readonly AuditLogger $audit,
@@ -53,6 +63,13 @@ class OrderActions
         }
 
         $account = $order->account;
+        // One-way store (the seller chose "chỉ website → ECSO"): the action stays in ECSO, the store is not written.
+        if ($account->marketplace === WooCommerceConnector::MARKETPLACE && ! $account->syncs('push_status')) {
+            $order = $this->ingestor->applyLocal($order, self::RESULTS[$action], 'user', Auth::id(), $params['reason'] ?? null);
+            $this->audit->record("order.{$action}", $order, ['order' => $order->external_order_id, 'local' => true]);
+
+            return $order;
+        }
         $connector = $this->connectors->for($account->marketplace);
         $capability = Capability::ORDER_ACTIONS[$action];
         $state = $connector->capabilities()[$capability] ?? Capability::UNKNOWN;
@@ -69,7 +86,7 @@ class OrderActions
         $result = $this->sync->syncOne($account, $order->external_order_id, 'user', null, Auth::id());
         $this->audit->record("order.{$action}", $order, ['order' => $order->external_order_id]);
 
-        return $result['order'];
+        return $result['order'] ?? $order;
     }
 
     /**

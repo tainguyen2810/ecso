@@ -6,7 +6,10 @@ use App\Modules\Catalog\Models\Brand;
 use App\Modules\Catalog\Models\Category;
 use App\Modules\Catalog\Models\Product;
 use App\Modules\Catalog\Models\ProductVariant;
+use App\Modules\Tenancy\Support\TenantContext;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
@@ -34,7 +37,7 @@ class ProductRequest extends FormRequest
             'variants.*.opening_cost' => $creating ? ['nullable', 'numeric', 'min:0', 'max:9999999999'] : ['prohibited'],
             'variants' => [$creating ? 'required' : 'sometimes', 'array', 'min:1', 'max:200'],
             'variants.*.id' => ['sometimes', 'string'],
-            'variants.*.sku' => ['required', 'string', 'max:64', 'regex:'.self::SKU_REGEX, 'distinct:ignore_case'],
+            'variants.*.sku' => ['required', 'string', 'max:64', $this->skuFormat(), 'distinct:ignore_case'],
             'variants.*.barcode' => ['nullable', 'string', 'max:64', 'distinct:ignore_case'],
             'variants.*.name' => ['nullable', 'string', 'max:255'],
             'variants.*.options' => ['nullable', 'array', 'max:5'],
@@ -43,6 +46,12 @@ class ProductRequest extends FormRequest
             'variants.*.price_source' => ['nullable', 'in:auto,ecso,woo'],
             'variants.*.wholesale_price' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             'variants.*.weight_gram' => ['nullable', 'integer', 'min:0', 'max:1000000'],
+            // Usual supplier (ULID) and the supplier's code; package size in millimetres.
+            'variants.*.supplier_id' => ['nullable', 'string'],
+            'variants.*.supplier_sku' => ['nullable', 'string', 'max:64'],
+            'variants.*.length_mm' => ['nullable', 'integer', 'min:0', 'max:100000'],
+            'variants.*.width_mm' => ['nullable', 'integer', 'min:0', 'max:100000'],
+            'variants.*.height_mm' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'variants.*.status' => ['sometimes', Rule::in(['active', 'inactive'])],
             // Pack size (đơn vị quy đổi): this SKU = quantity × the base SKU of the same product.
             'variants.*.conversion' => ['nullable', 'array'],
@@ -54,6 +63,31 @@ class ProductRequest extends FormRequest
             'components.*.variant_id' => ['required', 'string', 'distinct'],
             'components.*.quantity' => ['required', 'integer', 'min:1', 'max:10000'],
         ];
+    }
+
+    /**
+     * New or changed SKUs use letters, digits and . _ - /. A SKU kept as it is may have other characters: SKUs
+     * created from a website (spaces, #, +) must not stop the product from being edited.
+     */
+    private function skuFormat(): Closure
+    {
+        $kept = null;
+
+        return function (string $attribute, mixed $value, Closure $fail) use (&$kept) {
+            if (! is_string($value) || preg_match(self::SKU_REGEX, $value)) {
+                return;
+            }
+            $product = $this->route('product');
+            if ($product instanceof Product) {
+                $kept ??= ProductVariant::query()->where('product_id', $product->id)->pluck('sku', 'ulid')->all();
+                $index = (int) explode('.', $attribute)[1];
+                $id = $this->input("variants.{$index}.id");
+                if (is_string($id) && isset($kept[$id]) && $kept[$id] === $value) {
+                    return;
+                }
+            }
+            $fail('SKU chỉ gồm chữ, số và . _ - /');
+        };
     }
 
     public function isCombo(): bool
@@ -203,6 +237,17 @@ class ProductRequest extends FormRequest
         foreach (['category_id' => Category::class, 'brand_id' => Brand::class] as $key => $model) {
             if (array_key_exists($key, $data)) {
                 $data[$key] = $data[$key] ? $model::query()->where('ulid', $data[$key])->value('id') ?? abort(422, 'Danh mục hoặc thương hiệu không hợp lệ.') : null;
+            }
+        }
+
+        // Usual supplier: a supplier of this business, by ULID.
+        $supplierUlids = collect($data['variants'] ?? [])->pluck('supplier_id')->filter()->unique()->values()->all();
+        if ($supplierUlids !== []) {
+            $suppliers = DB::table('suppliers')->where('tenant_id', app(TenantContext::class)->id())->whereIn('ulid', $supplierUlids)->pluck('id', 'ulid');
+            foreach ($data['variants'] as $i => $v) {
+                if (! empty($v['supplier_id'])) {
+                    $data['variants'][$i]['supplier_id'] = $suppliers[$v['supplier_id']] ?? abort(422, 'Nhà cung cấp không hợp lệ.');
+                }
             }
         }
 

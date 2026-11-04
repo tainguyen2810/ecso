@@ -20,6 +20,7 @@ import type { InventoryDocument } from '@/shared/types';
 
 const route = useRoute();
 const tenant = useTenantStore();
+const canCost = computed(() => tenant.can('products.cost.view'));
 const kindKey = computed(() => route.meta.kind as DocumentKindKey);
 const kind = computed(() => documentKinds[kindKey.value]);
 
@@ -95,7 +96,7 @@ watch(kindKey, () => ((status.value = 'all'), (page.value = 1), load()));
                         <th v-if="kindKey === 'adjustments'" class="px-4 py-2.5 font-medium">Lý do</th>
                         <th class="px-4 py-2.5 text-right font-medium">Số dòng</th>
                         <th v-if="kindKey === 'receipts'" class="px-4 py-2.5 text-right font-medium">Số lượng</th>
-                        <th v-if="kindKey === 'receipts'" class="px-4 py-2.5 text-right font-medium">Giá trị</th>
+                        <th v-if="kindKey === 'receipts' && canCost" class="px-4 py-2.5 text-right font-medium">Giá trị</th>
                         <th v-if="kindKey !== 'receipts'" class="px-4 py-2.5 font-medium">Trạng thái</th>
                         <th class="px-4 py-2.5 font-medium">Người tạo</th>
                         <th class="px-4 py-2.5 font-medium">Ngày tạo</th>
@@ -112,7 +113,7 @@ watch(kindKey, () => ((status.value = 'all'), (page.value = 1), load()));
                         <td v-if="kindKey === 'adjustments'" class="px-4 py-3">{{ adjustmentReasons[d.reason ?? ''] ?? d.reason }}</td>
                         <td class="px-4 py-3 text-right tabular-nums">{{ d.lines_count }}</td>
                         <td v-if="kindKey === 'receipts'" class="px-4 py-3 text-right tabular-nums">{{ formatNumber(d.total_quantity) }}</td>
-                        <td v-if="kindKey === 'receipts'" class="px-4 py-3 text-right tabular-nums">{{ formatMoney(d.total_value) }}</td>
+                        <td v-if="kindKey === 'receipts' && canCost" class="px-4 py-3 text-right tabular-nums">{{ formatMoney(d.total_value) }}</td>
                         <td v-if="kindKey !== 'receipts'" class="px-4 py-3"><Badge :tone="documentStatus[d.status!]?.tone">{{ documentStatus[d.status!]?.label }}</Badge></td>
                         <td class="px-4 py-3 text-muted-foreground">{{ d.created_by }}</td>
                         <td class="px-4 py-3 text-muted-foreground">{{ formatDateTime(d.created_at) }}</td>

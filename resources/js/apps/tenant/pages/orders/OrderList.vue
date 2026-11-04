@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Ban, Banknote, Bookmark, ChevronDown, ChevronsRight, Clock, Columns3, Download, Filter, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingCart, UserPlus, X } from 'lucide-vue-next';
+import { Ban, Banknote, Bookmark, FilePen, Trash2, ChevronDown, ChevronsRight, Clock, Columns3, Download, Filter, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingCart, UserPlus, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
@@ -26,7 +26,7 @@ import PrintDialog from './PrintDialog.vue';
 import { downloadPackingSlips } from './packingSlip';
 import OrderPipeline from './OrderPipeline.vue';
 import OrderQuickView from './OrderQuickView.vue';
-import type { MarketplaceAccountData, OrderDetail, OrderSummary, Ref, SalesChannel, Variant } from '@/shared/types';
+import type { MarketplaceAccountData, OrderDetail, OrderSummary, Ref, SalesChannel, Variant, Warehouse } from '@/shared/types';
 
 const route = useRoute();
 const router = useRouter();
@@ -40,6 +40,29 @@ const loading = ref(true);
 const loadError = ref<string | null>(null);
 const accounts = ref<MarketplaceAccountData[]>([]);
 const channels = ref<SalesChannel[]>([]);
+const warehouses = ref<Warehouse[]>([]);
+
+// Đơn nháp: forms saved without creating an order (no number, no stock held).
+interface DraftRow { id: string; title: string; total: string; lines_count: number; created_by: string | null; updated_at: string | null }
+const drafts = ref<DraftRow[]>([]);
+const draftsOpen = ref(false);
+async function loadDrafts() {
+    if (!tenant.can('orders.create')) return;
+    try {
+        drafts.value = (await api.get('/order-drafts')).data.data;
+    } catch {
+        drafts.value = [];
+    }
+}
+async function removeDraft(id: string) {
+    try {
+        await api.delete(`/order-drafts/${id}`);
+        drafts.value = drafts.value.filter((d) => d.id !== id);
+        toast.success('Đã xóa nháp.');
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    }
+}
 const assignees = ref<Ref[]>([]);
 const tags = ref<string[]>([]);
 const pipeline = ref<InstanceType<typeof OrderPipeline> | null>(null);
@@ -51,6 +74,7 @@ const filters = reactive({
     account: str('account'),
     source: str('source'),
     channel: str('channel'),
+    warehouse: str('warehouse'),
     assignee: str('assignee'),
     status: str('status'),
     payment_status: str('payment_status'),
@@ -100,6 +124,7 @@ function query() {
         account: filters.account || undefined,
         source: filters.source || undefined,
         channel: filters.channel || undefined,
+        warehouse: filters.warehouse || undefined,
         assignee: filters.assignee || undefined,
         status: filters.status || undefined,
         payment_status: filters.payment_status || undefined,
@@ -147,7 +172,9 @@ function refresh() {
 
 onMounted(async () => {
     load();
-    const [a, m, c, t] = await Promise.allSettled([api.get('/marketplace-accounts'), api.get('/orders/assignees'), api.get('/sales-channels'), api.get('/orders/tags')]);
+    loadDrafts();
+    const [a, m, c, t, w] = await Promise.allSettled([api.get('/marketplace-accounts'), api.get('/orders/assignees'), api.get('/sales-channels'), api.get('/orders/tags'), api.get('/warehouses')]);
+    if (w.status === 'fulfilled') warehouses.value = w.value.data.data;
     if (t.status === 'fulfilled') tags.value = t.value.data.data;
     if (a.status === 'fulfilled') accounts.value = a.value.data.data;
     if (c.status === 'fulfilled') channels.value = c.value.data.data;
@@ -160,7 +187,7 @@ watch(() => filters.q, () => {
     searchTimer = setTimeout(() => ((filters.page = 1), load()), 300);
 });
 watch(
-    () => [filters.tab, filters.account, filters.source, filters.channel, filters.assignee, filters.status, filters.payment_status, filters.from, filters.to, filters.customer, filters.sku, filters.tag, filters.deliver_from, filters.deliver_to, filters.sort, filters.flags.join()],
+    () => [filters.tab, filters.account, filters.source, filters.channel, filters.warehouse, filters.assignee, filters.status, filters.payment_status, filters.from, filters.to, filters.customer, filters.sku, filters.tag, filters.deliver_from, filters.deliver_to, filters.sort, filters.flags.join()],
     () => ((filters.page = 1), (selected.value = new Set()), (expanded.value = new Set()), load()),
 );
 
@@ -216,7 +243,7 @@ function removeView(name: string) {
     savedViews.value = savedViews.value.filter((v) => v.name !== name);
     writeStore('views', savedViews.value);
 }
-const hasFilters = computed(() => filters.tab !== 'all' || !!filters.q || !!filters.source || !!filters.channel || !!filters.account || !!filters.assignee || filters.flags.length > 0 || advancedCount.value > 0);
+const hasFilters = computed(() => filters.tab !== 'all' || !!filters.q || !!filters.source || !!filters.channel || !!filters.warehouse || !!filters.account || !!filters.assignee || filters.flags.length > 0 || advancedCount.value > 0);
 
 const columnLabels = { date: 'Ngày tạo đơn', customer: 'Tên khách hàng', products: 'Sản phẩm', status: 'Trạng thái đơn hàng', payment: 'Thanh toán', deadline: 'Hạn giao / hẹn giao', assignee: 'Người xử lý', total: 'Khách phải trả' } as const;
 type ColumnKey = keyof typeof columnLabels;
@@ -353,8 +380,22 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
     <PageHeader title="Đơn hàng" description="Đơn từ các sàn (cập nhật theo webhook, thao tác gửi lên sàn qua API) và đơn của kênh bán riêng (xử lý ngay trên ECSO).">
         <Button variant="outline" :loading="loading" @click="refresh"><RefreshCw /> Làm mới</Button>
         <Button variant="outline" :loading="busy === 'export'" data-testid="export-orders" @click="exportOrders"><Download /> Xuất Excel</Button>
+        <Button v-if="tenant.can('orders.create') && drafts.length" variant="outline" data-testid="open-drafts" @click="draftsOpen = true"><FilePen /> Đơn nháp ({{ drafts.length }})</Button>
         <Button v-if="tenant.can('orders.create')" data-testid="create-order" @click="$router.push('/orders/new')"><Plus /> Tạo đơn</Button>
     </PageHeader>
+
+    <Dialog v-model:open="draftsOpen" title="Đơn nháp" description="Đơn đang soạn dở: chưa có mã đơn, chưa giữ hàng trong kho. Mở ra để sửa tiếp và tạo đơn." size="lg">
+        <ul class="divide-y rounded-md border" data-testid="draft-list">
+            <li v-for="d in drafts" :key="d.id" class="flex items-center gap-3 px-3 py-2.5 text-sm">
+                <RouterLink :to="{ path: '/orders/new', query: { draft: d.id } }" class="min-w-0 flex-1 hover:underline">
+                    <div class="truncate font-medium">{{ d.title }}</div>
+                    <div class="text-xs text-muted-foreground">{{ d.lines_count }} dòng · {{ d.updated_at ? formatDateTime(d.updated_at) : '' }}<span v-if="d.created_by"> · {{ d.created_by }}</span></div>
+                </RouterLink>
+                <span class="tabular-nums">{{ formatMoney(d.total) }}</span>
+                <Button variant="ghost" size="icon" class="size-7" title="Xóa nháp" @click="removeDraft(d.id)"><Trash2 class="size-3.5" /></Button>
+            </li>
+        </ul>
+    </Dialog>
 
     <OrderPipeline ref="pipeline" :active="activeQueue" @select="selectQueue" />
 
@@ -380,9 +421,10 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                 </div>
                 <Button variant="outline" :disabled="!hasFilters" data-testid="save-view" @click="saveView"><Bookmark /> Lưu bộ lọc</Button>
             </div>
-            <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            <div :class="cn('grid grid-cols-2 gap-2 sm:grid-cols-3', warehouses.length > 1 ? 'lg:grid-cols-6' : 'lg:grid-cols-5')">
                 <Select v-model="filters.source" :options="[{ value: '', label: 'Mọi nguồn đơn' }, { value: 'manual', label: 'Kênh bán riêng' }, { value: 'marketplace', label: 'Sàn TMĐT' }]" aria-label="Nguồn đơn" data-testid="filter-source" />
                 <Select v-model="filters.channel" :disabled="filters.source === 'marketplace' || !channels.length" :options="[{ value: '', label: 'Mọi kênh riêng' }, ...channels.map((c) => ({ value: c.id, label: c.name }))]" aria-label="Kênh bán" />
+                <Select v-if="warehouses.length > 1" v-model="filters.warehouse" :options="[{ value: '', label: 'Mọi kho xuất' }, ...warehouses.map((w) => ({ value: w.id, label: w.name }))]" aria-label="Kho xuất" data-testid="filter-warehouse" />
                 <Select v-model="filters.account" :disabled="filters.source === 'manual' || !accounts.length" :options="[{ value: '', label: 'Tất cả gian hàng' }, ...accounts.map((a) => ({ value: a.id, label: a.shop_name }))]" aria-label="Gian hàng" />
                 <Select v-model="filters.assignee" :options="[{ value: '', label: 'Mọi người xử lý' }, { value: 'me', label: 'Đơn của tôi' }, { value: 'none', label: 'Chưa phân công' }, ...assignees.map((a) => ({ value: a.id, label: a.name }))]" aria-label="Người xử lý" />
                 <Select v-model="filters.sort" :options="[{ value: 'newest', label: 'Sắp xếp: Mới nhất' }, { value: 'oldest', label: 'Sắp xếp: Cũ nhất' }, { value: 'ship_by', label: 'Sắp xếp: Hạn giao gần nhất' }]" aria-label="Sắp xếp" />
@@ -466,7 +508,7 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
             <Button v-if="tenant.can('orders.assign')" size="sm" variant="outline" @click="assignOpen = true"><UserPlus /> Phân công</Button>
             <Button size="sm" variant="outline" :loading="busy === 'invoice'" data-testid="bulk-invoice" @click="printInvoices"><ReceiptText /> In hóa đơn</Button>
             <Button v-if="tenant.can('orders.print')" size="sm" :loading="busy === 'print'" data-testid="print-slips" @click="print"><Printer /> In phiếu đóng gói</Button>
-            <Button v-if="tenant.can('orders.update')" size="sm" variant="outline" class="text-destructive" data-testid="bulk-cancel" @click="cancelOpen = true"><Ban /> Hủy đơn</Button>
+            <Button v-if="tenant.can('orders.cancel')" size="sm" variant="outline" class="text-destructive" data-testid="bulk-cancel" @click="cancelOpen = true"><Ban /> Hủy đơn</Button>
             <button class="ml-auto text-xs text-muted-foreground hover:underline" @click="selected = new Set()">Bỏ chọn</button>
         </div>
 
@@ -510,12 +552,14 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                                 <div class="flex items-center gap-2">
                                     <MarketplaceLogo :marketplace="o.marketplace" :name="marketplaceNames[o.marketplace]" size="sm" />
                                     <span class="font-medium text-primary">{{ o.external_order_id }}</span>
+                                    <span v-if="o.external_number && o.external_number !== o.external_order_id" class="font-mono text-xs text-muted-foreground">#{{ o.external_number }}</span>
                                 </div>
                                 <div class="mt-0.5 flex flex-wrap items-center gap-1 pl-7 text-[11px] text-muted-foreground">
                                     {{ o.shop?.name ?? o.channel?.name ?? marketplaceNames[o.marketplace] }}
                                     <span v-if="o.flags.shortage" class="rounded-full bg-rose-50 px-1.5 text-rose-600" title="Thiếu hàng">Thiếu hàng</span>
                                     <span v-if="o.flags.unmapped" class="rounded-full bg-amber-50 px-1.5 text-amber-700">Chưa map SKU</span>
                                     <span v-if="o.sync_warning" class="rounded-full bg-amber-50 px-1.5 text-amber-700">Cảnh báo</span>
+                                    <span v-if="o.deleted_on_channel_at" class="rounded-full bg-rose-50 px-1.5 text-rose-600">Đã xóa trên website</span>
                                     <span v-if="o.flags.printed" class="inline-flex items-center gap-0.5"><Printer class="size-3" /> Đã in</span>
                                     <span v-for="t in o.tags ?? []" :key="t" class="rounded-full bg-slate-100 px-1.5 text-slate-600">#{{ t }}</span>
                                 </div>

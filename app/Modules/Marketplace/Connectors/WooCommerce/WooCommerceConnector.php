@@ -21,6 +21,7 @@ use App\Modules\Marketplace\Exceptions\UnsupportedCapability;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Models\MarketplaceCredential;
 use App\Modules\Orders\Domain\OrderStatus;
+use App\Modules\Orders\Models\Order;
 use Carbon\CarbonImmutable;
 
 /**
@@ -53,7 +54,7 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
     ];
 
     /** Topics registered on the store when it is connected. */
-    public const WEBHOOK_TOPICS = ['order.created', 'order.updated', 'product.created', 'product.updated', 'product.deleted'];
+    public const WEBHOOK_TOPICS = ['order.created', 'order.updated', 'order.deleted', 'order.restored', 'product.created', 'product.updated', 'product.deleted'];
 
     /** Order statuses polled by the reconcile job (checkout drafts are carts, not orders). */
     private const ORDER_STATUSES = 'pending,processing,on-hold,completed,cancelled,refunded,failed';
@@ -137,25 +138,34 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
 
     public function getOrder(MarketplaceAccount $account, string $externalOrderId): OrderData
     {
-        $order = WooClient::forAccount($account)->get('orders/'.rawurlencode($externalOrderId));
+        $client = WooClient::forAccount($account);
+        $order = $client->get('orders/'.rawurlencode($externalOrderId));
+        // The order only lists refund totals; lines and quantities come from the refunds resource.
+        $refunds = ! empty($order['refunds']) ? (array) $client->get('orders/'.rawurlencode($externalOrderId).'/refunds', ['per_page' => 100]) : [];
 
-        return $this->toOrderData($order);
+        return $this->toOrderData($order, $refunds);
     }
 
     public function listOrders(MarketplaceAccount $account, CarbonImmutable $from, CarbonImmutable $to, ?string $cursor = null): OrderPage
     {
         $page = max(1, (int) ($cursor ?? 1));
-        $response = WooClient::forAccount($account)->send('GET', 'orders', [
+        $response = WooClient::forAccount($account)->send('GET', 'orders', array_filter([
+            // Orders created before order sync was turned on are not wanted at all (ECSO skips them anyway).
+            'after' => $account->orders_since?->utc()->format('Y-m-d\TH:i:s'),
             'modified_after' => $from->utc()->format('Y-m-d\TH:i:s'),
             'modified_before' => $to->utc()->format('Y-m-d\TH:i:s'),
             'dates_are_gmt' => 'true',
-            'status' => self::ORDER_STATUSES,
+            // Plus the statuses a plugin added that the seller mapped on the store page.
+            'status' => implode(',', array_unique([...explode(',', self::ORDER_STATUSES), ...array_filter(
+                array_map(fn ($raw) => explode(':', (string) $raw)[0], array_keys($account->statusMap())),
+                fn ($raw) => (bool) preg_match('/^[a-z0-9_-]+$/', $raw),
+            )])),
             'per_page' => self::PAGE,
             'page' => $page,
             'orderby' => 'id',
             'order' => 'asc',
             '_fields' => 'id',
-        ]);
+        ], fn ($v) => $v !== null));
         $ids = array_map(fn ($o) => (string) $o['id'], (array) $response->json());
         $pages = (int) $response->header('X-WP-TotalPages');
 
@@ -184,9 +194,30 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
         }
     }
 
-    /** @param  array<string, mixed>  $o */
-    public function toOrderData(array $o): OrderData
+    /**
+     * @param  array<string, mixed>  $o
+     * @param  array<int, array<string, mixed>>  $refundDetails  from orders/{id}/refunds
+     */
+    public function toOrderData(array $o, array $refundDetails = []): OrderData
     {
+        $refunds = array_map(fn ($r) => [
+            'id' => (string) $r['id'],
+            'amount' => number_format(abs((float) ($r['amount'] ?? $r['total'] ?? 0)), 2, '.', ''),
+            'reason' => filled($r['reason'] ?? null) ? mb_substr((string) $r['reason'], 0, 255) : null,
+            'refunded_at' => filled($r['date_created_gmt'] ?? null) ? CarbonImmutable::parse($r['date_created_gmt'], 'UTC') : null,
+            'lines' => array_values(array_filter(array_map(fn ($l) => [
+                'external_item_id' => (string) (collect($l['meta_data'] ?? [])->firstWhere('key', '_refunded_item_id')['value'] ?? ''),
+                'quantity' => abs((int) ($l['quantity'] ?? 0)),
+                'amount' => number_format(abs((float) ($l['total'] ?? 0)), 2, '.', ''),
+            ], (array) ($r['line_items'] ?? [])), fn ($l) => $l['external_item_id'] !== '' && $l['quantity'] > 0)),
+        ], $refundDetails);
+        $refundedQty = [];
+        foreach ($refunds as $r) {
+            foreach ($r['lines'] as $l) {
+                $refundedQty[$l['external_item_id']] = ($refundedQty[$l['external_item_id']] ?? 0) + $l['quantity'];
+            }
+        }
+
         $date = fn (?string $v) => filled($v) ? CarbonImmutable::parse($v, 'UTC') : null;
         $stage = collect($o['meta_data'] ?? [])->firstWhere('key', self::STAGE_META)['value'] ?? null;
         $raw = (string) ($o['status'] ?? '');
@@ -213,6 +244,8 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
                 quantity: $qty,
                 unitPrice: number_format($lineSubtotal / $qty, 2, '.', ''),
                 discount: number_format(max(0, $lineSubtotal - $lineTotal), 2, '.', ''),
+                tax: number_format((float) ($line['total_tax'] ?? 0), 2, '.', ''),
+                refundedQuantity: min($qty, $refundedQty[(string) $line['id']] ?? 0),
             );
         }
 
@@ -224,27 +257,62 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
         $addressLine = implode(', ', array_filter([$address['address_1'] ?? null, $address['address_2'] ?? null, $address['city'] ?? null, $address['state'] ?? null]));
         $carrier = collect($o['shipping_lines'] ?? [])->pluck('method_title')->filter()->implode(', ');
 
+        $isCod = ($o['payment_method'] ?? null) === 'cod';
+        $paidAt = $date($o['date_paid_gmt'] ?? null);
+        $money = fn ($v) => number_format((float) $v, 2, '.', '');
+        $refunded = array_sum(array_map(fn ($r) => abs((float) ($r['total'] ?? 0)), (array) ($o['refunds'] ?? [])));
+        $email = trim((string) ($billing['email'] ?? ''));
+
         return new OrderData(
             externalOrderId: (string) $o['id'],
             rawStatus: $raw,
             updatedAt: $date($o['date_modified_gmt'] ?? null) ?? CarbonImmutable::now(),
             items: $items,
             placedAt: $date($o['date_created_gmt'] ?? null),
-            paidAt: $date($o['date_paid_gmt'] ?? null),
+            paidAt: $paidAt,
             paymentMethod: filled($o['payment_method_title'] ?? null) ? (string) $o['payment_method_title'] : ($o['payment_method'] ?? null),
-            isCod: ($o['payment_method'] ?? null) === 'cod',
+            isCod: $isCod,
             currency: (string) ($o['currency'] ?? 'VND'),
-            subtotal: number_format($subtotal, 2, '.', ''),
-            shippingFee: number_format((float) ($o['shipping_total'] ?? 0), 2, '.', ''),
-            discount: number_format((float) ($o['discount_total'] ?? 0), 2, '.', ''),
-            total: number_format((float) ($o['total'] ?? 0), 2, '.', ''),
+            subtotal: $money($subtotal),
+            shippingFee: $money($o['shipping_total'] ?? 0),
+            discount: $money($o['discount_total'] ?? 0),
+            total: $money($o['total'] ?? 0),
             buyerName: $name !== '' ? $name : null,
             buyerPhone: filled($phone) ? (string) $phone : null,
             shippingAddress: $addressLine !== '' ? $addressLine : null,
             carrier: $carrier !== '' ? $carrier : null,
             buyerNote: filled($o['customer_note'] ?? null) ? (string) $o['customer_note'] : null,
-            raw: array_intersect_key($o, array_flip(['id', 'number', 'status', 'payment_method', 'customer_id', 'date_modified_gmt'])),
+            // Billing and shipping are kept encrypted in their own column, not in the plain raw copy.
+            raw: array_diff_key($o, array_flip(['billing', 'shipping', 'meta_data', '_links'])),
+            externalNumber: filled($o['number'] ?? null) ? mb_substr((string) $o['number'], 0, 40) : null,
+            buyerEmail: $email !== '' ? mb_substr($email, 0, 150) : null,
+            addresses: ['billing' => self::address($billing), 'shipping' => self::address($shipping)],
+            externalCustomerId: ! empty($o['customer_id']) ? (string) $o['customer_id'] : null,
+            taxTotal: $money($o['total_tax'] ?? 0),
+            feeTotal: $money(array_sum(array_map(fn ($f) => (float) ($f['total'] ?? 0), (array) ($o['fee_lines'] ?? [])))),
+            couponCodes: array_values(array_filter(array_map(fn ($c) => (string) ($c['code'] ?? ''), (array) ($o['coupon_lines'] ?? [])))),
+            transactionId: filled($o['transaction_id'] ?? null) ? mb_substr((string) $o['transaction_id'], 0, 100) : null,
+            refundedTotal: $money($refunded),
+            // Paid online = Woo recorded a payment date. COD: Woo sets that date when the order is completed, which
+            // does not prove the carrier has paid the shop, so ECSO does not mark it paid.
+            paymentStatus: $paidAt !== null && ! $isCod ? Order::PAYMENT_PAID : Order::PAYMENT_UNPAID,
+            ownsCustomer: true,
+            // Details are read only when the order has refunds; an order without any has none to keep.
+            refunds: $refundDetails !== [] || empty($o['refunds']) ? $refunds : null,
         );
+    }
+
+    /**
+     * The non-empty fields of a Woo billing/shipping address.
+     *
+     * @param  array<string, mixed>  $a
+     * @return array<string, string>
+     */
+    private static function address(array $a): array
+    {
+        $keys = ['first_name', 'last_name', 'company', 'address_1', 'address_2', 'city', 'state', 'postcode', 'country', 'phone', 'email'];
+
+        return array_filter(array_map(fn ($k) => trim((string) ($a[$k] ?? '')), array_combine($keys, $keys)), fn ($v) => $v !== '');
     }
 
     /** @param  array<string, mixed>  $line */
@@ -321,12 +389,33 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
             variants: $variants,
             status: (string) ($p['status'] ?? 'publish'),
             imageUrl: $p['images'][0]['src'] ?? ($p['image']['src'] ?? null),
+            details: [
+                'description' => self::plainText((string) (($p['description'] ?? '') ?: ($p['short_description'] ?? ''))),
+                'categories' => collect($p['categories'] ?? [])->pluck('name')->filter()->map(fn ($n) => html_entity_decode((string) $n, ENT_QUOTES))->values()->all(),
+                'weight_gram' => self::grams($p['weight'] ?? null),
+            ],
         );
+    }
+
+    /** Woo descriptions are HTML: ECSO keeps the text, one paragraph per line. */
+    private static function plainText(string $html): ?string
+    {
+        $text = preg_replace('/<\s*(br|\/p|\/li|\/h[1-6])\s*\/?>/i', "\n", $html) ?? $html;
+        $text = html_entity_decode(strip_tags($text), ENT_QUOTES);
+        $text = trim(preg_replace("/[ \t]+/", ' ', preg_replace("/\n\s*\n+/", "\n", $text) ?? $text) ?? $text);
+
+        return $text === '' ? null : mb_substr($text, 0, 20000);
+    }
+
+    /** Woo's weight is in the store's unit; ECSO assumes kg, the WooCommerce default. */
+    private static function grams(mixed $weight): ?int
+    {
+        return is_numeric($weight) && (float) $weight > 0 ? (int) round((float) $weight * 1000) : null;
     }
 
     /**
      * @param  array<string, mixed>  $v
-     * @return array{external_sku_id: string, seller_sku: ?string, name: ?string, price: string, stock: ?int, regular_price: ?string, sale_price: ?string}
+     * @return array{external_sku_id: string, seller_sku: ?string, name: ?string, price: string, stock: ?int, regular_price: ?string, sale_price: ?string, options: array<string, string>, weight_gram: ?int, barcode: ?string}
      */
     private function variant(array $v, ?string $name): array
     {
@@ -340,6 +429,10 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
             'stock' => ($v['manage_stock'] ?? false) === true && isset($v['stock_quantity']) ? (int) $v['stock_quantity'] : null,
             'regular_price' => $money($v['regular_price'] ?? null),
             'sale_price' => $money($v['sale_price'] ?? null),
+            'options' => collect($v['attributes'] ?? [])->filter(fn ($a) => filled($a['name'] ?? null) && filled($a['option'] ?? null))
+                ->mapWithKeys(fn ($a) => [mb_substr((string) $a['name'], 0, 100) => mb_substr((string) $a['option'], 0, 100)])->take(5)->all(),
+            'weight_gram' => self::grams($v['weight'] ?? null),
+            'barcode' => filled($v['global_unique_id'] ?? null) ? mb_substr((string) $v['global_unique_id'], 0, 64) : null,
         ];
     }
 

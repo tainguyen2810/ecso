@@ -19,7 +19,7 @@ class OrderItem extends Model
 
     protected function casts(): array
     {
-        return ['quantity' => 'integer', 'unit_price' => 'decimal:2', 'discount' => 'decimal:2', 'cost_snapshot' => 'decimal:4'];
+        return ['quantity' => 'integer', 'refunded_quantity' => 'integer', 'unit_price' => 'decimal:2', 'discount' => 'decimal:2', 'cost_snapshot' => 'decimal:4'];
     }
 
     /** @return BelongsTo<Order, $this> */

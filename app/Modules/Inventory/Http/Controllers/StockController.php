@@ -3,6 +3,7 @@
 namespace App\Modules\Inventory\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Access\Support\DataAccess;
 use App\Modules\Catalog\Models\Product;
 use App\Modules\Catalog\Models\ProductComponent;
 use App\Modules\Catalog\Models\ProductVariant;
@@ -84,7 +85,7 @@ class StockController extends Controller
             'available' => (int) $v->on_hand - (int) $v->reserved,
             'safety_stock' => (int) $v->safety_stock,
             'sellable' => max(0, (int) $v->on_hand - (int) $v->reserved - (int) $v->safety_stock),
-            'cost_price' => $v->cost_price,
+            'cost_price' => app(DataAccess::class)->cost($v->cost_price),
             'ref_price' => $v->ref_price,
             'wholesale_price' => $v->wholesale_price,
             'created_at' => $v->created_at?->toIso8601String(),
@@ -129,7 +130,7 @@ class StockController extends Controller
             'skus' => $skus,
             'on_hand' => (int) ($totals->on_hand ?? 0),
             'reserved' => (int) ($totals->reserved ?? 0),
-            'inventory_value' => number_format((float) ($totals->value ?? 0), 0, '.', ''),
+            'inventory_value' => app(DataAccess::class)->cost(number_format((float) ($totals->value ?? 0), 0, '.', '')),
             // SKUs without any balance row count as out of stock too.
             'out_of_stock' => max(0, $skus - (int) ($states->in_stock ?? 0)),
             'low_stock' => (int) ($states->low_stock ?? 0),
@@ -203,6 +204,13 @@ class StockController extends Controller
         $balances = StockBalance::query()->whereIn('product_variant_id', $variants->pluck('id'))->get()
             ->groupBy('product_variant_id');
         $incoming = $onOrder->byVariantAndWarehouse($variants->pluck('id')->all());
+        // Goods dispatched from another warehouse and not received yet ("đang chuyển đến").
+        $inTransit = DB::table('stock_transfer_lines')->join('stock_transfers', 'stock_transfers.id', '=', 'stock_transfer_lines.stock_transfer_id')
+            ->where('stock_transfers.tenant_id', app(TenantContext::class)->id())->where('stock_transfers.status', StockTransfer::IN_TRANSIT)
+            ->whereIn('stock_transfer_lines.product_variant_id', $variants->pluck('id'))
+            ->groupBy('stock_transfer_lines.product_variant_id', 'stock_transfers.to_warehouse_id')
+            ->selectRaw('stock_transfer_lines.product_variant_id as v, stock_transfers.to_warehouse_id as w, SUM(stock_transfer_lines.quantity) as qty')
+            ->get()->mapWithKeys(fn ($r) => ["{$r->v}:{$r->w}" => (int) $r->qty]);
         $packs = app(ComboResolver::class)->componentsOf($variants->pluck('id')->all());
 
         $rows = [];
@@ -226,7 +234,8 @@ class StockController extends Controller
                     'max_stock' => $b?->max_stock,
                     'bin_location' => $b?->bin_location,
                     'incoming' => $incoming[$variant->id][$warehouse->id] ?? 0,
-                    'cost_price' => $variant->cost_price,
+                    'in_transit' => $inTransit["{$variant->id}:{$warehouse->id}"] ?? 0,
+                    'cost_price' => app(DataAccess::class)->cost($variant->cost_price),
                 ];
             }
         }
@@ -263,7 +272,7 @@ class StockController extends Controller
                 'available' => $available,
                 'safety_stock' => 0,
                 'incoming' => 0,
-                'cost_price' => $cost,
+                'cost_price' => app(DataAccess::class)->cost($cost),
             ];
         })->values()->all();
     }

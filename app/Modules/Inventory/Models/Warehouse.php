@@ -20,6 +20,12 @@ class Warehouse extends Model
 
     public const STATUS_INACTIVE = 'inactive';
 
+    /** A normal warehouse: its stock is sold. */
+    public const PURPOSE_SALE = 'sale';
+
+    /** Holds defective goods (damaged returns). Never sells and is not counted against the plan's warehouse limit. */
+    public const PURPOSE_DEFECTIVE = 'defective';
+
     protected $fillable = ['code', 'name', 'address', 'status'];
 
     protected function casts(): array
@@ -36,5 +42,10 @@ class Warehouse extends Model
     public function isActive(): bool
     {
         return $this->status === self::STATUS_ACTIVE;
+    }
+
+    public function sells(): bool
+    {
+        return $this->isActive() && ($this->purpose ?? self::PURPOSE_SALE) === self::PURPOSE_SALE;
     }
 }

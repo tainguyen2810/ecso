@@ -69,6 +69,6 @@ class WooCommerceController extends Controller
 
     private function warehouse(?string $ulid): ?Warehouse
     {
-        return $ulid ? Warehouse::query()->where('ulid', $ulid)->where('status', 'active')->firstOrFail() : null;
+        return $ulid ? Warehouse::query()->where('ulid', $ulid)->where('status', 'active')->where('purpose', Warehouse::PURPOSE_SALE)->firstOrFail() : null;
     }
 }

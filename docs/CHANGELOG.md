@@ -4,6 +4,73 @@
 
 ## [Unreleased]
 
+### Đồng bộ đơn WooCommerce, vòng E: giao diện và hướng dẫn (2026-11-04)
+- **Trang website Woo**: nút "Đồng bộ đơn ngay"; chọn chu kỳ đối soát 5/15/30 phút; hiện mốc "Đồng bộ đơn từ"; công tắc "Trạng thái đơn hai chiều"; thẻ **Webhook trên website** (tình trạng, đã bật lại / tạo lại, nút Kiểm tra ngay); thẻ **Ánh xạ trạng thái** (trạng thái website → trạng thái ECSO, số đơn đang chưa ánh xạ, thêm mã trạng thái plugin). Ô "Lỗi đồng bộ" tính cả lỗi đơn đang mở và dẫn sang trang lỗi.
+- **Trang Lịch sử và lỗi đồng bộ** (`/marketplaces/sync`): lỗi đang mở theo nhóm, thử lại / bỏ qua từng đơn, lỗi đã xử lý, lịch sử từng lượt đối soát (kết quả, số đơn, thời gian chạy).
+- **Chi tiết đơn website**: số đơn website, trạng thái thanh toán, email, địa chỉ thanh toán khi khác địa chỉ giao, mã giao dịch, mã giảm giá, thuế, phí khác, tổng đã hoàn, số lượng đã hoàn từng dòng, danh sách hoàn tiền trên website (kèm phiếu trả hàng nếu có), nhãn "Đã xóa trên website".
+- Danh sách đơn: hiện số đơn website và nhãn "Đã xóa trên website"; ô tìm kiếm tìm được theo số đơn website.
+- Hướng dẫn: `docs/WOOCOMMERCE-ORDERS.md`.
+
+### Đồng bộ đơn WooCommerce, vòng D: hoàn tiền (2026-11-04)
+- ECSO đọc **từng lần hoàn tiền** của đơn Woo (`orders/{id}/refunds`) và lưu vào `order_refunds`: số tiền, lý do, dòng hàng và số lượng. Mỗi lần hoàn chỉ lưu một lần, webhook gửi lặp không tạo trùng. Tổng đã hoàn cập nhật vào đơn.
+- Hoàn **một phần trước khi giao**: số lượng đã hoàn không còn được giữ hàng và không bị xuất kho (`order_items.refunded_quantity`).
+- Hoàn **sau khi đã giao** có dòng hàng: ECSO mở một phiếu trả hàng "Yêu cầu trả" cho đúng các dòng đó. Kho chỉ cộng lại khi nhận và kiểm hàng trên phiếu, không bao giờ cộng thẳng từ lệnh hoàn tiền. Hoàn chỉ tiền (phí ship, bồi thường) thì chỉ lưu số tiền.
+- Chi tiết đơn (API) có thêm `refunds` và `refunded_quantity` từng dòng.
+- Migration `2026_11_12_120000_add_order_refunds`. Chỉ thử với cửa hàng Woo giả lập.
+
+### Đồng bộ đơn WooCommerce, vòng C (2026-11-04)
+- **Ánh xạ trạng thái riêng từng website** (`settings.status_map`), ưu tiên hơn ánh xạ chung. Dùng cho trạng thái do plugin thêm (ví dụ `dang-giao`). Lưu ánh xạ xong, các đơn đang "Chưa ánh xạ" với trạng thái đó được chuyển ngay. Đối soát hỏi Woo cả các trạng thái riêng này. API: `GET/PUT marketplace-accounts/{id}/status-map`.
+- **Công tắc một chiều / hai chiều** (`settings.push_status`, mặc định hai chiều như trước). Một chiều: xác nhận, đóng gói, bàn giao, hủy chỉ làm trong ECSO, không ghi lên website. Khi website còn ở trạng thái trước ECSO, ECSO giữ trạng thái của mình và không báo xung đột. Khi website đi xa hơn (ví dụ hoàn tất), website thắng.
+- Mỗi thao tác đơn vẫn ghi nhật ký (`order.pack`, `order.cancel`…), có đánh dấu thao tác chỉ trong ECSO.
+
+### Đồng bộ đơn WooCommerce, vòng B (2026-11-04)
+- **Đơn bị xóa trên website**: ECSO không xóa đơn. Đơn được đánh dấu "đã xóa trên website" (`orders.deleted_on_channel_at`). Đơn chưa ra khỏi kho thì chuyển Đã hủy và nhả hàng giữ. Đơn đã giao thì giữ nguyên, chỉ cảnh báo. Đơn chuyển vào thùng rác rồi được **khôi phục** thì mở lại và giữ hàng lại (nếu chưa giao). Website được đăng ký thêm webhook `order.deleted`, `order.restored`.
+- **Đơn sửa trên website** (đổi số lượng, thêm/bớt dòng) khi chưa ra khỏi kho: ECSO nhả hàng giữ cũ và giữ lại theo dòng mới. Sửa sau khi đã xuất kho thì ECSO giữ số đã xuất và báo cảnh báo trên đơn.
+- **Tự bật lại webhook**: lệnh `ecso:woo:check-webhooks` chạy mỗi giờ, bật lại webhook ECSO bị Woo tắt sau nhiều lần gửi lỗi và tạo lại webhook còn thiếu (cả website kết nối từ trước). Kết quả lần kiểm tra gần nhất lưu ở `settings.webhook_health`. Có API kiểm tra ngay `POST marketplace-accounts/{id}/check-webhooks`.
+- **Chu kỳ đối soát theo từng website**: 5, 15 (mặc định) hoặc 30 phút (`settings.order_sync_interval`). Lệnh đối soát chạy mỗi 5 phút và bỏ qua website chưa tới lượt. Nút "Đồng bộ ngay": `POST marketplace-accounts/{id}/sync-orders`.
+- **Lỗi đồng bộ** (`sync_errors`): mỗi đơn đồng bộ không được có một dòng lỗi theo nhóm (API, xác thực, dữ liệu, xung đột trạng thái), đếm số lần thử. Lần đồng bộ sau thành công thì lỗi tự đóng. API: `GET sync-errors`, `POST sync-errors/{id}/retry`, `POST sync-errors/{id}/resolve`, `GET sync-runs`.
+- Migration `2026_11_12_110000_add_order_sync_errors`. Chỉ thử với cửa hàng Woo giả lập.
+
+### Đồng bộ đơn WooCommerce, vòng A (2026-11-04)
+- Chỉ lấy đơn **tạo sau lúc bật đồng bộ đơn** (`marketplace_accounts.orders_since`). Đơn cũ hơn bị bỏ qua cả khi website gửi cập nhật, không giữ hàng. Tắt rồi bật lại đồng bộ đơn thì tính lại từ lúc bật. Không nhập đơn lịch sử.
+- Đơn website lưu đủ: số đơn website, SĐT và email đầy đủ, địa chỉ thanh toán/giao hàng (mã hóa), mã khách trên Woo, mã giảm giá, thuế (đơn và từng dòng), phí khác, mã giao dịch, số đã hoàn. Bản `raw` không còn chứa billing/shipping.
+- Trạng thái thanh toán: có ngày thanh toán và không phải COD thì là Đã thanh toán; đơn COD hoàn tất trên Woo không tự coi là đã thu tiền.
+- Đơn website gắn vào **khách hàng** theo SĐT (tạo thẻ khách nếu chưa có). SĐT không hợp lệ thì đơn vẫn vào, không gắn khách. Đơn sàn vẫn che thông tin người mua như cũ.
+- Công nợ khách chỉ tính đơn bán tay; đơn website/sàn đã thanh toán qua kênh nên không thành nợ.
+- **Nhật ký đồng bộ** (`sync_runs`): mỗi lượt đối soát ghi kết quả (OK / Một phần / Lỗi), số đơn tạo/cập nhật/lỗi. Một đơn website trả lỗi không chặn đơn khác và không đẩy mốc đồng bộ lên.
+- Sửa: đơn Woo chuyển "Đã hoàn tiền" (refunded) trước khi giao thì thành Đã hủy và nhả hàng giữ, không trừ kho. Đơn đã giao rồi mới hoàn thì mở phiếu trả hàng; kho chỉ cộng lại khi nhận và kiểm hàng.
+- Sửa: Enter trong ô tìm SKU khi quét hai mã liên tiếp nhanh hơn kết quả tìm kiếm không còn bỏ sót mã đầu.
+- Migration `2026_11_12_100000_add_woo_order_details`. Chỉ thử với cửa hàng Woo giả lập trong test, chưa thử với website thật.
+
+### Tài chính: doanh thu không gồm thuế GTGT (2026-11-04)
+- Doanh thu thuần trên trang Tài chính và Báo cáo lãi lỗ **không gồm thuế GTGT bán ra**. Giá đã gồm thuế: trừ phần thuế nằm trong giá (dòng mới "3. Thuế GTGT nằm trong giá bán"). Giá chưa gồm thuế: thuế cộng thêm không bao giờ vào doanh thu.
+- Hàng trả lại trừ khỏi doanh thu theo giá trị chưa gồm thuế (tiền hoàn đã gồm cả thuế trả lại cho khách). Giá trị hàng trả khi không nhập số tiền hoàn giờ chia cả chiết khấu đơn và thuế cộng thêm theo tỷ lệ, giống `OrderReturn::goodsValue()`.
+- Xem chi tiết đơn có thêm cột VAT.
+
+### Thông tin sản phẩm, đợt E kiểm toán sản phẩm (2026-11-04)
+- **Lọc theo tồn kho** ở danh sách sản phẩm (Bộ lọc khác → Tồn kho): Còn hàng, Sắp hết (tồn khả dụng ≤ tồn an toàn), Hết hàng. Thêm sắp xếp theo giá bán tăng/giảm.
+- **Thùng rác "Đã xóa"**: tab mới liệt kê sản phẩm đã xóa, nút **Khôi phục** đưa sản phẩm về cùng các SKU bị xóa cùng lúc, ghi nhật ký và đẩy lại tồn thật lên sàn đã liên kết.
+- **Tạo mã vạch**: nút cạnh ô mã vạch tạo mã EAN-13 nội bộ (đầu 2x, dải GS1 dành cho mã cửa hàng) có số kiểm tra đúng, không trùng mã đã có.
+- **Nhà cung cấp thường nhập và mã hàng của NCC** cho từng SKU; gợi ý đặt hàng ưu tiên NCC này thay vì NCC của đơn nhập gần nhất. **Kích thước gói hàng** (dài × rộng × cao, mm) cho từng SKU.
+- Ô tìm kiếm coi `%` và `_` là ký tự thường (tìm "A_1" không còn khớp "AB1").
+
+### Kho và chuyển kho, đợt D kiểm toán sản phẩm (2026-11-04)
+- **Nhận chuyển kho thiếu**: nút "Nhận hàng" mở hộp nhập số thực nhận từng dòng (`POST /inventory/transfers/{id}/receive` nhận `lines[].line_id`, `received_qty`). Kho nhận vẫn nhập đủ số đã xuất, phần thiếu thành phiếu điều chỉnh "Thất lạc" chờ duyệt ở kho nhận, nên khoản mất được duyệt và báo cáo như hàng hủy. Phiếu chuyển ghi "Thực nhận" và liên kết phiếu thất lạc.
+- **Hàng đang chuyển đến**: tồn theo kho ở trang sản phẩm cộng thêm hàng đã xuất từ kho khác mà chưa nhận (`in_transit`).
+- **Ngừng kho an toàn**: không ngừng được kho còn đơn nhập chưa nhận xong, phiếu chuyển chưa hoàn tất, phiếu kiểm/điều chỉnh chưa duyệt hoặc gian hàng đang lấy tồn từ kho đó; thông báo nêu rõ còn gì.
+- **Đối soát tồn kho** (Sản phẩm → Đối soát tồn kho, `GET /inventory/reconciliation`): kết quả kiểm tra sổ kho (tồn = tổng sổ kho, đang giữ = các đơn đang giữ) và các đơn bàn giao khi kho thiếu hàng trong 90 ngày. Chỉ đọc, ECSO không tự sửa sổ kho.
+
+### Quyền dữ liệu, đợt C kiểm toán sản phẩm (2026-11-04)
+- **Quyền mới `products.cost.view`** (Xem giá vốn, giá trị tồn và đơn giá nhập). Có sẵn ở Chủ, Quản trị, Quản lý vận hành, Kế toán, Chỉ xem; Nhân viên kho và Nhân viên xử lý đơn không có. Vai trò tự tạo đang có `reports.view`, `products.manage` hoặc `purchasing.manage` được thêm quyền này khi migrate, nên không ai mất quyền đang dùng. Không có quyền thì API trả `null` cho giá vốn, giá trị tồn, đơn giá phiếu nhập, đơn giá trên thẻ kho; file xuất sản phẩm để trống cột giá vốn; màn hình ẩn các cột đó.
+- **Nhập kho tay không đổi giá vốn** khi người nhập không có quyền xem giá vốn: hàng vào theo giá vốn bình quân hiện tại, form không hiện ô đơn giá. Đơn giá nhập từ đơn nhập hàng (PO) không đổi.
+- **Phân kho cho nhân viên** (Nhân viên → cột "Kho thao tác"): nhân viên được chọn kho chỉ tạo phiếu nhập, kiểm, xuất chuyển, nhận chuyển, nhận PO, trả NCC, nhận hàng hoàn ở các kho đó. Không chọn kho nào thì được mọi kho (như trước). Xem tồn vẫn như cũ. Bảng `member_warehouses`.
+
+### Trạng thái và đồng bộ sản phẩm, đợt B kiểm toán sản phẩm (2026-11-04)
+- **Ngừng bán / Lưu trữ có hiệu lực**: SKU mà sản phẩm hoặc biến thể không ở trạng thái "Đang bán" thì không thêm được vào đơn mới hay POS ("SKU … đang ngừng bán"). Dòng đã có trên đơn vẫn giữ khi sửa đơn. Ô tìm SKU ở đơn và POS chỉ hiện SKU đang bán (`/variants?sellable=1`). Website được đẩy tồn 0 khi ngừng bán, và đẩy lại tồn thật khi bán lại (sự kiện `SaleStatusChanged`, cả khi đổi hàng loạt và khi nhập file).
+- **Nhập Excel đi qua model**: giá đổi bằng file được đẩy lên website và ghi lịch sử giá như sửa tay.
+- **SKU từ website có dấu cách, #, +**: sản phẩm vẫn sửa và lưu được khi giữ nguyên SKU đó; SKU mới hoặc SKU đổi vẫn theo quy tắc chữ, số và . _ - /.
+- **Duyệt sản phẩm mới từ website an toàn**: so SKU không phân biệt hoa thường; SKU đang nằm trong thùng rác được khôi phục và liên kết, không còn lỗi 500. Sản phẩm tạo mới lấy thêm mô tả (dạng chữ), danh mục đầu tiên, cân nặng (kg → gram), thuộc tính biến thể và barcode (`global_unique_id`) nếu chưa bị SKU khác dùng. Ảnh chưa được tải về ECSO.
+
 ### Tài chính, vòng C–E: phí sàn, lợi nhuận nhiều tầng, lọc theo shop (2026-11-04)
 - **Một nguồn số liệu lợi nhuận** (`App\Modules\Analytics\Support\ProfitFigures`) cho trang Tài chính và Báo cáo lãi lỗ: doanh thu thuần, giá vốn, lợi nhuận gộp, **lợi nhuận đóng góp** (gộp − phí sàn + phí ship khách trả − chi phí bán hàng) và **lợi nhuận quản trị ước tính** (đóng góp − hao hụt kho − chi phí vận hành, chi phí khác + thu nhập khác). Ghi rõ là số ước tính, chưa phải lợi nhuận kế toán.
 - **Phí sàn** tách 3 loại: *đã xác nhận* (từ file đối soát đã nhập), *ước tính* (theo bảng phí của shop cho đơn chưa đối soát), *chưa biết* (shop chưa có bảng phí: đếm số đơn, không tính là 0). Đơn kênh riêng, POS, website không có phí sàn.

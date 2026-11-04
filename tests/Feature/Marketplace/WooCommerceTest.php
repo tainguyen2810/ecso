@@ -45,7 +45,7 @@ it('connects through the store approval screen: Woo posts the keys, the user com
         ->assertJsonPath('data.shop_name', 'Cửa hàng Woo')
         ->assertJsonPath('checks.woocommerce_version', '9.3.3')
         ->assertJsonPath('checks.products', 2)
-        ->assertJsonPath('checks.webhooks', ['order.created', 'order.updated', 'product.created', 'product.updated', 'product.deleted']);
+        ->assertJsonPath('checks.webhooks', ['order.created', 'order.updated', 'order.deleted', 'order.restored', 'product.created', 'product.updated', 'product.deleted']);
 
     $account = MarketplaceAccount::withoutGlobalScopes()->where('marketplace', 'woocommerce')->sole();
     $credential = MarketplaceCredential::withoutGlobalScopes()->where('marketplace_account_id', $account->id)->sole();
@@ -54,7 +54,7 @@ it('connects through the store approval screen: Woo posts the keys, the user com
         ->and($credential->access_token)->toBe('ck_test')
         ->and($credential->getRawOriginal('access_token'))->not->toContain('ck_test')
         ->and($credential->webhook_secret)->toBe(end($this->store->webhooks)['secret'])
-        ->and($this->store->webhooks)->toHaveCount(5)
+        ->and($this->store->webhooks)->toHaveCount(7)
         ->and(collect($this->store->webhooks)->pluck('delivery_url')->unique()->all())->toBe(['https://erp.example.vn/api/v1/webhooks/woocommerce']);
 
     // The state is single use.
@@ -188,7 +188,7 @@ it('re-reads one product after a product webhook and respects the stock and orde
 
 it('removes its webhooks from the store when disconnected', function () {
     $account = wooConnect($this);
-    expect($this->store->webhooks)->toHaveCount(5);
+    expect($this->store->webhooks)->toHaveCount(7);
 
     actingInTenant($this->owner, $this->tenant)->postJson("/api/v1/marketplace-accounts/{$account->ulid}/disconnect")->assertOk();
 

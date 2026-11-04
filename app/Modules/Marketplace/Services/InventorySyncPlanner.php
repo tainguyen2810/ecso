@@ -2,6 +2,7 @@
 
 namespace App\Modules\Marketplace\Services;
 
+use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Catalog\Services\ComboResolver;
 use App\Modules\Inventory\Domain\AllocationCalculator;
 use App\Modules\Inventory\Models\Warehouse;
@@ -41,11 +42,14 @@ class InventorySyncPlanner
             if (! $warehouseId) {
                 continue;
             }
-            $sellable = $this->stock->sellable([$warehouseId], $rows->pluck('product_variant_id')->unique()->values()->all());
+            $ids = $rows->pluck('product_variant_id')->unique()->values()->all();
+            $sellable = $this->stock->sellable([$warehouseId], $ids);
+            // A SKU stopped in ECSO (Ngừng bán / Lưu trữ) is published as 0 so the shop stops taking orders for it.
+            $stopped = array_flip(ProductVariant::stoppedIds($ids));
             $soonest = null;
 
             foreach ($rows as $listing) {
-                $desired = AllocationCalculator::published($sellable[$listing->product_variant_id] ?? 0);
+                $desired = isset($stopped[$listing->product_variant_id]) ? 0 : AllocationCalculator::published($sellable[$listing->product_variant_id] ?? 0);
                 $outbox = InventorySyncOutbox::query()->where('listing_variant_id', $listing->id)->first();
                 $upToDate = $listing->push_status === 'ok' && $listing->last_pushed_qty === $desired
                     && $listing->last_pushed_at?->gt(now()->subDay());

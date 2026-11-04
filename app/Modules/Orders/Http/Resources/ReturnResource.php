@@ -33,6 +33,7 @@ class ReturnResource extends JsonResource
                 'customer' => $this->order->relationLoaded('customer') ? ($this->order->customer->name ?? $this->order->buyer_name) : null,
             ]),
             'warehouse' => $this->whenLoaded('warehouse', fn () => $this->warehouse ? ['id' => $this->warehouse->ulid, 'code' => $this->warehouse->code, 'name' => $this->warehouse->name] : null),
+            'damaged_warehouse' => $this->whenLoaded('damagedWarehouse', fn () => $this->damagedWarehouse ? ['id' => $this->damagedWarehouse->ulid, 'code' => $this->damagedWarehouse->code, 'name' => $this->damagedWarehouse->name] : null),
             'lines' => $this->whenLoaded('lines', fn () => $this->lines->map(fn (OrderReturnLine $l) => [
                 'id' => $l->id,
                 'name' => $l->item?->name,

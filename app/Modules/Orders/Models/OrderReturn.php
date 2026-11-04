@@ -61,7 +61,7 @@ class OrderReturn extends Model
 
     protected $guarded = ['id', 'ulid', 'tenant_id'];
 
-    protected $hidden = ['id', 'tenant_id', 'order_id', 'warehouse_id'];
+    protected $hidden = ['id', 'tenant_id', 'order_id', 'warehouse_id', 'damaged_warehouse_id'];
 
     protected function casts(): array
     {
@@ -105,11 +105,13 @@ class OrderReturn extends Model
             return (string) $this->refund_amount;
         }
 
-        // The order-level discount is spread over the goods in proportion to their value (shipping is not refunded).
+        // The order-level discount (and VAT added on top of the prices) is spread over the goods in proportion to
+        // their value. Shipping is not refunded.
         $order = $this->order;
         $share = '1';
-        if ($order !== null && bccomp((string) $order->subtotal, '0', 2) > 0 && bccomp((string) $order->discount, '0', 2) > 0) {
-            $share = bcdiv(bcsub((string) $order->subtotal, (string) $order->discount, 2), (string) $order->subtotal, 8);
+        $addedTax = $order !== null && ! $order->prices_include_tax ? (string) $order->tax_amount : '0';
+        if ($order !== null && bccomp((string) $order->subtotal, '0', 2) > 0 && (bccomp((string) $order->discount, '0', 2) > 0 || bccomp($addedTax, '0', 2) > 0)) {
+            $share = bcdiv(bcadd(bcsub((string) $order->subtotal, (string) $order->discount, 2), $addedTax, 2), (string) $order->subtotal, 8);
             $share = bccomp($share, '0', 8) < 0 ? '0' : $share;
         }
 
@@ -148,6 +150,12 @@ class OrderReturn extends Model
     public function warehouse(): BelongsTo
     {
         return $this->belongsTo(Warehouse::class)->withTrashed();
+    }
+
+    /** @return BelongsTo<Warehouse, $this> */
+    public function damagedWarehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class, 'damaged_warehouse_id')->withTrashed();
     }
 
     /** @return BelongsTo<User, $this> */

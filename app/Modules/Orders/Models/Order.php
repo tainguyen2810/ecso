@@ -26,6 +26,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $delivered_at
  * @property Carbon|null $completed_at
  * @property Carbon|null $cancelled_at
+ * @property Carbon|null $deleted_on_channel_at
  * @property Carbon|null $packing_slip_printed_at
  * @property Carbon|null $deliver_on
  * @property array<int, string>|null $tags
@@ -48,7 +49,7 @@ class Order extends Model
 
     protected $guarded = ['id', 'ulid', 'tenant_id'];
 
-    protected $hidden = ['id', 'tenant_id', 'marketplace_account_id', 'sales_channel_id', 'customer_id', 'warehouse_id', 'assigned_to', 'created_by', 'raw'];
+    protected $hidden = ['id', 'tenant_id', 'marketplace_account_id', 'sales_channel_id', 'customer_id', 'warehouse_id', 'assigned_to', 'created_by', 'raw', 'buyer_phone_hash'];
 
     protected static function booted(): void
     {
@@ -66,6 +67,11 @@ class Order extends Model
             'buyer_name' => 'encrypted',
             'shipping_address' => 'encrypted',
             'buyer_phone' => 'encrypted',
+            'buyer_email' => 'encrypted',
+            'addresses' => 'encrypted:array',
+            'tax_total' => 'decimal:2',
+            'fee_total' => 'decimal:2',
+            'coupon_codes' => 'array',
             'paid_amount' => 'decimal:2',
             'refunded_amount' => 'decimal:2',
             'is_cod' => 'boolean',
@@ -74,6 +80,9 @@ class Order extends Model
             'subtotal' => 'decimal:2',
             'shipping_fee' => 'decimal:2',
             'discount' => 'decimal:2',
+            'tax_rate' => 'decimal:2',
+            'prices_include_tax' => 'boolean',
+            'tax_amount' => 'decimal:2',
             'total' => 'decimal:2',
             'placed_at' => 'datetime',
             'paid_at' => 'datetime',
@@ -83,6 +92,7 @@ class Order extends Model
             'delivered_at' => 'datetime',
             'completed_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'deleted_on_channel_at' => 'datetime',
             'packing_slip_printed_at' => 'datetime',
             'raw' => 'array',
             'tags' => 'array',
@@ -100,6 +110,12 @@ class Order extends Model
     public function isManual(): bool
     {
         return $this->marketplace === self::SOURCE_MANUAL;
+    }
+
+    /** Orders whose buyer is the seller's own customer (manual sales, own website): full contact is kept and shown. */
+    public function ownsCustomerData(): bool
+    {
+        return $this->isManual() || $this->marketplace === 'woocommerce';
     }
 
     /** Amount still to collect from the buyer (manual orders). */

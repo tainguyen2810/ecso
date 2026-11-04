@@ -1,3 +1,4 @@
+import { addedTax, saleTax, type TaxRule } from '@/shared/lib/tax';
 import type { Variant } from '@/shared/types';
 
 export interface CartLine {
@@ -57,12 +58,15 @@ export function addToCart(cart: Cart, v: Variant): void {
     cart.lines.push({ variant_id: v.id!, sku: v.sku, name: (v.product?.name ?? v.sku) + (v.name ? ` · ${v.name}` : ''), quantity: 1, unit_price: Number(v.ref_price) || 0, discount: 0 });
 }
 
-export function cartTotals(cart: Cart): { quantity: number; subtotal: number; total: number } {
+/** Totals of a cart; with a tax rule, the VAT on the goods after discount (added to the total when prices exclude it). */
+export function cartTotals(cart: Cart, tax?: TaxRule | null): { quantity: number; subtotal: number; tax: number; total: number } {
     const subtotal = cart.lines.reduce((s, l) => s + Math.max(0, (Number(l.quantity) || 0) * (Number(l.unit_price) || 0) - (Number(l.discount) || 0)), 0);
+    const goods = Math.max(0, subtotal - (Number(cart.discount) || 0));
     return {
         quantity: cart.lines.reduce((s, l) => s + (Number(l.quantity) || 0), 0),
         subtotal,
-        total: Math.max(0, subtotal - (Number(cart.discount) || 0)),
+        tax: saleTax(goods, tax),
+        total: goods + addedTax(goods, tax),
     };
 }
 

@@ -3,6 +3,7 @@
 namespace App\Modules\Orders\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Audit\Models\AuditLog;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Identity\Models\User;
 use App\Modules\Inventory\Services\ReservationLedger;
@@ -15,6 +16,7 @@ use App\Modules\Orders\Http\Resources\ReturnResource;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
 use App\Modules\Orders\Models\OrderNote;
+use App\Modules\Orders\Models\OrderRefund;
 use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Orders\Models\OrderStatusHistory;
 use App\Modules\Orders\Services\OrderActions;
@@ -88,10 +90,12 @@ class OrderController extends Controller
                 'seller_sku' => $i->seller_sku,
                 'external_sku_id' => $i->external_sku_id,
                 'quantity' => $i->quantity,
+                'refunded_quantity' => (int) $i->refunded_quantity,
                 // Shipped and not yet covered by a return: the most a new return may take back.
                 'returnable' => $returnable[$i->id] ?? 0,
                 'unit_price' => $i->unit_price,
                 'discount' => $i->discount,
+                'tax' => $i->tax,
                 'mapping_status' => $i->mapping_status,
                 'listing_id' => $i->listingVariant?->ulid,
                 'variant' => $i->variant ? ['id' => $i->variant->ulid, 'sku' => $i->variant->sku, 'name' => $i->variant->displayName()] : null,
@@ -111,10 +115,26 @@ class OrderController extends Controller
                 'occurred_at' => $h->occurred_at?->toIso8601String(),
                 'created_at' => $h->created_at->toIso8601String(),
             ]),
+            // What each edit changed, newest first.
+            'edits' => AuditLog::query()->with('actor:id,name')->where('tenant_id', $order->tenant_id)->where('action', 'order.updated')->where('subject_type', 'Order')->where('subject_id', $order->id)
+                ->latest('id')->limit(50)->get()->map(fn (AuditLog $log) => [
+                    'at' => $log->created_at->toIso8601String(),
+                    'actor' => $log->actor?->name,
+                    'changes' => self::editChanges($log->getAttribute('changes')),
+                ]),
             'notes' => $order->notes()->with('user:id,name')->get()->map(fn (OrderNote $n) => [
                 'id' => $n->id, 'body' => $n->body, 'user' => $n->user?->name, 'created_at' => $n->created_at?->toIso8601String(),
             ]),
             'returns' => ReturnResource::collection($order->returns()->with('exchangeOrder')->get()),
+            'refunds' => OrderRefund::query()->with('orderReturn:id,ulid,number,status')->where('order_id', $order->id)->orderBy('refunded_at')->get()
+                ->map(fn (OrderRefund $r) => [
+                    'id' => $r->ulid, 'external_refund_id' => $r->external_refund_id, 'amount' => $r->amount, 'reason' => $r->reason,
+                    'refunded_at' => $r->refunded_at?->toIso8601String(),
+                    'lines' => collect($r->lines ?? [])->map(fn ($l) => [
+                        'name' => $order->items->firstWhere('id', $l['order_item_id'])?->name, 'quantity' => $l['quantity'], 'amount' => $l['amount'],
+                    ])->values(),
+                    'return' => $r->orderReturn ? ['id' => $r->orderReturn->ulid, 'number' => $r->orderReturn->number, 'status' => $r->orderReturn->status] : null,
+                ]),
             // This order was taken in exchange for returned goods.
             'exchanged_from' => OrderReturn::query()->with('order')->where('exchange_order_id', $order->id)->get()->map(fn (OrderReturn $r) => [
                 'id' => $r->ulid, 'number' => $r->number, 'credit' => $r->exchange_credit,
@@ -139,6 +159,9 @@ class OrderController extends Controller
     public function action(Request $request, Order $order, string $action, OrderActions $actions): OrderResource
     {
         $this->authorize('update', $order);
+        if ($action === 'cancel') {
+            $this->authorize('cancel', $order);
+        }
         $params = $request->validate(['reason' => ['nullable', 'string', 'max:255']]);
 
         return new OrderResource($actions->perform($order, $action, $params)->load(['account', 'channel', 'assignee']));
@@ -159,6 +182,9 @@ class OrderController extends Controller
             'pay' => 'pay',
             default => 'update',
         }, Order::class);
+        if ($data['action'] === 'cancel') {
+            $this->authorize('cancel', Order::class);
+        }
         $orders = Order::query()->with(['account', 'channel'])->whereIn('ulid', $data['ids'])->get();
 
         if ($data['action'] === 'assign') {
@@ -411,6 +437,7 @@ class OrderController extends Controller
             'account' => ['nullable', 'string'],
             'channel' => ['nullable', 'string'],
             'customer' => ['nullable', 'string'],
+            'warehouse' => ['nullable', 'string'],
             'source' => ['nullable', Rule::in(['manual', 'marketplace'])],
             'payment_status' => ['nullable', Rule::in([Order::PAYMENT_UNPAID, Order::PAYMENT_PARTIAL, Order::PAYMENT_PAID])],
             'marketplace' => ['nullable', 'string', 'max:20'],
@@ -427,5 +454,13 @@ class OrderController extends Controller
             'sort' => ['nullable', Rule::in(['newest', 'oldest', 'ship_by'])],
             'per_page' => ['nullable', 'integer', 'min:10', 'max:100'],
         ]);
+    }
+
+    /** @return array<int, string> */
+    private static function editChanges(mixed $changes): array
+    {
+        $diff = is_array($changes) ? ($changes['diff'] ?? null) : null;
+
+        return is_array($diff) ? array_values(array_map('strval', $diff)) : [];
     }
 }

@@ -21,6 +21,14 @@ class FakeWooStore
     /** @var array<int, array<string, mixed>> */
     public array $orders = [];
 
+    /** @var array<int, array<int, array<string, mixed>>> order id => refunds (orders/{id}/refunds) */
+    public array $refunds = [];
+
+    /** Order ids whose read answers 503 (a busy store), and whether listing orders fails. */
+    public array $failOrders = [];
+
+    public bool $failList = false;
+
     /** @var array<int, array<string, mixed>> */
     public array $webhooks = [];
 
@@ -70,12 +78,30 @@ class FakeWooStore
         }
 
         return $this->orders[$id] = ['id' => $id, 'number' => (string) $id, 'status' => $status, 'currency' => 'VND',
-            'date_created_gmt' => '2026-11-04T01:00:00', 'date_modified_gmt' => now()->utc()->format('Y-m-d\TH:i:s'),
+            'date_created_gmt' => now()->utc()->format('Y-m-d\TH:i:s'), 'date_modified_gmt' => now()->utc()->format('Y-m-d\TH:i:s'),
             'date_paid_gmt' => null, 'payment_method' => $paymentMethod, 'payment_method_title' => $paymentMethod === 'cod' ? 'Thanh toán khi nhận hàng' : 'Chuyển khoản',
             'total' => (string) ($total + 30000), 'shipping_total' => '30000', 'discount_total' => '0', 'customer_note' => 'Giao giờ hành chính',
-            'billing' => ['first_name' => 'Lan', 'last_name' => 'Nguyễn', 'phone' => '0901234567', 'address_1' => '12 Lê Lợi', 'city' => 'Huế'],
+            'billing' => ['first_name' => 'Lan', 'last_name' => 'Nguyễn', 'phone' => '0901234567', 'email' => 'lan@example.vn', 'address_1' => '12 Lê Lợi', 'city' => 'Huế'],
             'shipping' => ['first_name' => '', 'last_name' => '', 'address_1' => ''], 'shipping_lines' => [['method_title' => 'GHTK']],
             'line_items' => $items, 'meta_data' => []];
+    }
+
+    /**
+     * Refunds an order the way the Woo admin does: a refund record (lines point at the order lines through the
+     * _refunded_item_id meta, quantities negative) and its summary on the order.
+     *
+     * @param  array<int, array{0: int, 1: int}>  $lines  [order line id, quantity]
+     */
+    public function refund(int $orderId, int $amount, array $lines = [], string $reason = ''): array
+    {
+        $id = $this->nextId++;
+        $this->refunds[$orderId][$id] = ['id' => $id, 'date_created_gmt' => now()->utc()->format('Y-m-d\TH:i:s'), 'amount' => (string) $amount, 'reason' => $reason,
+            'line_items' => array_map(fn ($l) => ['id' => $this->nextId++, 'quantity' => -$l[1], 'total' => (string) -($amount / max(1, count($lines))),
+                'meta_data' => [['key' => '_refunded_item_id', 'value' => (string) $l[0]]]], $lines)];
+        $this->orders[$orderId]['refunds'][] = ['id' => $id, 'reason' => $reason, 'total' => (string) -$amount];
+        $this->orders[$orderId]['date_modified_gmt'] = now()->addSecond()->utc()->format('Y-m-d\TH:i:s');
+
+        return $this->orders[$orderId];
     }
 
     /** Signs a webhook body the way Woo does. */
@@ -121,11 +147,17 @@ class FakeWooStore
             (bool) preg_match('#^products/(\d+)/variations/batch$#', $path, $m) => $this->batchVariations((int) $m[1], $request->data()['update'] ?? []),
             (bool) preg_match('#^products/(\d+)$#', $path, $m) => isset($this->products[(int) $m[1]])
                 ? Http::response($this->products[(int) $m[1]]) : Http::response(['code' => 'woocommerce_rest_product_invalid_id', 'message' => 'Invalid ID.'], 404),
-            $path === 'orders' => $this->page(array_values(array_filter($this->orders, fn ($o) => in_array($o['status'], explode(',', $query['status'] ?? $o['status']), true))), $query),
+            $path === 'orders' && $this->failList => Http::response(['code' => 'internal_server_error', 'message' => 'Busy'], 503),
+            $path === 'orders' => $this->page(array_values(array_filter($this->orders, fn ($o) => in_array($o['status'], explode(',', $query['status'] ?? $o['status']), true)
+                && (! isset($query['after']) || $o['date_created_gmt'] >= $query['after']))), $query),
+            (bool) preg_match('#^orders/(\d+)$#', $path, $m) && in_array((int) $m[1], $this->failOrders, true) => Http::response(['code' => 'internal_server_error', 'message' => 'Busy'], 503),
+            (bool) preg_match('#^orders/(\d+)/refunds$#', $path, $m) => $this->page(array_values($this->refunds[(int) $m[1]] ?? []), $query),
             (bool) preg_match('#^orders/(\d+)/notes$#', $path, $m) => Http::response(['id' => $this->nextId++, 'note' => $request->data()['note']], 201),
             (bool) preg_match('#^orders/(\d+)$#', $path, $m) && $method === 'PUT' => $this->updateOrder((int) $m[1], $request->data()),
             (bool) preg_match('#^orders/(\d+)$#', $path, $m) => Http::response($this->orders[(int) $m[1]] ?? ['code' => 'woocommerce_rest_shop_order_invalid_id', 'message' => 'Invalid ID.'], isset($this->orders[(int) $m[1]]) ? 200 : 404),
             $path === 'webhooks' && $method === 'POST' => $this->createWebhook($request->data()),
+            $path === 'webhooks' && $method === 'GET' => $this->page(array_values($this->webhooks), $query),
+            (bool) preg_match('#^webhooks/(\d+)$#', $path, $m) && $method === 'PUT' => $this->updateWebhook((int) $m[1], $request->data()),
             (bool) preg_match('#^webhooks/(\d+)$#', $path, $m) && $method === 'DELETE' => $this->deleteWebhook((int) $m[1]),
             default => Http::response(['code' => 'rest_no_route', 'message' => 'No route'], 404),
         };
@@ -191,6 +223,13 @@ class FakeWooStore
         $this->webhooks[$id] = $data + ['id' => $id];
 
         return Http::response($this->webhooks[$id], 201);
+    }
+
+    private function updateWebhook(int $id, array $data)
+    {
+        $this->webhooks[$id] = array_merge($this->webhooks[$id], $data);
+
+        return Http::response($this->webhooks[$id]);
     }
 
     private function deleteWebhook(int $id)

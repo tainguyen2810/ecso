@@ -10,6 +10,7 @@ use App\Modules\Cashbook\Models\CashTransfer;
 use App\Modules\Cashbook\Models\CashVoucher;
 use App\Modules\Cashbook\Models\CashVoucherType;
 use App\Modules\Cashbook\Policies\CashbookPolicy;
+use App\Modules\Catalog\Events\SaleStatusChanged;
 use App\Modules\Catalog\Models\Brand;
 use App\Modules\Catalog\Models\Category;
 use App\Modules\Catalog\Models\Product;
@@ -28,6 +29,7 @@ use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Policies\InventoryPolicy;
 use App\Modules\Inventory\Policies\WarehousePolicy;
 use App\Modules\Marketplace\Console\CheckFeesCommand;
+use App\Modules\Marketplace\Console\CheckWebhooksCommand;
 use App\Modules\Marketplace\Console\PushDueInventoryCommand;
 use App\Modules\Marketplace\Events\ListingMappingChanged;
 use App\Modules\Marketplace\Events\WebhookReceived;
@@ -55,6 +57,7 @@ use App\Modules\Purchasing\Models\Supplier;
 use App\Modules\Purchasing\Models\SupplierPayment;
 use App\Modules\Purchasing\Models\SupplierReturn;
 use App\Modules\Purchasing\Policies\PurchasingPolicy;
+use App\Modules\Sales\Console\VerifyOrderMoneyCommand;
 use App\Modules\Sales\Listeners\CreateDefaultSalesChannel;
 use App\Modules\Sales\Models\CashShift;
 use App\Modules\Sales\Models\Customer;
@@ -126,6 +129,7 @@ class ModuleServiceProvider extends ServiceProvider
         Event::listen(AvailableStockChanged::class, PlanInventoryPush::class);
         Event::listen(ListingMappingChanged::class, RemapOrderItems::class);
         Event::listen(ListingMappingChanged::class, PlanInventoryPush::class);
+        Event::listen(SaleStatusChanged::class, PlanInventoryPush::class);
         // A retail price changed in ECSO goes to the websites where ECSO holds the price.
         ProductVariant::updated(function (ProductVariant $variant) {
             app(PriceSync::class)->variantUpdated($variant);
@@ -142,7 +146,7 @@ class ModuleServiceProvider extends ServiceProvider
         $this->configureAuthLinks();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, LowStockDigestCommand::class, PushDueInventoryCommand::class, CheckFeesCommand::class, ReconcileOrdersCommand::class, BillingSweepCommand::class, MonitorCommand::class, DemoTenantCommand::class]);
+            $this->commands([CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, VerifyOrderMoneyCommand::class, LowStockDigestCommand::class, PushDueInventoryCommand::class, CheckFeesCommand::class, CheckWebhooksCommand::class, ReconcileOrdersCommand::class, BillingSweepCommand::class, MonitorCommand::class, DemoTenantCommand::class]);
         }
     }
 
