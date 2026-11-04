@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import { api, getApiTenant, setApiTenant } from '@/shared/lib/api';
+import { useSettingsStore } from './settings';
 import type { Tenant, TenantContextData } from '@/shared/types';
 
 export const useTenantStore = defineStore('tenant', () => {
@@ -36,6 +37,7 @@ export const useTenantStore = defineStore('tenant', () => {
 
     async function select(ulid: string): Promise<void> {
         setApiTenant(ulid);
+        useSettingsStore().reset();
         try {
             const { data } = await api.get('/tenant');
             context.value = data.data;

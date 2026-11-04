@@ -3,6 +3,7 @@
 namespace App\Modules\Sales\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Orders\Http\Resources\OrderResource;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Support\OrderTags;
@@ -10,9 +11,11 @@ use App\Modules\Sales\Http\Resources\PaymentResource;
 use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Sales\Services\ManualOrderService;
 use App\Modules\Sales\Services\PaymentService;
+use App\Modules\Tenancy\Support\TenantSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /** Orders of the seller's own channels: create, edit, process, collect payments. */
 class SalesOrderController extends Controller
@@ -31,7 +34,9 @@ class SalesOrderController extends Controller
             'payments.*.amount' => ['required', 'numeric', 'min:0', 'max:9999999999'],
             'payments.*.reference' => ['nullable', 'string', 'max:100'],
             'exchange_return_id' => ['nullable', 'string'],
+            'placed_at' => ['nullable', 'date', 'before_or_equal:now'],
         ]);
+        $this->guardSettings($request, $data);
 
         $order = $orders->create($data);
 
@@ -46,6 +51,7 @@ class SalesOrderController extends Controller
             'lines' => ['sometimes', 'array', 'min:1', 'max:200'],
             ...$this->lineRules(),
         ]);
+        $this->guardSettings($request, $data);
 
         return new OrderResource($orders->update($order, $data)->load(['channel', 'customer', 'warehouse']));
     }
@@ -83,6 +89,41 @@ class SalesOrderController extends Controller
         $data = $request->validate(['reason' => ['required', 'string', 'max:255']]);
 
         return new PaymentResource($payments->void($payment, $data['reason'])->load('creator'));
+    }
+
+    /**
+     * Rules from Cấu hình: when staff may not change prices, a SKU line sells at its retail or wholesale price with
+     * no discount (members with orders.price excepted); the sale time can be back-dated only when allowed.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function guardSettings(Request $request, array $data): void
+    {
+        $settings = TenantSettings::current();
+        if (isset($data['placed_at']) && ! $settings->get('sales.allow_change_sale_time')) {
+            throw ValidationException::withMessages(['placed_at' => 'Cấu hình chưa cho phép sửa thời gian bán.']);
+        }
+        if ($settings->get('pricing.staff_edit_price') || $request->user()->can('changePrice', Order::class)) {
+            return;
+        }
+        if ((float) ($data['discount'] ?? 0) > 0) {
+            throw ValidationException::withMessages(['discount' => 'Bạn không có quyền chiết khấu đơn hàng.']);
+        }
+        $lines = $data['lines'] ?? [];
+        $variants = ProductVariant::query()->whereIn('ulid', array_filter(array_column($lines, 'variant_id')))->get()->keyBy('ulid');
+        foreach ($lines as $i => $line) {
+            if ((float) ($line['discount'] ?? 0) > 0) {
+                throw ValidationException::withMessages(["lines.{$i}.discount" => 'Bạn không có quyền chiết khấu.']);
+            }
+            $variant = $variants[$line['variant_id'] ?? ''] ?? null;
+            if (! $variant || ! isset($line['unit_price'])) {
+                continue; // service lines have no list price; no price sent = the retail price
+            }
+            $allowed = array_filter([(string) $variant->ref_price, (string) $variant->wholesale_price], fn ($p) => (float) $p > 0);
+            if (! collect($allowed)->contains(fn ($p) => bccomp((string) $line['unit_price'], $p, 2) === 0)) {
+                throw ValidationException::withMessages(["lines.{$i}.unit_price" => "Bạn không có quyền sửa giá {$variant->sku}."]);
+            }
+        }
     }
 
     /** @return array<string, array<int, mixed>> */

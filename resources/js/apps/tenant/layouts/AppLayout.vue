@@ -25,7 +25,7 @@ const visibleGroups = computed(() =>
         .map((g) => ({
             ...g,
             items: g.items
-                .filter(canSee)
+                .filter((i) => !i.hidden && canSee(i))
                 .map((i) => {
                     const children = i.children?.filter((c) => !c.permission || tenant.can(c.permission));
                     // A member who only sees part of a group lands on the first sub-page they may open.

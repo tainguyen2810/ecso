@@ -20,6 +20,7 @@ final class PermissionRegistry
             'orders.print' => 'In phiếu đóng gói, vận đơn',
             'orders.create' => 'Tạo đơn bán, bán tại quầy',
             'orders.payment' => 'Thu tiền, hoàn tiền đơn bán',
+            'orders.price' => 'Sửa giá, chiết khấu khi bán (khi Cấu hình không cho nhân viên sửa)',
             'orders.shifts' => 'Xem và đóng ca bán hàng của mọi thu ngân',
         ],
         'customers' => [
@@ -83,7 +84,7 @@ final class PermissionRegistry
             Role::OWNER => ['name' => 'Chủ doanh nghiệp', 'rank' => 100, 'permissions' => $all],
             Role::ADMIN => ['name' => 'Quản trị doanh nghiệp', 'rank' => 90, 'permissions' => array_values(array_diff($all, ['billing.manage']))],
             Role::MANAGER => ['name' => 'Quản lý vận hành', 'rank' => 70, 'permissions' => [
-                ...self::READ_ALL, 'orders.update', 'orders.assign', 'orders.print', 'orders.create', 'orders.payment', 'orders.shifts', 'customers.manage', 'products.manage',
+                ...self::READ_ALL, 'orders.update', 'orders.assign', 'orders.print', 'orders.create', 'orders.payment', 'orders.price', 'orders.shifts', 'customers.manage', 'products.manage',
                 'inventory.receive', 'inventory.adjust', 'inventory.adjust.approve', 'inventory.transfer', 'purchasing.manage', 'purchasing.payment',
                 'returns.inspect', 'finance.view', 'finance.vouchers', 'members.view',
             ]],

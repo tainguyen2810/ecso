@@ -17,6 +17,7 @@ import { useToast } from '@/shared/composables/useToast';
 import { REORDER_DRAFT_KEY, type ReorderDraft } from './reorder';
 import { purchaseCosts, VAT_RATES } from './costs';
 import { supplierPaymentMethods } from './labels';
+import { useSettingsStore } from '@/shared/stores/settings';
 import type { PurchaseOrderData, Supplier, Variant, Warehouse } from '@/shared/types';
 
 /**
@@ -76,7 +77,9 @@ const backTo = computed(() => (orderMode.value ? '/purchasing/orders' : '/purcha
 
 onMounted(async () => {
     window.addEventListener('keydown', onKey);
-    const [s, w] = await Promise.all([api.get('/suppliers', { params: { active: 1, per_page: 200 } }), api.get('/warehouses')]);
+    const [s, w, cfg] = await Promise.all([api.get('/suppliers', { params: { active: 1, per_page: 200 } }), api.get('/warehouses'), useSettingsStore().load().catch(() => null)]);
+    // New lines take the purchase tax set in Cấu hình → Thuế.
+    if (cfg) defaultVat.value = String(cfg.tax.purchase_rate);
     suppliers.value = s.data.data;
     warehouses.value = (w.data.data as Warehouse[]).filter((x) => x.status === 'active');
     form.warehouse_id = (warehouses.value.find((x) => x.is_default) ?? warehouses.value[0])?.id ?? '';

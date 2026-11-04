@@ -22,6 +22,7 @@ import { actionLabels, capabilityLabels, deadlineLabel, historySource, manualAct
 import PrintDialog from './PrintDialog.vue';
 import { downloadPackingSlips } from './packingSlip';
 import { orderWorkflow } from './workflow';
+import { useSettingsStore } from '@/shared/stores/settings';
 import type { OrderDetail, Ref } from '@/shared/types';
 
 const route = useRoute();
@@ -38,6 +39,11 @@ const note = ref('');
 
 const cancelOpen = ref(false);
 const cancelReason = ref('');
+// Reasons set up in Cấu hình → Cấu hình bán hàng, offered as one-click choices.
+const settingsStore = useSettingsStore();
+settingsStore.load().catch(() => {});
+const cancelReasons = computed(() => (settingsStore.data?.reasons ?? []).filter((r) => r.cancel).map((r) => r.label));
+const returnReasons = computed(() => (settingsStore.data?.reasons ?? []).filter((r) => r.return).map((r) => r.label));
 const returnOpen = ref(false);
 const returnForm = ref({ type: 'return', reason: '', refund_amount: '', lines: {} as Record<number, number> });
 const returnErrors = ref<ApiError | null>(null);
@@ -528,7 +534,10 @@ async function createReturn() {
         <PrintDialog v-model:open="printOpen" :orders="[order]" />
 
         <Dialog v-model:open="cancelOpen" title="Hủy đơn" :description="isManual ? 'Hàng đang giữ được nhả lại kho ngay. Nếu khách đã trả tiền, hãy ghi nhận hoàn tiền sau khi hủy.' : 'Yêu cầu hủy được gửi lên sàn. Hàng đang giữ sẽ được nhả khi sàn xác nhận hủy.'">
-            <FormField label="Lý do"><Input v-model="cancelReason" placeholder="Hết hàng, khách yêu cầu…" /></FormField>
+            <FormField label="Lý do"><Input v-model="cancelReason" placeholder="Chọn bên dưới hoặc gõ lý do khác" data-testid="cancel-reason" /></FormField>
+            <div v-if="cancelReasons.length" class="mt-2 flex flex-wrap gap-1.5" data-testid="cancel-reason-options">
+                <button v-for="r in cancelReasons" :key="r" type="button" :class="['rounded-full border px-2.5 py-1 text-xs', cancelReason === r ? 'border-blue-300 bg-blue-50 text-blue-700' : 'hover:bg-muted']" @click="cancelReason = r">{{ r }}</button>
+            </div>
             <template #footer>
                 <Button variant="outline" @click="cancelOpen = false">Đóng</Button>
                 <Button variant="destructive" :loading="busy === 'cancel'" @click="act('cancel', { reason: cancelReason || null })">Hủy đơn</Button>
@@ -575,7 +584,10 @@ async function createReturn() {
                         </tr>
                     </tbody>
                 </table>
-                <FormField label="Lý do"><Input v-model="returnForm.reason" /></FormField>
+                <FormField label="Lý do"><Input v-model="returnForm.reason" placeholder="Chọn bên dưới hoặc gõ lý do khác" /></FormField>
+                <div v-if="returnReasons.length" class="-mt-1 flex flex-wrap gap-1.5" data-testid="return-reason-options">
+                    <button v-for="r in returnReasons" :key="r" type="button" :class="['rounded-full border px-2.5 py-1 text-xs', returnForm.reason === r ? 'border-blue-300 bg-blue-50 text-blue-700' : 'hover:bg-muted']" @click="returnForm.reason = r">{{ r }}</button>
+                </div>
                 <FormField label="Số tiền hoàn (nếu có)" :error="returnErrors?.field('refund_amount')"><Input v-model="returnForm.refund_amount" type="number" min="0" /></FormField>
                 <p v-if="returnErrors" class="text-sm text-destructive">{{ returnErrors.field('lines') ?? returnErrors.message }}</p>
             </div>

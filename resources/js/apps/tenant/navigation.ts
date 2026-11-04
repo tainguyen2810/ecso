@@ -28,6 +28,8 @@ export interface NavItem {
     description?: string;
     /** Sub-menu shown under the item when it is open (like Sapo's sidebar). */
     children?: NavChild[];
+    /** Not in the sidebar (reached from Cấu hình) but keeps its shortcut and its pages' highlight. */
+    hidden?: boolean;
     /** Also shown to members who hold any of these (a group that gathers several modules). */
     anyPermission?: string[];
     /** Other route `meta.nav` values that belong to this item (e.g. returns under orders). */
@@ -83,11 +85,12 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
         label: 'Thiết lập',
         items: [
             { name: 'marketplaces', label: 'Kết nối sàn', path: '/marketplaces', icon: PlugZap, permission: 'marketplace.view', description: 'Kết nối Shopee, TikTok Shop, Lazada, Tiki bằng API chính thức.' },
-            { name: 'sales-channels', label: 'Kênh bán riêng', path: '/sales-channels', icon: Store, permission: 'orders.view', description: 'Quầy, cửa hàng, Facebook, Zalo, website.' },
-            { name: 'members', label: 'Nhân viên', path: '/members', icon: Users, permission: 'members.view', shortcut: 'm' },
-            { name: 'subscription', label: 'Gói dịch vụ', path: '/subscription', icon: CreditCard, permission: 'billing.view' },
-            { name: 'audit', label: 'Nhật ký', path: '/audit', icon: ScrollText, permission: 'audit.view' },
-            { name: 'settings', label: 'Cài đặt', path: '/settings', icon: Settings, permission: 'settings.manage', shortcut: 's' },
+            { name: 'settings', label: 'Cấu hình', path: '/settings', icon: Settings, permission: 'settings.manage', anyPermission: ['members.view', 'billing.view', 'audit.view'], shortcut: 's', alsoActive: ['members', 'subscription', 'audit', 'sales-channels'] },
+            // Reached from Cấu hình like Sapo; kept here for their shortcuts and access checks.
+            { name: 'sales-channels', label: 'Kênh bán riêng', path: '/sales-channels', icon: Store, permission: 'orders.view', hidden: true, description: 'Quầy, cửa hàng, Facebook, Zalo, website.' },
+            { name: 'members', label: 'Nhân viên', path: '/members', icon: Users, permission: 'members.view', shortcut: 'm', hidden: true },
+            { name: 'subscription', label: 'Gói dịch vụ', path: '/subscription', icon: CreditCard, permission: 'billing.view', hidden: true },
+            { name: 'audit', label: 'Nhật ký', path: '/audit', icon: ScrollText, permission: 'audit.view', hidden: true },
         ],
     },
 ];
