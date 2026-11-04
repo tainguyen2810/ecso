@@ -1,27 +1,48 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Search } from 'lucide-vue-next';
 import Input from '@/shared/ui/Input.vue';
 import { api } from '@/shared/lib/api';
 import { formatNumber } from '@/shared/lib/utils';
 import type { Variant } from '@/shared/types';
 
-/** Search SKU / barcode / product name. Pressing Enter on an exact barcode match picks it (scanner friendly). */
-const props = defineProps<{ warehouse?: string; exclude?: string[]; placeholder?: string; stocked?: boolean }>();
+/**
+ * Search SKU / barcode / product name. Pressing Enter on an exact barcode match picks it (scanner friendly).
+ * `inline`: the results are a list in the page flow, shown right away (for dialogs, where a floating dropdown is
+ * clipped by the dialog's scroll area).
+ */
+const props = defineProps<{ warehouse?: string; exclude?: string[]; placeholder?: string; stocked?: boolean; inline?: boolean; initialQuery?: string }>();
 const emit = defineEmits<{ pick: [variant: Variant] }>();
 
-const query = ref('');
+const query = ref(props.initialQuery ?? '');
 const results = ref<Variant[]>([]);
+const searched = ref(false);
 const open = ref(false);
 const active = ref(0);
 let timer: ReturnType<typeof setTimeout> | undefined;
 let searchedFor: string | null = null;
 
-async function search() {
-    searchedFor = query.value;
-    const { data } = await api.get('/variants', { params: { q: query.value || undefined, warehouse: props.warehouse || undefined, stocked: props.stocked ? 1 : undefined } });
-    results.value = (data.data as Variant[]).filter((v) => !props.exclude?.includes(v.id!));
-    active.value = 0;
+/** Results per query text, so an Enter answers for the text it was pressed on even when the user typed on since. */
+let pending: { q: string; run: Promise<Variant[]> } | null = null;
+
+function search(): Promise<Variant[]> {
+    const q = query.value;
+    searchedFor = q;
+    const run = load(q);
+    pending = { q, run };
+    return run;
+}
+
+async function load(q: string): Promise<Variant[]> {
+    const { data } = await api.get('/variants', { params: { q: q || undefined, warehouse: props.warehouse || undefined, stocked: props.stocked ? 1 : undefined } });
+    const found = (data.data as Variant[]).filter((v) => !props.exclude?.includes(v.id!));
+    if (q === query.value) {
+        // Only the answer for the current text fills the list; an older answer would overwrite a newer one.
+        results.value = found;
+        active.value = 0;
+        searched.value = true;
+    }
+    return found;
 }
 
 watch(query, () => {
@@ -29,10 +50,14 @@ watch(query, () => {
     timer = setTimeout(search, 200);
 });
 onBeforeUnmount(() => clearTimeout(timer));
+onMounted(() => {
+    if (props.inline) search();
+});
 
-function pick(v: Variant) {
+function pick(v: Variant, forText = query.value) {
     emit('pick', v);
-    query.value = '';
+    if (props.inline) return;
+    if (query.value === forText) query.value = ''; // keep what the user typed after pressing Enter
     open.value = false;
 }
 
@@ -45,14 +70,18 @@ async function onKey(e: KeyboardEvent) {
     else if (e.key === 'ArrowUp') active.value = Math.max(active.value - 1, 0);
     else if (e.key === 'Enter') {
         e.preventDefault();
+        const q = query.value;
+        let list = results.value;
         // Barcode scanners type the code and press Enter faster than the debounce: search right away.
-        if (searchedFor !== query.value) {
+        if (searchedFor !== q) {
             clearTimeout(timer);
-            await search();
+            list = await search();
+        } else if (pending?.q === q) {
+            list = await pending.run; // the search for this text is already on its way (debounce fired)
         }
-        const exact = results.value.find((v) => v.barcode === query.value || v.sku.toLowerCase() === query.value.toLowerCase());
-        const choice = exact ?? results.value[active.value];
-        if (choice) pick(choice);
+        const exact = list.find((v) => v.barcode === q || v.sku.toLowerCase() === q.toLowerCase());
+        const choice = exact ?? (q === query.value ? list[active.value] : list[0]);
+        if (choice) pick(choice, q);
     } else if (e.key === 'Escape') open.value = false;
 }
 </script>
@@ -65,11 +94,16 @@ async function onKey(e: KeyboardEvent) {
             data-testid="sku-picker"
             class="pl-8"
             :placeholder="placeholder ?? 'Quét mã vạch hoặc tìm SKU, tên sản phẩm…'"
-            @focus="open = true; search()"
-            @blur="onBlur"
+            :autofocus="inline"
+            @focus="inline || ((open = true), search())"
+            @blur="inline || onBlur()"
             @keydown="onKey"
         />
-        <div v-if="open && results.length" class="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-md border bg-card py-1 shadow-lg">
+        <div
+            v-if="inline ? results.length : open && results.length"
+            :class="inline ? 'mt-2 max-h-[45vh] overflow-y-auto rounded-md border bg-card py-1' : 'absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-md border bg-card py-1 shadow-lg'"
+            data-testid="sku-picker-results"
+        >
             <button
                 v-for="(v, i) in results"
                 :key="v.id"
@@ -82,5 +116,6 @@ async function onKey(e: KeyboardEvent) {
                 <span v-if="v.stock" class="text-xs tabular-nums text-muted-foreground">Khả dụng {{ formatNumber(v.stock.available) }}</span>
             </button>
         </div>
+        <p v-else-if="inline && searched" class="mt-2 rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">Không tìm thấy SKU nào khớp “{{ query }}”.</p>
     </div>
 </template>

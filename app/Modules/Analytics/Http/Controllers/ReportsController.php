@@ -8,9 +8,11 @@ use App\Modules\Analytics\Services\LedgerReports;
 use App\Modules\Analytics\Services\OrderReports;
 use App\Modules\Analytics\Services\StockReports;
 use App\Modules\Analytics\Services\TradeReports;
+use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Tenancy\Support\TenantContext;
+use App\Shared\Support\ReportRange;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -61,6 +63,7 @@ class ReportsController extends Controller
     public function productSales(Request $request, TradeReports $trade): JsonResponse
     {
         $this->allow('reports.view');
+        $this->exporting($request, 'product-sales');
         [$from, $to] = $this->range($request);
         $q = $request->validate(['q' => ['nullable', 'string', 'max:100']])['q'] ?? null;
 
@@ -70,6 +73,7 @@ class ReportsController extends Controller
     public function returns(Request $request, TradeReports $trade): JsonResponse
     {
         $this->allow('reports.view');
+        $this->exporting($request, 'returns');
         [$from, $to] = $this->range($request);
 
         return response()->json(['data' => $trade->returns($from, $to, $this->by($request, ['order', 'product']))]);
@@ -111,6 +115,7 @@ class ReportsController extends Controller
     public function customers(Request $request, TradeReports $trade): JsonResponse
     {
         $this->allow('reports.view');
+        $this->exporting($request, 'customers');
         [$from, $to] = $this->range($request);
 
         return response()->json(['data' => $trade->customers($from, $to)]);
@@ -125,7 +130,7 @@ class ReportsController extends Controller
             'q' => ['nullable', 'string', 'max:100'],
             'zero' => ['nullable', 'boolean'],
         ]);
-        $date = isset($data['date']) ? CarbonImmutable::parse($data['date']) : CarbonImmutable::now();
+        $date = isset($data['date']) ? ReportRange::date($data['date']) : ReportRange::now();
 
         return response()->json(['data' => $stock->onHand($date, $this->warehouse($data['warehouse'] ?? null), $data['q'] ?? null, $request->boolean('zero'))]);
     }
@@ -150,6 +155,7 @@ class ReportsController extends Controller
     public function orders(Request $request, OrderReports $orders): JsonResponse
     {
         $this->allow('reports.view');
+        $this->exporting($request, 'orders');
         [$from, $to] = $this->range($request);
 
         return response()->json(['data' => $orders->byOrder($from, $to, $this->orderFilters($request))]);
@@ -159,6 +165,7 @@ class ReportsController extends Controller
     public function salesLines(Request $request, OrderReports $orders): JsonResponse
     {
         $this->allow('reports.view');
+        $this->exporting($request, 'sales-lines');
         [$from, $to] = $this->range($request);
 
         return response()->json(['data' => $orders->lines($from, $to, $this->orderFilters($request))]);
@@ -167,6 +174,7 @@ class ReportsController extends Controller
     public function stockDetail(Request $request, OrderReports $orders): JsonResponse
     {
         $this->allow('inventory.view');
+        $this->exporting($request, 'stock-detail');
         $data = $request->validate(['warehouse' => ['nullable', 'string'], 'q' => ['nullable', 'string', 'max:100']]);
 
         return response()->json(['data' => $orders->stockDetail($this->warehouse($data['warehouse'] ?? null), $data['q'] ?? null)]);
@@ -206,6 +214,20 @@ class ReportsController extends Controller
         return response()->json(['data' => $ledger->payables()]);
     }
 
+    /**
+     * "Xuất CSV" of a report whose table stops at the row limit asks again with export=1: every row of the same filter
+     * is returned, up to the export limit, and the export is written to the audit log (who exported what, when).
+     */
+    private function exporting(Request $request, string $report): void
+    {
+        if (! $request->boolean('export')) {
+            return;
+        }
+        $limit = (int) config('ecso.reports.export_row_limit', 50000);
+        config(['ecso.reports.row_limit' => $limit, 'ecso.reports.customer_row_limit' => $limit]);
+        app(AuditLogger::class)->record('report.exported', null, ['report' => $report, 'filters' => $request->except('export')]);
+    }
+
     private function allow(string $permission): void
     {
         abort_unless($this->context->can($permission), 403);
@@ -225,11 +247,6 @@ class ReportsController extends Controller
     /** @return array{0: CarbonImmutable, 1: CarbonImmutable} */
     private function range(Request $request): array
     {
-        $data = $request->validate(['from' => ['nullable', 'date'], 'to' => ['nullable', 'date', 'after_or_equal:from']]);
-        $from = isset($data['from']) ? CarbonImmutable::parse($data['from'])->startOfDay() : CarbonImmutable::now()->startOfMonth();
-        $to = isset($data['to']) ? CarbonImmutable::parse($data['to'])->endOfDay() : CarbonImmutable::now()->endOfDay();
-        abort_if($from->diffInDays($to) > 366, 422, 'Khoảng thời gian tối đa 1 năm.');
-
-        return [$from, $to];
+        return ReportRange::fromRequest($request);
     }
 }

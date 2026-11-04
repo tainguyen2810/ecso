@@ -29,6 +29,7 @@ use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Sales\Services\ManualOrderService;
 use App\Modules\Sales\Services\PaymentService;
 use App\Modules\Tenancy\Models\TenantUser;
+use App\Shared\Support\ReportRange;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -283,14 +284,14 @@ class OrderController extends Controller
     {
         $this->authorize('viewAny', Order::class);
         $days = (int) ($request->validate(['days' => ['nullable', Rule::in(['7', '30'])]])['days'] ?? 7);
-        $today = now()->startOfDay();
+        $today = now(ReportRange::timezone())->startOfDay();
         $placed = fn ($from, $to = null) => Order::query()->where('placed_at', '>=', $from)->when($to, fn ($q) => $q->where('placed_at', '<', $to));
         $todayOrders = $placed($today)->where('status', '!=', OrderStatus::CANCELLED);
 
         $from = $today->copy()->subDays($days - 1);
         $rows = $placed($from)->where('status', '!=', OrderStatus::CANCELLED)->toBase()
-            ->selectRaw('DATE(placed_at) as day, marketplace, SUM(total) as revenue, COUNT(*) as orders')
-            ->groupByRaw('DATE(placed_at), marketplace')->get();
+            ->selectRaw(ReportRange::day('placed_at', $today).' as day, marketplace, SUM(total) as revenue, COUNT(*) as orders')
+            ->groupByRaw(ReportRange::day('placed_at', $today).', marketplace')->get();
         $byDay = [];
         for ($d = $from->copy(); $d->lte($today); $d->addDay()) {
             $byDay[$d->toDateString()] = ['date' => $d->toDateString(), 'revenue' => '0.00', 'orders' => 0, 'channels' => []];

@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Modules\Analytics\Services\BusinessReports;
 use App\Modules\Analytics\Services\FinanceReport;
 use App\Modules\Analytics\Services\SalesReport;
+use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Tenancy\Support\TenantContext;
+use App\Shared\Support\ReportRange;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -59,6 +61,10 @@ class AnalyticsController extends Controller
     public function stockLedger(Request $request, TenantContext $context, BusinessReports $reports): JsonResponse
     {
         abort_unless($context->can('reports.view') && $context->can('inventory.view'), 403);
+        if ($request->boolean('export')) {
+            config(['ecso.reports.row_limit' => (int) config('ecso.reports.export_row_limit', 50000)]);
+            app(AuditLogger::class)->record('report.exported', null, ['report' => 'stock-ledger', 'filters' => $request->except('export')]);
+        }
         [$from, $to] = $this->range($request);
         $data = $request->validate(['warehouse' => ['nullable', 'string'], 'q' => ['nullable', 'string', 'max:100']]);
         $warehouse = ($data['warehouse'] ?? null) ? Warehouse::query()->where('ulid', $data['warehouse'])->firstOrFail()->id : null;
@@ -79,11 +85,6 @@ class AnalyticsController extends Controller
     /** @return array{0: CarbonImmutable, 1: CarbonImmutable} */
     private function range(Request $request): array
     {
-        $data = $request->validate(['from' => ['nullable', 'date'], 'to' => ['nullable', 'date', 'after_or_equal:from']]);
-        $from = isset($data['from']) ? CarbonImmutable::parse($data['from'])->startOfDay() : CarbonImmutable::now()->startOfMonth();
-        $to = isset($data['to']) ? CarbonImmutable::parse($data['to'])->endOfDay() : CarbonImmutable::now()->endOfDay();
-        abort_if($from->diffInDays($to) > 366, 422, 'Khoảng thời gian tối đa 1 năm.');
-
-        return [$from, $to];
+        return ReportRange::fromRequest($request);
     }
 }

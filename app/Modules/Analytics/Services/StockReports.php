@@ -2,6 +2,7 @@
 
 namespace App\Modules\Analytics\Services;
 
+use App\Modules\Analytics\Support\Search;
 use App\Modules\Tenancy\Support\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -28,7 +29,7 @@ class StockReports
             ->where('m.tenant_id', $this->tenant())
             ->where('m.created_at', '<=', $date->endOfDay())
             ->when($warehouseId, fn ($w) => $w->where('m.warehouse_id', $warehouseId))
-            ->when($q, fn ($w) => $w->where(fn ($s) => $s->where('v.sku', 'like', "%{$q}%")->orWhere('p.name', 'like', "%{$q}%")))
+            ->when($q, fn ($w) => $w->where(fn ($s) => $s->where('v.sku', 'like', Search::contains($q))->orWhere('p.name', 'like', Search::contains($q))))
             ->groupBy('m.product_variant_id', 'm.warehouse_id')
             ->selectRaw('m.product_variant_id as variant_id, m.warehouse_id, SUM(m.on_hand_delta) as qty')
             ->get();
