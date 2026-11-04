@@ -194,7 +194,7 @@ class MarketplacePriceBoard
                 'external_product_id' => (string) ($listing->listing->external_product_id ?? ''),
                 'external_sku_id' => $listing->external_sku_id,
                 'seller_sku' => $listing->seller_sku,
-                'name' => trim(($row['variant']->product?->name ?? '').' '.($row['variant']->name ?? '')),
+                'name' => trim(($row['variant']->product->name ?? '').' '.($row['variant']->name ?? '')),
                 'current' => $cell['current'],
                 'new' => (float) $listing->target_price,
             ];

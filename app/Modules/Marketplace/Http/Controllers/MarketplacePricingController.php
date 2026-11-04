@@ -245,7 +245,7 @@ class MarketplacePricingController extends Controller
             ->groupBy('marketplace_account_id')->get()->keyBy('marketplace_account_id');
 
         return response()->json([
-            'data' => $accounts->map(function (MarketplaceAccount $a) use ($categories, $imports) {
+            'data' => $accounts->map(function (MarketplaceAccount $a) use ($categories, $imports): array {
                 $actual = $this->fees->actual($a);
                 $fee = $this->pricing->effective($this->pricing->rulesOf($a), null);
 
@@ -254,8 +254,8 @@ class MarketplacePricingController extends Controller
                     'actual' => $actual['shop'],
                     'table' => $fee,
                     'categories' => collect($actual['categories'])->map(fn ($s, $id) => $s + ['category_name' => $categories[$id] ?? '—'])->sortByDesc('order_amount')->take(8)->values(),
-                    'last_import_at' => $imports->get($a->id)?->last_at,
-                    'settlements' => (int) ($imports->get($a->id)->orders ?? 0),
+                    'last_import_at' => $imports->get($a->id)?->getAttribute('last_at'),
+                    'settlements' => (int) $imports->get($a->id)?->getAttribute('orders'),
                 ];
             })->values(),
             'alerts' => $this->fees->openAlerts()->map(fn (FeeAlert $al) => [

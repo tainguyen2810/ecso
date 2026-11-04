@@ -64,7 +64,11 @@ class FeeAnalyzer
         return ['shop' => $this->stats($buckets['shop']), 'categories' => $categories];
     }
 
-    /** @param  array<string, float>|null  $sums */
+    /**
+     * @param  array<string, float|int>|null  $sums
+     *
+     * @param-out array<string, float|int>  $sums
+     */
     private function add(?array &$sums, MarketplaceSettlement $s, float $share): void
     {
         $sums ??= ['orders' => 0, 'order_amount' => 0, 'commission_fee' => 0, 'payment_fee' => 0, 'service_fee' => 0, 'fixed_fee' => 0, 'shipping_fee' => 0, 'net_amount' => 0];
@@ -75,7 +79,7 @@ class FeeAnalyzer
     }
 
     /**
-     * @param  array<string, float>  $sums
+     * @param  array<string, float|int>  $sums
      * @return array<string, float|int>
      */
     private function stats(array $sums): array

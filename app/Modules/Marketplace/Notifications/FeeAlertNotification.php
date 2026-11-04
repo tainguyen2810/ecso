@@ -35,7 +35,7 @@ class FeeAlertNotification extends Notification implements ShouldQueue
 
     public static function describe(FeeAlert $alert): string
     {
-        $shop = $alert->account?->shop_name ?? 'Gian hàng';
+        $shop = $alert->account->shop_name ?? 'Gian hàng';
         $d = $alert->data;
         if ($alert->type === FeeAlert::FEE_DRIFT) {
             $text = sprintf('%s: phí thực tế %s%% (%d ngày, %d đơn), bảng phí đang cài %s%%.', $shop,
