@@ -16,6 +16,7 @@ use App\Modules\Orders\Http\Resources\ReturnResource;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
 use App\Modules\Orders\Models\OrderNote;
+use App\Modules\Orders\Models\OrderRefund;
 use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Orders\Models\OrderStatusHistory;
 use App\Modules\Orders\Services\OrderActions;
@@ -89,10 +90,12 @@ class OrderController extends Controller
                 'seller_sku' => $i->seller_sku,
                 'external_sku_id' => $i->external_sku_id,
                 'quantity' => $i->quantity,
+                'refunded_quantity' => (int) $i->refunded_quantity,
                 // Shipped and not yet covered by a return: the most a new return may take back.
                 'returnable' => $returnable[$i->id] ?? 0,
                 'unit_price' => $i->unit_price,
                 'discount' => $i->discount,
+                'tax' => $i->tax,
                 'mapping_status' => $i->mapping_status,
                 'listing_id' => $i->listingVariant?->ulid,
                 'variant' => $i->variant ? ['id' => $i->variant->ulid, 'sku' => $i->variant->sku, 'name' => $i->variant->displayName()] : null,
@@ -123,6 +126,15 @@ class OrderController extends Controller
                 'id' => $n->id, 'body' => $n->body, 'user' => $n->user?->name, 'created_at' => $n->created_at?->toIso8601String(),
             ]),
             'returns' => ReturnResource::collection($order->returns()->with('exchangeOrder')->get()),
+            'refunds' => OrderRefund::query()->with('orderReturn:id,ulid,number,status')->where('order_id', $order->id)->orderBy('refunded_at')->get()
+                ->map(fn (OrderRefund $r) => [
+                    'id' => $r->ulid, 'external_refund_id' => $r->external_refund_id, 'amount' => $r->amount, 'reason' => $r->reason,
+                    'refunded_at' => $r->refunded_at?->toIso8601String(),
+                    'lines' => collect($r->lines ?? [])->map(fn ($l) => [
+                        'name' => $order->items->firstWhere('id', $l['order_item_id'])?->name, 'quantity' => $l['quantity'], 'amount' => $l['amount'],
+                    ])->values(),
+                    'return' => $r->orderReturn ? ['id' => $r->orderReturn->ulid, 'number' => $r->orderReturn->number, 'status' => $r->orderReturn->status] : null,
+                ]),
             // This order was taken in exchange for returned goods.
             'exchanged_from' => OrderReturn::query()->with('order')->where('exchange_order_id', $order->id)->get()->map(fn (OrderReturn $r) => [
                 'id' => $r->ulid, 'number' => $r->number, 'credit' => $r->exchange_credit,

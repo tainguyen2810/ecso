@@ -46,8 +46,15 @@ class OrderResource extends JsonResource
             'tax_amount' => $this->tax_amount,
             'total' => $this->total,
             'buyer_name' => $this->buyer_name,
-            // Manual orders: the seller entered the phone and needs it for delivery; marketplace orders: masked only.
-            'buyer_phone' => $this->isManual() ? $this->buyer_phone : $this->buyer_phone_masked,
+            // Manual and own-website orders: the seller's own customer, full phone; marketplace orders: masked only.
+            'buyer_phone' => $this->ownsCustomerData() ? ($this->buyer_phone ?? $this->buyer_phone_masked) : $this->buyer_phone_masked,
+            'buyer_email' => $this->when($this->ownsCustomerData(), fn () => $this->buyer_email),
+            'addresses' => $this->when($this->ownsCustomerData(), fn () => $this->addresses),
+            'external_number' => $this->external_number,
+            'tax_total' => $this->tax_total,
+            'fee_total' => $this->fee_total,
+            'coupon_codes' => $this->coupon_codes ?? [],
+            'transaction_id' => $this->transaction_id,
             'shipping_address' => $this->shipping_address,
             'carrier' => $this->shipping_carrier,
             'tracking_number' => $this->tracking_number,
@@ -59,6 +66,7 @@ class OrderResource extends JsonResource
             'deliver_on' => $this->deliver_on?->toDateString(),
             'handed_over_at' => $this->handed_over_at?->toIso8601String(),
             'cancelled_at' => $this->cancelled_at?->toIso8601String(),
+            'deleted_on_channel_at' => $this->deleted_on_channel_at?->toIso8601String(),
             'cancel_reason' => $this->cancel_reason,
             'external_updated_at' => $this->external_updated_at?->toIso8601String(),
             'flags' => [

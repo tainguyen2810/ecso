@@ -4,6 +4,44 @@
 
 ## [Unreleased]
 
+### Đồng bộ đơn WooCommerce, vòng E: giao diện và hướng dẫn (2026-11-04)
+- **Trang website Woo**: nút "Đồng bộ đơn ngay"; chọn chu kỳ đối soát 5/15/30 phút; hiện mốc "Đồng bộ đơn từ"; công tắc "Trạng thái đơn hai chiều"; thẻ **Webhook trên website** (tình trạng, đã bật lại / tạo lại, nút Kiểm tra ngay); thẻ **Ánh xạ trạng thái** (trạng thái website → trạng thái ECSO, số đơn đang chưa ánh xạ, thêm mã trạng thái plugin). Ô "Lỗi đồng bộ" tính cả lỗi đơn đang mở và dẫn sang trang lỗi.
+- **Trang Lịch sử và lỗi đồng bộ** (`/marketplaces/sync`): lỗi đang mở theo nhóm, thử lại / bỏ qua từng đơn, lỗi đã xử lý, lịch sử từng lượt đối soát (kết quả, số đơn, thời gian chạy).
+- **Chi tiết đơn website**: số đơn website, trạng thái thanh toán, email, địa chỉ thanh toán khi khác địa chỉ giao, mã giao dịch, mã giảm giá, thuế, phí khác, tổng đã hoàn, số lượng đã hoàn từng dòng, danh sách hoàn tiền trên website (kèm phiếu trả hàng nếu có), nhãn "Đã xóa trên website".
+- Danh sách đơn: hiện số đơn website và nhãn "Đã xóa trên website"; ô tìm kiếm tìm được theo số đơn website.
+- Hướng dẫn: `docs/WOOCOMMERCE-ORDERS.md`.
+
+### Đồng bộ đơn WooCommerce, vòng D: hoàn tiền (2026-11-04)
+- ECSO đọc **từng lần hoàn tiền** của đơn Woo (`orders/{id}/refunds`) và lưu vào `order_refunds`: số tiền, lý do, dòng hàng và số lượng. Mỗi lần hoàn chỉ lưu một lần, webhook gửi lặp không tạo trùng. Tổng đã hoàn cập nhật vào đơn.
+- Hoàn **một phần trước khi giao**: số lượng đã hoàn không còn được giữ hàng và không bị xuất kho (`order_items.refunded_quantity`).
+- Hoàn **sau khi đã giao** có dòng hàng: ECSO mở một phiếu trả hàng "Yêu cầu trả" cho đúng các dòng đó. Kho chỉ cộng lại khi nhận và kiểm hàng trên phiếu, không bao giờ cộng thẳng từ lệnh hoàn tiền. Hoàn chỉ tiền (phí ship, bồi thường) thì chỉ lưu số tiền.
+- Chi tiết đơn (API) có thêm `refunds` và `refunded_quantity` từng dòng.
+- Migration `2026_11_12_120000_add_order_refunds`. Chỉ thử với cửa hàng Woo giả lập.
+
+### Đồng bộ đơn WooCommerce, vòng C (2026-11-04)
+- **Ánh xạ trạng thái riêng từng website** (`settings.status_map`), ưu tiên hơn ánh xạ chung. Dùng cho trạng thái do plugin thêm (ví dụ `dang-giao`). Lưu ánh xạ xong, các đơn đang "Chưa ánh xạ" với trạng thái đó được chuyển ngay. Đối soát hỏi Woo cả các trạng thái riêng này. API: `GET/PUT marketplace-accounts/{id}/status-map`.
+- **Công tắc một chiều / hai chiều** (`settings.push_status`, mặc định hai chiều như trước). Một chiều: xác nhận, đóng gói, bàn giao, hủy chỉ làm trong ECSO, không ghi lên website. Khi website còn ở trạng thái trước ECSO, ECSO giữ trạng thái của mình và không báo xung đột. Khi website đi xa hơn (ví dụ hoàn tất), website thắng.
+- Mỗi thao tác đơn vẫn ghi nhật ký (`order.pack`, `order.cancel`…), có đánh dấu thao tác chỉ trong ECSO.
+
+### Đồng bộ đơn WooCommerce, vòng B (2026-11-04)
+- **Đơn bị xóa trên website**: ECSO không xóa đơn. Đơn được đánh dấu "đã xóa trên website" (`orders.deleted_on_channel_at`). Đơn chưa ra khỏi kho thì chuyển Đã hủy và nhả hàng giữ. Đơn đã giao thì giữ nguyên, chỉ cảnh báo. Đơn chuyển vào thùng rác rồi được **khôi phục** thì mở lại và giữ hàng lại (nếu chưa giao). Website được đăng ký thêm webhook `order.deleted`, `order.restored`.
+- **Đơn sửa trên website** (đổi số lượng, thêm/bớt dòng) khi chưa ra khỏi kho: ECSO nhả hàng giữ cũ và giữ lại theo dòng mới. Sửa sau khi đã xuất kho thì ECSO giữ số đã xuất và báo cảnh báo trên đơn.
+- **Tự bật lại webhook**: lệnh `ecso:woo:check-webhooks` chạy mỗi giờ, bật lại webhook ECSO bị Woo tắt sau nhiều lần gửi lỗi và tạo lại webhook còn thiếu (cả website kết nối từ trước). Kết quả lần kiểm tra gần nhất lưu ở `settings.webhook_health`. Có API kiểm tra ngay `POST marketplace-accounts/{id}/check-webhooks`.
+- **Chu kỳ đối soát theo từng website**: 5, 15 (mặc định) hoặc 30 phút (`settings.order_sync_interval`). Lệnh đối soát chạy mỗi 5 phút và bỏ qua website chưa tới lượt. Nút "Đồng bộ ngay": `POST marketplace-accounts/{id}/sync-orders`.
+- **Lỗi đồng bộ** (`sync_errors`): mỗi đơn đồng bộ không được có một dòng lỗi theo nhóm (API, xác thực, dữ liệu, xung đột trạng thái), đếm số lần thử. Lần đồng bộ sau thành công thì lỗi tự đóng. API: `GET sync-errors`, `POST sync-errors/{id}/retry`, `POST sync-errors/{id}/resolve`, `GET sync-runs`.
+- Migration `2026_11_12_110000_add_order_sync_errors`. Chỉ thử với cửa hàng Woo giả lập.
+
+### Đồng bộ đơn WooCommerce, vòng A (2026-11-04)
+- Chỉ lấy đơn **tạo sau lúc bật đồng bộ đơn** (`marketplace_accounts.orders_since`). Đơn cũ hơn bị bỏ qua cả khi website gửi cập nhật, không giữ hàng. Tắt rồi bật lại đồng bộ đơn thì tính lại từ lúc bật. Không nhập đơn lịch sử.
+- Đơn website lưu đủ: số đơn website, SĐT và email đầy đủ, địa chỉ thanh toán/giao hàng (mã hóa), mã khách trên Woo, mã giảm giá, thuế (đơn và từng dòng), phí khác, mã giao dịch, số đã hoàn. Bản `raw` không còn chứa billing/shipping.
+- Trạng thái thanh toán: có ngày thanh toán và không phải COD thì là Đã thanh toán; đơn COD hoàn tất trên Woo không tự coi là đã thu tiền.
+- Đơn website gắn vào **khách hàng** theo SĐT (tạo thẻ khách nếu chưa có). SĐT không hợp lệ thì đơn vẫn vào, không gắn khách. Đơn sàn vẫn che thông tin người mua như cũ.
+- Công nợ khách chỉ tính đơn bán tay; đơn website/sàn đã thanh toán qua kênh nên không thành nợ.
+- **Nhật ký đồng bộ** (`sync_runs`): mỗi lượt đối soát ghi kết quả (OK / Một phần / Lỗi), số đơn tạo/cập nhật/lỗi. Một đơn website trả lỗi không chặn đơn khác và không đẩy mốc đồng bộ lên.
+- Sửa: đơn Woo chuyển "Đã hoàn tiền" (refunded) trước khi giao thì thành Đã hủy và nhả hàng giữ, không trừ kho. Đơn đã giao rồi mới hoàn thì mở phiếu trả hàng; kho chỉ cộng lại khi nhận và kiểm hàng.
+- Sửa: Enter trong ô tìm SKU khi quét hai mã liên tiếp nhanh hơn kết quả tìm kiếm không còn bỏ sót mã đầu.
+- Migration `2026_11_12_100000_add_woo_order_details`. Chỉ thử với cửa hàng Woo giả lập trong test, chưa thử với website thật.
+
 ### Tài chính: doanh thu không gồm thuế GTGT (2026-11-04)
 - Doanh thu thuần trên trang Tài chính và Báo cáo lãi lỗ **không gồm thuế GTGT bán ra**. Giá đã gồm thuế: trừ phần thuế nằm trong giá (dòng mới "3. Thuế GTGT nằm trong giá bán"). Giá chưa gồm thuế: thuế cộng thêm không bao giờ vào doanh thu.
 - Hàng trả lại trừ khỏi doanh thu theo giá trị chưa gồm thuế (tiền hoàn đã gồm cả thuế trả lại cho khách). Giá trị hàng trả khi không nhập số tiền hoàn giờ chia cả chiết khấu đơn và thuế cộng thêm theo tỷ lệ, giống `OrderReturn::goodsValue()`.

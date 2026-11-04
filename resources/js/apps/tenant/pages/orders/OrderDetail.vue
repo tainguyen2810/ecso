@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { AlertTriangle, ArrowLeft, Ban, Banknote, Check, Clock, Copy, Link2, MapPin, MessageSquare, Pencil, Printer, ReceiptText, RefreshCw, Repeat, Truck, Undo2, UserRound, Wallet, Warehouse, X } from 'lucide-vue-next';
+import { AlertTriangle, ArrowLeft, Ban, Banknote, Check, Clock, Copy, Link2, Mail, MapPin, MessageSquare, Pencil, Printer, ReceiptText, RefreshCw, Repeat, Truck, Undo2, UserRound, Wallet, Warehouse, X } from 'lucide-vue-next';
 import TagInput from '../../components/TagInput.vue';
 import Alert from '@/shared/ui/Alert.vue';
 import Badge from '@/shared/ui/Badge.vue';
@@ -112,6 +112,13 @@ async function saveMeta() {
 }
 
 const isManual = computed(() => order.value?.source === 'manual');
+/** The seller's own WooCommerce website: full contact, payment details and refunds made on the website. */
+const isWebsite = computed(() => order.value?.marketplace === 'woocommerce');
+const addressLine = (a?: Record<string, string>) => (a ? [a.address_1, a.address_2, a.city, a.state].filter(Boolean).join(', ') : '');
+const billingAddress = computed(() => {
+    const line = addressLine(order.value?.addresses?.billing);
+    return line && line !== order.value?.shipping_address ? line : '';
+});
 const actionList = computed(() => {
     const entries = Object.entries(order.value?.actions ?? {}).filter(([action, a]) => a.allowed && (action !== 'cancel' || tenant.can('orders.cancel')));
     return isManual.value ? entries.sort(([a], [b]) => manualActionOrder.indexOf(a) - manualActionOrder.indexOf(b)) : entries;
@@ -293,7 +300,9 @@ async function createReturn() {
                     <div class="flex flex-wrap items-center gap-2">
                         <h1 class="font-mono text-xl font-semibold tracking-tight">Đơn {{ order.external_order_id }}</h1>
                         <Badge :tone="orderStatus[order.status]?.tone" data-testid="order-status">{{ orderStatus[order.status]?.label ?? order.status }}</Badge>
-                        <Badge v-if="isManual && order.payment_status" :tone="paymentStatus[order.payment_status]?.tone" data-testid="payment-status">{{ paymentStatus[order.payment_status]?.label }}</Badge>
+                        <span v-if="order.external_number && order.external_number !== order.external_order_id" class="font-mono text-sm text-muted-foreground" data-testid="external-number">#{{ order.external_number }}</span>
+                        <Badge v-if="(isManual || isWebsite) && order.payment_status" :tone="paymentStatus[order.payment_status]?.tone" data-testid="payment-status">{{ paymentStatus[order.payment_status]?.label }}</Badge>
+                        <Badge v-if="order.deleted_on_channel_at" tone="danger" data-testid="deleted-on-channel">Đã xóa trên website</Badge>
                         <Badge v-if="order.refund_status && refundStatus[order.refund_status]" :tone="refundStatus[order.refund_status]!.tone" data-testid="refund-status">{{ refundStatus[order.refund_status]!.label }}</Badge>
                         <Badge v-if="order.return_state && returnState[order.return_state]" :tone="returnState[order.return_state]!.tone" data-testid="return-state">{{ returnState[order.return_state]!.label }}</Badge>
                         <span v-for="t in order.tags ?? []" :key="t" class="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">#{{ t }}</span>
@@ -374,7 +383,10 @@ async function createReturn() {
                                         <RouterLink v-if="i.variant" :to="`/inventory/sku/${i.variant.id}`" class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-700 hover:text-primary">{{ i.variant.sku }}</RouterLink>
                                         <Badge v-else :tone="mappingStatus[i.mapping_status]?.tone">{{ mappingStatus[i.mapping_status]?.label }}</Badge>
                                     </td>
-                                    <td class="px-4 py-3 text-right font-medium tabular-nums">{{ i.quantity }}</td>
+                                    <td class="px-4 py-3 text-right font-medium tabular-nums">
+                                        {{ i.quantity }}
+                                        <div v-if="i.refunded_quantity" class="text-[11px] font-normal text-rose-600" data-testid="refunded-qty">hoàn {{ i.refunded_quantity }}</div>
+                                    </td>
                                     <td class="px-4 py-3 text-right tabular-nums">{{ formatMoney(i.unit_price) }}</td>
                                     <td class="px-4 py-3 text-right tabular-nums">{{ formatMoney(i.quantity * Number(i.unit_price) - Number(i.discount)) }}</td>
                                     <td class="px-5 py-3 text-xs">
@@ -399,11 +411,14 @@ async function createReturn() {
                         <dl class="grid w-full grid-cols-2 gap-y-1.5 text-sm sm:w-80">
                             <dt class="text-muted-foreground">Tiền hàng</dt><dd class="text-right tabular-nums">{{ formatMoney(order.subtotal) }}</dd>
                             <dt class="text-muted-foreground">Phí vận chuyển</dt><dd class="text-right tabular-nums">{{ formatMoney(order.shipping_fee) }}</dd>
-                            <dt class="text-muted-foreground">Giảm giá</dt><dd class="text-right tabular-nums">−{{ formatMoney(order.discount) }}</dd>
+                            <dt class="text-muted-foreground">Giảm giá<span v-if="order.coupon_codes?.length" class="ml-1 font-mono text-xs" data-testid="coupon-codes">({{ order.coupon_codes.join(', ') }})</span></dt><dd class="text-right tabular-nums">−{{ formatMoney(order.discount) }}</dd>
+                            <template v-if="Number(order.tax_total ?? 0) > 0"><dt class="text-muted-foreground">Thuế</dt><dd class="text-right tabular-nums">{{ formatMoney(order.tax_total ?? 0) }}</dd></template>
+                            <template v-if="Number(order.fee_total ?? 0) !== 0"><dt class="text-muted-foreground">Phí khác</dt><dd class="text-right tabular-nums">{{ formatMoney(order.fee_total ?? 0) }}</dd></template>
                             <template v-if="Number(order.tax_amount ?? 0) > 0">
                                 <dt class="text-muted-foreground">{{ order.prices_include_tax === false ? 'Thuế GTGT' : 'Trong đó thuế GTGT' }} {{ Number(order.tax_rate) }}%</dt><dd class="text-right tabular-nums" data-testid="order-tax">{{ formatMoney(order.tax_amount!) }}</dd>
                             </template>
                             <dt class="mt-1 border-t pt-2 font-semibold">Khách trả</dt><dd class="mt-1 border-t pt-2 text-right text-lg font-bold tabular-nums text-blue-600">{{ formatMoney(order.total) }}</dd>
+                            <template v-if="!isManual && Number(order.refunded_amount ?? 0) > 0"><dt class="text-rose-600">Đã hoàn trên website</dt><dd class="text-right tabular-nums text-rose-600" data-testid="refunded-total">−{{ formatMoney(order.refunded_amount ?? 0) }}</dd></template>
                         </dl>
                     </div>
                     <p v-if="!isManual" class="border-t px-5 py-2 text-xs text-muted-foreground">Số tiền khách trả chưa phải tiền thực nhận: phí sàn, phí thanh toán và đối soát sẽ được tính ở module Tài chính.</p>
@@ -541,14 +556,16 @@ async function createReturn() {
                     </dl>
                     <dl class="space-y-2.5 px-5 py-4 text-sm">
                         <div class="flex gap-3"><UserRound class="mt-0.5 size-4 shrink-0 text-muted-foreground" /><div><dt class="text-xs text-muted-foreground">Người nhận</dt><dd>{{ order.buyer_name ?? '—' }} <span class="text-muted-foreground">{{ order.buyer_phone }}</span></dd></div></div>
-                        <div class="flex gap-3"><MapPin class="mt-0.5 size-4 shrink-0 text-muted-foreground" /><div><dt class="text-xs text-muted-foreground">Địa chỉ</dt><dd>{{ order.shipping_address ?? '—' }}</dd></div></div>
+                        <div v-if="order.buyer_email" class="flex gap-3"><Mail class="mt-0.5 size-4 shrink-0 text-muted-foreground" /><div><dt class="text-xs text-muted-foreground">Email</dt><dd class="break-all" data-testid="buyer-email">{{ order.buyer_email }}</dd></div></div>
+                        <div class="flex gap-3"><MapPin class="mt-0.5 size-4 shrink-0 text-muted-foreground" /><div><dt class="text-xs text-muted-foreground">{{ isWebsite ? 'Địa chỉ giao hàng' : 'Địa chỉ' }}</dt><dd>{{ order.shipping_address ?? '—' }}</dd></div></div>
+                        <div v-if="billingAddress" class="flex gap-3"><MapPin class="mt-0.5 size-4 shrink-0 text-muted-foreground" /><div><dt class="text-xs text-muted-foreground">Địa chỉ thanh toán</dt><dd>{{ billingAddress }}</dd></div></div>
                         <div class="flex gap-3"><Truck class="mt-0.5 size-4 shrink-0 text-muted-foreground" /><div><dt class="text-xs text-muted-foreground">Đơn vị vận chuyển · Mã vận đơn</dt><dd>{{ order.carrier ?? '—' }} · <span class="font-mono text-xs">{{ order.tracking_number ?? '—' }}</span></dd></div></div>
-                        <div v-if="!isManual || order.is_cod" class="flex gap-3"><Wallet class="mt-0.5 size-4 shrink-0 text-muted-foreground" /><div><dt class="text-xs text-muted-foreground">Thanh toán</dt><dd>{{ isManual ? 'Thu hộ (COD) khi giao' : order.is_cod ? 'Thu hộ (COD)' : (order.payment_method ?? 'Đã thanh toán') }}</dd></div></div>
+                        <div v-if="!isManual || order.is_cod" class="flex gap-3"><Wallet class="mt-0.5 size-4 shrink-0 text-muted-foreground" /><div><dt class="text-xs text-muted-foreground">Thanh toán</dt><dd>{{ isManual ? 'Thu hộ (COD) khi giao' : order.is_cod ? 'Thu hộ (COD)' : (order.payment_method ?? 'Đã thanh toán') }}<span v-if="order.transaction_id" class="ml-1 font-mono text-xs text-muted-foreground" data-testid="transaction-id">· GD {{ order.transaction_id }}</span></dd></div></div>
                         <div class="flex gap-3"><Warehouse class="mt-0.5 size-4 shrink-0 text-muted-foreground" /><div><dt class="text-xs text-muted-foreground">Kho xuất</dt><dd>{{ order.warehouse ? `${order.warehouse.code} · ${order.warehouse.name}` : '—' }}</dd></div></div>
                         <div v-if="order.buyer_note" class="flex gap-3"><MessageSquare class="mt-0.5 size-4 shrink-0 text-muted-foreground" /><div><dt class="text-xs text-muted-foreground">Ghi chú của khách</dt><dd class="italic">{{ order.buyer_note }}</dd></div></div>
                         <div v-if="order.cancel_reason" class="flex gap-3"><Ban class="mt-0.5 size-4 shrink-0 text-rose-500" /><div><dt class="text-xs text-muted-foreground">Lý do hủy</dt><dd>{{ order.cancel_reason }}</dd></div></div>
                     </dl>
-                    <p class="border-t px-5 py-2 text-xs text-muted-foreground">{{ isManual ? 'Tên, số điện thoại và địa chỉ được mã hóa khi lưu.' : 'Số điện thoại chỉ lưu dạng che; tên và địa chỉ được mã hóa khi lưu.' }}</p>
+                    <p class="border-t px-5 py-2 text-xs text-muted-foreground">{{ isManual || isWebsite ? 'Tên, số điện thoại, email và địa chỉ được mã hóa khi lưu.' : 'Số điện thoại chỉ lưu dạng che; tên và địa chỉ được mã hóa khi lưu.' }}</p>
                 </Card>
 
                 <Card caps title="Tags · hẹn giao" data-testid="order-meta">
@@ -564,6 +581,22 @@ async function createReturn() {
                     <template v-if="canCreateReturn" #actions>
                         <Button size="sm" variant="outline" data-testid="create-return" @click="openReturn"><Undo2 /> Tạo</Button>
                     </template>
+                    <ul v-if="order.refunds?.length" class="divide-y border-b text-sm" data-testid="website-refunds">
+                        <li v-for="r in order.refunds" :key="r.id" class="px-5 py-3">
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="font-medium">Hoàn trên website</span>
+                                <span class="font-semibold tabular-nums text-rose-600">−{{ formatMoney(r.amount) }}</span>
+                            </div>
+                            <div class="text-xs text-muted-foreground">
+                                {{ r.refunded_at ? formatDateTime(r.refunded_at) : '' }}<template v-if="r.reason"> · {{ r.reason }}</template>
+                                <template v-if="r.lines.length"> · {{ r.lines.map((l) => `${l.quantity} × ${l.name ?? 'sản phẩm'}`).join(', ') }}</template>
+                                <template v-else> · chỉ hoàn tiền</template>
+                            </div>
+                            <RouterLink v-if="r.return" :to="`/returns/${r.return.id}`" class="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                                Phiếu {{ r.return.number }} · {{ returnStatus[r.return.status]?.label ?? r.return.status }}
+                            </RouterLink>
+                        </li>
+                    </ul>
                     <ul v-if="order.returns.length" class="divide-y text-sm">
                         <li v-for="r in order.returns" :key="r.id" class="px-5 py-3">
                             <div class="flex items-center justify-between">
@@ -587,7 +620,7 @@ async function createReturn() {
                             </RouterLink>
                         </li>
                     </ul>
-                    <p v-else class="px-5 py-4 text-sm text-muted-foreground">Chưa có.</p>
+                    <p v-else-if="!order.refunds?.length" class="px-5 py-4 text-sm text-muted-foreground">Chưa có.</p>
                 </Card>
             </div>
         </div>
