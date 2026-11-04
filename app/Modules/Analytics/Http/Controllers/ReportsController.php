@@ -11,6 +11,7 @@ use App\Modules\Analytics\Services\TradeReports;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Tenancy\Support\TenantContext;
+use App\Shared\Support\ReportRange;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -125,7 +126,7 @@ class ReportsController extends Controller
             'q' => ['nullable', 'string', 'max:100'],
             'zero' => ['nullable', 'boolean'],
         ]);
-        $date = isset($data['date']) ? CarbonImmutable::parse($data['date']) : CarbonImmutable::now();
+        $date = isset($data['date']) ? ReportRange::date($data['date']) : ReportRange::now();
 
         return response()->json(['data' => $stock->onHand($date, $this->warehouse($data['warehouse'] ?? null), $data['q'] ?? null, $request->boolean('zero'))]);
     }
@@ -225,11 +226,6 @@ class ReportsController extends Controller
     /** @return array{0: CarbonImmutable, 1: CarbonImmutable} */
     private function range(Request $request): array
     {
-        $data = $request->validate(['from' => ['nullable', 'date'], 'to' => ['nullable', 'date', 'after_or_equal:from']]);
-        $from = isset($data['from']) ? CarbonImmutable::parse($data['from'])->startOfDay() : CarbonImmutable::now()->startOfMonth();
-        $to = isset($data['to']) ? CarbonImmutable::parse($data['to'])->endOfDay() : CarbonImmutable::now()->endOfDay();
-        abort_if($from->diffInDays($to) > 366, 422, 'Khoảng thời gian tối đa 1 năm.');
-
-        return [$from, $to];
+        return ReportRange::fromRequest($request);
     }
 }
