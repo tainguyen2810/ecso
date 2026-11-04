@@ -127,6 +127,13 @@ class WooClient
         return strlen($id) <= 64 ? $id : substr($id, 0, 31).'~'.substr(hash('sha256', $id), 0, 32);
     }
 
+    /**
+     * DNS lookup used by normalizeUrl; tests swap it so they never depend on the runner's DNS.
+     *
+     * @var (\Closure(string): array<int, string>)|null
+     */
+    public static ?\Closure $resolver = null;
+
     public static function host(string $url): string
     {
         return (string) (parse_url($url, PHP_URL_HOST) ?? $url);
@@ -153,7 +160,7 @@ class WooClient
             throw new \InvalidArgumentException('Website phải chạy HTTPS (https://...). WooCommerce chỉ cho kết nối an toàn qua HTTPS.');
         }
         if (! config('marketplaces.woocommerce.allow_private_hosts')) {
-            $ips = filter_var($host, FILTER_VALIDATE_IP) ? [$host] : (gethostbynamel($host) ?: []);
+            $ips = filter_var($host, FILTER_VALIDATE_IP) ? [$host] : (self::$resolver ?? fn (string $h) => gethostbynamel($h) ?: [])($host);
             foreach ($ips as $ip) {
                 if (! filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
                     throw new \InvalidArgumentException('Địa chỉ website trỏ vào mạng nội bộ, không kết nối được.');

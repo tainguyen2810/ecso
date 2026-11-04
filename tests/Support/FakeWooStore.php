@@ -2,6 +2,7 @@
 
 namespace Tests\Support;
 
+use App\Modules\Marketplace\Connectors\WooCommerce\WooClient;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 
@@ -35,6 +36,8 @@ class FakeWooStore
     public function __construct(public string $url = 'https://shop.example.vn', public string $key = 'ck_test', public string $secret = 'cs_test')
     {
         Http::fake(fn (Request $request) => $this->handle($request));
+        // Every made-up store host resolves to a public address, whatever the runner's DNS says about it.
+        WooClient::$resolver = fn (string $host) => ['93.184.216.34'];
     }
 
     public function addSimple(int $id, string $sku, string $name, string $regular, ?string $sale = null, int $stock = 5): void
