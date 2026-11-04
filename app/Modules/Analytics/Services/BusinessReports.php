@@ -57,7 +57,7 @@ class BusinessReports
             ->whereNotIn('orders.status', self::EXCLUDED);
 
         $metrics = 'COUNT(*) as orders, COALESCE(SUM(c.units), 0) as units, COALESCE(SUM(orders.total), 0) as revenue, '
-            .'COALESCE(SUM(orders.subtotal - orders.discount), 0) as goods, COALESCE(SUM(c.cogs), 0) as cogs, COALESCE(SUM(c.missing), 0) as missing';
+            .'COALESCE(SUM(orders.subtotal - orders.discount), 0) as goods, COALESCE(SUM(orders.shipping_fee), 0) as shipping, COALESCE(SUM(c.cogs), 0) as cogs, COALESCE(SUM(c.missing), 0) as missing';
 
         $grouped = match ($by) {
             'channel' => (clone $base)
@@ -99,7 +99,9 @@ class BusinessReports
             'range' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
             'by' => $by,
             'rows' => $rows,
-            'totals' => $totals,
+            // Which date puts an order in the period: 'placed' (ngày đặt). Labels on the pages follow it.
+            'basis' => 'placed',
+            'totals' => [...$totals, 'basis' => 'placed'],
             'excluded' => ['orders' => (int) $cancelled->n, 'revenue' => (float) $cancelled->total],
         ];
     }
@@ -285,6 +287,7 @@ class BusinessReports
             'units' => (int) $r->units,
             'revenue' => round((float) $r->revenue, 2),
             'goods' => round($goods, 2),
+            'shipping' => round((float) $r->shipping, 2),
             'cogs' => round($cogs, 2),
             'gross_profit' => round($goods - $cogs, 2),
             'margin' => $goods > 0 ? round(($goods - $cogs) / $goods * 100, 1) : null,
@@ -301,7 +304,7 @@ class BusinessReports
         $byDay = collect($rows)->keyBy('label');
         $out = [];
         for ($d = $from->startOfDay(); $d->lte($to); $d = $d->addDay()) {
-            $out[] = $byDay->get($d->toDateString()) ?? ['label' => $d->toDateString(), 'kind' => null, 'orders' => 0, 'units' => 0, 'revenue' => 0.0, 'goods' => 0.0, 'cogs' => 0.0, 'gross_profit' => 0.0, 'margin' => null, 'missing_cost_lines' => 0];
+            $out[] = $byDay->get($d->toDateString()) ?? ['label' => $d->toDateString(), 'kind' => null, 'orders' => 0, 'units' => 0, 'revenue' => 0.0, 'goods' => 0.0, 'shipping' => 0.0, 'cogs' => 0.0, 'gross_profit' => 0.0, 'margin' => null, 'missing_cost_lines' => 0];
         }
 
         return $out;

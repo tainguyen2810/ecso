@@ -138,7 +138,8 @@ class OrderReports
     }
 
     /**
-     * Orders placed in the range by where they are in delivery (Sapo "Thông tin giao hàng").
+     * Orders placed in the range by where they are in delivery (Sapo "Thông tin giao hàng"). The groups do not overlap
+     * and together count every order placed in the range.
      *
      * @return array<int, array{key: string, label: string, orders: int}>
      */
@@ -148,15 +149,21 @@ class OrderReports
             'delivered' => ['Đã giao', [OrderStatus::DELIVERED, OrderStatus::COMPLETED]],
             'shipping' => ['Đang giao', [OrderStatus::HANDED_OVER, OrderStatus::IN_TRANSIT]],
             'waiting' => ['Chờ xử lý, chờ lấy hàng', [OrderStatus::UNPAID, OrderStatus::PENDING_CONFIRMATION, OrderStatus::READY_TO_PACK, OrderStatus::PACKED]],
-            'failed' => ['Hủy, hoàn, giao thất bại', [OrderStatus::CANCELLED, OrderStatus::RETURNED, OrderStatus::FAILED_DELIVERY, OrderStatus::RETURN_REQUESTED]],
+            'return_requested' => ['Yêu cầu trả hàng', [OrderStatus::RETURN_REQUESTED]],
+            'failed' => ['Hủy, hoàn, giao thất bại', [OrderStatus::CANCELLED, OrderStatus::RETURNED, OrderStatus::FAILED_DELIVERY]],
+            // Statuses not mapped yet (UNKNOWN_STATUS or a new one), so the groups always add up to every order.
+            'unknown' => ['Trạng thái chưa rõ', []],
         ];
+        $known = array_merge(...array_column($groups, 1));
         $counts = DB::table('orders')->where('tenant_id', $this->tenant())->whereBetween('placed_at', [$from, $to])
             ->groupBy('status')->pluck(DB::raw('COUNT(*)'), 'status');
 
         return collect($groups)->map(fn ($g, $key) => [
             'key' => $key,
             'label' => $g[0],
-            'orders' => (int) collect($g[1])->sum(fn ($s) => (int) ($counts[$s] ?? 0)),
+            'orders' => $key === 'unknown'
+                ? (int) collect($counts)->except($known)->sum()
+                : (int) collect($g[1])->sum(fn ($s) => (int) ($counts[$s] ?? 0)),
         ])->values()->all();
     }
 

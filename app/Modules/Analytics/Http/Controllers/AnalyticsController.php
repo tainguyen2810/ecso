@@ -3,6 +3,7 @@
 namespace App\Modules\Analytics\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Analytics\Services\BusinessReports;
 use App\Modules\Analytics\Services\FinanceReport;
 use App\Modules\Analytics\Services\SalesReport;
@@ -60,6 +61,10 @@ class AnalyticsController extends Controller
     public function stockLedger(Request $request, TenantContext $context, BusinessReports $reports): JsonResponse
     {
         abort_unless($context->can('reports.view') && $context->can('inventory.view'), 403);
+        if ($request->boolean('export')) {
+            config(['ecso.reports.row_limit' => (int) config('ecso.reports.export_row_limit', 50000)]);
+            app(AuditLogger::class)->record('report.exported', null, ['report' => 'stock-ledger', 'filters' => $request->except('export')]);
+        }
         [$from, $to] = $this->range($request);
         $data = $request->validate(['warehouse' => ['nullable', 'string'], 'q' => ['nullable', 'string', 'max:100']]);
         $warehouse = ($data['warehouse'] ?? null) ? Warehouse::query()->where('ulid', $data['warehouse'])->firstOrFail()->id : null;

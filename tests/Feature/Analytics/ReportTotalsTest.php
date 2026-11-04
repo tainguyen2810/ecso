@@ -1,7 +1,10 @@
 <?php
 
+use App\Modules\Audit\Models\AuditLog;
 use App\Modules\Billing\Models\Plan;
 use App\Modules\Billing\Models\Subscription;
+use App\Modules\Orders\Domain\OrderStatus;
+use App\Modules\Orders\Models\Order;
 use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Tenancy\Support\TenantContext;
 
@@ -114,4 +117,39 @@ it('matches % and _ typed in a report search literally', function () {
     $api->getJson('/api/v1/reports/product-sales?q=AO_')->assertOk()->assertJsonCount(1, 'data.rows')->assertJsonPath('data.rows.0.variant.sku', 'AO_01');
     $api->getJson('/api/v1/reports/sales-lines?q=%25')->assertOk()->assertJsonPath('data.totals.lines', 0);
     $api->getJson('/api/v1/reports/stock-detail?q=AO_')->assertOk()->assertJsonCount(1, 'data.rows');
+});
+
+it('exports every row of a cut report and records the export in the audit log', function () {
+    config(['ecso.reports.row_limit' => 1]);
+    [$tenant, $owner] = tenantWithOwner();
+    $variant = makeVariant($tenant, 'AO-01');
+    stockIn($tenant, $variant, 10);
+    foreach ([1, 2] as $qty) {
+        totalsSale($owner, $tenant, [[$variant, $qty, 100000]], ['payments' => [['method' => 'cash', 'amount' => $qty * 100000]]]);
+    }
+    $api = actingInTenant($owner, $tenant);
+
+    $api->getJson('/api/v1/reports/orders')->assertOk()->assertJsonCount(1, 'data.rows')->assertJsonPath('data.truncated', true);
+    $api->getJson('/api/v1/reports/orders?export=1')->assertOk()->assertJsonCount(2, 'data.rows')->assertJsonPath('data.truncated', false);
+
+    $log = AuditLog::query()->where('tenant_id', $tenant->id)->where('action', 'report.exported')->sole();
+    expect($log->actor_user_id)->toBe($owner->id)->and($log->changes['report'])->toBe('orders');
+});
+
+it('splits delivery status into groups that add up to every order, and reports shipping apart from net revenue', function () {
+    [$tenant, $owner] = tenantWithOwner();
+    $variant = makeVariant($tenant, 'AO-01');
+    stockIn($tenant, $variant, 10);
+    totalsSale($owner, $tenant, [[$variant, 1, 100000]], ['shipping_fee' => 30000, 'payments' => [['method' => 'cash', 'amount' => 130000]]]);
+    totalsSale($owner, $tenant, [[$variant, 1, 100000]], ['stage' => 'pending']);
+    $odd = totalsSale($owner, $tenant, [[$variant, 1, 100000]], ['stage' => 'pending']);
+    Order::withoutGlobalScopes()->where('ulid', $odd['id'])->update(['status' => OrderStatus::UNKNOWN_STATUS]);
+
+    $overview = actingInTenant($owner, $tenant)->getJson('/api/v1/reports/overview')->assertOk()->json('data');
+    $delivery = collect($overview['delivery'])->pluck('orders', 'key');
+    expect($delivery->all())->toMatchArray(['delivered' => 1, 'waiting' => 1, 'return_requested' => 0, 'unknown' => 1])
+        ->and($delivery->sum())->toBe(3);
+
+    expect((float) $overview['sales']['shipping'])->toEqual(30000.0)
+        ->and($overview['sales']['basis'])->toBe('placed');
 });
