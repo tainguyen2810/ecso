@@ -57,7 +57,7 @@ interface Summary {
 
 const days = ref(7);
 const orders = ref<Summary | null>(null);
-const stock = ref<{ on_hand: number; inventory_value: string; low_stock: number; out_of_stock: number } | null>(null);
+const stock = ref<{ on_hand: number; inventory_value: string | null; low_stock: number; out_of_stock: number } | null>(null);
 const accounts = ref<MarketplaceAccountData[] | null>(null);
 const best = ref<{ variant: { id: string; sku: string; name: string } | null; units: number }[] | null>(null);
 const lowStock = ref<{ items: { variant_id: string; sku: string; name: string; warehouse: string; available: number; safety_stock: number }[]; total: number } | null>(null);
@@ -123,7 +123,8 @@ const stockBoxes = computed(() => {
         { label: 'SKU dưới tồn an toàn', value: formatNumber(s.low_stock), tone: 'red' as Tone, alert: s.low_stock > 0, to: tenant.can('purchasing.view') ? '/purchasing/reorder' : '/inventory' },
         { label: 'SKU đã hết hàng', value: formatNumber(s.out_of_stock), tone: 'amber' as Tone, alert: false, to: '/inventory' },
         { label: 'Tổng tồn kho', value: formatNumber(s.on_hand), tone: 'slate' as Tone, alert: false, to: '/inventory' },
-        { label: 'Giá trị tồn kho (giá vốn)', value: formatMoney(s.inventory_value), tone: 'slate' as Tone, alert: false, to: '/inventory' },
+        // Hidden without "products.cost.view" (the API sends null).
+        ...(s.inventory_value != null ? [{ label: 'Giá trị tồn kho (giá vốn)', value: formatMoney(s.inventory_value), tone: 'slate' as Tone, alert: false, to: '/inventory' }] : []),
     ];
 });
 

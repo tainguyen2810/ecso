@@ -65,10 +65,15 @@ class AccountService
     public function update(MarketplaceAccount $account, array $data): MarketplaceAccount
     {
         $pricesWereOn = $account->syncs('sync_prices');
+        $ordersWereOn = $account->syncs('sync_orders');
         if (isset($data['settings'])) {
-            $data['settings'] = array_merge((array) $account->settings, array_intersect_key($data['settings'], MarketplaceAccount::SYNC_DEFAULTS));
+            $data['settings'] = array_merge((array) $account->settings, array_intersect_key($data['settings'], MarketplaceAccount::SYNC_DEFAULTS + ['order_sync_interval' => 15]));
             $account->forceFill(['settings' => $data['settings']]);
             unset($data['settings']);
+        }
+        // Turning order sync back on starts from now: orders created while it was off stay on the store.
+        if (! $ordersWereOn && $account->syncs('sync_orders') && $account->marketplace === WooCommerceConnector::MARKETPLACE) {
+            $account->orders_since = now();
         }
         $account->fill($data)->save();
         $this->audit->record('marketplace.updated', $account, $data);

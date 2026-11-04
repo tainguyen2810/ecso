@@ -3,6 +3,7 @@
 namespace App\Modules\Inventory\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Access\Support\DataAccess;
 use App\Modules\Inventory\Http\Controllers\Concerns\ResolvesLines;
 use App\Modules\Inventory\Http\Resources\DocumentResource;
 use App\Modules\Inventory\Models\InventoryAdjustment;
@@ -63,6 +64,7 @@ class AdjustmentController extends Controller
     public function update(Request $request, InventoryAdjustment $adjustment): DocumentResource
     {
         $this->authorize('cancel', $adjustment); // its creator, or an approver
+        app(DataAccess::class)->assertWarehouse($adjustment->warehouse_id);
         $data = $request->validate(['note' => ['nullable', 'string', 'max:1000'], ...$this->adjustmentLineRules()]);
         $this->assertLines($data['lines']);
 
@@ -76,6 +78,7 @@ class AdjustmentController extends Controller
     public function balance(Request $request, InventoryAdjustment $adjustment): DocumentResource
     {
         $this->authorize('cancel', $adjustment);
+        app(DataAccess::class)->assertWarehouse($adjustment->warehouse_id);
         $adjustment = $this->documents->submitDraft($adjustment);
         if ($request->user()->can('approve', $adjustment)) {
             $adjustment = $this->documents->approveAdjustment($adjustment);
@@ -121,6 +124,7 @@ class AdjustmentController extends Controller
     public function approve(Request $request, InventoryAdjustment $adjustment): DocumentResource
     {
         $this->authorize('approve', $adjustment);
+        app(DataAccess::class)->assertWarehouse($adjustment->warehouse_id);
         $note = $request->validate(['note' => ['nullable', 'string', 'max:255']])['note'] ?? null;
 
         return new DocumentResource($this->documents->approveAdjustment($adjustment, $note)->load(self::RELATIONS));
@@ -129,6 +133,7 @@ class AdjustmentController extends Controller
     public function reject(Request $request, InventoryAdjustment $adjustment): DocumentResource
     {
         $this->authorize('approve', $adjustment);
+        app(DataAccess::class)->assertWarehouse($adjustment->warehouse_id);
         $note = $request->validate(['note' => ['required', 'string', 'max:255']])['note'];
 
         return new DocumentResource($this->documents->rejectAdjustment($adjustment, $note)->load(self::RELATIONS));
@@ -137,6 +142,7 @@ class AdjustmentController extends Controller
     public function cancel(InventoryAdjustment $adjustment): DocumentResource
     {
         $this->authorize('cancel', $adjustment);
+        app(DataAccess::class)->assertWarehouse($adjustment->warehouse_id);
 
         return new DocumentResource($this->documents->cancelAdjustment($adjustment)->load(self::RELATIONS));
     }

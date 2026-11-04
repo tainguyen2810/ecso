@@ -12,6 +12,7 @@ use App\Modules\Marketplace\Models\InventorySyncOutbox;
 use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Models\PriceChange;
+use App\Modules\Marketplace\Models\SyncError;
 use App\Modules\Marketplace\Models\WebhookEvent;
 use App\Modules\Marketplace\Services\AccountService;
 use App\Modules\Marketplace\Services\InventorySyncPlanner;
@@ -23,6 +24,7 @@ use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Validation\Rule;
 
 class MarketplaceAccountController extends Controller
 {
@@ -94,7 +96,8 @@ class MarketplaceAccountController extends Controller
             'orders_this_week' => Order::query()->where('marketplace_account_id', $account->id)->where('placed_at', '>=', now()->startOfWeek())->count(),
             'new_products' => $newListings->count($account),
             'pending_prices' => PriceChange::query()->where('marketplace_account_id', $account->id)->where('status', PriceChange::PENDING)->count(),
-            'sync_errors' => (int) $account->push_errors + $failedWebhooks,
+            'sync_errors' => (int) $account->push_errors + $failedWebhooks
+                + SyncError::query()->where('marketplace_account_id', $account->id)->whereNull('resolved_at')->count(),
         ]])->response();
     }
 
@@ -175,6 +178,7 @@ class MarketplaceAccountController extends Controller
             'sync_enabled' => ['sometimes', 'boolean'],
             'settings' => ['sometimes', 'array'],
             ...collect(MarketplaceAccount::SETTING_KEYS)->mapWithKeys(fn ($k) => ["settings.{$k}" => ['sometimes', 'boolean']])->all(),
+            'settings.order_sync_interval' => ['sometimes', 'integer', Rule::in(MarketplaceAccount::ORDER_SYNC_INTERVALS)],
         ]);
         if (isset($data['warehouse_id'])) {
             $data['warehouse_id'] = Warehouse::query()->where('ulid', $data['warehouse_id'])->where('status', 'active')->firstOrFail()->id;

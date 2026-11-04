@@ -286,7 +286,7 @@ const pickQ = ref('');
 const pickRows = ref<Variant[]>([]);
 const picked = ref<Map<string, Variant>>(new Map());
 async function loadPick() {
-    const { data } = await api.get('/variants', { params: { q: pickQ.value || undefined, warehouse: form.warehouse_id || undefined } });
+    const { data } = await api.get('/variants', { params: { q: pickQ.value || undefined, warehouse: form.warehouse_id || undefined, sellable: 1 } });
     pickRows.value = data.data;
 }
 let pickTimer: ReturnType<typeof setTimeout> | undefined;

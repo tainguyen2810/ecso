@@ -26,6 +26,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $delivered_at
  * @property Carbon|null $completed_at
  * @property Carbon|null $cancelled_at
+ * @property Carbon|null $deleted_on_channel_at
  * @property Carbon|null $packing_slip_printed_at
  * @property Carbon|null $deliver_on
  * @property array<int, string>|null $tags
@@ -66,6 +67,11 @@ class Order extends Model
             'buyer_name' => 'encrypted',
             'shipping_address' => 'encrypted',
             'buyer_phone' => 'encrypted',
+            'buyer_email' => 'encrypted',
+            'addresses' => 'encrypted:array',
+            'tax_total' => 'decimal:2',
+            'fee_total' => 'decimal:2',
+            'coupon_codes' => 'array',
             'paid_amount' => 'decimal:2',
             'refunded_amount' => 'decimal:2',
             'is_cod' => 'boolean',
@@ -86,6 +92,7 @@ class Order extends Model
             'delivered_at' => 'datetime',
             'completed_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'deleted_on_channel_at' => 'datetime',
             'packing_slip_printed_at' => 'datetime',
             'raw' => 'array',
             'tags' => 'array',
@@ -103,6 +110,12 @@ class Order extends Model
     public function isManual(): bool
     {
         return $this->marketplace === self::SOURCE_MANUAL;
+    }
+
+    /** Orders whose buyer is the seller's own customer (manual sales, own website): full contact is kept and shown. */
+    public function ownsCustomerData(): bool
+    {
+        return $this->isManual() || $this->marketplace === 'woocommerce';
     }
 
     /** Amount still to collect from the buyer (manual orders). */

@@ -15,7 +15,7 @@ class StockTransferLine extends Model
 
     protected function casts(): array
     {
-        return ['quantity' => 'integer'];
+        return ['quantity' => 'integer', 'received_qty' => 'integer'];
     }
 
     /** @return BelongsTo<ProductVariant, $this> */

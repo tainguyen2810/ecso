@@ -23,6 +23,8 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant', 'idempotent'])->group(f
     Route::post('products/import', [ProductTransferController::class, 'import'])->middleware('throttle:10,1,catalog.products.import');
     Route::post('products/bulk-status', [ProductController::class, 'bulkStatus']);
     Route::post('products/bulk-delete', [ProductController::class, 'bulkDelete']);
+    Route::post('products/{product}/restore', [ProductController::class, 'restore']);
+    Route::get('products/barcode-suggestion', [ProductController::class, 'barcodeSuggestion']);
     Route::get('products/tags', [ProductController::class, 'tags']);
     Route::get('variants', [ProductController::class, 'variants']);
     Route::apiResource('products', ProductController::class);

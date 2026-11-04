@@ -63,6 +63,7 @@ class OrderQuery
         if ($q = trim((string) ($filters['q'] ?? ''))) {
             $phoneHash = PhoneNumber::hash(PhoneNumber::normalize($q)) ?? '-';
             $query->where(fn (Builder $w) => $w->where('external_order_id', 'like', "%{$q}%")
+                ->orWhere('external_number', $q)
                 ->orWhere('tracking_number', $q)
                 ->orWhere('buyer_phone_hash', $phoneHash)
                 ->orWhereHas('customer', fn ($c) => $c->where('name', 'like', "%{$q}%")->orWhere('phone_hash', $phoneHash))

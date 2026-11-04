@@ -23,7 +23,7 @@ class ReorderController extends Controller
             'cover_days' => ['nullable', 'integer', 'min:1', 'max:180'],
             'lookback_days' => ['nullable', 'integer', 'min:7', 'max:180'],
         ]);
-        $warehouse = ($data['warehouse_id'] ?? null) ? $this->findWarehouse($data['warehouse_id'])
+        $warehouse = ($data['warehouse_id'] ?? null) ? $this->findWarehouse($data['warehouse_id'], assigned: false)
             : Warehouse::query()->where('is_default', true)->first() ?? Warehouse::query()->orderBy('id')->firstOrFail();
         $cover = (int) ($data['cover_days'] ?? 14);
         $lookback = (int) ($data['lookback_days'] ?? 30);

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Bookmark, Boxes, ChevronDown, ChevronRight, Columns3, Download, FileSpreadsheet, ImageIcon, Package, Plus, Printer, Search, SlidersHorizontal, Tags, Upload, X } from 'lucide-vue-next';
+import { Bookmark, Boxes, ChevronDown, ChevronRight, Columns3, Download, FileSpreadsheet, ImageIcon, Package, Plus, Printer, RotateCcw, Search, SlidersHorizontal, Tags, Upload, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import Tabs from '../../components/Tabs.vue';
@@ -45,13 +45,16 @@ const filters = reactive({
     type: q('type'),
     created_from: q('created_from'),
     created_to: q('created_to'),
+    stock: q('stock'),
     sort: q('sort') || 'newest',
     page: 1,
 });
-const moreFilters = ref(!!(filters.type || filters.tag || filters.created_from || filters.created_to));
-const activeExtra = computed(() => [filters.type, filters.tag, filters.created_from, filters.created_to].filter(Boolean).length);
+const moreFilters = ref(!!(filters.type || filters.tag || filters.stock || filters.created_from || filters.created_to));
+const activeExtra = computed(() => [filters.type, filters.tag, filters.stock, filters.created_from, filters.created_to].filter(Boolean).length);
+/** "Đã xóa" tab: deleted products, which can be restored. */
+const trashed = computed(() => filters.status === 'trashed');
 function clearExtra() {
-    Object.assign(filters, { type: '', tag: '', created_from: '', created_to: '' });
+    Object.assign(filters, { type: '', tag: '', stock: '', created_from: '', created_to: '' });
 }
 const expanded = ref<Set<string>>(new Set());
 const selected = ref<Set<string>>(new Set());
@@ -83,7 +86,7 @@ async function load() {
         const same = key(query) === key(route.query);
         if (!same && route.name === 'products') router.replace({ query });
         const { data } = await api.get('/products', {
-            params: { ...query, status: filters.status === 'all' ? undefined : filters.status, sort: filters.sort, page },
+            params: { ...query, status: filters.status === 'all' || trashed.value ? undefined : filters.status, trashed: trashed.value ? 1 : undefined, sort: filters.sort, page },
         });
         products.value = data.data;
         meta.value = data.meta;
@@ -109,7 +112,7 @@ watch(() => filters.q, () => {
     timer = setTimeout(() => ((filters.page = 1), load()), 250);
 });
 watch(
-    () => [filters.status, filters.category, filters.type, filters.brand, filters.tag, filters.created_from, filters.created_to, filters.sort],
+    () => [filters.status, filters.category, filters.type, filters.brand, filters.tag, filters.created_from, filters.created_to, filters.stock, filters.sort],
     () => ((filters.page = 1), load()),
 );
 
@@ -122,6 +125,20 @@ function priceRange(p: Product): string {
     if (!prices.length) return '—';
     const [min, max] = [Math.min(...prices), Math.max(...prices)];
     return min === max ? formatMoney(min) : `${formatMoney(min)} – ${formatMoney(max)}`;
+}
+
+const restoring = ref<string | null>(null);
+async function restore(p: Product) {
+    restoring.value = p.id;
+    try {
+        await api.post(`/products/${p.id}/restore`);
+        toast.success(`Đã khôi phục ${p.name}.`);
+        await load();
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    } finally {
+        restoring.value = null;
+    }
 }
 
 async function bulkStatus(status: string) {
@@ -189,7 +206,7 @@ type ColumnKey = keyof typeof columnLabels;
 const columns = ref<Record<ColumnKey, boolean>>({ category: true, price: true, on_hand: true, available: true, status: true, created: true, ...readStore('columns', {}) });
 watch(columns, (v) => writeStore('columns', v), { deep: true });
 const columnsOpen = ref(false);
-const visibleCount = computed(() => Object.values(columns.value).filter(Boolean).length + (columns.value.category ? 1 : 0) + 2 + (canManage.value ? 1 : 0));
+const visibleCount = computed(() => Object.values(columns.value).filter(Boolean).length + (columns.value.category ? 1 : 0) + 2 + (canManage.value && !trashed.value ? 1 : 0));
 
 const allSelected = computed(() => products.value.length > 0 && products.value.every((p) => selected.value.has(p.id)));
 function toggleAll() {
@@ -219,6 +236,7 @@ function toggleAll() {
                     { value: 'active', label: 'Đang bán' },
                     { value: 'inactive', label: 'Ngừng bán' },
                     { value: 'archived', label: 'Lưu trữ' },
+                    { value: 'trashed', label: 'Đã xóa' },
                 ]"
             />
         </div>
@@ -242,6 +260,8 @@ function toggleAll() {
                     { value: 'name', label: 'Tên A → Z' },
                     { value: 'available', label: 'Tồn khả dụng tăng dần' },
                     { value: '-available', label: 'Tồn khả dụng giảm dần' },
+                    { value: 'price', label: 'Giá bán tăng dần' },
+                    { value: '-price', label: 'Giá bán giảm dần' },
                 ]"
             />
             <div class="relative">
@@ -269,6 +289,21 @@ function toggleAll() {
             <label class="grid gap-1">
                 <span class="text-xs text-muted-foreground">Tag</span>
                 <Select v-model="filters.tag" class="w-40" aria-label="Tag" :options="[{ value: '', label: 'Mọi tag' }, ...tags.map((t) => ({ value: t, label: t }))]" />
+            </label>
+            <label class="grid gap-1">
+                <span class="text-xs text-muted-foreground">Tồn kho</span>
+                <Select
+                    v-model="filters.stock"
+                    class="w-44"
+                    aria-label="Tình trạng tồn"
+                    data-testid="stock-filter"
+                    :options="[
+                        { value: '', label: 'Mọi tình trạng' },
+                        { value: 'in', label: 'Còn hàng' },
+                        { value: 'low', label: 'Sắp hết (≤ tồn an toàn)' },
+                        { value: 'out', label: 'Hết hàng' },
+                    ]"
+                />
             </label>
             <label class="grid gap-1">
                 <span class="text-xs text-muted-foreground">Tạo từ ngày</span>
@@ -308,7 +343,7 @@ function toggleAll() {
             <table class="w-full text-sm" data-testid="product-table">
                 <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                     <tr>
-                        <th v-if="canManage" class="w-10 px-4 py-2.5"><input type="checkbox" :checked="allSelected" aria-label="Chọn tất cả" @change="toggleAll" /></th>
+                        <th v-if="canManage && !trashed" class="w-10 px-4 py-2.5"><input type="checkbox" :checked="allSelected" aria-label="Chọn tất cả" @change="toggleAll" /></th>
                         <th class="w-14 py-2.5 pl-4 font-medium">Ảnh</th>
                         <th class="px-4 py-2.5 font-medium">Sản phẩm</th>
                         <th v-if="columns.category" class="px-4 py-2.5 font-medium">Danh mục</th>
@@ -323,7 +358,7 @@ function toggleAll() {
                 <tbody class="divide-y">
                     <template v-for="p in products" :key="p.id">
                         <tr class="hover:bg-muted/30">
-                            <td v-if="canManage" class="px-4 py-3"><input type="checkbox" :checked="selected.has(p.id)" :aria-label="`Chọn ${p.name}`" @change="toggle(selected, p.id)" /></td>
+                            <td v-if="canManage && !trashed" class="px-4 py-3"><input type="checkbox" :checked="selected.has(p.id)" :aria-label="`Chọn ${p.name}`" @change="toggle(selected, p.id)" /></td>
                             <td class="py-3 pl-4">
                                 <img v-if="p.images?.length" :src="p.images[0]!.url" alt="" class="size-10 rounded border object-cover" />
                                 <span v-else class="flex size-10 items-center justify-center rounded border bg-muted/50 text-muted-foreground"><ImageIcon class="size-4" /></span>
@@ -335,7 +370,8 @@ function toggleAll() {
                                         <ChevronRight v-else class="size-4" />
                                     </button>
                                     <div class="min-w-0">
-                                        <RouterLink :to="`/products/${p.id}`" class="font-medium text-primary hover:underline">{{ p.name }}</RouterLink>
+                                        <span v-if="trashed" class="font-medium">{{ p.name }}</span>
+                                        <RouterLink v-else :to="`/products/${p.id}`" class="font-medium text-primary hover:underline">{{ p.name }}</RouterLink>
                                         <Badge v-if="p.type === 'combo'" class="ml-1.5">Combo</Badge>
                                         <p class="truncate text-xs text-muted-foreground">
                                             {{ p.variants_count }} biến thể ·
@@ -353,7 +389,13 @@ function toggleAll() {
                             <td v-if="columns.on_hand" class="px-4 py-3 text-center tabular-nums">
                                 {{ formatNumber(p.stock?.on_hand ?? 0) }}<span class="block text-[11px] text-muted-foreground">({{ p.variants_count }} phiên bản)</span>
                             </td>
-                            <td v-if="columns.status" class="px-4 py-3"><Badge :tone="statusTone[p.status]">{{ statusLabels[p.status] }}</Badge></td>
+                            <td v-if="columns.status" class="px-4 py-3">
+                                <div v-if="trashed" class="flex items-center gap-2">
+                                    <Badge tone="danger">Đã xóa</Badge>
+                                    <Button v-if="canManage" size="sm" variant="outline" :disabled="restoring === p.id" :data-testid="`restore-${p.id}`" @click="restore(p)"><RotateCcw /> Khôi phục</Button>
+                                </div>
+                                <Badge v-else :tone="statusTone[p.status]">{{ statusLabels[p.status] }}</Badge>
+                            </td>
                             <td v-if="columns.created" class="whitespace-nowrap px-4 py-3 text-muted-foreground">{{ formatDate(p.created_at) }}</td>
                         </tr>
                         <tr v-if="expanded.has(p.id)" class="bg-muted/20">

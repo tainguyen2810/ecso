@@ -22,6 +22,7 @@ import type { Ref as Named, StockRow, StockSummary, Warehouse } from '@/shared/t
 const tenant = useTenantStore();
 const toast = useToast();
 const canConfigure = computed(() => tenant.can('inventory.adjust.approve'));
+const canCost = computed(() => tenant.can('products.cost.view'));
 
 const warehouses = ref<Warehouse[]>([]);
 const categories = ref<Named[]>([]);
@@ -154,7 +155,7 @@ const isLow = (row: StockRow) => row.available > 0 && row.available <= row.safet
                         <th class="px-4 py-2.5 text-right font-medium" :title="filters.warehouse ? 'Bấm để sửa' : 'Chọn một kho để sửa'">Tồn an toàn</th>
                         <th class="px-4 py-2.5 font-medium">Ngày khởi tạo</th>
                         <th class="px-4 py-2.5 text-right font-medium">Giá bán lẻ</th>
-                        <th class="px-4 py-2.5 text-right font-medium">Giá vốn</th>
+                        <th v-if="canCost" class="px-4 py-2.5 text-right font-medium">Giá vốn</th>
                         <th class="px-4 py-2.5 text-right font-medium">Giá bán buôn</th>
                     </tr>
                 </thead>
@@ -193,7 +194,7 @@ const isLow = (row: StockRow) => row.available > 0 && row.available <= row.safet
                         </td>
                         <td class="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{{ row.created_at ? formatDate(row.created_at) : '—' }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(row.ref_price ?? 0) }}</td>
-                        <td class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(row.cost_price) }}</td>
+                        <td v-if="canCost" class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(row.cost_price) }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(row.wholesale_price ?? 0) }}</td>
                     </tr>
                 </tbody>

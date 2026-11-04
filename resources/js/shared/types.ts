@@ -27,6 +27,8 @@ export interface TenantContextData {
     role: { key: string; name: string };
     permissions: string[];
     entitlements: Record<string, Entitlement>;
+    /** Warehouses this member moves stock in; null = every warehouse. */
+    warehouses?: string[] | null;
 }
 
 export interface Role {
@@ -45,6 +47,8 @@ export interface Member {
     status: 'active' | 'disabled';
     joined_at: string | null;
     is_me: boolean;
+    /** Warehouses the member moves stock in; empty = every warehouse. */
+    warehouses?: string[];
 }
 
 export interface Invitation {
@@ -77,6 +81,12 @@ export interface Variant {
     components?: { variant: { id: string; sku: string; name: string }; quantity: number }[];
     cost_price?: string;
     weight_gram: number | null;
+    supplier?: Ref | null;
+    supplier_sku?: string | null;
+    length_mm?: number | null;
+    width_mm?: number | null;
+    height_mm?: number | null;
+    sellable?: boolean;
     status?: string;
     product?: Ref & { image?: string | null };
     stock?: StockFigures;
@@ -155,6 +165,9 @@ export interface Movement {
 }
 
 export interface DocumentLine {
+    /** Transfer lines: id used when receiving. */
+    line_id?: number;
+    received_qty?: number;
     variant: { id: string; sku: string; name: string };
     quantity: number;
     unit_cost?: string;
@@ -170,6 +183,8 @@ export interface DocumentLine {
 }
 
 export interface InventoryDocument {
+    /** Transfers received short: the pending "thất lạc" adjustment. */
+    shortage?: { ulid: string; number: string; status: string } | null;
     id: string;
     kind: 'receipt' | 'adjustment' | 'transfer';
     number: string;
@@ -234,7 +249,16 @@ export interface OrderSummary {
     handed_over_at: string | null;
     cancelled_at: string | null;
     cancel_reason: string | null;
+    deleted_on_channel_at?: string | null;
     external_updated_at: string | null;
+    /** WooCommerce (the seller's own website): full contact and payment details. */
+    external_number?: string | null;
+    buyer_email?: string | null;
+    addresses?: { billing?: Record<string, string>; shipping?: Record<string, string> } | null;
+    tax_total?: string;
+    fee_total?: string;
+    coupon_codes?: string[];
+    transaction_id?: string | null;
     flags: { shortage: boolean; unmapped: boolean; overdue: boolean; due_soon: boolean; printed: boolean };
     sync_warning: string | null;
     warehouse?: { id: string; code: string; name: string } | null;
@@ -252,8 +276,10 @@ export interface OrderItemDetail {
     quantity: number;
     /** Shipped and not yet covered by a return. */
     returnable: number;
+    refunded_quantity?: number;
     unit_price: string;
     discount: string;
+    tax?: string;
     mapping_status: string;
     listing_id: string | null;
     variant: { id: string; sku: string; name: string } | null;
@@ -275,6 +301,18 @@ export interface OrderDetail extends OrderSummary {
     created_by: string | null;
     exchanged_from?: { id: string; number: string; credit: string; order: { id: string; external_order_id: string } }[];
     customer_stats: { orders_count: number; total_spent: string; debt: string; returns_count: number; failed_deliveries: number } | null;
+    refunds?: OrderRefundData[];
+}
+
+/** A refund made on the store (WooCommerce). */
+export interface OrderRefundData {
+    id: string;
+    external_refund_id: string;
+    amount: string;
+    reason: string | null;
+    refunded_at: string | null;
+    lines: { name: string | null; quantity: number; amount: string }[];
+    return: { id: string; number: string; status: string } | null;
 }
 
 export interface OrderPaymentData {
@@ -468,6 +506,52 @@ export interface MarketplaceSyncSettings {
     sync_stock: boolean;
     sync_prices: boolean;
     import_new_products: boolean;
+    push_status?: boolean;
+}
+
+export interface WebhookHealth {
+    ok: boolean;
+    checked_at: string;
+    missing: string[];
+    reactivated: string[];
+    error: string | null;
+}
+
+export interface SyncRunData {
+    id: string;
+    account: { id: string; name: string; marketplace: string } | null;
+    resource: string;
+    trigger: string;
+    status: 'running' | 'ok' | 'partial' | 'failed';
+    window_from: string | null;
+    window_to: string | null;
+    pages: number;
+    counts: Record<string, number>;
+    error: string | null;
+    started_at: string;
+    finished_at: string | null;
+    duration_ms: number | null;
+}
+
+export interface SyncErrorData {
+    id: string;
+    account: { id: string; name: string; marketplace: string } | null;
+    resource: string;
+    external_id: string;
+    category: 'api' | 'auth' | 'not_found' | 'data' | 'conflict';
+    message: string;
+    attempts: number;
+    first_seen_at: string;
+    last_seen_at: string;
+    resolved_at: string | null;
+    resolution: string | null;
+}
+
+export interface StatusMapData {
+    defaults: Record<string, string>;
+    custom: Record<string, string>;
+    seen: { raw_status: string; orders: number; unknown: number }[];
+    statuses: string[];
 }
 
 export interface WooConnectChecks {
@@ -549,6 +633,9 @@ export interface MarketplaceAccountData {
     settings?: MarketplaceSyncSettings;
     warehouse: { id: string; code: string; name: string } | null;
     connected_at: string | null;
+    orders_since?: string | null;
+    order_sync_interval?: number;
+    webhook_health?: WebhookHealth | null;
     last_synced_at: string | null;
     last_error: string | null;
     circuit_open: boolean;

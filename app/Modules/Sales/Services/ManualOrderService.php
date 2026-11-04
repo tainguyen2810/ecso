@@ -333,6 +333,8 @@ class ManualOrderService
     private function replaceItems(Order $order, array $lines): void
     {
         $variants = ProductVariant::query()->with('product')->whereIn('ulid', collect($lines)->pluck('variant_id')->filter())->get()->keyBy('ulid');
+        // A stopped SKU (Ngừng bán / Lưu trữ) cannot be added; lines already on the order may stay when it is edited.
+        $already = $order->items()->whereNotNull('product_variant_id')->pluck('product_variant_id')->map(fn ($id) => (int) $id)->all();
 
         $order->items()->delete();
         foreach (array_values($lines) as $i => $line) {
@@ -359,6 +361,9 @@ class ManualOrderService
             }
 
             $variant = $variants[$line['variant_id']] ?? throw ValidationException::withMessages(["lines.{$i}.variant_id" => 'SKU không tồn tại.']);
+            if (! $variant->isSellable() && ! in_array($variant->id, $already, true)) {
+                throw ValidationException::withMessages(["lines.{$i}.variant_id" => "SKU {$variant->sku} đang ngừng bán."]);
+            }
             $price = bcadd((string) ($line['unit_price'] ?? $variant->ref_price), '0', 2);
             $discount = bcadd((string) ($line['discount'] ?? 0), '0', 2);
             if (bccomp($discount, bcmul($price, (string) $line['quantity'], 2), 2) > 0) {

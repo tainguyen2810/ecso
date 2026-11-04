@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { AlertTriangle, ChevronLeft, Link2, PackagePlus, RefreshCw, Send, ShoppingCart, Tag, Unplug } from 'lucide-vue-next';
+import { AlertTriangle, ChevronLeft, CircleCheck, History, Link2, ListChecks, PackagePlus, RefreshCw, Send, ShoppingCart, Tag, Unplug, Webhook } from 'lucide-vue-next';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import FormField from '@/shared/ui/FormField.vue';
+import Input from '@/shared/ui/Input.vue';
 import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
@@ -17,7 +18,8 @@ import { api, ApiError } from '@/shared/lib/api';
 import { formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
-import type { MarketplaceAccountData, MarketplaceSyncSettings, NewListingData, PendingPriceChange, Warehouse } from '@/shared/types';
+import { orderStatus } from '../orders/labels';
+import type { MarketplaceAccountData, MarketplaceSyncSettings, NewListingData, PendingPriceChange, StatusMapData, Warehouse } from '@/shared/types';
 
 /** Settings page of a connected WooCommerce store: sync switches, warehouse, new store products and website prices waiting for approval. */
 const route = useRoute();
@@ -30,6 +32,8 @@ const overview = ref({ orders_this_week: 0, new_products: 0, pending_prices: 0, 
 const pending = ref<NewListingData[]>([]);
 const prices = ref<PendingPriceChange[]>([]);
 const warehouses = ref<Warehouse[]>([]);
+const statusMap = ref<StatusMapData | null>(null);
+const mapDraft = ref<Record<string, string>>({});
 const loading = ref(true);
 const loadError = ref<string | null>(null);
 const busy = ref<string | null>(null);
@@ -46,6 +50,7 @@ async function load() {
             api.get('/warehouses'),
             api.get(`/marketplace-accounts/${id}/price-changes`),
         ]);
+        api.get(`/marketplace-accounts/${id}/status-map`).then(({ data }) => setStatusMap(data.data)).catch(() => {});
         account.value = a.data.data;
         overview.value = a.data.overview;
         pending.value = p.data.data;
@@ -76,7 +81,62 @@ const switches: { key: keyof MarketplaceSyncSettings; label: string; hint: strin
     { key: 'sync_stock', label: 'Tồn kho ECSO lên Woo', hint: 'Số có thể bán của kho bên dưới' },
     { key: 'sync_prices', label: 'Giá hai chiều', hint: 'Theo nguồn giá từng sản phẩm; giá khuyến mãi Woo là giá bán thực tế' },
     { key: 'import_new_products', label: 'Sản phẩm mới trên Woo', hint: 'Vào danh sách chờ duyệt' },
+    { key: 'push_status', label: 'Trạng thái đơn hai chiều', hint: 'Xác nhận, đóng gói, bàn giao, hủy trong ECSO được ghi lên website. Tắt: chỉ website → ECSO' },
 ];
+
+const intervals = [5, 15, 30].map((m) => ({ value: String(m), label: `${m} phút` }));
+const setSyncInterval = (value: string | undefined) => run('interval', async () => {
+    const { data } = await api.patch(`/marketplace-accounts/${account.value!.id}`, { settings: { order_sync_interval: Number(value) } });
+    account.value = { ...account.value!, order_sync_interval: data.data.order_sync_interval };
+    return `ECSO sẽ đối soát đơn với website mỗi ${data.data.order_sync_interval} phút.`;
+});
+const syncOrders = () => run('sync-orders', async () => {
+    const { data } = await api.post(`/marketplace-accounts/${account.value!.id}/sync-orders`);
+    const c = data.data.counts as Record<string, number>;
+    await load();
+    return `Đã đối soát: ${formatNumber(c.created ?? 0)} đơn mới, ${formatNumber(c.updated ?? 0)} đơn cập nhật${c.failed ? `, ${formatNumber(c.failed)} đơn lỗi` : ''}.`;
+});
+const checkWebhooks = () => run('webhooks', async () => {
+    const { data } = await api.post(`/marketplace-accounts/${account.value!.id}/check-webhooks`);
+    account.value = { ...account.value!, webhook_health: data.data };
+    return data.data.ok ? 'Webhook trên website đang hoạt động.' : undefined;
+});
+const topicLabels: Record<string, string> = {
+    'order.created': 'Đơn mới', 'order.updated': 'Đơn cập nhật', 'order.deleted': 'Đơn bị xóa', 'order.restored': 'Đơn khôi phục',
+    'product.created': 'Sản phẩm mới', 'product.updated': 'Sản phẩm sửa', 'product.deleted': 'Sản phẩm xóa',
+};
+
+function setStatusMap(m: StatusMapData) {
+    statusMap.value = m;
+    mapDraft.value = { ...m.custom };
+}
+/** Raw statuses to show: the ones orders came with, the store's own entries and the shared defaults. */
+const mapRows = computed(() => {
+    const m = statusMap.value;
+    if (!m) return [];
+    const raws = new Set([...m.seen.map((x) => x.raw_status), ...Object.keys(m.custom), ...Object.keys(m.defaults)]);
+    return [...raws].sort((a, b) => (m.seen.find((x) => x.raw_status === b)?.unknown ?? 0) - (m.seen.find((x) => x.raw_status === a)?.unknown ?? 0) || a.localeCompare(b)).map((raw) => ({
+        raw,
+        fallback: m.defaults[raw] ?? null,
+        seen: m.seen.find((x) => x.raw_status === raw) ?? null,
+    }));
+});
+const newRaw = ref('');
+const saveMap = () => run('status-map', async () => {
+    const custom = statusMap.value?.custom ?? {};
+    const map: Record<string, string | null> = {};
+    for (const [raw, status] of Object.entries(mapDraft.value)) if (status && status !== custom[raw]) map[raw] = status;
+    for (const raw of Object.keys(custom)) if (!mapDraft.value[raw]) map[raw] = null;
+    const { data } = await api.put(`/marketplace-accounts/${account.value!.id}/status-map`, { map });
+    setStatusMap(data.data);
+    return data.data.orders_moved ? `Đã lưu ánh xạ và chuyển ${formatNumber(data.data.orders_moved)} đơn đang chưa ánh xạ.` : 'Đã lưu ánh xạ trạng thái.';
+});
+function addRaw() {
+    const raw = newRaw.value.trim().toLowerCase().replace(/^wc-/, '');
+    if (!raw || !statusMap.value) return;
+    if (!statusMap.value.seen.some((x) => x.raw_status === raw)) statusMap.value.seen.push({ raw_status: raw, orders: 0, unknown: 0 });
+    newRaw.value = '';
+}
 
 const setSwitch = (key: keyof MarketplaceSyncSettings, value: boolean) => run(`set-${key}`, async () => {
     const { data } = await api.patch(`/marketplace-accounts/${account.value!.id}`, { settings: { [key]: value } });
@@ -150,6 +210,7 @@ const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].
                 </div>
             </div>
             <div v-if="canEdit && account.status === 'connected'" class="flex flex-wrap gap-2">
+                <Button variant="outline" :loading="busy === 'sync-orders'" data-testid="woo-sync-orders" @click="syncOrders"><ShoppingCart /> Đồng bộ đơn ngay</Button>
                 <Button variant="outline" :loading="busy === 'sync'" @click="resync"><RefreshCw /> Lấy lại sản phẩm</Button>
                 <Button variant="outline" :loading="busy === 'push'" @click="pushStock"><Send /> Đẩy tồn kho</Button>
                 <Button variant="outline" class="text-destructive" :loading="busy === 'disconnect'" @click="disconnect"><Unplug /> Ngắt kết nối</Button>
@@ -163,7 +224,7 @@ const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].
                 <StatTile :icon="Link2" label="Sản phẩm đã liên kết" :value="`${formatNumber(account.stats?.mapped ?? 0)} / ${formatNumber(account.stats?.listings ?? 0)}`" :to="`/marketplaces/${account.id}/listings`" />
                 <StatTile :icon="PackagePlus" label="Chờ duyệt (SP mới)" :value="formatNumber(overview.new_products)" :tone="overview.new_products ? 'amber' : 'slate'" />
                 <StatTile :icon="ShoppingCart" label="Đơn tuần này" :value="formatNumber(overview.orders_this_week)" tone="green" />
-                <StatTile :icon="AlertTriangle" label="Lỗi đồng bộ" :value="formatNumber(overview.sync_errors)" :tone="overview.sync_errors ? 'red' : 'slate'" />
+                <StatTile :icon="AlertTriangle" label="Lỗi đồng bộ" :value="formatNumber(overview.sync_errors)" :tone="overview.sync_errors ? 'red' : 'slate'" :to="`/marketplaces/sync?account=${account.id}`" />
             </div>
         </Card>
 
@@ -180,6 +241,16 @@ const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].
                         :data-testid="`woo-switch-${s.key}`"
                         @update:model-value="(v: boolean) => setSwitch(s.key, v)"
                     />
+                </div>
+                <div class="grid gap-4 border-t px-5 py-4 sm:grid-cols-2">
+                    <FormField label="Đối soát đơn với website mỗi">
+                        <Select :model-value="String(account.order_sync_interval ?? 15)" :disabled="!canEdit" :options="intervals" data-testid="woo-interval" @update:model-value="setSyncInterval" />
+                    </FormField>
+                    <div class="text-sm">
+                        <p class="mb-1.5 font-medium">Đồng bộ đơn từ</p>
+                        <p class="text-muted-foreground" data-testid="woo-orders-since">{{ account.orders_since ? formatDateTime(account.orders_since) : '—' }}</p>
+                        <p class="text-xs text-muted-foreground">Đơn tạo trước mốc này không vào ECSO.</p>
+                    </div>
                 </div>
                 <div class="border-t px-5 py-4">
                     <FormField label="Kho trừ hàng cho đơn Woo">
@@ -214,6 +285,66 @@ const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].
                     </li>
                 </ul>
                 <p class="border-t px-5 py-3 text-xs text-muted-foreground">Giá khuyến mãi (nếu có) được dùng làm giá bán khi tạo sản phẩm.</p>
+            </Card>
+        </div>
+
+        <div class="mt-4 grid gap-4 lg:grid-cols-2">
+            <Card title="Webhook trên website" description="Woo tự tắt webhook sau nhiều lần gửi lỗi; ECSO kiểm tra mỗi giờ và bật lại." data-testid="woo-webhooks">
+                <template v-if="canEdit && account.status === 'connected'" #actions>
+                    <Button size="sm" variant="outline" :loading="busy === 'webhooks'" data-testid="woo-check-webhooks" @click="checkWebhooks"><Webhook /> Kiểm tra ngay</Button>
+                </template>
+                <div class="space-y-2 px-5 py-4 text-sm">
+                    <p v-if="!account.webhook_health" class="text-muted-foreground">Chưa kiểm tra lần nào.</p>
+                    <template v-else>
+                        <p class="flex items-center gap-2">
+                            <CircleCheck v-if="account.webhook_health.ok" class="size-4 text-emerald-600" /><AlertTriangle v-else class="size-4 text-rose-500" />
+                            <span :class="account.webhook_health.ok ? 'text-emerald-700' : 'text-rose-600'">{{ account.webhook_health.ok ? 'Đang hoạt động' : 'Không kiểm tra được' }}</span>
+                            <span class="text-xs text-muted-foreground">· {{ formatDateTime(account.webhook_health.checked_at) }}</span>
+                        </p>
+                        <p v-if="account.webhook_health.error" class="text-rose-600">{{ account.webhook_health.error }}</p>
+                        <p v-if="account.webhook_health.reactivated.length" class="text-amber-700">Đã bật lại: {{ account.webhook_health.reactivated.map((t) => topicLabels[t] ?? t).join(', ') }}</p>
+                        <p v-if="account.webhook_health.missing.length" class="text-amber-700">Đã tạo lại: {{ account.webhook_health.missing.map((t) => topicLabels[t] ?? t).join(', ') }}</p>
+                    </template>
+                    <p class="text-xs text-muted-foreground">Dù webhook lỗi, ECSO vẫn đối soát đơn theo chu kỳ ở trên nên không mất đơn.</p>
+                </div>
+                <div class="flex gap-2 border-t px-5 py-3 text-sm">
+                    <RouterLink :to="`/marketplaces/sync?account=${account.id}`" class="inline-flex items-center gap-1 text-primary hover:underline"><History class="size-4" /> Lịch sử và lỗi đồng bộ</RouterLink>
+                </div>
+            </Card>
+
+            <Card title="Ánh xạ trạng thái" description="Trạng thái đơn trên website (kể cả trạng thái do plugin thêm) tương ứng trạng thái nào trong ECSO." data-testid="woo-status-map">
+                <template v-if="canEdit" #actions>
+                    <Button size="sm" :loading="busy === 'status-map'" data-testid="woo-save-status-map" @click="saveMap"><ListChecks /> Lưu</Button>
+                </template>
+                <div v-if="!statusMap" class="p-5"><Skeleton class="h-24" /></div>
+                <div v-else class="max-h-[26rem] overflow-y-auto">
+                    <table class="w-full text-sm">
+                        <thead class="sticky top-0 border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                            <tr><th class="px-5 py-2 font-medium">Trên website</th><th class="px-4 py-2 font-medium">Trong ECSO</th><th class="px-5 py-2 text-right font-medium">Đơn</th></tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            <tr v-for="r in mapRows" :key="r.raw" :data-testid="`status-row-${r.raw}`">
+                                <td class="px-5 py-2 font-mono text-xs">{{ r.raw }}</td>
+                                <td class="px-4 py-1.5">
+                                    <Select
+                                        :model-value="mapDraft[r.raw] ?? ''"
+                                        :disabled="!canEdit"
+                                        :options="[{ value: '', label: r.fallback ? `Mặc định: ${orderStatus[r.fallback]?.label ?? r.fallback}` : 'Chưa ánh xạ' }, ...statusMap.statuses.map((x) => ({ value: x, label: orderStatus[x]?.label ?? x }))]"
+                                        @update:model-value="(v?: string) => (mapDraft[r.raw] = v ?? '')"
+                                    />
+                                </td>
+                                <td class="px-5 py-2 text-right tabular-nums">
+                                    {{ formatNumber(r.seen?.orders ?? 0) }}
+                                    <span v-if="r.seen?.unknown" class="ml-1 rounded-full bg-amber-50 px-1.5 text-xs text-amber-700">{{ r.seen.unknown }} chưa ánh xạ</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <form v-if="canEdit" class="flex gap-2 border-t p-4" @submit.prevent="addRaw">
+                    <Input v-model="newRaw" placeholder="Thêm mã trạng thái của plugin, ví dụ dang-giao" class="font-mono" />
+                    <Button type="submit" variant="outline">Thêm</Button>
+                </form>
             </Card>
         </div>
 

@@ -515,12 +515,14 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                                 <div class="flex items-center gap-2">
                                     <MarketplaceLogo :marketplace="o.marketplace" :name="marketplaceNames[o.marketplace]" size="sm" />
                                     <span class="font-medium text-primary">{{ o.external_order_id }}</span>
+                                    <span v-if="o.external_number && o.external_number !== o.external_order_id" class="font-mono text-xs text-muted-foreground">#{{ o.external_number }}</span>
                                 </div>
                                 <div class="mt-0.5 flex flex-wrap items-center gap-1 pl-7 text-[11px] text-muted-foreground">
                                     {{ o.shop?.name ?? o.channel?.name ?? marketplaceNames[o.marketplace] }}
                                     <span v-if="o.flags.shortage" class="rounded-full bg-rose-50 px-1.5 text-rose-600" title="Thiếu hàng">Thiếu hàng</span>
                                     <span v-if="o.flags.unmapped" class="rounded-full bg-amber-50 px-1.5 text-amber-700">Chưa map SKU</span>
                                     <span v-if="o.sync_warning" class="rounded-full bg-amber-50 px-1.5 text-amber-700">Cảnh báo</span>
+                                    <span v-if="o.deleted_on_channel_at" class="rounded-full bg-rose-50 px-1.5 text-rose-600">Đã xóa trên website</span>
                                     <span v-if="o.flags.printed" class="inline-flex items-center gap-0.5"><Printer class="size-3" /> Đã in</span>
                                     <span v-for="t in o.tags ?? []" :key="t" class="rounded-full bg-slate-100 px-1.5 text-slate-600">#{{ t }}</span>
                                 </div>

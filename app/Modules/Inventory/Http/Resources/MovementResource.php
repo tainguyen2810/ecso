@@ -2,6 +2,7 @@
 
 namespace App\Modules\Inventory\Http\Resources;
 
+use App\Modules\Access\Support\DataAccess;
 use App\Modules\Inventory\Models\StockMovement;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -20,7 +21,7 @@ class MovementResource extends JsonResource
             'on_hand_after' => $this->on_hand_after,
             'reserved_after' => $this->reserved_after,
             'available_after' => $this->on_hand_after - $this->reserved_after,
-            'unit_cost' => $this->unit_cost,
+            'unit_cost' => app(DataAccess::class)->cost($this->unit_cost),
             'reference' => $this->reference_type ? ['type' => $this->reference_type, 'number' => $this->reference_number ?? null] : null,
             'reason' => $this->reason,
             'actor' => $this->actor_type === 'user' ? $this->actor?->name : $this->actor_type,
