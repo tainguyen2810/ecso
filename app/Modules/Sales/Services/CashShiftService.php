@@ -32,6 +32,45 @@ class CashShiftService
         return CashShift::query()->where('open_user_id', $user->id)->first();
     }
 
+    /** The open shift of the signed-in user, if any (money they take goes into it). */
+    public function currentForAuth(): ?CashShift
+    {
+        $id = Auth::id();
+
+        return $id === null ? null : CashShift::query()->where('open_user_id', $id)->first();
+    }
+
+    /**
+     * Opens again the last closed shift of a cashier (a count or a sale corrected after closing). Only the cashier's
+     * latest shift, only while they have no other shift open; the closing figures are kept in the audit log.
+     */
+    public function reopen(CashShift $shift, string $reason): CashShift
+    {
+        return DB::transaction(function () use ($shift, $reason) {
+            $shift = CashShift::query()->lockForUpdate()->findOrFail($shift->id);
+            if ($shift->isOpen()) {
+                throw ValidationException::withMessages(['shift' => 'Ca đang mở.']);
+            }
+            $latest = CashShift::query()->where('user_id', $shift->user_id)->latest('opened_at')->latest('id')->value('id');
+            if ($latest !== $shift->id) {
+                throw ValidationException::withMessages(['shift' => 'Chỉ mở lại được ca gần nhất của thu ngân này.']);
+            }
+            if (CashShift::query()->where('open_user_id', $shift->user_id)->exists()) {
+                throw ValidationException::withMessages(['shift' => 'Thu ngân đang có ca khác mở.']);
+            }
+
+            $closing = ['counted' => $shift->counted_cash, 'expected' => $shift->expected_cash, 'difference' => $shift->difference, 'handed_over' => $shift->handed_over, 'closed_at' => $shift->closed_at?->toIso8601String()];
+            $shift->forceFill([
+                'status' => CashShift::OPEN, 'open_user_id' => $shift->user_id, 'closed_at' => null, 'closed_by' => null,
+                'expected_cash' => null, 'counted_cash' => null, 'difference' => null, 'handed_over' => null, 'denominations' => null, 'totals' => null,
+                'closing_note' => trim(($shift->closing_note ? $shift->closing_note."\n" : '').'Mở lại: '.$reason),
+            ])->save();
+            $this->audit->record('shift.reopened', $shift, ['number' => $shift->number, 'reason' => $reason, 'previous_close' => $closing]);
+
+            return $shift;
+        });
+    }
+
     /** What the last shift at this counter left in the drawer: the float the next shift starts from. */
     public function suggestedOpening(?Warehouse $warehouse): string
     {
@@ -155,8 +194,11 @@ class CashShiftService
             return $shift->totals;
         }
 
-        $orders = Order::query()->where('marketplace', Order::SOURCE_MANUAL)->where('created_by', $shift->user_id)->where('created_at', '>=', $shift->opened_at);
-        $payments = OrderPayment::query()->whereNull('voided_at')->where('created_by', $shift->user_id)->where('created_at', '>=', $shift->opened_at);
+        // Rows linked to the shift, plus older unlinked rows of the cashier taken while it was open (before the link existed).
+        $orders = Order::query()->where('marketplace', Order::SOURCE_MANUAL)->where(fn ($q) => $q->where('cash_shift_id', $shift->id)
+            ->orWhere(fn ($w) => $w->whereNull('cash_shift_id')->where('created_by', $shift->user_id)->where('created_at', '>=', $shift->opened_at)));
+        $payments = OrderPayment::query()->whereNull('voided_at')->where(fn ($q) => $q->where('cash_shift_id', $shift->id)
+            ->orWhere(fn ($w) => $w->whereNull('cash_shift_id')->where('created_by', $shift->user_id)->where('created_at', '>=', $shift->opened_at)));
         $byMethod = (clone $payments)->selectRaw("method, SUM(CASE WHEN kind = 'refund' THEN -amount ELSE amount END) as total")->groupBy('method')->pluck('total', 'method');
         $cash = (clone $payments)->where('method', 'cash')->selectRaw('kind, SUM(amount) as total')->groupBy('kind')->pluck('total', 'kind');
         $moves = CashShiftMovement::query()->where('cash_shift_id', $shift->id)->selectRaw('kind, SUM(amount) as total')->groupBy('kind')->pluck('total', 'kind');

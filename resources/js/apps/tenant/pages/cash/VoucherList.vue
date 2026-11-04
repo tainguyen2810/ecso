@@ -104,6 +104,7 @@ const typeOptions = computed(() => [
     { value: '', label: 'Mọi loại phiếu' },
     { value: 'order_payment', label: 'Tự động: thu tiền đơn, hoàn tiền' },
     { value: 'supplier_payment', label: 'Tự động: trả nhà cung cấp' },
+    { value: 'shift_movement', label: 'Tự động: thu, chi tiền mặt trong ca' },
     ...types.value
         .filter((t) => direction.value === 'all' || t.direction === direction.value)
         .map((t) => ({ value: t.id, label: `${directionLabels[t.direction]}: ${t.name}${t.is_active ? '' : ' (ngừng dùng)'}` })),
