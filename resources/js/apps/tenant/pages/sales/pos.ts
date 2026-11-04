@@ -17,6 +17,8 @@ export interface Cart {
     method: 'cash' | 'bank_transfer' | 'card' | 'ewallet';
     /** What the buyer handed over; '' = exact amount. */
     received: number | string;
+    /** Idempotency key of the payment in progress: kept until the sale succeeds, so a retry cannot sell twice. */
+    key?: string;
 }
 
 export function emptyCart(no: number): Cart {

@@ -234,7 +234,7 @@ Mỗi đợt: một PR riêng, có test tự động (Pest) cho từng tình hu�
 
 | Đợt | Nội dung | Giao diện? | Test chính |
 |---|---|---|---|
-| **1 (P0, an toàn dữ liệu)** | B1, B2, B8, M1 idempotency (tạo đơn + thu tiền), B5/B6 quyền trả hàng/sửa đơn, B9 | Rất ít (ẩn nút, điền đúng số lượng): **không cần mockup** | trả đơn chưa xuất kho bị chặn; kiểm trùng dòng bị chặn; gửi lại cùng khóa không tạo đơn/thu tiền thứ hai; nhân viên không quyền bị chặn |
+| **1 (P0, an toàn dữ liệu)** ✅ đã làm | B1, B2, B8, M1 idempotency (tạo đơn + thu tiền), B5/B6 quyền trả hàng/sửa đơn, B9 | Rất ít (ẩn nút, điền đúng số lượng): **không cần mockup** | trả đơn chưa xuất kho bị chặn; kiểm trùng dòng bị chặn; gửi lại cùng khóa không tạo đơn/thu tiền thứ hai; nhân viên không quyền bị chặn |
 | **1b (P0, Woo)** | B3: gửi phát hiện + đề xuất cho luồng WooCommerce, họ sửa hoặc giao lại cho tôi | Không | hoàn tiền trước giao → nhả kho; sau giao → mở phiếu hàng hoàn |
 | **2 (P1, trả hàng & tiền)** | M10 (B4 phần công nợ/báo cáo do luồng Khách hàng và Tài chính làm), PA7/U8 hoàn tiền trong phiếu trả, PA8, PA14, B11 | **Có, gửi mockup** (phiếu trả có bước hoàn tiền, huy hiệu trạng thái) | trả một phần nhiều lần; hoàn vượt bị chặn; công nợ/doanh thu giảm đúng; không hoàn hai lần |
 | **3 (P1, ca & POS)** | M2, PA12, PA11, PA3/U1, U2, M8, M9 | **Có, gửi mockup** (thanh toán kết hợp, mở lại ca, hủy hóa đơn) | bán khi chưa mở ca bị chặn; tiền két đúng khi hoàn/hủy phiếu; thanh toán kết hợp; mở lại ca chỉ quản lý |

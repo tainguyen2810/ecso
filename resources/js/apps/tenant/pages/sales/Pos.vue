@@ -7,7 +7,7 @@ import Card from '@/shared/ui/Card.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
 import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
-import { api, ApiError } from '@/shared/lib/api';
+import { api, ApiError, idempotent, newIdempotencyKey } from '@/shared/lib/api';
 import { cn, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
@@ -191,6 +191,8 @@ async function pay() {
     paying.value = true;
     error.value = null;
     const collected = Math.min(received.value, totals.value.total);
+    // Same key on every retry of this cart: a sale that went through but whose answer was lost is not sold again.
+    const key = (cart.value.key ??= newIdempotencyKey());
     try {
         const { data } = await api.post('/sales-orders', {
             channel_id: channelId.value,
@@ -200,7 +202,7 @@ async function pay() {
             discount: Number(cart.value.discount) || 0,
             lines: cart.value.lines.map((l) => ({ variant_id: l.variant_id, quantity: l.quantity, unit_price: l.unit_price, discount: l.discount })),
             payments: collected > 0 ? [{ method: cart.value.method, amount: collected }] : [],
-        });
+        }, idempotent(key));
         toast.success(`Đã bán ${data.data.external_order_id}${change.value > 0 ? ` · trả lại khách ${formatMoney(change.value)}` : ''}`);
         if (autoPrint.value) {
             const detail = await api.get(`/orders/${data.data.id}`);
