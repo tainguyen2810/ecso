@@ -29,6 +29,7 @@ class CashVoucherController extends Controller
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date', 'after_or_equal:from'],
             'method' => ['nullable', Rule::in(CashVoucher::METHODS)],
+            'account' => ['nullable', 'string', 'max:40'],
             'type' => ['nullable', 'string', 'max:40'],
             'party_kind' => ['nullable', Rule::in(CashVoucher::PARTY_KINDS)],
             'q' => ['nullable', 'string', 'max:100'],
@@ -61,6 +62,7 @@ class CashVoucherController extends Controller
             'party_id' => ['nullable', 'string', 'max:40'],
             'party_name' => ['nullable', 'string', 'max:255'],
             'method' => ['required', Rule::in(CashVoucher::METHODS)],
+            'account' => ['nullable', 'string', 'max:40'],
             'amount' => ['required', 'numeric', 'min:1', 'max:9999999999'],
             'counts_in_pnl' => ['nullable', 'boolean'],
             'reference' => ['nullable', 'string', 'max:100'],
@@ -116,6 +118,7 @@ class CashVoucherController extends Controller
         $this->authorize('pay', Order::class);
         $data = $request->validate([
             'method' => ['required', Rule::in(CashVoucher::METHODS)],
+            'account' => ['nullable', 'string', 'max:40'],
             'amount' => ['required', 'numeric', 'min:1', 'max:9999999999'],
             'reference' => ['nullable', 'string', 'max:100'],
             'note' => ['nullable', 'string', 'max:500'],

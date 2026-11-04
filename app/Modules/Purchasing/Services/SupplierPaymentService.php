@@ -3,6 +3,7 @@
 namespace App\Modules\Purchasing\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Cashbook\Services\CashAccountService;
 use App\Modules\Purchasing\Models\PurchaseOrder;
 use App\Modules\Purchasing\Models\Supplier;
 use App\Modules\Purchasing\Models\SupplierPayment;
@@ -13,10 +14,10 @@ use Illuminate\Validation\ValidationException;
 /** Payments to suppliers. Against an order they cannot exceed what is owed on it; on account they can (prepayment). */
 class SupplierPaymentService
 {
-    public function __construct(private readonly AuditLogger $audit) {}
+    public function __construct(private readonly AuditLogger $audit, private readonly CashAccountService $accounts) {}
 
     /**
-     * @param  array{method: string, amount: string|int|float, reference?: string|null, note?: string|null, paid_at?: string|null}  $data
+     * @param  array{method: string, amount: string|int|float, reference?: string|null, note?: string|null, paid_at?: string|null, account?: string|null}  $data
      */
     public function record(Supplier $supplier, array $data, ?PurchaseOrder $po = null): SupplierPayment
     {
@@ -47,7 +48,7 @@ class SupplierPaymentService
                 'note' => $data['note'] ?? null,
                 'paid_at' => $data['paid_at'] ?? now(),
             ]);
-            $payment->forceFill(['created_by' => Auth::id()])->save();
+            $payment->forceFill(['created_by' => Auth::id(), 'cash_account_id' => $this->accounts->resolve($data['account'] ?? null, $data['method'])])->save();
             if ($po) {
                 $this->recompute($po);
             }

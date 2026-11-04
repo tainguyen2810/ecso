@@ -39,7 +39,7 @@ class CashVoucher extends Model
 
     protected $guarded = ['id', 'ulid', 'tenant_id'];
 
-    protected $hidden = ['id', 'tenant_id', 'cash_voucher_type_id', 'customer_id', 'supplier_id', 'staff_id', 'created_by', 'voided_by'];
+    protected $hidden = ['id', 'tenant_id', 'cash_account_id', 'cash_transfer_id', 'cash_voucher_type_id', 'customer_id', 'supplier_id', 'staff_id', 'created_by', 'voided_by'];
 
     protected function casts(): array
     {

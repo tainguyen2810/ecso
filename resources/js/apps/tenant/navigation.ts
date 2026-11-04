@@ -77,7 +77,7 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
         label: 'Phân tích',
         items: [
             { name: 'cash', label: 'Thu chi', path: '/cash', icon: HandCoins, permission: 'finance.view', shortcut: 'q', description: 'Phiếu thu, phiếu chi, sổ quỹ và loại phiếu.',
-                children: [{ label: 'Phiếu thu, phiếu chi', path: '/cash' }, { label: 'Sổ quỹ', path: '/reports/cashbook' }, { label: 'Loại phiếu', path: '/cash/types' }] },
+                children: [{ label: 'Phiếu thu, phiếu chi', path: '/cash' }, { label: 'Sổ quỹ', path: '/reports/cashbook' }, { label: 'Quỹ', path: '/cash/accounts' }, { label: 'Loại phiếu', path: '/cash/types' }] },
             { name: 'finance', label: 'Tài chính', path: '/finance', icon: Wallet, permission: 'finance.view', description: 'Doanh thu, phí sàn, đối soát, lợi nhuận ước tính và đã xác nhận.' },
             { name: 'reports', label: 'Báo cáo', path: '/reports', icon: BarChart3, permission: 'reports.view', description: 'Bán hàng, lãi lỗ, kho, nhập hàng, công nợ và khách hàng.',
                 children: [

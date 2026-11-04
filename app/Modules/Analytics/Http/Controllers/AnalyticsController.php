@@ -9,6 +9,7 @@ use App\Modules\Analytics\Services\FinanceReport;
 use App\Modules\Analytics\Services\SalesReport;
 use App\Modules\Analytics\Support\ProfitFields;
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Cashbook\Models\CashAccount;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Sales\Models\SalesChannel;
@@ -126,9 +127,16 @@ class AnalyticsController extends Controller
     {
         abort_unless($context->can('finance.view'), 403);
         [$from, $to] = $this->range($request);
-        $method = $request->validate(['method' => ['nullable', Rule::in(['cash', 'bank_transfer', 'card', 'ewallet', 'cod', 'other'])]])['method'] ?? null;
+        $data = $request->validate([
+            'method' => ['nullable', Rule::in(['cash', 'bank_transfer', 'card', 'ewallet', 'cod', 'other'])],
+            'account' => ['nullable', 'string', 'max:40'],
+        ]);
+        $account = isset($data['account']) ? (CashAccount::query()->where('ulid', $data['account'])->first() ?? abort(404)) : null;
 
-        return response()->json(['data' => $reports->cashbook($from, $to, $method)]);
+        return response()->json(['data' => [
+            ...$reports->cashbook($from, $to, $data['method'] ?? null, BusinessReports::CASHBOOK_ROWS, $account?->id),
+            'account' => $account ? ['id' => $account->ulid, 'name' => $account->name, 'kind' => $account->kind] : null,
+        ]]);
     }
 
     /** @return array{0: CarbonImmutable, 1: CarbonImmutable} */

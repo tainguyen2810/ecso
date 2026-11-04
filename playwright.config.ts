@@ -15,8 +15,7 @@ export default defineConfig({
         baseURL: process.env.E2E_BASE_URL ?? 'http://127.0.0.1:8000',
         viewport: { width: 1440, height: 900 },
         locale: 'vi-VN',
-        // The shops (tenants.timezone) and their staff are in Vietnam: date ranges picked in the browser must agree
-        // with the server's local days at any hour of the run.
+        // Users are in Vietnam; a UTC browser picks a different "today" than the server between 17:00 and 24:00 UTC.
         timezoneId: 'Asia/Ho_Chi_Minh',
         trace: 'retain-on-failure',
     },

@@ -17,15 +17,17 @@ import { api, ApiError } from '@/shared/lib/api';
 import { formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { paymentMethods } from '../orders/labels';
 import { downloadCsv, presetRange, toCsv } from './range';
+import { useRoute, useRouter } from 'vue-router';
+import type { Fund } from '../cash/voucher';
 
 interface Entry {
     paid_at: string;
-    type: 'payment' | 'refund' | 'supplier' | 'voucher';
+    type: 'payment' | 'refund' | 'supplier' | 'voucher' | 'transfer_in' | 'transfer_out';
     label: string | null;
     method: string;
     amount: number;
     balance: number;
-    document: { id: string; number: string; kind: 'order' | 'purchase' | 'voucher' } | null;
+    document: { id: string; number: string; kind: 'order' | 'purchase' | 'voucher' | 'transfer' } | null;
     party: string | null;
     reference: string | null;
     created_by: string | null;
@@ -38,14 +40,22 @@ interface Book {
     by_method: { method: string; in: number; out: number }[];
     count: number;
     truncated: boolean;
+    account: { id: string; name: string; kind: string } | null;
     rows: Entry[];
 }
 
-const types: Record<Entry['type'], string> = { payment: 'Thu tiền bán hàng', refund: 'Hoàn tiền khách', supplier: 'Chi trả nhà cung cấp', voucher: 'Phiếu thu chi' };
+const types: Record<Entry['type'], string> = { payment: 'Thu tiền bán hàng', refund: 'Hoàn tiền khách', supplier: 'Chi trả nhà cung cấp', voucher: 'Phiếu thu chi', transfer_in: 'Chuyển quỹ đến', transfer_out: 'Chuyển quỹ đi' };
 const label = (e: Entry) => (e.type === 'voucher' && e.label ? e.label : types[e.type]);
-const link = (d: NonNullable<Entry['document']>) => (d.kind === 'order' ? `/orders/${d.id}` : d.kind === 'purchase' ? `/purchasing/${d.id}` : `/cash?open=voucher:${d.id}`);
+const methodName = (m: string) => (m === 'transfer' ? 'Chuyển quỹ' : (paymentMethods[m] ?? m));
+const link = (d: NonNullable<Entry['document']>) => (d.kind === 'order' ? `/orders/${d.id}` : d.kind === 'purchase' ? `/purchasing/${d.id}` : `/cash?open=${d.kind}:${d.id}`);
 const range = ref(presetRange('month'));
+const route = useRoute();
+const router = useRouter();
 const method = ref('');
+// The fund comes from the URL (?account=ULID), so a fund card links straight to its book.
+const account = ref(typeof route.query.account === 'string' ? route.query.account : '');
+const funds = ref<Fund[]>([]);
+const fundOptions = computed(() => [{ value: '', label: 'Tất cả quỹ' }, ...funds.value.map((f) => ({ value: f.id, label: f.is_active ? f.name : `${f.name} (ngừng dùng)` }))]);
 const data = ref<Book | null>(null);
 const error = ref<string | null>(null);
 const loading = ref(false);
@@ -59,7 +69,9 @@ const terms = [
     ['Tổng chi', 'Tiền chi ra trong kỳ: hoàn tiền cho khách, trả tiền nhà cung cấp và các phiếu chi.'],
     ['Tồn cuối kỳ', 'Tồn đầu kỳ + Tổng thu − Tổng chi, tức tiền trong quỹ tính đến hết ngày cuối kỳ.'],
     ['Tồn quỹ từng dòng', 'Số dư ngay sau khoản thu hoặc chi đó, cộng dồn từ tồn đầu kỳ.'],
-    ['Hình thức', 'Chọn Tiền mặt để xem riêng quỹ tiền mặt. Các hình thức khác là tiền qua ngân hàng, thẻ, ví.'],
+    ['Quỹ', 'Nơi tiền đang nằm: két tiền mặt, từng tài khoản ngân hàng, ví điện tử. Chọn một quỹ để xem sổ của riêng quỹ đó, có cả các lần chuyển quỹ.'],
+    ['Chuyển quỹ', 'Tiền đổi chỗ giữa các quỹ, ví dụ nộp tiền mặt vào ngân hàng. Không phải thu hay chi nên sổ tất cả quỹ không tính.'],
+    ['Hình thức', 'Cách khách trả hoặc mình trả. Lọc theo hình thức thì không tính số dư đầu của quỹ và các lần chuyển quỹ.'],
 ] as const;
 
 // Tabs and search only narrow the list; the totals and running balance stay those of the whole book.
@@ -76,23 +88,27 @@ async function load() {
     loading.value = true;
     error.value = null;
     try {
-        data.value = (await api.get('/reports/cashbook', { params: { ...range.value, method: method.value || undefined } })).data.data;
+        router.replace({ query: { ...route.query, account: account.value || undefined } });
+        data.value = (await api.get('/reports/cashbook', { params: { ...range.value, method: method.value || undefined, account: account.value || undefined } })).data.data;
     } catch (e) {
         error.value = (e as ApiError).message;
     } finally {
         loading.value = false;
     }
 }
-onMounted(load);
-watch([range, method], load, { deep: true });
+onMounted(() => {
+    load();
+    api.get('/cash-accounts').then(({ data }) => (funds.value = data.data)).catch(() => {});
+});
+watch([range, method, account], load, { deep: true });
 
 function exportCsv() {
     if (!data.value) return;
     downloadCsv(
-        `so-quy-${method.value || 'tat-ca'}-${range.value.from}-${range.value.to}.csv`,
+        `so-quy-${data.value.account?.name || method.value || 'tat-ca'}-${range.value.from}-${range.value.to}.csv`,
         toCsv(
             ['Thời gian', 'Loại', 'Hình thức', 'Chứng từ', 'Đối tượng', 'Tham chiếu', 'Thu', 'Chi', 'Tồn quỹ', 'Người lập'],
-            [...data.value.rows].reverse().map((e) => [formatDateTime(e.paid_at), label(e), paymentMethods[e.method] ?? e.method, e.document?.number ?? '', e.party, e.reference, e.amount > 0 ? e.amount : null, e.amount < 0 ? -e.amount : null, e.balance, e.created_by]),
+            [...data.value.rows].reverse().map((e) => [formatDateTime(e.paid_at), label(e), methodName(e.method), e.document?.number ?? '', e.party, e.reference, e.amount > 0 ? e.amount : null, e.amount < 0 ? -e.amount : null, e.balance, e.created_by]),
         ),
     );
 }
@@ -135,9 +151,10 @@ function exportCsv() {
                     <Search class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                     <Input v-model="search" class="pl-8" placeholder="Tìm chứng từ, đối tượng, tham chiếu" aria-label="Tìm trong sổ quỹ" data-testid="cashbook-search" />
                 </div>
+                <Select v-model="account" class="w-52" :options="fundOptions" aria-label="Quỹ" data-testid="cashbook-account" />
                 <Select v-model="method" class="w-52" :options="[{ value: '', label: 'Tất cả hình thức' }, ...Object.entries(paymentMethods).map(([value, label]) => ({ value, label: value === 'cash' ? 'Tiền mặt (sổ quỹ tiền mặt)' : label }))]" aria-label="Hình thức" data-testid="cashbook-method" />
                 <div class="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                    <span v-for="m in data.by_method" :key="m.method">{{ paymentMethods[m.method] ?? m.method }}: <span class="text-success">+{{ formatMoney(m.in) }}</span> / <span class="text-destructive">−{{ formatMoney(m.out) }}</span></span>
+                    <span v-for="m in data.by_method" :key="m.method">{{ methodName(m.method) }}: <span class="text-success">+{{ formatMoney(m.in) }}</span> / <span class="text-destructive">−{{ formatMoney(m.out) }}</span></span>
                 </div>
                 <Button variant="outline" size="sm" class="ml-auto" @click="exportCsv"><Download /> Xuất CSV</Button>
             </div>
@@ -161,7 +178,7 @@ function exportCsv() {
                     <tbody class="divide-y">
                         <tr v-for="(e, i) in rows" :key="i">
                             <td class="whitespace-nowrap px-4 py-2 text-muted-foreground">{{ formatDateTime(e.paid_at) }}<div class="text-xs">{{ e.created_by }}</div></td>
-                            <td class="px-4 py-2">{{ label(e) }} · {{ paymentMethods[e.method] ?? e.method }}<div class="text-xs text-muted-foreground">{{ e.party }}<template v-if="e.reference"> · {{ e.reference }}</template></div></td>
+                            <td class="px-4 py-2">{{ label(e) }}<template v-if="e.type.startsWith('transfer')"> · {{ e.type === 'transfer_in' ? 'từ' : 'sang' }} {{ e.party }}</template><template v-else> · {{ methodName(e.method) }}</template><div class="text-xs text-muted-foreground">{{ e.party }}<template v-if="e.reference"> · {{ e.reference }}</template></div></td>
                             <td class="px-4 py-2"><RouterLink v-if="e.document" :to="link(e.document)" class="font-mono text-xs hover:underline">{{ e.document.number }}</RouterLink><span v-else class="text-xs text-muted-foreground">Thanh toán chung</span></td>
                             <td class="px-4 py-2 text-right tabular-nums text-success">{{ e.amount > 0 ? formatMoney(e.amount) : '' }}</td>
                             <td class="px-4 py-2 text-right tabular-nums text-destructive">{{ e.amount < 0 ? formatMoney(-e.amount) : '' }}</td>

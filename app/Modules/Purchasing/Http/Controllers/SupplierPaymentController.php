@@ -21,6 +21,7 @@ class SupplierPaymentController extends Controller
         $data = $request->validate([
             'purchase_order_id' => ['nullable', 'string'],
             'method' => ['required', Rule::in(SupplierPayment::METHODS)],
+            'account' => ['nullable', 'string', 'max:40'],
             'amount' => ['required', 'numeric', 'min:1', 'max:9999999999'],
             'reference' => ['nullable', 'string', 'max:100'],
             'note' => ['nullable', 'string', 'max:500'],

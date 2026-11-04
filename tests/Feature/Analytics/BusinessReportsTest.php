@@ -5,6 +5,9 @@ use App\Modules\Inventory\Notifications\LowStockNotification;
 use App\Modules\Sales\Models\SalesChannel;
 use Illuminate\Support\Facades\Notification;
 
+// 05:00 UTC is midday in the tenant's timezone, so dates built from now() are the same calendar day there.
+beforeEach(fn () => $this->travelTo(now()->setTime(5, 0)));
+
 function reportSale($user, $tenant, array $lines, array $extra = [])
 {
     $channel = $extra['channel'] ?? SalesChannel::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('name', SalesChannel::DEFAULT_NAME)->firstOrFail()->ulid;
@@ -17,11 +20,6 @@ function reportSale($user, $tenant, array $lines, array $extra = [])
         ...$extra,
     ])->assertCreated();
 }
-
-beforeEach(function () {
-    // Reports count days in the shop's time zone (UTC+7): run at a time when the UTC and local dates are the same.
-    $this->travelTo(now()->startOfDay()->addHours(3));
-});
 
 it('reports sales and gross profit by channel, staff and day', function () {
     [$tenant, $owner] = tenantWithOwner();

@@ -7,31 +7,6 @@ use App\Modules\Sales\Models\OrderPayment;
 use App\Shared\Support\ReportRange;
 use Illuminate\Support\Str;
 
-/** A voucher type id by name. */
-function cashType($user, $tenant, string $direction, string $name): string
-{
-    return collect(actingInTenant($user, $tenant)->getJson("/api/v1/cash-voucher-types?direction={$direction}")->assertOk()->json('data'))->firstWhere('name', $name)['id'];
-}
-
-/** A completed counter sale on credit for a customer. */
-function cashSale($user, $tenant, $variant, int $price, string $customer): string
-{
-    return actingInTenant($user, $tenant)->postJson('/api/v1/sales-orders', [
-        'channel_id' => defaultChannel($tenant)->ulid, 'stage' => 'completed', 'customer_id' => $customer,
-        'lines' => [['variant_id' => $variant->ulid, 'quantity' => 1, 'unit_price' => $price]],
-    ])->assertCreated()->json('data.id');
-}
-
-/** POST with an Idempotency-Key header. */
-function postOnce($user, $tenant, string $url, array $body, string $key)
-{
-    $test = actingInTenant($user, $tenant)->withHeader('Idempotency-Key', $key);
-    $response = $test->postJson($url, $body);
-    $test->flushHeaders(); // the next request of the test sends no key unless it asks for one
-
-    return $response;
-}
-
 it('records a receipt voucher once per idempotency key, and refuses the key for another body', function () {
     [$tenant, $owner] = tenantWithOwner();
     $income = cashType($owner, $tenant, 'receipt', 'Thu nhập khác');
