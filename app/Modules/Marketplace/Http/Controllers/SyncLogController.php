@@ -181,7 +181,7 @@ class SyncLogController extends Controller
         return [
             'defaults' => (object) $mapper->defaults($account->marketplace),
             'custom' => (object) $account->statusMap(),
-            'seen' => $seen->map(fn ($r) => ['raw_status' => $r->raw_status, 'orders' => (int) $r->orders, 'unknown' => (int) $r->unknown])->values(),
+            'seen' => $seen->map(fn (Order $r) => ['raw_status' => $r->raw_status, 'orders' => (int) $r->getAttribute('orders'), 'unknown' => (int) $r->getAttribute('unknown')])->values(),
             'statuses' => array_values(array_diff(OrderStatus::ALL, [OrderStatus::UNKNOWN_STATUS])),
         ];
     }

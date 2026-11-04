@@ -14,6 +14,8 @@ use Illuminate\Support\Carbon;
  * @property array<string, int>|null $counts
  * @property Carbon $started_at
  * @property Carbon|null $finished_at
+ * @property Carbon|null $window_from
+ * @property Carbon|null $window_to
  */
 class SyncRun extends Model
 {
