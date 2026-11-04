@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
  *
  * @property Carbon|null $mapped_at
  * @property Carbon|null $last_pushed_at
+ * @property Carbon|null $price_pushed_at
  */
 class ListingVariant extends Model
 {

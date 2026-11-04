@@ -86,7 +86,7 @@ class PriceSync
      */
     public function queueEcsoPrice(ProductVariant $variant): int
     {
-        if ($variant->ref_price === null || $this->holder($variant) !== PriceChange::SOURCE_ECSO) {
+        if (self::money($variant->getAttribute('ref_price')) === null || $this->holder($variant) !== PriceChange::SOURCE_ECSO) {
             return 0;
         }
 
@@ -134,7 +134,8 @@ class PriceSync
     /** ECSO holds: anything else on the website is undone. */
     private function guardEcsoPrice(MarketplaceAccount $account, ListingVariant $listing, ProductVariant $variant): void
     {
-        if ($variant->ref_price === null || $listing->regular_price === null || $this->same($listing->regular_price, $variant->ref_price)) {
+        $ref = self::money($variant->getAttribute('ref_price'));
+        if ($ref === null || self::money($listing->getAttribute('regular_price')) === null || $this->same($listing->regular_price, $ref)) {
             if ($listing->price_push_status === 'pending' && $this->same($listing->regular_price, $listing->target_price)) {
                 $listing->forceFill(['price_push_status' => 'ok'])->save();
             }
@@ -163,16 +164,17 @@ class PriceSync
     /** The website holds: its real selling price (sale price if any) becomes ECSO's, or waits for approval. */
     private function takeChannelPrice(MarketplaceAccount $account, ListingVariant $listing, ProductVariant $variant): void
     {
-        $price = $listing->price;
+        $price = self::money($listing->getAttribute('price'));
+        $current = self::money($variant->getAttribute('ref_price'));
         $pending = PriceChange::query()->where('listing_variant_id', $listing->id)->where('status', PriceChange::PENDING)->first();
 
-        if ($price === null || $this->same($price, $variant->ref_price)) {
+        if ($price === null || $this->same($price, $current)) {
             $pending?->forceFill(['status' => PriceChange::REJECTED, 'reason' => 'Giá website đã bằng giá ECSO', 'decided_at' => now()])->save();
 
             return;
         }
 
-        $reason = $this->needsApproval($price, $variant->ref_price);
+        $reason = $this->needsApproval($price, $current);
         if ($reason !== null) {
             // A price the owner already refused stays refused until the website changes it again.
             $refused = PriceChange::query()->where('listing_variant_id', $listing->id)->where('status', PriceChange::REJECTED)
@@ -183,7 +185,7 @@ class PriceSync
             $attributes = [
                 'product_variant_id' => $variant->id,
                 'marketplace_account_id' => $account->id,
-                'old_price' => $variant->ref_price,
+                'old_price' => $current,
                 'new_price' => $price,
                 'source' => PriceChange::SOURCE_CHANNEL,
                 'status' => PriceChange::PENDING,
@@ -284,6 +286,12 @@ class PriceSync
     {
         return ListingVariant::query()->with('account', 'listing')->where('product_variant_id', $variantId)
             ->where('mapping_status', ListingVariant::MAPPED)->get();
+    }
+
+    /** A money attribute as a string (decimal casts), or null. */
+    private static function money(mixed $value): ?string
+    {
+        return $value === null || $value === '' ? null : (string) $value;
     }
 
     private function same(mixed $a, mixed $b): bool
