@@ -495,7 +495,7 @@ export interface ListingVariantData {
     external_product_id: string | null;
     external_sku_id: string;
     title: string;
-    name: string;
+    name: string | null;
     seller_sku: string | null;
     price: string | null;
     marketplace_stock: number | null;
