@@ -5,6 +5,7 @@ namespace App\Modules\Cashbook\Models;
 use App\Modules\Tenancy\Concerns\BelongsToTenant;
 use App\Shared\Concerns\HasPublicUlid;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 /**
  * A fund (quỹ): the cash drawer, a bank account, an e-wallet, COD held by carriers. `methods` lists the payment
@@ -16,6 +17,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property array<int, string> $methods
  * @property string $opening_balance
  * @property bool $is_active
+ * @property Carbon|null $opening_at
  */
 class CashAccount extends Model
 {
