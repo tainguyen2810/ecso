@@ -15,6 +15,7 @@ import { api, ApiError } from '@/shared/lib/api';
 import { cn, formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
+import { useIdempotencyKey } from '@/shared/composables/useIdempotencyKey';
 import type { Variant } from '@/shared/types';
 
 interface Line {
@@ -35,6 +36,7 @@ interface Doc {
 
 const tenant = useTenantStore();
 const toast = useToast();
+const idempotency = useIdempotencyKey();
 const canCreate = computed(() => tenant.can('inventory.adjust.approve'));
 
 const docs = ref<Doc[]>([]);
@@ -81,7 +83,8 @@ async function submit() {
         const { data } = await api.post('/inventory/cost-adjustments', {
             note: note.value || null,
             lines: rows.value.map((r) => ({ variant_id: r.variant.id, new_cost: r.new_cost === '' ? null : Number(r.new_cost) })),
-        });
+        }, idempotency.config());
+        idempotency.renew();
         toast.success(`Đã tạo phiếu ${data.data.number}, giá vốn đã cập nhật`);
         open.value = false;
         rows.value = [];

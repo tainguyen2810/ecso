@@ -8,12 +8,14 @@ import Select from '@/shared/ui/Select.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { formatMoney } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
+import { useIdempotencyKey } from '@/shared/composables/useIdempotencyKey';
 import { supplierPaymentMethods } from './labels';
 
 const open = defineModel<boolean>('open', { required: true });
 const props = defineProps<{ supplierId: string; order?: { id: string; number: string } | null; suggested?: number }>();
 const emit = defineEmits<{ saved: [] }>();
 const toast = useToast();
+const idempotency = useIdempotencyKey();
 
 const form = reactive({ method: 'bank_transfer', amount: '', reference: '', note: '' });
 const saving = ref(false);
@@ -35,7 +37,8 @@ async function save() {
             amount: Number(form.amount),
             reference: form.reference || null,
             note: form.note || null,
-        });
+        }, idempotency.config());
+        idempotency.renew();
         toast.success(`Đã ghi chi ${formatMoney(form.amount)}.`);
         open.value = false;
         emit('saved');

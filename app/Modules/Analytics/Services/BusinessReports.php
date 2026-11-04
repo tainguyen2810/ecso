@@ -2,6 +2,7 @@
 
 namespace App\Modules\Analytics\Services;
 
+use App\Modules\Inventory\Services\CostHistory;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Tenancy\Support\TenantContext;
@@ -104,7 +105,7 @@ class BusinessReports
 
     /**
      * Stock in-out-balance per SKU for the range: opening, each kind of goods in and out, closing, and the closing
-     * value at the current weighted average cost.
+     * value at the weighted average cost of the end date.
      *
      * @return array<string, mixed>
      */
@@ -135,10 +136,12 @@ class BusinessReports
             ->when($warehouseId, fn ($w) => $w->where('m.warehouse_id', $warehouseId))
             ->when($q, fn ($w) => $w->where(fn ($s) => $s->where('v.sku', 'like', "%{$q}%")->orWhere('p.name', 'like', "%{$q}%")))
             ->groupBy('m.product_variant_id', 'v.ulid', 'v.sku', 'v.name', 'p.name', 'v.cost_price')
-            ->selectRaw('v.ulid, v.sku, v.name as variant_name, p.name as product_name, v.cost_price, '.implode(', ', $sums), $bindings)
+            ->selectRaw('m.product_variant_id as vid, v.ulid, v.sku, v.name as variant_name, p.name as product_name, v.cost_price, '.implode(', ', $sums), $bindings)
             ->orderBy('v.sku')
             ->limit(2000)
             ->get();
+        // Closing value at the cost of the end date, not today's.
+        $costs = app(CostHistory::class)->at($this->tenant(), $to, $rows->pluck('vid')->map(fn ($id) => (int) $id)->all(), $rows->pluck('cost_price', 'vid')->all());
 
         $out = [];
         $totals = array_fill_keys(['opening', 'in', 'out', 'closing', 'closing_value', ...array_keys(self::STOCK_COLUMNS)], 0.0);
@@ -162,8 +165,8 @@ class BusinessReports
                 'in' => $in,
                 'out' => $outQty,
                 'closing' => $closing,
-                'unit_cost' => round((float) $r->cost_price, 2),
-                'closing_value' => round($closing * (float) $r->cost_price, 2),
+                'unit_cost' => round($costs[(int) $r->vid] ?? (float) $r->cost_price, 2),
+                'closing_value' => round($closing * ($costs[(int) $r->vid] ?? (float) $r->cost_price), 2),
             ];
             foreach ($totals as $k => $v) {
                 $totals[$k] = $v + $row[$k];

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Analytics\Services;
 
+use App\Modules\Inventory\Services\CostHistory;
 use App\Modules\Tenancy\Support\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -37,6 +38,9 @@ class StockReports
             ->whereIn('v.id', $cells->pluck('variant_id')->unique())
             ->get(['v.id', 'v.ulid', 'v.sku', 'v.name', 'p.unit', 'v.cost_price', 'p.name as product_name'])->keyBy('id');
 
+        // Value at the cost of that date, not today's (CostHistory).
+        $costs = app(CostHistory::class)->at($this->tenant(), $date->endOfDay(), $variants->keys()->map(fn ($id) => (int) $id)->all(), $variants->map(fn ($v) => $v->cost_price)->all());
+
         $whUlid = $warehouses->pluck('ulid', 'id');
         $rows = [];
         foreach ($cells->groupBy('variant_id') as $variantId => $group) {
@@ -56,8 +60,8 @@ class StockReports
                 'unit' => $v->unit,
                 'by_warehouse' => $byWarehouse,
                 'quantity' => $qty,
-                'unit_cost' => round((float) $v->cost_price, 2),
-                'value' => round($qty * (float) $v->cost_price, 2),
+                'unit_cost' => round($costs[$variantId] ?? (float) $v->cost_price, 2),
+                'value' => round($qty * ($costs[$variantId] ?? (float) $v->cost_price), 2),
             ];
         }
         usort($rows, fn ($a, $b) => $b['value'] <=> $a['value'] ?: strcmp((string) $a['variant']['sku'], (string) $b['variant']['sku']));

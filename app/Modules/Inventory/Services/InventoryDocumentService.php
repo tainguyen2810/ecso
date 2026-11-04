@@ -6,6 +6,7 @@ use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Inventory\Exceptions\InvalidStockOperation;
 use App\Modules\Inventory\Models\CostAdjustment;
 use App\Modules\Inventory\Models\InventoryAdjustment;
+use App\Modules\Inventory\Models\StockBalance;
 use App\Modules\Inventory\Models\StockMovement;
 use App\Modules\Inventory\Models\StockReceipt;
 use App\Modules\Inventory\Models\StockTransfer;
@@ -58,8 +59,9 @@ class InventoryDocumentService
                 'number' => DocumentNumber::next('ADJ'),
                 'status' => $draft ? InventoryAdjustment::DRAFT : InventoryAdjustment::PENDING,
                 'created_by' => Auth::id(),
+                'counted_at' => now(),
             ])->save();
-            $adjustment->lines()->createMany($this->adjustmentRows($lines));
+            $adjustment->lines()->createMany($this->adjustmentRows($warehouse, $lines));
             $this->audit->record($draft ? 'inventory.adjustment.drafted' : 'inventory.adjustment.created', $adjustment, ['number' => $adjustment->number, 'reason' => $reason]);
 
             return $adjustment;
@@ -75,9 +77,9 @@ class InventoryDocumentService
     {
         return DB::transaction(function () use ($adjustment, $lines, $note) {
             $locked = $this->lockDraft($adjustment);
-            $locked->forceFill(['note' => $note])->save();
+            $locked->forceFill(['note' => $note, 'counted_at' => now()])->save();
             $locked->lines()->delete();
-            $locked->lines()->createMany($this->adjustmentRows($lines));
+            $locked->lines()->createMany($this->adjustmentRows(Warehouse::query()->withTrashed()->findOrFail($locked->warehouse_id), $lines));
             $this->audit->record('inventory.adjustment.draft_saved', $locked, ['number' => $locked->number, 'lines' => count($lines)]);
 
             return $locked;
@@ -100,15 +102,23 @@ class InventoryDocumentService
     }
 
     /**
-     * @param  array<int, array{variant_id: int, mode: string, quantity: int, reason?: string|null, note?: string|null}>  $lines
+     * A count line keeps the system quantity it was compared with: the one the counter saw (system_qty from the
+     * stocktake screen) or, when not given, the quantity on hand now. Approval applies count − system_qty.
+     *
+     * @param  array<int, array{variant_id: int, mode: string, quantity: int, system_qty?: int|null, reason?: string|null, note?: string|null}>  $lines
      * @return array<int, array<string, mixed>>
      */
-    private function adjustmentRows(array $lines): array
+    private function adjustmentRows(Warehouse $warehouse, array $lines): array
     {
+        $missing = array_column(array_filter($lines, fn ($l) => $l['mode'] === 'count' && ! isset($l['system_qty'])), 'variant_id');
+        $onHand = $missing === [] ? collect() : StockBalance::query()->where('warehouse_id', $warehouse->id)
+            ->whereIn('product_variant_id', $missing)->pluck('on_hand', 'product_variant_id');
+
         return array_map(fn ($l) => [
             'product_variant_id' => $l['variant_id'],
             'mode' => $l['mode'],
             'quantity' => $l['quantity'],
+            'system_qty' => $l['mode'] === 'count' ? (int) ($l['system_qty'] ?? $onHand[$l['variant_id']] ?? 0) : null,
             'reason' => $l['reason'] ?? null,
             'note' => $l['note'] ?? null,
         ], $lines);
@@ -134,7 +144,7 @@ class InventoryDocumentService
 
             $applied = $this->inventory->adjust(
                 $warehouse,
-                $lines->map(fn ($l) => ['variant_id' => $l->product_variant_id, 'mode' => $l->mode, 'quantity' => $l->quantity])->all(),
+                $lines->map(fn ($l) => ['variant_id' => $l->product_variant_id, 'mode' => $l->mode, 'quantity' => $l->quantity, 'system_qty' => $l->system_qty])->all(),
                 "adjustment:{$locked->id}",
                 $locked,
                 $locked->reason,

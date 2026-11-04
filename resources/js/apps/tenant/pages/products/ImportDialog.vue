@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { CheckCircle2, Download, FileSpreadsheet, XCircle } from 'lucide-vue-next';
+import Alert from '@/shared/ui/Alert.vue';
 import Button from '@/shared/ui/Button.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
 import FormField from '@/shared/ui/FormField.vue';
@@ -19,6 +20,8 @@ interface ImportResult {
     products?: number;
     errors: { row: number; message: string }[];
     opening_receipt?: string | null;
+    /** File lines with opening stock but no cost (average cost would start at 0 ₫). */
+    zero_cost_rows?: number[];
     dry_run?: boolean;
 }
 
@@ -112,6 +115,9 @@ function onFile(e: Event) {
                         <p class="text-muted-foreground">Sẽ tạo {{ formatNumber(preview.created) }} SKU mới và cập nhật {{ formatNumber(preview.updated) }} SKU.</p>
                     </div>
                 </div>
+                <Alert v-if="!preview.errors.length && preview.zero_cost_rows?.length" tone="amber" class="mt-2" data-testid="import-no-cost">
+                    {{ formatNumber(preview.zero_cost_rows.length) }} dòng có tồn đầu kỳ nhưng chưa có giá vốn (dòng {{ preview.zero_cost_rows.slice(0, 10).join(', ') }}{{ preview.zero_cost_rows.length > 10 ? '…' : '' }}). Giá vốn sẽ là 0 ₫, lãi gộp khi bán sẽ cao hơn thực tế. Điền cột opening_cost nếu biết giá.
+                </Alert>
                 <div v-else class="rounded-md border border-destructive/30">
                     <div class="flex items-center gap-2 border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-sm font-medium text-destructive">
                         <XCircle class="size-4" /> {{ preview.errors.length }} lỗi, chưa nhập dòng nào

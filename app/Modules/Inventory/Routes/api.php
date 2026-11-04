@@ -8,7 +8,8 @@ use App\Modules\Inventory\Http\Controllers\TransferController;
 use App\Modules\Inventory\Http\Controllers\WarehouseController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
+// idempotent: a repeated POST with the same Idempotency-Key replays the first answer (no second document).
+Route::middleware(['auth:sanctum', 'verified', 'tenant', 'idempotent'])->group(function () {
     Route::apiResource('warehouses', WarehouseController::class)->except('show');
 
     Route::prefix('inventory')->group(function () {

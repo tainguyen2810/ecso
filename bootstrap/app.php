@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\IdempotentRequest;
 use App\Http\Middleware\SecurityHeaders;
 use App\Modules\Admin\Http\Middleware\EnsureSuperAdmin;
 use App\Modules\Platform\Http\Middleware\RedirectToInstaller;
@@ -27,6 +28,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'tenant' => ResolveTenant::class,
             'super-admin' => EnsureSuperAdmin::class,
+            'idempotent' => IdempotentRequest::class,
         ]);
         // The tenant context must exist before route model binding runs, so scoped models resolve inside the tenant.
         $middleware->prependToPriorityList(before: SubstituteBindings::class, prepend: ResolveTenant::class);

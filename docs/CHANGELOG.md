@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Độ chính xác tồn kho, đợt A kiểm toán sản phẩm (2026-11-04)
+- **Kiểm hàng chốt số lúc đếm**: mỗi dòng đếm lưu `system_qty` (tồn hệ thống lúc đếm). Khi duyệt chỉ áp `số đếm − system_qty`, nên hàng bán ra hoặc nhập thêm giữa lúc đếm và lúc duyệt được giữ nguyên. Phiếu chờ duyệt hiện "Tồn lúc đếm", "Tồn hiện tại", "Sẽ áp dụng", "Tồn sau duyệt" và cảnh báo khi có nhập/xuất xen giữa. Phiếu cũ không có `system_qty` vẫn chạy như trước.
+- **Idempotency-Key**: middleware `idempotent` trên API Sản phẩm, Kho, Mua hàng. Gửi lại cùng khóa (bấm 2 lần, mạng gửi lại) trả lại kết quả lần đầu, không tạo phiếu thứ hai; khóa giữ 48 giờ (bảng `idempotency_keys`, dọn lúc 03:15). Các form tạo phiếu nhập, kiểm, chuyển, điều chỉnh giá vốn, đơn nhập, nhận hàng, trả NCC, chi tiền NCC, tạo sản phẩm đều gửi khóa.
+- **Giá vốn trên mọi biến động kho**: `stock_movements.unit_cost` ghi giá vốn bình quân lúc xuất/điều chỉnh/chuyển, `avg_cost_after` ghi giá vốn sau biến động. Hàng hoàn nhập kho mang giá vốn lúc bán (`cost_snapshot`). Báo cáo tồn theo ngày và sổ kho nhập-xuất tính giá trị theo giá vốn của ngày đó (`CostHistory`), không theo giá hiện tại. Phương pháp bình quân gia quyền giữ nguyên.
+- Cảnh báo tồn đầu không có giá vốn ở form sản phẩm và khi nhập file (`zero_cost_rows`).
+
 ### Phí sàn và giá sàn, đợt 3 (2026-11-04)
 - **Bảng phí sàn** cho từng gian hàng (Cấu hình → Thuế và chính sách giá), gồm hoa hồng %, thanh toán %, dịch vụ %, phí cố định mỗi đơn, làm tròn lên và lãi tối thiểu trên giá vốn. Có thể đặt hoa hồng riêng theo danh mục. Khi chưa lưu thì bảng hiện số tham khảo (`config/marketplaces.php`, `pricing.reference_fees`), cần kiểm tra lại theo hợp đồng.
 - Công thức giá sàn: (giá gốc + phí cố định) ÷ (1 − tổng % phí), làm tròn lên. Giá không được thấp hơn mức để còn giá vốn + lãi tối thiểu sau phí. Website WooCommerce vẫn bán theo giá gốc, không cộng phí sàn.

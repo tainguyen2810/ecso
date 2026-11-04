@@ -34,7 +34,7 @@ class InventoryAdjustment extends Model
 
     protected function casts(): array
     {
-        return ['decided_at' => 'datetime'];
+        return ['decided_at' => 'datetime', 'counted_at' => 'datetime'];
     }
 
     /** @return BelongsTo<Warehouse, $this> */
