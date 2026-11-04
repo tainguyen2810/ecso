@@ -21,6 +21,12 @@ return [
         'due_soon_hours' => 6,
     ],
 
+    // Detail reports list at most this many rows on screen; their totals always cover every row.
+    'reports' => [
+        'row_limit' => 2000,
+        'customer_row_limit' => 500,
+    ],
+
     // Minimum PHP extensions checked by `php artisan ecso:check-env`.
     'required_extensions' => [
         'bcmath', 'ctype', 'curl', 'dom', 'fileinfo', 'intl', 'mbstring', 'openssl',

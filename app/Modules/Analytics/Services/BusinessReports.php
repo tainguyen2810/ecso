@@ -2,6 +2,7 @@
 
 namespace App\Modules\Analytics\Services;
 
+use App\Modules\Analytics\Support\Search;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Tenancy\Support\TenantContext;
@@ -133,11 +134,10 @@ class BusinessReports
             ->where('m.tenant_id', $this->tenant())
             ->where('m.created_at', '<=', $to)
             ->when($warehouseId, fn ($w) => $w->where('m.warehouse_id', $warehouseId))
-            ->when($q, fn ($w) => $w->where(fn ($s) => $s->where('v.sku', 'like', "%{$q}%")->orWhere('p.name', 'like', "%{$q}%")))
+            ->when($q, fn ($w) => $w->where(fn ($s) => $s->where('v.sku', 'like', Search::contains($q))->orWhere('p.name', 'like', Search::contains($q))))
             ->groupBy('m.product_variant_id', 'v.ulid', 'v.sku', 'v.name', 'p.name', 'v.cost_price')
             ->selectRaw('v.ulid, v.sku, v.name as variant_name, p.name as product_name, v.cost_price, '.implode(', ', $sums), $bindings)
             ->orderBy('v.sku')
-            ->limit(2000)
             ->get();
 
         $out = [];
@@ -148,6 +148,13 @@ class BusinessReports
             $cols = [];
             foreach (array_keys(self::STOCK_COLUMNS) as $column) {
                 $cols[$column] = abs((int) $r->{$column});
+            }
+            if ($warehouseId === null) {
+                // Across all warehouses an internal transfer is neither new goods in nor goods sold out: only the
+                // part still on the road (sent, not yet received) changes the stock of the whole business.
+                $transfer = $cols['transfer_in'] - $cols['transfer_out'];
+                $cols['transfer_in'] = max(0, $transfer);
+                $cols['transfer_out'] = max(0, -$transfer);
             }
             $in = $cols['purchase_in'] + $cols['return_in'] + $cols['transfer_in'] + $cols['adjust_in'];
             $outQty = $cols['sale_out'] + $cols['supplier_out'] + $cols['damage_out'] + $cols['adjust_out'] + $cols['transfer_out'];
@@ -171,7 +178,18 @@ class BusinessReports
             $out[] = $row;
         }
 
-        return ['range' => ['from' => $from->toDateString(), 'to' => $to->toDateString()], 'rows' => $out, 'totals' => $totals];
+        $count = count($out);
+        $limit = (int) config('ecso.reports.row_limit', 2000);
+
+        return [
+            'range' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+            // Totals cover every SKU; the table lists the first STOCK_LEDGER_LIMIT.
+            'rows' => array_slice($out, 0, $limit),
+            'totals' => $totals,
+            'truncated' => $count > $limit,
+            'total_rows' => $count,
+            'limit' => $limit,
+        ];
     }
 
     /**

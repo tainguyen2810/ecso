@@ -2,6 +2,7 @@
 
 namespace App\Modules\Analytics\Services;
 
+use App\Modules\Analytics\Support\Search;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Sales\Models\OrderPayment;
@@ -28,21 +29,20 @@ class TradeReports
      */
     public function salesByProduct(CarbonImmutable $from, CarbonImmutable $to, ?string $q = null): array
     {
-        $rows = DB::table('order_items as i')
+        $grouped = DB::table('order_items as i')
             ->join('orders as o', 'o.id', '=', 'i.order_id')
             ->leftJoin('product_variants as v', 'v.id', '=', 'i.product_variant_id')
             ->leftJoin('products as p', 'p.id', '=', 'v.product_id')
             ->where('o.tenant_id', $this->tenant())
             ->whereBetween('o.placed_at', [$from, $to])
             ->whereNotIn('o.status', self::EXCLUDED)
-            ->when($q, fn ($w) => $w->where(fn ($s) => $s->where('v.sku', 'like', "%{$q}%")->orWhere('p.name', 'like', "%{$q}%")->orWhere('i.name', 'like', "%{$q}%")))
+            ->when($q, fn ($w) => $w->where(fn ($s) => $s->where('v.sku', 'like', Search::contains($q))->orWhere('p.name', 'like', Search::contains($q))->orWhere('i.name', 'like', Search::contains($q))))
             ->groupBy('i.product_variant_id', 'v.ulid', 'v.sku', 'v.name', 'p.name')
             ->selectRaw('v.ulid, v.sku, v.name as variant_name, p.name as product_name, MAX(i.name) as item_name, MAX(i.seller_sku) as seller_sku, '
                 .'COUNT(DISTINCT o.id) as orders, SUM(i.quantity) as units, SUM(i.quantity * i.unit_price) as goods, SUM(i.discount) as discount, '
-                .'SUM(COALESCE(i.cost_snapshot, 0) * i.quantity) as cogs, SUM(CASE WHEN i.cost_snapshot IS NULL AND i.mapping_status <> \'service\' THEN 1 ELSE 0 END) as missing')
-            ->orderByDesc('goods')
-            ->limit(2000)
-            ->get();
+                .'SUM(COALESCE(i.cost_snapshot, 0) * i.quantity) as cogs, SUM(CASE WHEN i.cost_snapshot IS NULL AND i.mapping_status <> \'service\' THEN 1 ELSE 0 END) as missing');
+        $all = $this->over($grouped, ['orders', 'units', 'goods', 'discount', 'cogs', 'missing']);
+        $rows = (clone $grouped)->orderByDesc('goods')->limit(self::limit())->get();
 
         $out = $rows->map(function ($r) {
             $net = (float) $r->goods - (float) $r->discount;
@@ -64,7 +64,19 @@ class TradeReports
             ];
         })->all();
 
-        return ['range' => $this->range($from, $to), 'rows' => $out, 'totals' => $this->sum($out, ['orders', 'units', 'goods', 'discount', 'net', 'cogs', 'gross_profit', 'missing_cost_lines'])];
+        $net = (float) $all->goods - (float) $all->discount;
+        $totals = [
+            'orders' => (int) $all->orders,
+            'units' => (int) $all->units,
+            'goods' => round((float) $all->goods, 2),
+            'discount' => round((float) $all->discount, 2),
+            'net' => round($net, 2),
+            'cogs' => round((float) $all->cogs, 2),
+            'gross_profit' => round($net - (float) $all->cogs, 2),
+            'missing_cost_lines' => (int) $all->missing,
+        ];
+
+        return ['range' => $this->range($from, $to), 'rows' => $out, 'totals' => $totals, ...$this->truncation(count($out), (int) $all->n)];
     }
 
     /**
@@ -87,8 +99,9 @@ class TradeReports
                 ->groupBy('l.product_variant_id', 'v.ulid', 'v.sku', 'v.name', 'p.name')
                 ->selectRaw('v.ulid, v.sku, v.name as variant_name, p.name as product_name, MAX(i.name) as item_name, COUNT(DISTINCT r.id) as returns, '
                     .'SUM(l.quantity) as quantity, SUM(l.received_qty) as received, SUM(l.sellable_qty) as sellable, SUM(l.damaged_qty) as damaged, '
-                    .'SUM(l.quantity * i.unit_price) as value')
-                ->orderByDesc('quantity')->limit(2000)->get()
+                    .'SUM(l.quantity * i.unit_price) as value');
+            $all = $this->over($rows, ['returns', 'quantity', 'received', 'sellable', 'damaged', 'value']);
+            $rows = (clone $rows)->orderByDesc('quantity')->limit(self::limit())->get()
                 ->map(fn ($r) => [
                     'variant' => ['id' => $r->ulid, 'sku' => $r->sku, 'name' => $r->ulid ? trim($r->product_name.($r->variant_name ? ' - '.$r->variant_name : '')) : $r->item_name],
                     'returns' => (int) $r->returns,
@@ -99,14 +112,17 @@ class TradeReports
                     'value' => round((float) $r->value, 2),
                 ])->all();
 
-            return ['range' => $this->range($from, $to), 'by' => $by, 'rows' => $rows, 'totals' => $this->sum($rows, ['returns', 'quantity', 'received', 'sellable', 'damaged', 'value'])];
+            $totals = ['returns' => (int) $all->returns, 'quantity' => (int) $all->quantity, 'received' => (int) $all->received, 'sellable' => (int) $all->sellable, 'damaged' => (int) $all->damaged, 'value' => round((float) $all->value, 2)];
+
+            return ['range' => $this->range($from, $to), 'by' => $by, 'rows' => $rows, 'totals' => $totals, ...$this->truncation(count($rows), (int) $all->n)];
         }
 
-        $qty = DB::table('order_return_lines')->groupBy('order_return_id')->selectRaw('order_return_id, SUM(quantity) as quantity');
-        $rows = $base()->join('orders as o', 'o.id', '=', 'r.order_id')
+        $qty = DB::table('order_return_lines')->whereIn('order_return_id', $base()->select('r.id'))->groupBy('order_return_id')->selectRaw('order_return_id, SUM(quantity) as quantity');
+        $returns = $base()->join('orders as o', 'o.id', '=', 'r.order_id')
             ->leftJoinSub($qty, 'q', 'q.order_return_id', '=', 'r.id')
-            ->leftJoin('customers as c', 'c.id', '=', 'o.customer_id')
-            ->orderByDesc('r.created_at')->limit(2000)
+            ->leftJoin('customers as c', 'c.id', '=', 'o.customer_id');
+        $all = (clone $returns)->selectRaw('COUNT(*) as n, COALESCE(SUM(q.quantity), 0) as quantity, COALESCE(SUM(r.refund_amount), 0) as refund_amount')->first();
+        $rows = (clone $returns)->orderByDesc('r.created_at')->limit(self::limit())
             ->get(['r.ulid', 'r.number', 'r.type', 'r.status', 'r.reason', 'r.refund_amount', 'r.created_at', 'o.ulid as order_id', 'o.external_order_id', 'o.buyer_name', 'c.name as customer', 'q.quantity'])
             ->map(fn ($r) => [
                 'id' => $r->ulid,
@@ -121,7 +137,9 @@ class TradeReports
                 'refund_amount' => round((float) $r->refund_amount, 2),
             ])->all();
 
-        return ['range' => $this->range($from, $to), 'by' => $by, 'rows' => $rows, 'totals' => ['returns' => count($rows), ...$this->sum($rows, ['quantity', 'refund_amount'])]];
+        $totals = ['returns' => (int) $all->n, 'quantity' => (int) $all->quantity, 'refund_amount' => round((float) $all->refund_amount, 2)];
+
+        return ['range' => $this->range($from, $to), 'by' => $by, 'rows' => $rows, 'totals' => $totals, ...$this->truncation(count($rows), (int) $all->n)];
     }
 
     /**
@@ -213,7 +231,7 @@ class TradeReports
             $rows = (clone $base)->join('product_variants as v', 'v.id', '=', 'l.product_variant_id')->join('products as p', 'p.id', '=', 'v.product_id')
                 ->groupBy('l.product_variant_id', 'v.ulid', 'v.sku', 'v.name', 'p.name')
                 ->selectRaw("v.ulid as id, v.sku, TRIM(CONCAT(p.name, CASE WHEN v.name IS NULL OR v.name = '' THEN '' ELSE CONCAT(' - ', v.name) END)) as label, {$metrics}")
-                ->orderByDesc('value')->limit(2000)->get();
+                ->orderByDesc('value')->limit(self::limit())->get();
             $returned = (clone $returns)->join('supplier_return_lines as rl', 'rl.supplier_return_id', '=', 'sr.id')
                 ->groupBy('rl.product_variant_id')->selectRaw('rl.product_variant_id as k, SUM(rl.quantity * rl.unit_cost) as value')->pluck('value', 'k');
             $ids = DB::table('product_variants')->whereIn('ulid', $rows->pluck('id'))->pluck('id', 'ulid');
@@ -261,12 +279,15 @@ class TradeReports
             ->groupBy('customer_id')->selectRaw('customer_id, MIN(placed_at) as first_at, MAX(placed_at) as last_at, COUNT(*) as lifetime_orders');
         $placed = fn (): Builder => DB::table('orders as o')->where('o.tenant_id', $this->tenant())->whereBetween('o.placed_at', [$from, $to])->whereNotIn('o.status', self::EXCLUDED);
 
-        $rows = $placed()->join('customers as c', 'c.id', '=', 'o.customer_id')
+        $grouped = $placed()->join('customers as c', 'c.id', '=', 'o.customer_id')
             ->leftJoin('customer_groups as g', 'g.id', '=', 'c.customer_group_id')
             ->joinSub($first, 'f', 'f.customer_id', '=', 'o.customer_id')
             ->groupBy('o.customer_id', 'c.ulid', 'c.code', 'c.name', 'g.name', 'f.first_at', 'f.last_at', 'f.lifetime_orders')
-            ->selectRaw('c.ulid, c.code, c.name, g.name as group_name, f.first_at, f.last_at, f.lifetime_orders, COUNT(*) as orders, SUM(o.total) as revenue')
-            ->orderByDesc('revenue')->limit(500)->get()
+            ->selectRaw('c.ulid, c.code, c.name, g.name as group_name, f.first_at, f.last_at, f.lifetime_orders, COUNT(*) as orders, SUM(o.total) as revenue');
+        // Summary over every buyer in the range; the table lists the top customerLimit() by revenue.
+        $all = DB::query()->fromSub($grouped, 'g')
+            ->selectRaw('COUNT(*) as n, COALESCE(SUM(CASE WHEN g.first_at >= ? THEN 1 ELSE 0 END), 0) as new_customers, COALESCE(SUM(g.revenue), 0) as revenue', [$from])->first();
+        $rows = (clone $grouped)->orderByDesc('revenue')->limit(self::customerLimit())->get()
             ->map(fn ($r) => [
                 'customer' => ['id' => $r->ulid, 'code' => $r->code, 'name' => $r->name, 'group' => $r->group_name],
                 'orders' => (int) $r->orders,
@@ -290,19 +311,20 @@ class TradeReports
             $days[] = ['day' => $d->toDateString(), 'new' => (int) ($r->new_customers ?? 0), 'returning' => (int) ($r->returning_customers ?? 0), 'anonymous_orders' => (int) ($r->anonymous_orders ?? 0)];
         }
 
-        $new = count(array_filter($rows, fn ($r) => $r['is_new']));
-
         return [
             'range' => $this->range($from, $to),
             'summary' => [
-                'customers' => count($rows),
-                'new' => $new,
-                'returning' => count($rows) - $new,
-                'revenue' => round(array_sum(array_column($rows, 'revenue')), 2),
+                'customers' => (int) $all->n,
+                'new' => (int) $all->new_customers,
+                'returning' => (int) $all->n - (int) $all->new_customers,
+                'revenue' => round((float) $all->revenue, 2),
                 'anonymous_orders' => array_sum(array_column($days, 'anonymous_orders')),
             ],
             'rows' => $rows,
             'days' => $days,
+            'truncated' => count($rows) < (int) $all->n,
+            'total_rows' => (int) $all->n,
+            'limit' => self::customerLimit(),
         ];
     }
 
@@ -322,6 +344,35 @@ class TradeReports
         }
 
         return $out;
+    }
+
+    /**
+     * Sums of the given columns over every row of a (grouped) query, plus the row count as n.
+     *
+     * @param  array<int, string>  $columns
+     */
+    private function over(Builder $query, array $columns): object
+    {
+        $sums = implode(', ', array_map(fn ($c) => "COALESCE(SUM(g.{$c}), 0) as {$c}", $columns));
+
+        return DB::query()->fromSub($query, 'g')->selectRaw("COUNT(*) as n, {$sums}")->first();
+    }
+
+    /** Rows a detail table returns; totals always cover every row. */
+    private static function limit(): int
+    {
+        return (int) config('ecso.reports.row_limit', 2000);
+    }
+
+    private static function customerLimit(): int
+    {
+        return (int) config('ecso.reports.customer_row_limit', 500);
+    }
+
+    /** @return array{truncated: bool, total_rows: int, limit: int} */
+    private function truncation(int $shown, int $all): array
+    {
+        return ['truncated' => $shown < $all, 'total_rows' => $all, 'limit' => self::limit()];
     }
 
     /** @return array{from: string, to: string} */
