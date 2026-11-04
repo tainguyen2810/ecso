@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Access\Models\Role;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderReturn;
@@ -158,8 +159,8 @@ it('recognises marketplace revenue at completion and own-channel revenue at deli
 
 it('shows cost and profit only to members with finance.profit', function () {
     [$tenant, $owner] = tenantWithOwner();
-    $viewer = addMember($tenant, \App\Modules\Access\Models\Role::VIEWER);
-    $accountant = addMember($tenant, \App\Modules\Access\Models\Role::ACCOUNTANT);
+    $viewer = addMember($tenant, Role::VIEWER);
+    $accountant = addMember($tenant, Role::ACCOUNTANT);
 
     expect(actingInTenant($accountant, $tenant)->getJson('/api/v1/finance/summary')->assertOk()->json('data.can_view_profit'))->toBeTrue();
     actingInTenant($viewer, $tenant)->getJson('/api/v1/reports/profit-loss')->assertForbidden();
