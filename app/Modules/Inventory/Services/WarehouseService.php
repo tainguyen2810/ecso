@@ -29,6 +29,31 @@ class WarehouseService
     }
 
     /**
+     * The tenant's warehouse for defective goods, created the first time damaged returns come in.
+     */
+    public function defective(): Warehouse
+    {
+        return DB::transaction(function () {
+            DB::table('tenants')->where('id', $this->context->id())->lockForUpdate()->value('id');
+            $warehouse = Warehouse::query()->where('purpose', Warehouse::PURPOSE_DEFECTIVE)->where('status', Warehouse::STATUS_ACTIVE)->orderBy('id')->first();
+            if ($warehouse) {
+                return $warehouse;
+            }
+
+            $code = 'HANGLOI';
+            for ($i = 2; Warehouse::withTrashed()->where('code', $code)->exists(); $i++) {
+                $code = 'HANGLOI'.$i;
+            }
+            $warehouse = new Warehouse(['code' => $code, 'name' => 'Kho hàng lỗi', 'status' => Warehouse::STATUS_ACTIVE]);
+            $warehouse->purpose = Warehouse::PURPOSE_DEFECTIVE;
+            $warehouse->save();
+            $this->audit->record('warehouse.created', $warehouse, ['code' => $warehouse->code, 'name' => $warehouse->name, 'purpose' => Warehouse::PURPOSE_DEFECTIVE]);
+
+            return $warehouse;
+        });
+    }
+
+    /**
      * @param  array{code: string, name: string, address?: string|null}  $data
      */
     public function create(array $data): Warehouse
@@ -36,7 +61,7 @@ class WarehouseService
         return DB::transaction(function () use ($data) {
             // Serialize concurrent creates per tenant so the plan limit cannot be bypassed.
             DB::table('tenants')->where('id', $this->context->id())->lockForUpdate()->value('id');
-            $this->context->entitlements()->assertWithin('limit.warehouses', Warehouse::query()->count());
+            $this->context->entitlements()->assertWithin('limit.warehouses', Warehouse::query()->where('purpose', Warehouse::PURPOSE_SALE)->count());
 
             $warehouse = Warehouse::create($data + ['status' => Warehouse::STATUS_ACTIVE]);
             if (! Warehouse::query()->where('is_default', true)->exists()) {
@@ -66,6 +91,9 @@ class WarehouseService
             }
 
             if (! empty($data['is_default'])) {
+                if ($warehouse->purpose === Warehouse::PURPOSE_DEFECTIVE) {
+                    throw new InvalidStockOperation('Kho hàng lỗi không thể là kho mặc định.');
+                }
                 if (($data['status'] ?? $warehouse->status) !== Warehouse::STATUS_ACTIVE) {
                     throw new InvalidStockOperation('Kho mặc định phải đang hoạt động.');
                 }

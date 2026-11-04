@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { invoiceHtml, invoicesHtml } from './invoice';
+import { deliverySlipHtml, invoiceHtml, invoicesHtml } from './invoice';
 import { actionLabels, manualActionOrder, paymentMethods, paymentStatus } from './labels';
 import type { OrderDetail } from '@/shared/types';
 
@@ -73,3 +73,20 @@ describe('sales invoice', () => {
         for (const s of ['unpaid', 'partial', 'paid']) expect(paymentStatus[s]).toBeTruthy();
     });
 });
+
+describe('deliverySlipHtml', () => {
+    it('prints what to collect, no prices, and the signatures', () => {
+        const html = deliverySlipHtml(order({ shipping_address: '12 Lê Lợi', carrier: 'GHN', tracking_number: 'GHN123' }), 'Shop A', 'a5');
+        expect(html).toContain('PHIẾU GIAO HÀNG');
+        expect(html).toContain('THU HỘ (COD)');
+        expect(html).toContain('data-cod="80000"');
+        expect(html).toContain('GHN123');
+        expect(html).toContain('Chị &lt;Lan&gt;');
+        expect(html).not.toContain('150.000');
+        expect(html).toContain('Người nhận hàng');
+    });
+    it('says nothing is to be collected on a paid order', () => {
+        expect(deliverySlipHtml(order({ paid_amount: '280000.00' }), 'Shop A')).toContain('KHÔNG THU TIỀN');
+    });
+});
+

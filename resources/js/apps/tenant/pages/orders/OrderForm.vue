@@ -53,6 +53,9 @@ const copiedFrom = ref<string | null>(null);
 const exchangeId = computed(() => (editId.value ? null : ((route.query.exchange as string | undefined) ?? null)));
 const exchange = ref<OrderReturnData | null>(null);
 const tagSuggestions = ref<string[]>([]);
+// Đơn nháp (?draft=<id>): the form saved without creating an order; creating the order deletes the draft.
+const draftId = ref<string | null>(editId.value ? null : ((route.query.draft as string | undefined) ?? null));
+const savingDraft = ref(false);
 
 const loading = ref(true);
 const channels = ref<SalesChannel[]>([]);
@@ -114,7 +117,7 @@ onMounted(async () => {
             if (payOptions.value.some((o) => o.value === s.payments.default_online)) form.pay_method = s.payments.default_online;
         }
         channels.value = c.data.data;
-        warehouses.value = w.data.data;
+        warehouses.value = (w.data.data as Warehouse[]).filter((x) => x.purpose !== 'defective');
         if (editId.value) {
             await loadOrder(editId.value);
         } else {
@@ -126,6 +129,7 @@ onMounted(async () => {
                 chooseCustomer(data.data);
             }
             if (copyId.value) await loadOrder(copyId.value, true);
+            if (draftId.value) await loadDraft(draftId.value);
             if (exchangeId.value) await loadExchange(exchangeId.value);
         }
     } finally {
@@ -481,6 +485,7 @@ async function submit() {
             const placedAt = canBackdate.value && form.placed_at ? form.placed_at.replace('T', ' ') : null;
             const { data } = await api.post('/sales-orders', { ...body, channel_id: form.channel_id, stage: form.stage, payments, exchange_return_id: exchange.value?.id ?? null, ...(placedAt ? { placed_at: placedAt } : {}) }, idempotent(createKey));
             toast.success(`Đã tạo đơn ${data.data.external_order_id}`);
+            if (draftId.value) await api.delete(`/order-drafts/${draftId.value}`).catch(() => {});
             await router.push(`/orders/${data.data.id}`);
         }
     } catch (e) {
@@ -518,11 +523,47 @@ function onShortcut(e: KeyboardEvent) {
 }
 onMounted(() => window.addEventListener('keydown', onShortcut));
 onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut));
+
+async function loadDraft(id: string) {
+    try {
+        const { data } = await api.get(`/order-drafts/${id}`);
+        const p = data.data.payload as { form?: Partial<typeof form>; lines?: Line[]; customer?: typeof customer.value; priceTier?: 'retail' | 'wholesale' };
+        Object.assign(form, p.form ?? {});
+        lines.value = (p.lines ?? []).map((l) => ({ ...l, uid: nextUid++ }));
+        customer.value = p.customer ?? null;
+        if (p.priceTier) priceTier.value = p.priceTier;
+    } catch {
+        toast.error('Không mở được đơn nháp (có thể đã bị xóa).');
+        draftId.value = null;
+    }
+}
+
+/** "Lưu nháp": keeps the form for later without creating an order; no stock is held and no number is used. */
+async function saveDraft() {
+    savingDraft.value = true;
+    try {
+        const title = form.buyer_name.trim() || customer.value?.name || lines.value[0]?.name || 'Đơn nháp';
+        const body = { title: title.slice(0, 191), total: total.value, lines_count: lines.value.length, payload: { form: { ...form }, lines: lines.value, customer: customer.value, priceTier: priceTier.value } };
+        if (draftId.value) {
+            await api.put(`/order-drafts/${draftId.value}`, body);
+        } else {
+            const { data } = await api.post('/order-drafts', body);
+            draftId.value = data.data.id;
+            await router.replace({ query: { ...route.query, draft: draftId.value } });
+        }
+        toast.success('Đã lưu nháp. Mở lại ở Danh sách đơn hàng › Đơn nháp.');
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    } finally {
+        savingDraft.value = false;
+    }
+}
 </script>
 
 <template>
     <PageHeader :title="editId ? 'Sửa đơn bán' : copiedFrom ? `Tạo đơn bán (sao chép từ ${copiedFrom})` : 'Tạo đơn hàng'" description="Đơn của kênh bán riêng: cửa hàng, Facebook, Zalo, website… Hàng được giữ trong kho ngay khi lưu đơn.">
         <Button variant="outline" @click="$router.push(editId ? `/orders/${editId}` : '/orders')">Thoát</Button>
+        <Button v-if="!editId && !exchange" variant="outline" :loading="savingDraft" :disabled="loading || (!lines.length && !form.buyer_name)" data-testid="save-draft" @click="saveDraft">{{ draftId ? 'Cập nhật nháp' : 'Lưu nháp' }}</Button>
         <Button form="order-form" type="submit" :loading="saving" :disabled="loading || !lines.length || !form.channel_id" data-testid="submit-order">
             {{ editId ? 'Lưu thay đổi' : 'Tạo đơn hàng' }} <kbd class="ml-1 text-[10px] opacity-70">F1</kbd>
         </Button>

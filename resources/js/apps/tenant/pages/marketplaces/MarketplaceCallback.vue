@@ -30,7 +30,7 @@ onMounted(async () => {
             ? await api.post('/marketplace-accounts/woocommerce/complete', { state })
             : await api.post(`/marketplace-accounts/callback/${route.params.marketplace}`, { state, params: rest });
         result.value = { ok: true, account: data.data, checks: data.checks };
-        if (isWoo) warehouses.value = (await api.get('/warehouses')).data.data.filter((w: Warehouse) => w.status === 'active');
+        if (isWoo) warehouses.value = (await api.get('/warehouses')).data.data.filter((w: Warehouse) => w.status === 'active' && w.purpose !== 'defective');
     } catch (e) {
         const err = e as ApiError;
         result.value = { ok: false, message: Object.values(err.body.errors ?? {})[0]?.[0] ?? err.message };
