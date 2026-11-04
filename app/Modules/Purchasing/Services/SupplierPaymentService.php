@@ -60,13 +60,15 @@ class SupplierPaymentService
     public function void(SupplierPayment $payment, string $reason): SupplierPayment
     {
         return DB::transaction(function () use ($payment, $reason) {
+            // Purchase order first, then the payment: the same order as record(), so the two cannot deadlock.
+            $po = $payment->purchase_order_id ? PurchaseOrder::query()->lockForUpdate()->findOrFail($payment->purchase_order_id) : null;
             $payment = SupplierPayment::query()->lockForUpdate()->findOrFail($payment->id);
             if ($payment->voided_at) {
                 throw ValidationException::withMessages(['payment' => 'Phiếu chi đã hủy.']);
             }
             $payment->forceFill(['voided_at' => now(), 'voided_by' => Auth::id(), 'void_reason' => $reason])->save();
-            if ($payment->purchase_order_id) {
-                $this->recompute(PurchaseOrder::query()->lockForUpdate()->findOrFail($payment->purchase_order_id));
+            if ($po) {
+                $this->recompute($po);
             }
             $this->audit->record('purchase.payment_voided', $payment, ['amount' => $payment->amount, 'reason' => $reason]);
 

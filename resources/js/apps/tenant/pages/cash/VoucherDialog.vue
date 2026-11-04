@@ -6,7 +6,7 @@ import Dialog from '@/shared/ui/Dialog.vue';
 import FormField from '@/shared/ui/FormField.vue';
 import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
-import { api, ApiError } from '@/shared/lib/api';
+import { api, ApiError, idempotent, newIdempotencyKey } from '@/shared/lib/api';
 import { useToast } from '@/shared/composables/useToast';
 import { cn, formatDate, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
@@ -43,6 +43,8 @@ const searching = ref(false);
 const debtMode = ref(false);
 const debtOrders = ref<DebtOrder[]>([]);
 const saving = ref(false);
+// One key per voucher being entered: a retry sends the same key, so the money is recorded once.
+let key = newIdempotencyKey();
 const error = ref<ApiError | null>(null);
 
 const receipt = computed(() => props.direction === 'receipt');
@@ -84,6 +86,7 @@ watch(open, async (v) => {
     results.value = [];
     error.value = null;
     debtMode.value = false;
+    key = newIdempotencyKey();
     try {
         types.value = (await api.get('/cash-voucher-types', { params: { direction: props.direction } })).data.data;
         form.type = activeTypes.value[0]?.id ?? '';
@@ -146,10 +149,10 @@ async function save(again = false) {
     try {
         let saved: VoucherRow | null = null;
         if (debtMode.value && party.value && form.party_kind === 'customer') {
-            const { data } = await api.post(`/customers/${party.value.id}/debt-receipts`, common);
+            const { data } = await api.post(`/customers/${party.value.id}/debt-receipts`, common, idempotent(key));
             toast.success(`Đã thu nợ ${formatMoney(amount.value)} của ${party.value.name}, ghi vào ${data.data.length} đơn.`);
         } else if (debtMode.value && party.value && form.party_kind === 'supplier') {
-            await api.post(`/suppliers/${party.value.id}/payments`, common);
+            await api.post(`/suppliers/${party.value.id}/payments`, common, idempotent(key));
             toast.success(`Đã trả nợ ${formatMoney(amount.value)} cho ${party.value.name}.`);
         } else {
             const { data } = await api.post('/cash-vouchers', {
@@ -160,10 +163,11 @@ async function save(again = false) {
                 party_id: party.value?.id ?? null,
                 party_name: party.value ? null : form.party_name || query.value || null,
                 counts_in_pnl: form.counts_in_pnl,
-            });
+            }, idempotent(key));
             saved = data.data;
             toast.success(`Đã lập ${directionLabels[props.direction].toLowerCase()} ${data.data.number}.`);
         }
+        key = newIdempotencyKey();
         emit('saved', saved);
         if (again) {
             Object.assign(form, { amount: '', reference: '', note: '' });
