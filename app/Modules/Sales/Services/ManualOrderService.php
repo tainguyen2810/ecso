@@ -391,16 +391,16 @@ class ManualOrderService
     {
         $lines = [];
         foreach ($order->items()->with('variant')->get() as $i) {
-            $key = $i->variant?->sku ?? $i->name;
+            $key = $i->variant->sku ?? $i->name;
             $lines[$key] = ['qty' => (int) $i->quantity + (int) ($lines[$key]['qty'] ?? 0), 'price' => (string) $i->unit_price, 'discount' => (string) $i->discount];
         }
 
         return ['lines' => $lines, 'fields' => [
-            'Khách hàng' => (string) ($order->customer?->name ?? ''),
+            'Khách hàng' => (string) ($order->customer->name ?? ''),
             'Người nhận' => (string) $order->buyer_name,
             'SĐT người nhận' => (string) $order->buyer_phone_masked,
             'Địa chỉ giao' => (string) $order->shipping_address,
-            'Kho xuất' => (string) ($order->warehouse?->name ?? ''),
+            'Kho xuất' => (string) ($order->warehouse->name ?? ''),
             'Phí giao hàng' => (string) $order->shipping_fee,
             'Chiết khấu đơn' => (string) $order->discount,
             'Tổng tiền' => (string) $order->total,

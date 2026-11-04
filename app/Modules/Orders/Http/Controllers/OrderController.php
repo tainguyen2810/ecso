@@ -115,9 +115,9 @@ class OrderController extends Controller
             // What each edit changed, newest first.
             'edits' => AuditLog::query()->with('actor:id,name')->where('tenant_id', $order->tenant_id)->where('action', 'order.updated')->where('subject_type', 'Order')->where('subject_id', $order->id)
                 ->latest('id')->limit(50)->get()->map(fn (AuditLog $log) => [
-                    'at' => $log->created_at?->toIso8601String(),
+                    'at' => $log->created_at->toIso8601String(),
                     'actor' => $log->actor?->name,
-                    'changes' => array_values((array) ($log->changes['diff'] ?? [])),
+                    'changes' => self::editChanges($log->getAttribute('changes')),
                 ]),
             'notes' => $order->notes()->with('user:id,name')->get()->map(fn (OrderNote $n) => [
                 'id' => $n->id, 'body' => $n->body, 'user' => $n->user?->name, 'created_at' => $n->created_at?->toIso8601String(),
@@ -442,5 +442,13 @@ class OrderController extends Controller
             'sort' => ['nullable', Rule::in(['newest', 'oldest', 'ship_by'])],
             'per_page' => ['nullable', 'integer', 'min:10', 'max:100'],
         ]);
+    }
+
+    /** @return array<int, string> */
+    private static function editChanges(mixed $changes): array
+    {
+        $diff = is_array($changes) ? ($changes['diff'] ?? null) : null;
+
+        return is_array($diff) ? array_values(array_map('strval', $diff)) : [];
     }
 }

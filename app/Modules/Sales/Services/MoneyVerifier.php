@@ -72,7 +72,7 @@ class MoneyVerifier
             }
             $limit = bcsub($return->goodsValue(), (string) $return->exchange_credit, 2);
             if (bccomp((string) $total, $limit, 2) > 0) {
-                $problems[] = ['tenant' => (int) $return->tenant_id, 'order' => (string) ($return->order?->external_order_id ?? ''), 'problem' => "phiếu trả {$return->number} hoàn vượt giá trị", 'expected' => $limit, 'actual' => bcadd((string) $total, '0', 2)];
+                $problems[] = ['tenant' => (int) $return->tenant_id, 'order' => (string) ($return->order->external_order_id ?? ''), 'problem' => "phiếu trả {$return->number} hoàn vượt giá trị", 'expected' => $limit, 'actual' => bcadd((string) $total, '0', 2)];
             }
         }
 
