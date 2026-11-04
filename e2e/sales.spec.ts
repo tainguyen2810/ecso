@@ -77,7 +77,8 @@ test('counter sale beyond stock is refused', async ({ page }) => {
 
 test('customers: list with debt, detail with order history', async ({ page }) => {
     await login(page, 'owner@demo.test');
-    await page.getByRole('link', { name: 'Khách hàng' }).first().click();
+    await page.getByRole('button', { name: 'Khách hàng', exact: true }).click();
+    await page.getByRole('link', { name: 'Danh sách khách hàng' }).click();
     await expect(page.getByTestId('customer-table')).toContainText('Phạm Minh Tuấn');
     await shot(page, '06-customers');
 

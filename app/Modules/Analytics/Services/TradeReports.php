@@ -142,6 +142,8 @@ class TradeReports
             'staff' => (clone $base)->leftJoin('users as u', 'u.id', '=', 'op.created_by')
                 ->groupBy('op.created_by', 'u.name')->selectRaw("COALESCE(u.name, 'Không rõ') as label, {$metrics}")->orderByDesc('received')->get(),
             'day' => (clone $base)->groupByRaw('DATE(op.paid_at)')->selectRaw("DATE(op.paid_at) as label, {$metrics}")->orderBy('label')->get(),
+            'warehouse' => (clone $base)->join('orders as o', 'o.id', '=', 'op.order_id')->leftJoin('warehouses as w', 'w.id', '=', 'o.warehouse_id')
+                ->groupBy('o.warehouse_id', 'w.name')->selectRaw("COALESCE(w.name, 'Chưa gán kho') as label, {$metrics}")->orderByDesc('received')->get(),
             default => (clone $base)->groupBy('op.method')->selectRaw("op.method as label, {$metrics}")->orderByDesc('received')->get(),
         };
 

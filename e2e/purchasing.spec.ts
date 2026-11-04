@@ -11,7 +11,7 @@ test.describe.configure({ mode: 'serial' });
 
 test('purchasing: order, receive in parts, pay, supplier debt', async ({ page }) => {
     await login(page, 'owner@demo.test');
-    await page.getByRole('link', { name: 'Sản phẩm' }).first().click();
+    await page.getByRole('button', { name: 'Sản phẩm', exact: true }).click();
     await page.getByRole('link', { name: 'Nhập hàng', exact: true }).first().click();
     await expect(page.getByTestId('po-table').locator('tbody tr')).toHaveCount(4);
     await shot(page, '01-purchase-orders');

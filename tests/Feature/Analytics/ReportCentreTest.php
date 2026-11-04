@@ -151,3 +151,39 @@ it('shows each report group only to members allowed to see it, inside their own 
         ->and($theirs['stock']['skus'])->toBe(0);
     actingInTenant($otherOwner, $other)->getJson('/api/v1/reports/product-sales')->assertOk()->assertJsonCount(0, 'data.rows');
 });
+
+it('reports sales per order and per line, delivery status, payments by warehouse and detailed stock (Sapo reports)', function () {
+    [$tenant, $owner] = tenantWithOwner();
+    $a = makeVariant($tenant, 'RP-A', ['ref_price' => 100000]);
+    stockIn($tenant, $a, 10);
+    $paid = createSalesOrder($owner, $tenant, [[$a, 2, 100000]], [
+        'stage' => 'completed', 'customer' => ['name' => 'Anh Tuấn', 'phone' => '0909000111'], 'payments' => [['method' => 'cash', 'amount' => 200000]],
+    ])->assertCreated();
+    createSalesOrder($owner, $tenant, [[$a, 1, 100000]], ['lines' => [['variant_id' => $a->ulid, 'quantity' => 1, 'unit_price' => 100000, 'discount' => 10000], ['name' => 'Cài win', 'quantity' => 1, 'unit_price' => 50000]]])->assertCreated();
+    $api = actingInTenant($owner, $tenant);
+
+    $orders = $api->getJson('/api/v1/reports/orders')->assertOk();
+    // 200 000 + (100 000 − 10 000 + 50 000)
+    expect($orders->json('data.totals.orders'))->toBe(2)->and((float) $orders->json('data.totals.total'))->toEqual(340000.0);
+    $byNumber = collect($orders->json('data.rows'))->keyBy('number');
+    expect($byNumber[$paid->json('data.external_order_id')]['customer'])->toBe('Anh Tuấn')
+        ->and((float) $byNumber[$paid->json('data.external_order_id')]['cogs'])->toEqual(100000.0); // 2 × 50 000 shipped at the counter
+
+    $lines = $api->getJson('/api/v1/reports/sales-lines')->assertOk();
+    expect($lines->json('data.totals.lines'))->toBe(3)->and($lines->json('data.totals.orders'))->toBe(2);
+    $service = collect($lines->json('data.rows'))->firstWhere('product.service', true);
+    expect($service['product']['name'])->toBe('Cài win')->and((float) $service['amount'])->toEqual(50000.0);
+    $api->getJson('/api/v1/reports/sales-lines?q=RP-A')->assertJsonPath('data.totals.lines', 2);
+
+    $delivery = collect($api->getJson('/api/v1/reports/overview')->json('data.delivery'))->keyBy('key');
+    expect($delivery['delivered']['orders'])->toBe(1)->and($delivery['waiting']['orders'])->toBe(1);
+
+    $api->getJson('/api/v1/reports/payments?by=warehouse')->assertOk()
+        ->assertJsonPath('data.rows.0.label', defaultWarehouse($tenant)->name)->assertJsonPath('data.rows.0.received', 200000);
+
+    $stock = $api->getJson('/api/v1/reports/stock-detail')->assertOk();
+    expect($stock->json('data.rows.0.variant.sku'))->toBe('RP-A')
+        ->and($stock->json('data.rows.0.on_hand'))->toBe(8)
+        ->and($stock->json('data.rows.0.reserved'))->toBe(1)
+        ->and($stock->json('data.rows.0.available'))->toBe(7);
+});

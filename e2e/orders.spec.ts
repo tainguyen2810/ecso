@@ -39,7 +39,8 @@ test('listings: SKU mapping with exact-SKU suggestions only', async ({ page }) =
 
 test('orders: tabs, filters, bulk actions and packing slips', async ({ page }) => {
     await login(page, 'owner@demo.test');
-    await page.getByRole('link', { name: 'Đơn hàng' }).first().click();
+    await page.getByRole('button', { name: 'Đơn hàng', exact: true }).click();
+    await page.getByRole('link', { name: 'Danh sách đơn hàng' }).click();
     await expect(page.getByTestId('order-table')).toBeVisible();
     await shot(page, '04-orders');
 
@@ -82,7 +83,7 @@ test('order detail: items, reservations, history, actions and notes', async ({ p
 
 test('returns: receive and inspect restocks sellable units only', async ({ page }) => {
     await login(page, 'owner@demo.test');
-    await page.getByRole('link', { name: 'Đơn hàng' }).first().click();
+    await page.getByRole('button', { name: 'Đơn hàng', exact: true }).click();
     await page.getByRole('link', { name: 'Khách trả hàng' }).click();
     await expect(page.getByTestId('return-table')).toBeVisible();
     await shot(page, '09-returns');

@@ -47,9 +47,13 @@ test('low-stock alert, stocktake and write-off', async ({ page }) => {
 
 test('reports: sales and profit, stock ledger, cashbook', async ({ page }) => {
     await login(page, 'owner@demo.test');
-    await page.getByRole('link', { name: 'Báo cáo' }).first().click();
-    await page.getByTestId('report-group-sales').getByRole('link', { name: 'Doanh thu & lợi nhuận theo ngày' }).click();
+    // Báo cáo has five sub-menus like Sapo.
+    await page.getByRole('button', { name: 'Báo cáo', exact: true }).click();
+    await page.getByRole('link', { name: 'Báo cáo bán hàng' }).click();
+    await expect(page.getByTestId('delivery-status')).toBeVisible();
+    await page.getByTestId('report-group-sales').getByRole('link', { name: 'Doanh thu theo kênh bán' }).click();
     await expect(page.getByTestId('sales-kpis')).toBeVisible();
+    await page.goto('/reports/sales');
     await page.getByRole('button', { name: '7 ngày' }).click();
     await expect(page.getByTestId('sales-table').locator('tbody tr')).toHaveCount(7);
     await shot(page, '04-sales-by-day');
@@ -57,12 +61,14 @@ test('reports: sales and profit, stock ledger, cashbook', async ({ page }) => {
     await expect(page.getByTestId('sales-table')).toContainText('Bán tại cửa hàng');
     await shot(page, '05-sales-by-channel');
 
+    await page.getByRole('link', { name: 'Báo cáo kho' }).click();
     await page.getByRole('link', { name: 'Xuất nhập tồn' }).click();
     await page.getByTestId('ledger-detail').check();
     await expect(page.getByTestId('ledger-table')).toContainText('Hủy / mất');
     await shot(page, '06-stock-ledger');
 
-    await page.getByRole('link', { name: 'Sổ quỹ' }).click();
+    await page.getByRole('link', { name: 'Báo cáo tài chính' }).click();
+    await page.getByTestId('report-group-finance').getByRole('link', { name: 'Sổ quỹ' }).click();
     await expect(page.getByTestId('cashbook-table')).toContainText('Chi trả nhà cung cấp');
     await shot(page, '07-cashbook');
 });
@@ -75,17 +81,20 @@ test('report centre: every group opens its detail reports on the same period', a
         await baseShot(page, name, dir);
     };
     await login(page, 'owner@demo.test');
-    await page.goto('/reports');
-    for (const group of ['sales', 'returns', 'customers', 'finance', 'purchases', 'stock']) {
+    for (const group of ['purchases', 'stock', 'finance', 'customers']) {
+        await page.goto(`/reports/group/${group}`);
         await expect(page.getByTestId(`report-group-${group}`)).toBeVisible();
+        await snap(`00-group-${group}`);
     }
+    await page.goto('/reports');
+    await expect(page.getByTestId('report-group-sales')).toBeVisible();
     await page.getByRole('button', { name: '30 ngày' }).click();
     await expect(page).toHaveURL(/from=/);
     await snap('01-report-centre');
 
     // The period chosen on the centre carries over to the detail report.
     const from = new URL(page.url()).searchParams.get('from');
-    await page.getByTestId('report-group-sales').getByRole('link', { name: 'Theo sản phẩm' }).click();
+    await page.getByTestId('report-group-sales').getByRole('link', { name: 'Thống kê theo sản phẩm' }).click();
     await expect(page).toHaveURL(new RegExp(`from=${from}`));
     await expect(page.getByTestId('report-table')).toBeVisible();
     await snap('02-sales-by-product');
@@ -93,6 +102,8 @@ test('report centre: every group opens its detail reports on the same period', a
     await expect(page.getByTestId('report-table').locator('tbody tr').first()).toContainText('ATC');
 
     await page.getByTestId('back-to-reports').click();
+    await expect(page.getByTestId('report-group-sales')).toBeVisible();
+    await page.goto('/reports/group/finance');
     await page.getByRole('link', { name: 'Báo cáo lãi lỗ' }).click();
     await expect(page.getByTestId('pl-profit')).toBeVisible();
     await snap('03-profit-loss');
@@ -111,6 +122,10 @@ test('report centre: every group opens its detail reports on the same period', a
         ['payables', '08-supplier-debts', ''],
         ['payments', '09-payments-by-method', '?by=method'],
         ['customers', '10-customers', ''],
+        ['orders', '12-orders', ''],
+        ['sales-lines', '13-sales-lines', ''],
+        ['stock-detail', '14-stock-detail', ''],
+        ['payments', '15-payments-by-warehouse', '?by=warehouse'],
         ['returns', '11-returns', '?by=product'],
     ] as const) {
         await page.goto(`/reports/view/${report}${query}`);

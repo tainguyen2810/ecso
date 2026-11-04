@@ -8,7 +8,9 @@ test.describe.configure({ mode: 'serial' });
 
 test('products: list, create with generated variants, import', async ({ page }) => {
     await login(page, 'owner@demo.test');
-    await page.getByRole('link', { name: 'Sản phẩm' }).first().click();
+    // A sidebar item with a sub-menu only opens it (like Sapo); its pages are the sub-items.
+    await page.getByRole('button', { name: 'Sản phẩm', exact: true }).click();
+    await page.getByRole('link', { name: 'Danh sách sản phẩm' }).click();
     await expect(page.getByTestId('product-table')).toBeVisible();
     await page.getByRole('button', { name: 'Xem biến thể' }).first().click();
     await shot(page, '01-products');

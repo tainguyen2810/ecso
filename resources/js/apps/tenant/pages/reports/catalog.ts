@@ -34,7 +34,10 @@ export interface DetailReport {
     /** range: from/to; date: a single "as of" date; none: current state. */
     period: 'range' | 'date' | 'none';
     search?: boolean;
+    searchPlaceholder?: string;
     warehouse?: boolean;
+    /** Filter by own sales channel. */
+    channel?: boolean;
     tabs?: Record<string, string>;
     columns: (data: any, by: string) => Column[];
     rows?: (data: any) => any[];
@@ -77,6 +80,99 @@ export const reports: Record<string, DetailReport> = {
             { key: 'margin', label: 'Biên', type: 'pct' },
         ],
     },
+    orders: {
+        key: 'orders',
+        title: 'Thống kê theo đơn hàng',
+        description: 'Mỗi đơn một dòng: khách, kênh bán, tiền hàng, chiết khấu, phí giao, khách phải trả, giá vốn và lãi gộp.',
+        endpoint: '/reports/orders',
+        permission: 'reports.view',
+        period: 'range',
+        search: true,
+        searchPlaceholder: 'Tìm mã đơn, tên khách',
+        warehouse: true,
+        channel: true,
+        empty: 'Không có đơn nào trong kỳ.',
+        note: 'Không tính đơn hủy và đơn hoàn. Lãi gộp = khách phải trả − phí giao − giá vốn; đơn chưa xuất kho chưa có giá vốn.',
+        kpis: (d) => [
+            { label: 'Số đơn', value: d.totals.orders, type: 'number' },
+            { label: 'Khách phải trả', value: d.totals.total, type: 'money' },
+            { label: 'Chiết khấu', value: d.totals.discount, type: 'money' },
+            { label: 'Lãi gộp', value: d.totals.gross_profit, type: 'money' },
+        ],
+        columns: () => [
+            { key: 'number', label: 'Mã đơn', link: (r) => `/orders/${r.id}`, sub: (r) => r.channel },
+            { key: 'placed_at', label: 'Ngày bán', type: 'datetime' },
+            { key: 'customer', label: 'Khách hàng' },
+            { key: 'units', label: 'SL', type: 'number', total: true },
+            { key: 'goods', label: 'Tiền hàng', type: 'money', total: true },
+            { key: 'discount', label: 'Chiết khấu', type: 'money', total: true },
+            { key: 'shipping_fee', label: 'Phí giao', type: 'money', total: true },
+            { key: 'total', label: 'Khách phải trả', type: 'money', total: true },
+            { key: 'cogs', label: 'Giá vốn', type: 'money', total: true },
+            { key: 'gross_profit', label: 'Lãi gộp', type: 'money', total: true, tone: negative('gross_profit') },
+        ],
+    },
+    'sales-lines': {
+        key: 'sales-lines',
+        title: 'Bán hàng chi tiết',
+        description: 'Từng dòng hàng của từng đơn trong kỳ, kể cả dịch vụ.',
+        endpoint: '/reports/sales-lines',
+        permission: 'reports.view',
+        period: 'range',
+        search: true,
+        searchPlaceholder: 'Tìm mã đơn, khách hàng, SKU, tên hàng',
+        warehouse: true,
+        channel: true,
+        empty: 'Không có dòng hàng nào trong kỳ.',
+        note: 'Không tính đơn hủy và đơn hoàn. Chiết khấu là chiết khấu từng dòng; chiết khấu cả đơn xem ở Thống kê theo đơn hàng.',
+        kpis: (d) => [
+            { label: 'Số đơn', value: d.totals.orders, type: 'number' },
+            { label: 'Số lượng bán', value: d.totals.quantity, type: 'number' },
+            { label: 'Thành tiền', value: d.totals.amount, type: 'money' },
+            { label: 'Lãi gộp', value: d.totals.gross_profit, type: 'money' },
+        ],
+        columns: () => [
+            { key: 'placed_at', label: 'Ngày bán', type: 'datetime' },
+            { key: 'order', label: 'Mã đơn', value: (r) => r.order.number, link: (r) => `/orders/${r.order.id}`, sub: (r) => r.channel },
+            { key: 'customer', label: 'Khách hàng' },
+            { key: 'product', label: 'Sản phẩm', value: (r) => r.product.name, sub: (r) => (r.product.service ? 'Dịch vụ' : r.product.sku), link: (r) => (r.product.id ? `/inventory/sku/${r.product.id}` : null) },
+            { key: 'quantity', label: 'SL', type: 'number', total: true },
+            { key: 'unit_price', label: 'Đơn giá', type: 'money' },
+            { key: 'discount', label: 'Chiết khấu', type: 'money', total: true },
+            { key: 'amount', label: 'Thành tiền', type: 'money', total: true },
+            { key: 'cogs', label: 'Giá vốn', type: 'money', total: true },
+            { key: 'gross_profit', label: 'Lãi gộp', type: 'money', total: true, tone: negative('gross_profit') },
+        ],
+    },
+    'stock-detail': {
+        key: 'stock-detail',
+        title: 'Tồn kho chi tiết',
+        description: 'Tồn thực tế, đang giữ cho đơn, có thể bán và đang về từ đơn nhập, theo từng kho, tại thời điểm xem.',
+        endpoint: '/reports/stock-detail',
+        permission: 'inventory.view',
+        period: 'none',
+        search: true,
+        warehouse: true,
+        empty: 'Chưa có tồn kho.',
+        note: 'Có thể bán = tồn thực tế − đang giữ − tồn an toàn. Đang về = phần còn chờ của đơn nhập đã đặt.',
+        kpis: (d) => [
+            { label: 'SKU có tồn', value: d.totals.skus, type: 'number' },
+            { label: 'Tồn thực tế', value: d.totals.on_hand, type: 'number' },
+            { label: 'Đang giữ cho đơn', value: d.totals.reserved, type: 'number' },
+            { label: 'Giá trị tồn', value: d.totals.value, type: 'money' },
+        ],
+        columns: () => [
+            { key: 'variant', label: 'Sản phẩm', value: variant, sub: variantSku, link: variantLink },
+            { key: 'warehouse', label: 'Kho' },
+            { key: 'on_hand', label: 'Tồn thực tế', type: 'number', total: true },
+            { key: 'reserved', label: 'Đang giữ', type: 'number', total: true },
+            { key: 'available', label: 'Khả dụng', type: 'number', total: true, tone: negative('available') },
+            { key: 'sellable', label: 'Có thể bán', type: 'number', total: true },
+            { key: 'incoming', label: 'Đang về', type: 'number', total: true },
+            { key: 'cost_price', label: 'Giá vốn', type: 'money' },
+            { key: 'value', label: 'Giá trị tồn', type: 'money', total: true },
+        ],
+    },
     returns: {
         key: 'returns',
         title: 'Trả hàng',
@@ -114,13 +210,13 @@ export const reports: Record<string, DetailReport> = {
         endpoint: '/reports/payments',
         permission: 'finance.view',
         period: 'range',
-        tabs: { method: 'Theo phương thức', staff: 'Theo nhân viên', day: 'Theo ngày' },
+        tabs: { method: 'Theo phương thức', staff: 'Theo nhân viên', day: 'Theo ngày', warehouse: 'Theo kho' },
         empty: 'Không có khoản thanh toán nào trong kỳ.',
         note: 'Đơn trên sàn do sàn thu tiền nên không có ở đây. Khoản đã hủy không được tính.',
         columns: (_d, by) => [
             {
                 key: 'label',
-                label: { method: 'Phương thức', staff: 'Nhân viên', day: 'Ngày' }[by] ?? '',
+                label: { method: 'Phương thức', staff: 'Nhân viên', day: 'Ngày', warehouse: 'Kho' }[by] ?? '',
                 value: (r) => (by === 'method' ? (paymentMethods[r.label] ?? r.label) : by === 'day' ? isoDay(r.label) : r.label),
             },
             { key: 'entries', label: 'Số phiếu', type: 'number', total: true },

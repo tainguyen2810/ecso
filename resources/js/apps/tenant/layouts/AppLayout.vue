@@ -137,21 +137,23 @@ useGoShortcuts(
                                 )
                             "
                         >
-                            <RouterLink :to="item.path" class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2" @click="(item.children?.length && (open = new Set([...open, item.name])), !item.children?.length && (mobileOpen = false))">
+                            <!-- Like Sapo: an item with a sub-menu only opens / closes it; its pages are the sub-items. -->
+                            <button
+                                v-if="item.children?.length"
+                                type="button"
+                                class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left"
+                                :aria-expanded="open.has(item.name)"
+                                @click="toggleOpen(item.name)"
+                            >
+                                <component :is="item.icon" class="size-[18px] shrink-0" :stroke-width="1.75" />
+                                <span class="flex-1 truncate">{{ item.label }}</span>
+                                <ChevronDown v-if="open.has(item.name)" class="size-4 opacity-80" /><ChevronRight v-else class="size-4 opacity-80" />
+                            </button>
+                            <RouterLink v-else :to="item.path" class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2" @click="mobileOpen = false">
                                 <component :is="item.icon" class="size-[18px] shrink-0" :stroke-width="1.75" />
                                 <span class="flex-1 truncate">{{ item.label }}</span>
                                 <Badge v-if="item.phase" tone="muted" class="px-1.5 text-[10px]">{{ item.phase > 8 ? "Sau MVP" : "P" + item.phase }}</Badge>
                             </RouterLink>
-                            <button
-                                v-if="item.children?.length"
-                                type="button"
-                                class="mr-1 rounded p-1.5 text-current opacity-80 hover:opacity-100"
-                                :aria-label="open.has(item.name) ? `Thu gọn ${item.label}` : `Mở ${item.label}`"
-                                :aria-expanded="open.has(item.name)"
-                                @click="toggleOpen(item.name)"
-                            >
-                                <ChevronDown v-if="open.has(item.name)" class="size-4" /><ChevronRight v-else class="size-4" />
-                            </button>
                         </div>
                         <div v-if="item.children?.length && open.has(item.name)" class="mb-1 mt-0.5 space-y-0.5">
                             <RouterLink

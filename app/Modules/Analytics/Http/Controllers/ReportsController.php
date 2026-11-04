@@ -5,9 +5,11 @@ namespace App\Modules\Analytics\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Analytics\Services\BusinessReports;
 use App\Modules\Analytics\Services\LedgerReports;
+use App\Modules\Analytics\Services\OrderReports;
 use App\Modules\Analytics\Services\StockReports;
 use App\Modules\Analytics\Services\TradeReports;
 use App\Modules\Inventory\Models\Warehouse;
+use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Tenancy\Support\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -20,7 +22,7 @@ class ReportsController extends Controller
     public function __construct(private readonly TenantContext $context) {}
 
     /** Headline figures for the report centre; each group is present only when the user may see it. */
-    public function overview(Request $request, BusinessReports $business, TradeReports $trade, StockReports $stock, LedgerReports $ledger): JsonResponse
+    public function overview(Request $request, BusinessReports $business, TradeReports $trade, StockReports $stock, LedgerReports $ledger, OrderReports $orders): JsonResponse
     {
         $this->allow('reports.view');
         [$from, $to] = $this->range($request);
@@ -33,6 +35,7 @@ class ReportsController extends Controller
             'sales' => [...$sales['totals'], 'top_channels' => array_slice($sales['rows'], 0, 3)],
             'returns' => $returns['totals'],
             'customers' => $customers['summary'],
+            'delivery' => $orders->delivery($from, $to),
         ];
         if ($this->context->can('finance.view')) {
             $pl = collect($ledger->profitLoss($from, $to)['lines'])->keyBy('key');
@@ -77,7 +80,7 @@ class ReportsController extends Controller
         $this->allow('finance.view');
         [$from, $to] = $this->range($request);
 
-        return response()->json(['data' => $trade->payments($from, $to, $this->by($request, ['method', 'staff', 'day']))]);
+        return response()->json(['data' => $trade->payments($from, $to, $this->by($request, ['method', 'staff', 'day', 'warehouse']))]);
     }
 
     public function purchases(Request $request, TradeReports $trade): JsonResponse
@@ -141,6 +144,44 @@ class ReportsController extends Controller
         $warehouse = $request->validate(['warehouse' => ['nullable', 'string']])['warehouse'] ?? null;
 
         return response()->json(['data' => $stock->overStock($this->warehouse($warehouse))]);
+    }
+
+    /** Sapo "Thống kê theo đơn hàng". */
+    public function orders(Request $request, OrderReports $orders): JsonResponse
+    {
+        $this->allow('reports.view');
+        [$from, $to] = $this->range($request);
+
+        return response()->json(['data' => $orders->byOrder($from, $to, $this->orderFilters($request))]);
+    }
+
+    /** Sapo "Báo cáo bán hàng chi tiết": one row per order line. */
+    public function salesLines(Request $request, OrderReports $orders): JsonResponse
+    {
+        $this->allow('reports.view');
+        [$from, $to] = $this->range($request);
+
+        return response()->json(['data' => $orders->lines($from, $to, $this->orderFilters($request))]);
+    }
+
+    public function stockDetail(Request $request, OrderReports $orders): JsonResponse
+    {
+        $this->allow('inventory.view');
+        $data = $request->validate(['warehouse' => ['nullable', 'string'], 'q' => ['nullable', 'string', 'max:100']]);
+
+        return response()->json(['data' => $orders->stockDetail($this->warehouse($data['warehouse'] ?? null), $data['q'] ?? null)]);
+    }
+
+    /** @return array{q: string|null, channel: int|null, warehouse: int|null} */
+    private function orderFilters(Request $request): array
+    {
+        $data = $request->validate(['q' => ['nullable', 'string', 'max:100'], 'channel' => ['nullable', 'string'], 'warehouse' => ['nullable', 'string']]);
+
+        return [
+            'q' => $data['q'] ?? null,
+            'channel' => isset($data['channel']) ? SalesChannel::query()->where('ulid', $data['channel'])->firstOrFail()->id : null,
+            'warehouse' => $this->warehouse($data['warehouse'] ?? null),
+        ];
     }
 
     public function profitLoss(Request $request, LedgerReports $ledger): JsonResponse
