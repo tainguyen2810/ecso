@@ -50,7 +50,8 @@ class ImportCustomersJob implements ShouldQueue
             return;
         }
         // 30 000 rows and their checks are held in memory at once (about 120 MB measured).
-        if (($limit = ini_get('memory_limit')) !== '-1' && $limit !== false && $this->bytes($limit) < 512 * 1024 * 1024) {
+        $limit = (string) ini_get('memory_limit');
+        if ($limit !== '-1' && $this->bytes($limit) < 512 * 1024 * 1024) {
             ini_set('memory_limit', '512M');
         }
 
@@ -91,7 +92,9 @@ class ImportCustomersJob implements ShouldQueue
                 return;
             }
 
-            $result = $importer->import($parsed['rows'], progress: fn (int $done) => Cache::put($import->progressKey(), $done, 3600));
+            $result = $importer->import($parsed['rows'], progress: function (int $done) use ($import): void {
+                Cache::put($import->progressKey(), $done, 3600);
+            });
             if ($result['errors']) {
                 // Someone changed the customers since the check (a phone or code now taken): nothing was written.
                 $this->finish($import, CustomerImport::FAILED, ['message' => 'Dữ liệu khách đã thay đổi từ lúc kiểm tra, chưa nhập dòng nào.'] + $this->errors($result['errors']));
