@@ -210,7 +210,7 @@ class OrderIngestor
             'transaction_id' => $data->transactionId,
         ]);
         if ($data->refundedTotal !== null) {
-            $order->refunded_amount = $data->refundedTotal;
+            $order->forceFill(['refunded_amount' => $data->refundedTotal]);
         }
         // The store only proves "paid" (online payment); it never proves "not paid yet" for money ECSO recorded.
         if ($data->paymentStatus === Order::PAYMENT_PAID) {
