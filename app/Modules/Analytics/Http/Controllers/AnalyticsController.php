@@ -24,7 +24,16 @@ class AnalyticsController extends Controller
         [$from, $to] = $this->range($request);
         $account = $request->query('account') ? MarketplaceAccount::query()->where('ulid', $request->query('account'))->firstOrFail()->id : null;
 
-        return response()->json(['data' => $report->build($from, $to, $account)]);
+        $data = $report->build($from, $to, $account);
+        // Cost of goods and profit are for members with finance.profit only.
+        $data['can_view_profit'] = $context->can('finance.profit');
+        if (! $data['can_view_profit']) {
+            foreach (['cogs', 'cogs_returned', 'cogs_missing_lines', 'estimated_gross_profit', 'other_income', 'other_expenses', 'estimated_profit'] as $key) {
+                $data[$key] = null;
+            }
+        }
+
+        return response()->json(['data' => $data]);
     }
 
     public function bestSellers(Request $request, TenantContext $context, SalesReport $report): JsonResponse

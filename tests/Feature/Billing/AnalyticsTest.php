@@ -10,7 +10,7 @@ it('separates ordered and completed revenue from money received, and leaves mark
     stockIn($tenant, $variant, 20); // unit cost 50,000
     $shop = fakeShop($tenant);
 
-    $delivered = fakeOrder($shop, [[$variant, 2]], 'fake_delivered');
+    $delivered = fakeOrder($shop, [[$variant, 2]], 'fake_completed');
     fakeOrder($shop, [[$variant, 1]], 'fake_ready');
     fakeOrder($shop, [[$variant, 1]], 'fake_cancelled');
 

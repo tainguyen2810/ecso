@@ -78,7 +78,7 @@ const routes: RouteRecordRaw[] = [
             { path: 'reports', name: 'reports', redirect: { name: 'report-group', params: { group: 'sales' } } },
             { path: 'reports/group/:group(sales|purchases|stock|finance|customers)', name: 'report-group', component: () => import('./pages/reports/ReportGroup.vue'), meta: { permission: 'reports.view', nav: 'reports' } },
             { path: 'reports/sales', name: 'report-sales', component: () => import('./pages/reports/SalesReport.vue'), meta: { permission: 'reports.view', nav: 'reports' } },
-            { path: 'reports/profit-loss', name: 'report-profit-loss', component: () => import('./pages/reports/ProfitLoss.vue'), meta: { permission: 'finance.view', nav: 'reports' } },
+            { path: 'reports/profit-loss', name: 'report-profit-loss', component: () => import('./pages/reports/ProfitLoss.vue'), meta: { permission: 'finance.profit', nav: 'reports' } },
             { path: 'reports/view/:report(product-sales|orders|sales-lines|stock-detail|returns|payments|purchases|customers|stock-on-hand|low-stock|over-stock|receivables|payables|supplier-payments|adjustments)', name: 'report-detail', component: () => import('./pages/reports/DetailReport.vue'), meta: { permission: 'reports.view', nav: 'reports' } },
             { path: 'reports/stock', name: 'report-stock', component: () => import('./pages/reports/StockLedgerReport.vue'), meta: { permission: 'inventory.view', nav: 'reports' } },
             { path: 'reports/cashbook', name: 'report-cashbook', component: () => import('./pages/reports/Cashbook.vue'), meta: { permission: 'finance.view', nav: 'cash' } },

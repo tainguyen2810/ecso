@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Access\Models\Role;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderReturn;
@@ -98,7 +99,7 @@ it('does not subtract the return of an order that is already out of revenue', fu
     [$tenant, $owner] = tenantWithOwner();
     $variant = makeVariant($tenant, 'SKU-OUT');
     stockIn($tenant, $variant, 5);
-    $order = fakeOrder(fakeShop($tenant), [[$variant, 1]], 'fake_delivered');
+    $order = fakeOrder(fakeShop($tenant), [[$variant, 1]], 'fake_completed');
     financeReturn($owner, $tenant, $order->ulid, 1, 80000, OrderReturn::APPROVED);
     $api = actingInTenant($owner, $tenant);
 
@@ -119,9 +120,50 @@ it('keeps an order with an open return request in revenue until the return is ap
     [$tenant, $owner] = tenantWithOwner();
     $variant = makeVariant($tenant, 'SKU-RR');
     stockIn($tenant, $variant, 5);
-    $order = fakeOrder(fakeShop($tenant), [[$variant, 1]], 'fake_delivered');
+    $order = fakeOrder(fakeShop($tenant), [[$variant, 1]], 'fake_completed');
     Order::withoutGlobalScopes()->whereKey($order->id)->update(['status' => OrderStatus::RETURN_REQUESTED]);
 
     $data = actingInTenant($owner, $tenant)->getJson('/api/v1/finance/summary')->json('data');
     expect($data['completed']['orders'])->toBe(1)->and($data['cogs'])->toEqual(50000.0);
+});
+
+it('recognises marketplace revenue at completion and own-channel revenue at delivery, with shipping apart', function () {
+    [$tenant, $owner] = tenantWithOwner();
+    $variant = makeVariant($tenant, 'SKU-POL');
+    stockIn($tenant, $variant, 10); // unit cost 50,000
+    $shop = fakeShop($tenant);
+    $delivered = fakeOrder($shop, [[$variant, 1]], 'fake_delivered');
+    $completed = fakeOrder($shop, [[$variant, 2]], 'fake_completed');
+    $own = createSalesOrder($owner, $tenant, [[$variant, 1]], ['stage' => 'completed', 'shipping_fee' => 20000, 'payments' => [['method' => 'cash', 'amount' => 120000]]])->assertCreated()->json('data');
+    $api = actingInTenant($owner, $tenant);
+
+    $data = $api->getJson('/api/v1/finance/summary')->json('data');
+    $goods = fn (Order $o) => (float) $o->subtotal - (float) $o->discount;
+    expect($completed->fresh()->completed_at)->not->toBeNull()
+        ->and($data['completed']['orders'])->toBe(2)
+        ->and($data['completed']['goods'])->toEqual($goods($completed) + 100000)
+        ->and($data['completed']['shipping'])->toEqual((float) $completed->shipping_fee + 20000)
+        ->and($data['awaiting_completion']['orders'])->toBe(1)
+        ->and($data['awaiting_completion']['goods'])->toEqual($goods($delivered))
+        ->and($data['cogs'])->toEqual(150000.0)
+        ->and($data['estimated_gross_profit'])->toEqual(round($goods($completed) + 100000 - 150000, 2));
+
+    // Profit and loss uses the same basis; shipping charged to buyers is its own line, outside net revenue.
+    $pl = collect($api->getJson('/api/v1/reports/profit-loss')->json('data.lines'))->keyBy('key');
+    expect($pl['revenue']['current'])->toEqual($data['completed']['goods'])
+        ->and($pl['cogs_out']['current'])->toEqual(150000)
+        ->and($pl['shipping']['current'])->toEqual($data['completed']['shipping'])
+        ->and($pl['profit']['current'])->toEqual($pl['gross_profit']['current'] - $pl['stock_loss']['current'] + $data['completed']['shipping']);
+    expect($own['status'] ?? null)->not->toBeNull();
+});
+
+it('shows cost and profit only to members with finance.profit', function () {
+    [$tenant, $owner] = tenantWithOwner();
+    $viewer = addMember($tenant, Role::VIEWER);
+    $accountant = addMember($tenant, Role::ACCOUNTANT);
+
+    expect(actingInTenant($accountant, $tenant)->getJson('/api/v1/finance/summary')->assertOk()->json('data.can_view_profit'))->toBeTrue();
+    actingInTenant($viewer, $tenant)->getJson('/api/v1/reports/profit-loss')->assertForbidden();
+    $overview = actingInTenant($viewer, $tenant)->getJson('/api/v1/reports/overview')->assertOk()->json('data');
+    expect($overview['sales']['gross_profit'])->toBeNull()->and($overview['sales']['cogs'])->toBeNull()->and($overview)->not->toHaveKey('finance');
 });
