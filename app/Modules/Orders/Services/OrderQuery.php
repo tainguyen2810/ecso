@@ -10,7 +10,7 @@ use App\Modules\Orders\Models\Order;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Sales\Support\PhoneNumber;
-use Carbon\Carbon;
+use App\Shared\Support\ReportRange;
 use Illuminate\Database\Eloquent\Builder;
 
 /** Filters of the order list (ORDER-LIFECYCLE §7). Every filter value is resolved inside the tenant scope. */
@@ -49,10 +49,10 @@ class OrderQuery
             $query->where('marketplace', $marketplace);
         }
         if ($from = $filters['from'] ?? null) {
-            $query->where('placed_at', '>=', $from);
+            $query->where('placed_at', '>=', ReportRange::date($from));
         }
         if ($to = $filters['to'] ?? null) {
-            $query->where('placed_at', '<', Carbon::parse($to)->addDay());
+            $query->where('placed_at', '<', ReportRange::date($to)->addDay());
         }
         if ($q = trim((string) ($filters['q'] ?? ''))) {
             $query->where(fn (Builder $w) => $w->where('external_order_id', 'like', "%{$q}%")
