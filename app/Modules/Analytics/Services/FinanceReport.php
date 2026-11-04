@@ -37,13 +37,13 @@ class FinanceReport
 
         $placed = fn () => $this->profit->scoped(DB::table('orders as o')->where('o.tenant_id', $this->tenant())->whereBetween('o.placed_at', [$from, $to]), $scope);
         $ordered = $placed()->where('o.status', '!=', OrderStatus::CANCELLED)
-            ->selectRaw('COUNT(*) as n, COALESCE(SUM(o.total), 0) as total, COALESCE(SUM(o.subtotal - o.discount), 0) as goods')->first();
+            ->selectRaw('COUNT(*) as n, COALESCE(SUM(o.total), 0) as total, COALESCE(SUM('.ProfitFigures::netGoodsSql().'), 0) as goods')->first();
         $cancelled = $placed()->where('o.status', OrderStatus::CANCELLED)->selectRaw('COUNT(*) as n, COALESCE(SUM(o.total), 0) as total')->first();
 
         $completed = $this->profit->recognized($from, $to, $scope)
-            ->selectRaw('COUNT(*) as n, COALESCE(SUM(o.total), 0) as total, COALESCE(SUM(o.subtotal - o.discount), 0) as goods, COALESCE(SUM(o.shipping_fee), 0) as shipping')->first();
+            ->selectRaw('COUNT(*) as n, COALESCE(SUM(o.total), 0) as total, COALESCE(SUM('.ProfitFigures::netGoodsSql().'), 0) as goods, COALESCE(SUM(o.shipping_fee), 0) as shipping')->first();
         $awaiting = $this->profit->scoped(RevenuePolicy::awaitingCompletion(DB::table('orders as o')->where('o.tenant_id', $this->tenant()), 'o', $from, $to), $scope)
-            ->selectRaw('COUNT(*) as n, COALESCE(SUM(o.total), 0) as total, COALESCE(SUM(o.subtotal - o.discount), 0) as goods')->first();
+            ->selectRaw('COUNT(*) as n, COALESCE(SUM(o.total), 0) as total, COALESCE(SUM('.ProfitFigures::netGoodsSql().'), 0) as goods')->first();
 
         $p = $this->profit->period($from, $to, $scope);
         $prev = $this->profit->period($prevFrom, $prevTo, $scope);
@@ -137,7 +137,7 @@ class FinanceReport
         $day = ReportRange::day(RevenuePolicy::dateSql('o'), $from);
         $cost = DB::table('order_items')->selectRaw('order_id, SUM(cost_snapshot * quantity) as cogs')->groupBy('order_id');
         $recognized = $this->profit->recognized($from, $to, $scope)->leftJoinSub($cost, 'c', 'c.order_id', '=', 'o.id')
-            ->selectRaw("{$day} as day, COUNT(*) as orders, SUM(o.subtotal - o.discount) as goods, COALESCE(SUM(c.cogs), 0) as cogs")
+            ->selectRaw("{$day} as day, COUNT(*) as orders, SUM(".ProfitFigures::netGoodsSql().') as goods, COALESCE(SUM(c.cogs), 0) as cogs')
             ->groupBy('day')->get()->keyBy('day');
 
         $series = [];
@@ -170,7 +170,7 @@ class FinanceReport
         $placed = $key($base()->whereBetween('o.placed_at', [$from, $to])
             ->selectRaw('SUM(CASE WHEN o.status <> ? THEN 1 ELSE 0 END) as ordered, SUM(CASE WHEN o.status = ? THEN 1 ELSE 0 END) as cancelled, SUM(CASE WHEN o.status <> ? THEN o.total ELSE 0 END) as revenue',
                 [OrderStatus::CANCELLED, OrderStatus::CANCELLED, OrderStatus::CANCELLED]));
-        $before = $key(RevenuePolicy::recognized($base(), 'o', $prevFrom, $prevTo)->selectRaw('SUM(o.subtotal - o.discount) as goods'));
+        $before = $key(RevenuePolicy::recognized($base(), 'o', $prevFrom, $prevTo)->selectRaw('SUM('.ProfitFigures::netGoodsSql().') as goods'));
         $recognised = $key(RevenuePolicy::recognized($base(), 'o', $from, $to)->selectRaw('COUNT(*) as n'));
 
         $accounts = MarketplaceAccount::query()->get(['id', 'ulid', 'shop_name', 'marketplace'])->keyBy(fn ($a) => 'a'.$a->id);
@@ -207,8 +207,8 @@ class FinanceReport
                 // Contribution before selling expenses (which belong to the whole business).
                 'profit' => $p['contribution_profit'],
                 'margin' => $p['revenue'] > 0 ? round($p['contribution_profit'] / $p['revenue'] * 100, 1) : null,
-                'average_order' => $p['orders'] > 0 ? round(($p['goods'] - $p['discount']) / $p['orders'], 0) : null,
-                'growth' => $previous > 0 ? round(($p['goods'] - $p['discount'] - $previous) / $previous * 100, 1) : null,
+                'average_order' => $p['orders'] > 0 ? round(($p['goods'] - $p['discount'] - $p['sales_tax']) / $p['orders'], 0) : null,
+                'growth' => $previous > 0 ? round(($p['goods'] - $p['discount'] - $p['sales_tax'] - $previous) / $previous * 100, 1) : null,
             ];
         }
         usort($rows, fn ($a, $b) => $b['net_revenue'] <=> $a['net_revenue'] ?: $b['revenue'] <=> $a['revenue']);

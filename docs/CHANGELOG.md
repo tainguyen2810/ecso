@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Tài chính: doanh thu không gồm thuế GTGT (2026-11-04)
+- Doanh thu thuần trên trang Tài chính và Báo cáo lãi lỗ **không gồm thuế GTGT bán ra**. Giá đã gồm thuế: trừ phần thuế nằm trong giá (dòng mới "3. Thuế GTGT nằm trong giá bán"). Giá chưa gồm thuế: thuế cộng thêm không bao giờ vào doanh thu.
+- Hàng trả lại trừ khỏi doanh thu theo giá trị chưa gồm thuế (tiền hoàn đã gồm cả thuế trả lại cho khách). Giá trị hàng trả khi không nhập số tiền hoàn giờ chia cả chiết khấu đơn và thuế cộng thêm theo tỷ lệ, giống `OrderReturn::goodsValue()`.
+- Xem chi tiết đơn có thêm cột VAT.
+
 ### Khách hàng, đợt E: chăm sóc khách, phân khúc, tự xếp nhóm (2026-11-04)
 - **Việc cần làm với khách** (bảng `customer_tasks`): hẹn gọi lại, gửi báo giá, nhắc thanh toán… có hạn và người phụ trách (mặc định người tạo); đánh dấu xong, việc trễ hẹn hiện màu đỏ. `GET /customer-tasks?mine=1&due=late|today|week|all` cho danh sách việc của mình.
 - **Ghi chú có loại liên hệ**: Ghi chú, Cuộc gọi, Tin nhắn, Gặp mặt, Khiếu nại.

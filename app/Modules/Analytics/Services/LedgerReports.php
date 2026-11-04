@@ -32,10 +32,11 @@ class LedgerReports
         $previous = $this->period($prevFrom, $prevTo);
 
         $labels = [
-            ['revenue', 'I. Doanh thu thuần (1 - 2 - 3)', 0, 'sales'],
+            ['revenue', 'I. Doanh thu thuần (1 - 2 - 3 - 4)', 0, 'sales'],
             ['goods', '1. Tiền hàng bán ra', 1, 'sales'],
             ['discount', '2. Chiết khấu', 1, 'sales'],
-            ['returns', '3. Hàng trả lại', 1, 'returns'],
+            ['sales_tax', '3. Thuế GTGT nằm trong giá bán', 1, null],
+            ['returns', '4. Hàng trả lại (chưa gồm thuế GTGT)', 1, 'returns'],
             ['cogs', 'II. Giá vốn hàng bán (4 - 5)', 0, null],
             ['cogs_out', '4. Giá vốn hàng xuất bán', 1, 'products'],
             ['cogs_back', '5. Giá vốn hàng trả lại nhập kho', 1, 'returns'],
