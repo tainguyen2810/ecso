@@ -52,6 +52,7 @@ final class PermissionRegistry
         ],
         'finance' => [
             'finance.view' => 'Xem tài chính, sổ quỹ',
+            'finance.profit' => 'Xem giá vốn và lợi nhuận, xuất báo cáo tài chính',
             'finance.vouchers' => 'Lập và hủy phiếu thu, phiếu chi',
         ],
         'reports' => ['reports.view' => 'Xem báo cáo'],
@@ -89,7 +90,7 @@ final class PermissionRegistry
             Role::MANAGER => ['name' => 'Quản lý vận hành', 'rank' => 70, 'permissions' => [
                 ...self::READ_ALL, 'orders.update', 'orders.assign', 'orders.print', 'orders.create', 'orders.payment', 'orders.price', 'orders.shifts', 'customers.manage', 'customers.import', 'customers.export', 'customers.delete', 'products.manage',
                 'inventory.receive', 'inventory.adjust', 'inventory.adjust.approve', 'inventory.transfer', 'purchasing.manage', 'purchasing.payment',
-                'returns.inspect', 'finance.view', 'finance.vouchers', 'members.view',
+                'returns.inspect', 'finance.view', 'finance.profit', 'finance.vouchers', 'members.view',
             ]],
             Role::WAREHOUSE_STAFF => ['name' => 'Nhân viên kho', 'rank' => 40, 'permissions' => [
                 'dashboard.view', 'orders.view', 'orders.print', 'products.view', 'inventory.view',
@@ -101,7 +102,7 @@ final class PermissionRegistry
             ]],
             Role::ACCOUNTANT => ['name' => 'Kế toán', 'rank' => 40, 'permissions' => [
                 'dashboard.view', 'orders.view', 'products.view', 'inventory.view', 'purchasing.view',
-                'returns.view', 'finance.view', 'finance.vouchers', 'reports.view', 'billing.view', 'customers.view', 'orders.payment', 'orders.shifts', 'purchasing.payment',
+                'returns.view', 'finance.view', 'finance.profit', 'finance.vouchers', 'reports.view', 'billing.view', 'customers.view', 'orders.payment', 'orders.shifts', 'purchasing.payment',
             ]],
             Role::VIEWER => ['name' => 'Chỉ xem', 'rank' => 10, 'permissions' => self::READ_ALL],
         ];

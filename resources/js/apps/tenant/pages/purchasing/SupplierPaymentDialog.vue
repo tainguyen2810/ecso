@@ -5,25 +5,25 @@ import Dialog from '@/shared/ui/Dialog.vue';
 import FormField from '@/shared/ui/FormField.vue';
 import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
-import { api, ApiError } from '@/shared/lib/api';
+import { api, ApiError, idempotent, newIdempotencyKey } from '@/shared/lib/api';
 import { formatMoney } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
-import { useIdempotencyKey } from '@/shared/composables/useIdempotencyKey';
 import { supplierPaymentMethods } from './labels';
 
 const open = defineModel<boolean>('open', { required: true });
 const props = defineProps<{ supplierId: string; order?: { id: string; number: string } | null; suggested?: number }>();
 const emit = defineEmits<{ saved: [] }>();
 const toast = useToast();
-const idempotency = useIdempotencyKey();
 
 const form = reactive({ method: 'bank_transfer', amount: '', reference: '', note: '' });
 const saving = ref(false);
 const error = ref<ApiError | null>(null);
+let key = newIdempotencyKey();
 
 watch(open, (v) => {
     if (!v) return;
     error.value = null;
+    key = newIdempotencyKey();
     Object.assign(form, { method: 'bank_transfer', amount: props.suggested && props.suggested > 0 ? String(Math.round(props.suggested)) : '', reference: '', note: '' });
 });
 
@@ -37,8 +37,7 @@ async function save() {
             amount: Number(form.amount),
             reference: form.reference || null,
             note: form.note || null,
-        }, idempotency.config());
-        idempotency.renew();
+        }, idempotent(key));
         toast.success(`Đã ghi chi ${formatMoney(form.amount)}.`);
         open.value = false;
         emit('saved');

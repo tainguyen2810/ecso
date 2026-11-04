@@ -4,6 +4,7 @@ namespace App\Modules\Orders\Models;
 
 use App\Modules\Identity\Models\User;
 use App\Modules\Inventory\Models\Warehouse;
+use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Tenancy\Concerns\BelongsToTenant;
 use App\Shared\Concerns\HasPublicUlid;
 use Illuminate\Database\Eloquent\Model;
@@ -104,15 +105,43 @@ class OrderReturn extends Model
             return (string) $this->refund_amount;
         }
 
-        return $this->lines()->with('item')->get()->reduce(function (string $sum, OrderReturnLine $line) {
+        // The order-level discount is spread over the goods in proportion to their value (shipping is not refunded).
+        $order = $this->order;
+        $share = '1';
+        if ($order !== null && bccomp((string) $order->subtotal, '0', 2) > 0 && bccomp((string) $order->discount, '0', 2) > 0) {
+            $share = bcdiv(bcsub((string) $order->subtotal, (string) $order->discount, 2), (string) $order->subtotal, 8);
+            $share = bccomp($share, '0', 8) < 0 ? '0' : $share;
+        }
+
+        return $this->lines()->with('item')->get()->reduce(function (string $sum, OrderReturnLine $line) use ($share) {
             $item = $line->item;
             if ($item === null || $item->quantity === 0) {
                 return $sum;
             }
             $paid = bcsub(bcmul((string) $item->unit_price, (string) $item->quantity, 2), (string) $item->discount, 2);
 
-            return bcadd($sum, bcdiv(bcmul($paid, (string) $line->quantity, 4), (string) $item->quantity, 2), 2);
+            return bcadd($sum, bcdiv(bcmul(bcmul($paid, $share, 8), (string) $line->quantity, 8), (string) $item->quantity, 2), 2);
         }, '0.00');
+    }
+
+    /** @return HasMany<OrderPayment, $this> */
+    public function refunds(): HasMany
+    {
+        return $this->hasMany(OrderPayment::class, 'order_return_id')->where('kind', OrderPayment::REFUND)->whereNull('voided_at');
+    }
+
+    /** Money already paid back to the buyer from this return. */
+    public function refunded(): string
+    {
+        return bcadd((string) $this->refunds()->sum('amount'), '0', 2);
+    }
+
+    /** What may still be refunded from this return: its goods value, less the exchange set-off and refunds made. */
+    public function refundable(): string
+    {
+        $left = bcsub(bcsub($this->goodsValue(), (string) ($this->exchange_credit ?? 0), 2), $this->refunded(), 2);
+
+        return bccomp($left, '0', 2) > 0 ? $left : '0.00';
     }
 
     /** @return BelongsTo<Warehouse, $this> */

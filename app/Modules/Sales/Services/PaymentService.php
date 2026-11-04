@@ -5,7 +5,9 @@ namespace App\Modules\Sales\Services;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Sales\Models\CashShift;
 use App\Modules\Sales\Models\OrderPayment;
+use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -20,7 +22,7 @@ class PaymentService
     public function __construct(private readonly AuditLogger $audit) {}
 
     /**
-     * @param  array{kind?: string, method: string, amount: string|int|float, reference?: string|null, note?: string|null, paid_at?: string|null}  $data
+     * @param  array{kind?: string, method: string, amount: string|int|float, reference?: string|null, note?: string|null, paid_at?: string|null, order_return_id?: int|null}  $data
      */
     public function record(Order $order, array $data): OrderPayment
     {
@@ -54,6 +56,9 @@ class PaymentService
             $payment = new OrderPayment;
             $payment->forceFill([
                 'order_id' => $order->id,
+                'order_return_id' => $data['order_return_id'] ?? null,
+                // Money taken or paid back by a cashier with an open shift goes through that drawer.
+                'cash_shift_id' => Auth::id() ? CashShift::query()->where('open_user_id', Auth::id())->value('id') : null,
                 'customer_id' => $order->customer_id,
                 'kind' => $kind,
                 'method' => $data['method'],
@@ -78,6 +83,11 @@ class PaymentService
             $payment = OrderPayment::query()->whereKey($payment->id)->lockForUpdate()->firstOrFail();
             if ($payment->voided_at !== null) {
                 return $payment;
+            }
+            // The drawer of a closed shift has been counted: changing its money needs the shift supervisor.
+            $shift = $payment->cash_shift_id ? CashShift::query()->find($payment->cash_shift_id) : null;
+            if ($shift !== null && ! $shift->isOpen() && ! app(TenantContext::class)->can('orders.shifts')) {
+                throw ValidationException::withMessages(['payment' => "Phiếu này thuộc ca {$shift->number} đã đóng. Cần quyền quản lý ca để hủy."]);
             }
             // The set-off of an exchange has a twin entry on the other order: voiding one side would unbalance them.
             if ($payment->method === OrderPayment::EXCHANGE) {

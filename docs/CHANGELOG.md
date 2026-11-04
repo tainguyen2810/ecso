@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Tài chính, vòng B: ghi nhận doanh thu lúc hoàn thành (2026-11-04)
+- Chính sách đã duyệt (`App\Modules\Analytics\Support\RevenuePolicy`): đơn sàn TMĐT ghi nhận doanh thu khi sàn báo **hoàn thành**, theo cột mới `orders.completed_at`. Đơn kênh riêng, POS và website WooCommerce ghi nhận khi **giao thành công**. Đơn sàn đã giao nhưng chưa hoàn thành hiện riêng ở mục "Chờ sàn hoàn thành", là số tạm tính và không tính vào lợi nhuận.
+- Trang Tài chính và Báo cáo lãi lỗ (cả thẻ Tài chính ở Tổng quan báo cáo) dùng chung chính sách này. Báo cáo lãi lỗ không còn tính đơn mới đặt hoặc chưa giao.
+- **Phí ship khách trả tính riêng**: không nằm trong doanh thu thuần. Báo cáo lãi lỗ có dòng V riêng, vẫn được cộng vào lợi nhuận.
+- Quyền mới **`finance.profit`** (Xem giá vốn và lợi nhuận, xuất báo cáo tài chính). Mặc định có ở các vai trò Chủ, Quản trị, Quản lý vận hành và Kế toán. Vai trò tùy chỉnh đang có quyền `finance.view` được thêm quyền này để giữ nguyên quyền xem cũ. Người không có quyền này không thấy giá vốn và lãi trên trang Tài chính và Tổng quan báo cáo, và không mở được Báo cáo lãi lỗ.
+
 ### Độ chính xác tồn kho, đợt A kiểm toán sản phẩm (2026-11-04)
 - **Kiểm hàng chốt số lúc đếm**: mỗi dòng đếm lưu `system_qty` (tồn hệ thống lúc đếm). Khi duyệt chỉ áp `số đếm − system_qty`, nên hàng bán ra hoặc nhập thêm giữa lúc đếm và lúc duyệt được giữ nguyên. Phiếu chờ duyệt hiện "Tồn lúc đếm", "Tồn hiện tại", "Sẽ áp dụng", "Tồn sau duyệt" và cảnh báo khi có nhập/xuất xen giữa. Phiếu cũ không có `system_qty` vẫn chạy như trước.
 - **Idempotency-Key** (dùng chung middleware `idempotent` của đợt an toàn đơn hàng): bật cho toàn bộ API Sản phẩm, Kho, Mua hàng. Gửi lại cùng khóa (bấm 2 lần, mạng gửi lại) trả lại kết quả lần đầu, không tạo phiếu thứ hai. Các form tạo phiếu nhập, kiểm, chuyển, điều chỉnh giá vốn, đơn nhập, nhận hàng, trả NCC, chi tiền NCC, tạo sản phẩm đều gửi khóa.

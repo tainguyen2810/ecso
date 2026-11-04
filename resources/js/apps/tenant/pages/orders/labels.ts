@@ -79,6 +79,16 @@ export const paymentStatus: Record<string, { label: string; tone: Tone }> = {
     paid: { label: 'Đã thanh toán', tone: 'success' },
 };
 
+export const refundStatus: Record<string, { label: string; tone: Tone }> = {
+    partial: { label: 'Hoàn tiền một phần', tone: 'warning' },
+    full: { label: 'Đã hoàn tiền', tone: 'muted' },
+};
+
+export const returnState: Record<string, { label: string; tone: Tone }> = {
+    partial: { label: 'Trả hàng một phần', tone: 'warning' },
+    full: { label: 'Đã trả hết hàng', tone: 'muted' },
+};
+
 export const capabilityLabels: Record<string, { label: string; tone: Tone }> = {
     supported: { label: 'Hỗ trợ', tone: 'success' },
     unsupported: { label: 'Không hỗ trợ', tone: 'danger' },
