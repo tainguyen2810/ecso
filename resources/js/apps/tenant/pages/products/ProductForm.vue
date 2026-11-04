@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, ImagePlus, Plus, Sparkles, Tags, Trash2, X } from 'lucide-vue-next';
+import { ArrowLeft, ImagePlus, Plus, ScanBarcode, Sparkles, Tags, Trash2, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Alert from '@/shared/ui/Alert.vue';
 import Button from '@/shared/ui/Button.vue';
@@ -29,6 +29,13 @@ interface VariantRow {
     ref_price: string;
     wholesale_price: string;
     weight_gram: string;
+    /** Usual supplier (ULID) and its code for this SKU, used by reorder suggestions and purchase orders. */
+    supplier_id: string;
+    supplier_sku: string;
+    /** Package size in mm, for shipping fees. */
+    length_mm: string;
+    width_mm: string;
+    height_mm: string;
     cost_price?: string;
     opening_qty: string;
     opening_cost: string;
@@ -52,7 +59,10 @@ const toast = useToast();
 const idempotency = useIdempotencyKey();
 const tenant = useTenantStore();
 const canManage = computed(() => tenant.can('products.manage'));
+const canCost = computed(() => tenant.can('products.cost.view'));
 const canReceive = computed(() => tenant.can('inventory.receive'));
+const canSuppliers = computed(() => tenant.can('purchasing.view'));
+const suppliers = ref<Ref[]>([]);
 const productId = computed(() => (route.params.id as string | undefined) ?? null);
 const copyFrom = computed(() => (route.query.copy as string | undefined) ?? null);
 const isNew = computed(() => !productId.value);
@@ -113,8 +123,18 @@ const groups = ref<{ name: string; values: string }[]>([
 ]);
 const skuPrefix = ref('');
 
+/** Fill an empty barcode with an unused internal EAN-13 (prefix 2x, the range for in-store codes). */
+async function suggestBarcode(row: VariantRow) {
+    try {
+        const { data } = await api.get('/products/barcode-suggestion');
+        row.barcode = data.data.barcode;
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    }
+}
+
 function emptyRow(): VariantRow {
-    return { sku: '', name: '', barcode: '', options: {}, ref_price: '', wholesale_price: '', weight_gram: '', opening_qty: '', opening_cost: '' };
+    return { sku: '', name: '', barcode: '', options: {}, ref_price: '', wholesale_price: '', weight_gram: '', supplier_id: '', supplier_sku: '', length_mm: '', width_mm: '', height_mm: '', opening_qty: '', opening_cost: '' };
 }
 
 const money = (value: string | number | null | undefined) => (Number(value) ? String(Math.round(Number(value))) : '');
@@ -126,6 +146,7 @@ onMounted(async () => {
     categories.value = c.data.data;
     brands.value = b.data.data;
     knownTags.value = t.data.data;
+    if (canSuppliers.value) suppliers.value = (await api.get('/suppliers', { params: { active: 1, per_page: 200 } }).catch(() => null))?.data.data ?? [];
     if (isNew.value && canReceive.value) {
         warehouses.value = ((await api.get('/warehouses')).data.data as Warehouse[]).filter((w) => w.status === 'active');
         form.opening_warehouse_id = (warehouses.value.find((w) => w.is_default) ?? warehouses.value[0])?.id ?? '';
@@ -162,6 +183,11 @@ onMounted(async () => {
             ref_price: money(v.ref_price),
             wholesale_price: money(v.wholesale_price),
             weight_gram: v.weight_gram ? String(v.weight_gram) : '',
+            supplier_id: v.supplier?.id ?? '',
+            supplier_sku: v.supplier_sku ?? '',
+            length_mm: v.length_mm ? String(v.length_mm) : '',
+            width_mm: v.width_mm ? String(v.width_mm) : '',
+            height_mm: v.height_mm ? String(v.height_mm) : '',
             opening_qty: '',
             opening_cost: '',
             conversion:
@@ -250,6 +276,11 @@ async function save(then: 'detail' | 'labels' = 'detail') {
                 ref_price: num(v.ref_price),
                 wholesale_price: num(v.wholesale_price),
                 weight_gram: num(v.weight_gram),
+                // Only sent when the supplier list was loaded, so a user without purchasing access keeps what is saved.
+                ...(canSuppliers.value ? { supplier_id: v.supplier_id || null, supplier_sku: v.supplier_sku.trim() || null } : {}),
+                length_mm: num(v.length_mm),
+                width_mm: num(v.width_mm),
+                height_mm: num(v.height_mm),
                 ...(isNew.value && !v.conversion && Number(v.opening_qty) > 0 ? { opening_qty: Number(v.opening_qty), opening_cost: num(v.opening_cost) ?? 0 } : {}),
                 ...(!isCombo.value && v.conversion ? { conversion: { base_sku: v.conversion.base_sku, quantity: Number(v.conversion.quantity) } } : {}),
             })),
@@ -390,7 +421,7 @@ async function removeImage(id: number) {
                             <tr>
                                 <th class="px-5 py-2 font-medium">SKU thành phần</th>
                                 <th class="px-3 py-2 text-right font-medium">Số lượng / combo</th>
-                                <th class="px-3 py-2 text-right font-medium">Giá vốn BQ</th>
+                                <th v-if="canCost" class="px-3 py-2 text-right font-medium">Giá vốn BQ</th>
                                 <th class="w-10" />
                             </tr>
                         </thead>
@@ -404,7 +435,7 @@ async function removeImage(id: number) {
                                 <td class="px-3 py-2 text-right">
                                     <input v-model.number="c.quantity" type="number" min="1" max="10000" :disabled="!canManage" :data-testid="`component-qty-${i}`" aria-label="Số lượng mỗi combo" class="h-8 w-20 rounded-md border border-input bg-card px-2 text-right tabular-nums" />
                                 </td>
-                                <td class="px-3 py-2 text-right tabular-nums text-muted-foreground">{{ c.variant.cost_price ? formatMoney(Number(c.variant.cost_price) * c.quantity) : '—' }}</td>
+                                <td v-if="canCost" class="px-3 py-2 text-right tabular-nums text-muted-foreground">{{ c.variant.cost_price ? formatMoney(Number(c.variant.cost_price) * c.quantity) : '—' }}</td>
                                 <td class="px-2 text-right">
                                     <Button v-if="canManage" variant="ghost" size="icon" class="size-8" title="Bỏ thành phần" @click="components.splice(i, 1)"><Trash2 class="text-muted-foreground" /></Button>
                                 </td>
@@ -413,7 +444,7 @@ async function removeImage(id: number) {
                         <tfoot class="border-t text-xs text-muted-foreground">
                             <tr>
                                 <td class="px-5 py-2" colspan="2">Tổng giá bán lẻ nếu mua lẻ: <span class="font-medium text-foreground">{{ formatMoney(componentPrice) }}</span></td>
-                                <td class="px-3 py-2 text-right">Giá vốn combo: <span class="font-medium text-foreground">{{ formatMoney(componentCost) }}</span></td>
+                                <td v-if="canCost" class="px-3 py-2 text-right">Giá vốn combo: <span class="font-medium text-foreground">{{ formatMoney(componentCost) }}</span></td>
                                 <td />
                             </tr>
                         </tfoot>
@@ -451,7 +482,9 @@ async function removeImage(id: number) {
                                     <th class="px-3 py-2 text-right font-medium">Giá bán lẻ</th>
                                     <th class="px-3 py-2 text-right font-medium">Giá bán buôn</th>
                                     <th class="px-3 py-2 text-right font-medium">KL (g)</th>
-                                    <th v-if="!isNew" class="px-4 py-2 text-right font-medium">Giá vốn BQ</th>
+                                    <th class="px-3 py-2 font-medium" title="Dài × Rộng × Cao, tính bằng mm">Kích thước (mm)</th>
+                                    <th v-if="canSuppliers" class="px-3 py-2 font-medium">NCC / Mã NCC</th>
+                                    <th v-if="!isNew && canCost" class="px-4 py-2 text-right font-medium">Giá vốn BQ</th>
                                     <th class="px-2 py-2" />
                                 </tr>
                             </thead>
@@ -472,13 +505,30 @@ async function removeImage(id: number) {
                                     </td>
                                     <td class="px-3 py-2"><input v-model="v.name" :disabled="!canManage" class="h-8 w-32 rounded-md border border-input bg-card px-2" /></td>
                                     <td class="px-3 py-2">
-                                        <input v-model="v.barcode" :disabled="!canManage" maxlength="64" :class="cn('h-8 w-32 rounded-md border border-input bg-card px-2 font-mono text-xs', fieldError(i, 'barcode') && 'border-destructive')" />
+                                        <div class="flex items-center gap-1">
+                                            <input v-model="v.barcode" :disabled="!canManage" maxlength="64" :data-testid="`barcode-${i}`" :class="cn('h-8 w-32 rounded-md border border-input bg-card px-2 font-mono text-xs', fieldError(i, 'barcode') && 'border-destructive')" />
+                                            <Button v-if="canManage && !v.barcode" variant="ghost" size="icon" class="size-8" title="Tạo mã vạch EAN-13 nội bộ" :data-testid="`barcode-gen-${i}`" @click="suggestBarcode(v)"><ScanBarcode class="text-muted-foreground" /></Button>
+                                        </div>
                                         <p v-if="fieldError(i, 'barcode')" class="mt-1 max-w-36 text-xs text-destructive">{{ fieldError(i, 'barcode') }}</p>
                                     </td>
                                     <td class="px-3 py-2 text-right"><input v-model="v.ref_price" type="number" min="0" :disabled="!canManage" aria-label="Giá bán lẻ" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
                                     <td class="px-3 py-2 text-right"><input v-model="v.wholesale_price" type="number" min="0" :disabled="!canManage" aria-label="Giá bán buôn" :data-testid="`wholesale-${i}`" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
                                     <td class="px-3 py-2 text-right"><input v-model="v.weight_gram" type="number" min="0" :disabled="!canManage" class="h-8 w-16 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
-                                    <td v-if="!isNew" class="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                                    <td class="px-3 py-2">
+                                        <div class="flex items-center gap-0.5 text-xs text-muted-foreground" :data-testid="`size-${i}`">
+                                            <input v-model="v.length_mm" type="number" min="0" :disabled="!canManage" aria-label="Dài (mm)" placeholder="D" class="h-8 w-14 rounded-md border border-input bg-card px-1.5 text-right tabular-nums" />×
+                                            <input v-model="v.width_mm" type="number" min="0" :disabled="!canManage" aria-label="Rộng (mm)" placeholder="R" class="h-8 w-14 rounded-md border border-input bg-card px-1.5 text-right tabular-nums" />×
+                                            <input v-model="v.height_mm" type="number" min="0" :disabled="!canManage" aria-label="Cao (mm)" placeholder="C" class="h-8 w-14 rounded-md border border-input bg-card px-1.5 text-right tabular-nums" />
+                                        </div>
+                                    </td>
+                                    <td v-if="canSuppliers" class="px-3 py-2">
+                                        <select v-model="v.supplier_id" :disabled="!canManage" aria-label="Nhà cung cấp" :data-testid="`supplier-${i}`" class="h-8 w-36 rounded-md border border-input bg-card px-1 text-xs">
+                                            <option value="">— Chưa chọn —</option>
+                                            <option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.name }}</option>
+                                        </select>
+                                        <input v-if="v.supplier_id" v-model="v.supplier_sku" maxlength="64" :disabled="!canManage" placeholder="Mã hàng của NCC" aria-label="Mã hàng của NCC" class="mt-1 h-8 w-36 rounded-md border border-input bg-card px-2 font-mono text-xs" />
+                                    </td>
+                                    <td v-if="!isNew && canCost" class="px-4 py-2 text-right tabular-nums text-muted-foreground">
                                         {{ v.cost_price ? formatMoney(v.cost_price) : '—' }}
                                         <RouterLink v-if="v.id" :to="`/inventory/sku/${v.id}`" class="block text-xs text-primary hover:underline">Thẻ kho</RouterLink>
                                     </td>

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Catalog\Services;
 
+use App\Modules\Access\Support\DataAccess;
 use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Support\Facades\DB;
@@ -43,18 +44,19 @@ class ProductExporter
             ->selectRaw('product_variant_id, SUM(on_hand) as on_hand, SUM(reserved) as reserved')
             ->groupBy('product_variant_id');
 
+        $seesCost = app(DataAccess::class)->seesCost(); // without "products.cost.view" the column stays empty
         ProductVariant::query()
             ->with(['product.category', 'product.brand'])
             ->leftJoinSub($stock, 's', 's.product_variant_id', '=', 'product_variants.id')
             ->whereHas('product')
             ->select('product_variants.*', 's.on_hand', 's.reserved')
             ->orderBy('product_variants.product_id')->orderBy('product_variants.id')
-            ->chunk(1000, function ($variants) use ($writer) {
+            ->chunk(1000, function ($variants) use ($writer, $seesCost) {
                 foreach ($variants as $v) {
                     $writer->addRow(Row::fromValues([
                         $v->product->ulid, $v->product->name, $v->sku, (string) $v->name, (string) $v->barcode,
                         (string) $v->product->category?->name, (string) $v->product->brand?->name,
-                        (string) $v->ref_price, (string) $v->weight_gram, $v->status, (string) $v->cost_price,
+                        (string) $v->ref_price, (string) $v->weight_gram, $v->status, $seesCost ? (string) $v->cost_price : '',
                         (int) $v->on_hand, (int) $v->reserved, (int) $v->on_hand - (int) $v->reserved,
                         (string) $v->wholesale_price, (string) $v->product->unit,
                     ]));

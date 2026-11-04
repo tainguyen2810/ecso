@@ -3,6 +3,7 @@
 namespace App\Modules\Catalog\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Catalog\Events\SaleStatusChanged;
 use App\Modules\Catalog\Models\Brand;
 use App\Modules\Catalog\Models\Category;
 use App\Modules\Catalog\Models\Product;
@@ -10,6 +11,7 @@ use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Inventory\Models\StockReceipt;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Services\InventoryDocumentService;
+use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Support\Facades\DB;
 use OpenSpout\Reader\CSV\Reader as CsvReader;
 use OpenSpout\Reader\XLSX\Reader as XlsxReader;
@@ -124,6 +126,7 @@ class ProductImporter
             $productsByKey = [];
             $productCount = 0;
             $opening = [];
+            $statusChanged = [];
 
             foreach ($rows as $row) {
                 $categoryId = $this->lookup($categories, $row['category'], fn ($name) => Category::create(['name' => $name])->id);
@@ -139,10 +142,15 @@ class ProductImporter
 
                 $match = $existing[mb_strtolower($row['sku'])] ?? null;
                 if ($match) {
-                    ProductVariant::query()->withTrashed()->whereKey($match->id)->update($variantData);
-                    Product::query()->withTrashed()->whereKey($match->product_id)->update(array_filter([
+                    // Saved through the models so a new price reaches the websites and the price history, like an edit.
+                    $variant = ProductVariant::query()->withTrashed()->findOrFail($match->id);
+                    $variant->fill($variantData)->save();
+                    if ($variant->wasChanged('status')) {
+                        $statusChanged[] = $variant->id;
+                    }
+                    Product::query()->withTrashed()->findOrFail($match->product_id)->fill(array_filter([
                         'name' => $row['product_name'], 'category_id' => $categoryId, 'brand_id' => $brandId, 'unit' => $row['unit'] ?: null,
-                    ]));
+                    ]))->save();
 
                     continue;
                 }
@@ -167,6 +175,11 @@ class ProductImporter
             $receipt = null;
             if ($opening && $openingWarehouse) {
                 $receipt = $this->documents->receive($openingWarehouse, $opening, 'Tồn đầu kỳ từ import sản phẩm', StockReceipt::SOURCE_OPENING);
+            }
+
+            if ($statusChanged !== []) {
+                $tenantId = app(TenantContext::class)->id();
+                DB::afterCommit(fn () => SaleStatusChanged::dispatch($tenantId, $statusChanged));
             }
 
             $this->audit->record('product.imported', null, ['created' => $creates, 'updated' => $updates, 'products' => $productCount]);

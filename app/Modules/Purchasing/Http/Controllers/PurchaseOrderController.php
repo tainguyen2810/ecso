@@ -3,6 +3,7 @@
 namespace App\Modules\Purchasing\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Access\Support\DataAccess;
 use App\Modules\Inventory\Http\Controllers\Concerns\ResolvesLines;
 use App\Modules\Inventory\Http\Resources\DocumentResource;
 use App\Modules\Purchasing\Http\Resources\PurchaseOrderResource;
@@ -171,6 +172,7 @@ class PurchaseOrderController extends Controller
     public function receive(Request $request, PurchaseOrder $purchaseOrder, PurchaseService $purchases): JsonResponse
     {
         $this->authorize('receive', $purchaseOrder);
+        app(DataAccess::class)->assertWarehouse($purchaseOrder->warehouse_id);
         $data = $request->validate([
             'note' => ['nullable', 'string', 'max:1000'],
             ...$this->lineRules(300),

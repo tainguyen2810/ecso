@@ -95,7 +95,7 @@ async function loadStock() {
     }
 }
 onMounted(async () => {
-    warehouses.value = ((await api.get('/warehouses')).data.data as Warehouse[]).filter((w) => w.status === 'active');
+    warehouses.value = ((await api.get('/warehouses')).data.data as Warehouse[]).filter((w) => w.status === 'active' && tenant.worksIn(w.id));
     if (draftId.value) {
         doc.value = (await api.get(`/inventory/adjustments/${draftId.value}`)).data.data;
         if (doc.value!.status !== 'draft') {

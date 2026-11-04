@@ -3,6 +3,7 @@
 namespace App\Modules\Purchasing\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Access\Support\DataAccess;
 use App\Modules\Inventory\Http\Controllers\Concerns\ResolvesLines;
 use App\Modules\Purchasing\Http\Resources\SupplierReturnResource;
 use App\Modules\Purchasing\Models\PurchaseOrder;
@@ -58,6 +59,7 @@ class SupplierReturnController extends Controller
         if (! $warehouse) {
             throw ValidationException::withMessages(['warehouse_id' => 'Chọn kho xuất trả.']);
         }
+        app(DataAccess::class)->assertWarehouse($warehouse);
 
         $return = $returns->create($supplier, $warehouse, $this->resolveLines($data['lines']), $po, $data['reason'] ?? null);
 

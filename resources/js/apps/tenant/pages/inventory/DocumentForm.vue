@@ -13,6 +13,7 @@ import { api, ApiError } from '@/shared/lib/api';
 import { cn, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useIdempotencyKey } from '@/shared/composables/useIdempotencyKey';
+import { useTenantStore } from '@/shared/stores/tenant';
 import { adjustmentReasons, documentKinds, type DocumentKindKey } from './labels';
 import type { Variant, Warehouse } from '@/shared/types';
 
@@ -27,6 +28,9 @@ const route = useRoute();
 const router = useRouter();
 const toast = useToast();
 const idempotency = useIdempotencyKey();
+const tenant = useTenantStore();
+// Without "products.cost.view" a receipt comes in at today's average cost: the unit cost is neither shown nor sent.
+const withCost = computed(() => kindKey.value === 'receipts' && tenant.can('products.cost.view'));
 const kindKey = computed(() => route.meta.kind as DocumentKindKey);
 const kind = computed(() => documentKinds[kindKey.value]);
 
@@ -39,12 +43,15 @@ const saving = ref(false);
 const error = ref<ApiError | null>(null);
 
 const activeWarehouses = computed(() => warehouses.value.filter((w) => w.status === 'active').map((w) => ({ value: w.id, label: `${w.code} · ${w.name}` })));
+// The document's own warehouse must be one the member is assigned to; a transfer may go to any warehouse.
+const ownWarehouses = computed(() => activeWarehouses.value.filter((w) => tenant.worksIn(w.value)));
 const sourceWarehouse = computed(() => form.warehouse_id);
 const total = computed(() => lines.value.reduce((t, l) => ({ qty: t.qty + (Number(l.quantity) || 0), value: t.value + (Number(l.quantity) || 0) * (Number(l.unit_cost) || 0) }), { qty: 0, value: 0 }));
 
 onMounted(async () => {
     warehouses.value = (await api.get('/warehouses')).data.data;
-    const def = warehouses.value.find((w) => w.is_default && w.status === 'active') ?? warehouses.value[0];
+    const mine = warehouses.value.filter((w) => w.status === 'active' && tenant.worksIn(w.id));
+    const def = mine.find((w) => w.is_default) ?? mine[0];
     form.warehouse_id = def?.id ?? '';
     form.to_warehouse_id = warehouses.value.find((w) => w.id !== form.warehouse_id && w.status === 'active')?.id ?? '';
 });
@@ -79,7 +86,7 @@ async function submit() {
         const payloadLines = lines.value.map((l) => ({
             variant_id: l.variant.id,
             quantity: writeOff && l.mode === 'delta' ? -Math.abs(Number(l.quantity)) : Number(l.quantity),
-            ...(kindKey.value === 'receipts' ? { unit_cost: Number(l.unit_cost || 0) } : {}),
+            ...(withCost.value ? { unit_cost: Number(l.unit_cost || 0) } : {}),
             ...(kindKey.value === 'adjustments' ? { mode: l.mode } : {}),
         }));
         const body =
@@ -124,8 +131,8 @@ const hints: Record<DocumentKindKey, string> = {
                             <th class="px-4 py-2 text-right font-medium">Tồn hiện tại</th>
                             <th v-if="kindKey === 'adjustments'" class="px-4 py-2 font-medium">Cách nhập</th>
                             <th class="px-4 py-2 text-right font-medium">{{ kindKey === 'adjustments' ? 'Số lượng' : 'Số lượng' }}</th>
-                            <th v-if="kindKey === 'receipts'" class="px-4 py-2 text-right font-medium">Đơn giá nhập</th>
-                            <th v-if="kindKey === 'receipts'" class="px-4 py-2 text-right font-medium">Thành tiền</th>
+                            <th v-if="withCost" class="px-4 py-2 text-right font-medium">Đơn giá nhập</th>
+                            <th v-if="withCost" class="px-4 py-2 text-right font-medium">Thành tiền</th>
                             <th v-if="kindKey === 'adjustments'" class="px-4 py-2 text-right font-medium">Chênh lệch</th>
                             <th class="px-2 py-2" />
                         </tr>
@@ -158,10 +165,10 @@ const hints: Record<DocumentKindKey, string> = {
                                 />
                                 <p v-if="lineError(i, 'quantity')" class="text-xs text-destructive">{{ lineError(i, 'quantity') }}</p>
                             </td>
-                            <td v-if="kindKey === 'receipts'" class="px-4 py-2.5 text-right">
+                            <td v-if="withCost" class="px-4 py-2.5 text-right">
                                 <input v-model="l.unit_cost" type="number" min="0" step="any" required :data-testid="`cost-${i}`" class="h-8 w-32 rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" />
                             </td>
-                            <td v-if="kindKey === 'receipts'" class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney((Number(l.quantity) || 0) * (Number(l.unit_cost) || 0)) }}</td>
+                            <td v-if="withCost" class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney((Number(l.quantity) || 0) * (Number(l.unit_cost) || 0)) }}</td>
                             <td v-if="kindKey === 'adjustments'" class="px-4 py-2.5 text-right tabular-nums">
                                 <template v-if="l.mode === 'delta' && writeOff">{{ l.quantity ? '−' + Math.abs(Number(l.quantity)) : '—' }}</template>
                                 <template v-else-if="l.mode === 'delta'">{{ l.quantity ? (Number(l.quantity) > 0 ? '+' : '') + l.quantity : '—' }}</template>
@@ -184,7 +191,7 @@ const hints: Record<DocumentKindKey, string> = {
             <Card title="Thông tin phiếu" class="lg:sticky lg:top-4">
                 <div class="space-y-4 p-5">
                     <FormField :label="kindKey === 'transfers' ? 'Kho xuất' : 'Kho'" for="doc-warehouse" :error="error?.field('warehouse_id') ?? error?.field('from_warehouse_id')">
-                        <Select id="doc-warehouse" v-model="form.warehouse_id" :options="activeWarehouses" data-testid="doc-warehouse" />
+                        <Select id="doc-warehouse" v-model="form.warehouse_id" :options="ownWarehouses" data-testid="doc-warehouse" />
                     </FormField>
                     <FormField v-if="kindKey === 'transfers'" label="Kho nhận" for="doc-to" :error="error?.field('to_warehouse_id')">
                         <Select id="doc-to" v-model="form.to_warehouse_id" :options="activeWarehouses.filter((w) => w.value !== form.warehouse_id)" data-testid="doc-to-warehouse" />
@@ -199,8 +206,9 @@ const hints: Record<DocumentKindKey, string> = {
                     <div class="space-y-1 rounded-md bg-muted/50 p-3 text-sm">
                         <div class="flex justify-between"><span class="text-muted-foreground">Số dòng</span><span class="tabular-nums">{{ lines.length }}</span></div>
                         <div v-if="kindKey !== 'adjustments'" class="flex justify-between"><span class="text-muted-foreground">Tổng số lượng</span><span class="tabular-nums">{{ formatNumber(total.qty) }}</span></div>
-                        <div v-if="kindKey === 'receipts'" class="flex justify-between font-medium"><span>Tổng giá trị</span><span class="tabular-nums">{{ formatMoney(total.value) }}</span></div>
+                        <div v-if="withCost" class="flex justify-between font-medium"><span>Tổng giá trị</span><span class="tabular-nums">{{ formatMoney(total.value) }}</span></div>
                     </div>
+                    <p v-if="kindKey === 'receipts' && !withCost" class="text-xs text-muted-foreground" data-testid="receipt-no-cost">Hàng nhập theo giá vốn bình quân hiện tại. Đơn giá nhập do người có quyền xem giá vốn ghi.</p>
                     <p v-if="error && !error.body.errors" class="text-sm text-destructive">{{ error.message }}</p>
                     <Button type="submit" class="w-full" :loading="saving" :disabled="!lines.length" data-testid="submit-document">
                         {{ kindKey === 'receipts' ? 'Lưu và nhập kho' : kindKey === 'adjustments' ? 'Gửi duyệt' : 'Lưu phiếu nháp' }}

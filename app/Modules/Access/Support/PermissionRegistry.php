@@ -36,6 +36,7 @@ final class PermissionRegistry
         'products' => [
             'products.view' => 'Xem sản phẩm',
             'products.manage' => 'Quản lý sản phẩm và mapping',
+            'products.cost.view' => 'Xem giá vốn, giá trị tồn và đơn giá nhập',
         ],
         'inventory' => [
             'inventory.view' => 'Xem tồn kho',
@@ -77,7 +78,7 @@ final class PermissionRegistry
 
     private const READ_ALL = [
         'dashboard.view', 'orders.view', 'orders.view.all', 'products.view', 'inventory.view', 'purchasing.view',
-        'returns.view', 'reports.view', 'marketplace.view', 'customers.view',
+        'returns.view', 'reports.view', 'marketplace.view', 'customers.view', 'products.cost.view',
     ];
 
     /**
@@ -105,7 +106,7 @@ final class PermissionRegistry
             ]],
             Role::ACCOUNTANT => ['name' => 'Kế toán', 'rank' => 40, 'permissions' => [
                 'dashboard.view', 'orders.view', 'orders.view.all', 'products.view', 'inventory.view', 'purchasing.view',
-                'returns.view', 'finance.view', 'finance.profit', 'finance.vouchers', 'reports.view', 'billing.view', 'customers.view', 'orders.payment', 'orders.payment.void', 'orders.shifts', 'purchasing.payment',
+                'returns.view', 'finance.view', 'finance.profit', 'finance.vouchers', 'reports.view', 'billing.view', 'customers.view', 'orders.payment', 'orders.payment.void', 'orders.shifts', 'purchasing.payment', 'products.cost.view',
             ]],
             Role::VIEWER => ['name' => 'Chỉ xem', 'rank' => 10, 'permissions' => self::READ_ALL],
         ];

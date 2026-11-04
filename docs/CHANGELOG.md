@@ -9,6 +9,30 @@
 - Hàng trả lại trừ khỏi doanh thu theo giá trị chưa gồm thuế (tiền hoàn đã gồm cả thuế trả lại cho khách). Giá trị hàng trả khi không nhập số tiền hoàn giờ chia cả chiết khấu đơn và thuế cộng thêm theo tỷ lệ, giống `OrderReturn::goodsValue()`.
 - Xem chi tiết đơn có thêm cột VAT.
 
+### Thông tin sản phẩm, đợt E kiểm toán sản phẩm (2026-11-04)
+- **Lọc theo tồn kho** ở danh sách sản phẩm (Bộ lọc khác → Tồn kho): Còn hàng, Sắp hết (tồn khả dụng ≤ tồn an toàn), Hết hàng. Thêm sắp xếp theo giá bán tăng/giảm.
+- **Thùng rác "Đã xóa"**: tab mới liệt kê sản phẩm đã xóa, nút **Khôi phục** đưa sản phẩm về cùng các SKU bị xóa cùng lúc, ghi nhật ký và đẩy lại tồn thật lên sàn đã liên kết.
+- **Tạo mã vạch**: nút cạnh ô mã vạch tạo mã EAN-13 nội bộ (đầu 2x, dải GS1 dành cho mã cửa hàng) có số kiểm tra đúng, không trùng mã đã có.
+- **Nhà cung cấp thường nhập và mã hàng của NCC** cho từng SKU; gợi ý đặt hàng ưu tiên NCC này thay vì NCC của đơn nhập gần nhất. **Kích thước gói hàng** (dài × rộng × cao, mm) cho từng SKU.
+- Ô tìm kiếm coi `%` và `_` là ký tự thường (tìm "A_1" không còn khớp "AB1").
+
+### Kho và chuyển kho, đợt D kiểm toán sản phẩm (2026-11-04)
+- **Nhận chuyển kho thiếu**: nút "Nhận hàng" mở hộp nhập số thực nhận từng dòng (`POST /inventory/transfers/{id}/receive` nhận `lines[].line_id`, `received_qty`). Kho nhận vẫn nhập đủ số đã xuất, phần thiếu thành phiếu điều chỉnh "Thất lạc" chờ duyệt ở kho nhận, nên khoản mất được duyệt và báo cáo như hàng hủy. Phiếu chuyển ghi "Thực nhận" và liên kết phiếu thất lạc.
+- **Hàng đang chuyển đến**: tồn theo kho ở trang sản phẩm cộng thêm hàng đã xuất từ kho khác mà chưa nhận (`in_transit`).
+- **Ngừng kho an toàn**: không ngừng được kho còn đơn nhập chưa nhận xong, phiếu chuyển chưa hoàn tất, phiếu kiểm/điều chỉnh chưa duyệt hoặc gian hàng đang lấy tồn từ kho đó; thông báo nêu rõ còn gì.
+- **Đối soát tồn kho** (Sản phẩm → Đối soát tồn kho, `GET /inventory/reconciliation`): kết quả kiểm tra sổ kho (tồn = tổng sổ kho, đang giữ = các đơn đang giữ) và các đơn bàn giao khi kho thiếu hàng trong 90 ngày. Chỉ đọc, ECSO không tự sửa sổ kho.
+
+### Quyền dữ liệu, đợt C kiểm toán sản phẩm (2026-11-04)
+- **Quyền mới `products.cost.view`** (Xem giá vốn, giá trị tồn và đơn giá nhập). Có sẵn ở Chủ, Quản trị, Quản lý vận hành, Kế toán, Chỉ xem; Nhân viên kho và Nhân viên xử lý đơn không có. Vai trò tự tạo đang có `reports.view`, `products.manage` hoặc `purchasing.manage` được thêm quyền này khi migrate, nên không ai mất quyền đang dùng. Không có quyền thì API trả `null` cho giá vốn, giá trị tồn, đơn giá phiếu nhập, đơn giá trên thẻ kho; file xuất sản phẩm để trống cột giá vốn; màn hình ẩn các cột đó.
+- **Nhập kho tay không đổi giá vốn** khi người nhập không có quyền xem giá vốn: hàng vào theo giá vốn bình quân hiện tại, form không hiện ô đơn giá. Đơn giá nhập từ đơn nhập hàng (PO) không đổi.
+- **Phân kho cho nhân viên** (Nhân viên → cột "Kho thao tác"): nhân viên được chọn kho chỉ tạo phiếu nhập, kiểm, xuất chuyển, nhận chuyển, nhận PO, trả NCC, nhận hàng hoàn ở các kho đó. Không chọn kho nào thì được mọi kho (như trước). Xem tồn vẫn như cũ. Bảng `member_warehouses`.
+
+### Trạng thái và đồng bộ sản phẩm, đợt B kiểm toán sản phẩm (2026-11-04)
+- **Ngừng bán / Lưu trữ có hiệu lực**: SKU mà sản phẩm hoặc biến thể không ở trạng thái "Đang bán" thì không thêm được vào đơn mới hay POS ("SKU … đang ngừng bán"). Dòng đã có trên đơn vẫn giữ khi sửa đơn. Ô tìm SKU ở đơn và POS chỉ hiện SKU đang bán (`/variants?sellable=1`). Website được đẩy tồn 0 khi ngừng bán, và đẩy lại tồn thật khi bán lại (sự kiện `SaleStatusChanged`, cả khi đổi hàng loạt và khi nhập file).
+- **Nhập Excel đi qua model**: giá đổi bằng file được đẩy lên website và ghi lịch sử giá như sửa tay.
+- **SKU từ website có dấu cách, #, +**: sản phẩm vẫn sửa và lưu được khi giữ nguyên SKU đó; SKU mới hoặc SKU đổi vẫn theo quy tắc chữ, số và . _ - /.
+- **Duyệt sản phẩm mới từ website an toàn**: so SKU không phân biệt hoa thường; SKU đang nằm trong thùng rác được khôi phục và liên kết, không còn lỗi 500. Sản phẩm tạo mới lấy thêm mô tả (dạng chữ), danh mục đầu tiên, cân nặng (kg → gram), thuộc tính biến thể và barcode (`global_unique_id`) nếu chưa bị SKU khác dùng. Ảnh chưa được tải về ECSO.
+
 ### Tài chính, vòng C–E: phí sàn, lợi nhuận nhiều tầng, lọc theo shop (2026-11-04)
 - **Một nguồn số liệu lợi nhuận** (`App\Modules\Analytics\Support\ProfitFigures`) cho trang Tài chính và Báo cáo lãi lỗ: doanh thu thuần, giá vốn, lợi nhuận gộp, **lợi nhuận đóng góp** (gộp − phí sàn + phí ship khách trả − chi phí bán hàng) và **lợi nhuận quản trị ước tính** (đóng góp − hao hụt kho − chi phí vận hành, chi phí khác + thu nhập khác). Ghi rõ là số ước tính, chưa phải lợi nhuận kế toán.
 - **Phí sàn** tách 3 loại: *đã xác nhận* (từ file đối soát đã nhập), *ước tính* (theo bảng phí của shop cho đơn chưa đối soát), *chưa biết* (shop chưa có bảng phí: đếm số đơn, không tính là 0). Đơn kênh riêng, POS, website không có phí sàn.

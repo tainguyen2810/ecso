@@ -22,6 +22,7 @@ import { varianceReasons } from './stocktake';
 
 const route = useRoute();
 const tenant = useTenantStore();
+const canCost = computed(() => tenant.can('products.cost.view'));
 const toast = useToast();
 const kindKey = computed(() => route.meta.kind as DocumentKindKey);
 const kind = computed(() => documentKinds[kindKey.value]);
@@ -59,6 +60,22 @@ async function act(action: string, body: Record<string, unknown> = {}, message =
     } finally {
         busy.value = null;
     }
+}
+
+// Nhận chuyển kho: the counted quantity per line; the missing part becomes a pending "thất lạc" adjustment.
+const receiveOpen = ref(false);
+const receiveNote = ref('');
+const received = ref<Record<number, number>>({});
+function openReceive() {
+    received.value = Object.fromEntries((doc.value?.lines ?? []).map((l) => [l.line_id!, l.quantity]));
+    receiveNote.value = '';
+    receiveOpen.value = true;
+}
+const receiveShort = computed(() => (doc.value?.lines ?? []).reduce((n, l) => n + Math.max(0, l.quantity - (Number(received.value[l.line_id!]) || 0)), 0));
+async function receive() {
+    const lines = (doc.value?.lines ?? []).map((l) => ({ line_id: l.line_id!, received_qty: Math.max(0, Math.min(l.quantity, Number(received.value[l.line_id!]) || 0)) }));
+    const message = receiveShort.value ? `Đã nhận hàng, ${receiveShort.value} thiếu chờ duyệt thất lạc` : 'Đã nhận hàng vào kho đích';
+    if (await act('receive', { lines, note: receiveNote.value || null }, message)) receiveOpen.value = false;
 }
 
 const rejectOpen = ref(false);
@@ -106,10 +123,15 @@ const steps = computed(() => {
             <template v-if="doc.kind === 'transfer' && tenant.can('inventory.transfer')">
                 <Button v-if="doc.status === 'draft' || doc.status === 'in_transit'" variant="ghost" :loading="busy === 'cancel'" @click="act('cancel', {}, 'Đã hủy phiếu chuyển')">Hủy phiếu</Button>
                 <Button v-if="doc.status === 'draft'" data-testid="dispatch" :loading="busy === 'dispatch'" @click="act('dispatch', {}, 'Đã xuất khỏi kho nguồn')"><Send /> Xuất kho</Button>
-                <Button v-if="doc.status === 'in_transit'" data-testid="receive" :loading="busy === 'receive'" @click="act('receive', {}, 'Đã nhận hàng vào kho đích')"><PackageCheck /> Nhận hàng</Button>
+                <Button v-if="doc.status === 'in_transit'" data-testid="receive" :loading="busy === 'receive'" @click="openReceive"><PackageCheck /> Nhận hàng</Button>
             </template>
         </PageHeader>
 
+        <Alert v-if="doc.kind === 'transfer' && doc.shortage" tone="amber" class="mb-5" data-testid="transfer-shortage">
+            Nhận thiếu so với số đã xuất. Phần thiếu nằm ở phiếu
+            <RouterLink :to="`/inventory/adjustments/${doc.shortage.ulid}`" class="font-medium underline">{{ doc.shortage.number }}</RouterLink>
+            ({{ documentStatus[doc.shortage.status]?.label ?? doc.shortage.status }}).
+        </Alert>
         <Alert v-if="isPending && movedSince.length" :icon="History" tone="amber" class="mb-5" data-testid="moved-since-count">
             <p class="font-medium">{{ formatNumber(movedSince.length) }} SKU đã có nhập hoặc xuất sau khi đếm{{ doc.counted_at ? ` (${formatDateTime(doc.counted_at)})` : '' }}.</p>
             <p class="mt-0.5 text-muted-foreground">Khi duyệt, ECSO chỉ cộng hoặc trừ phần lệch tìm thấy lúc đếm và giữ nguyên các giao dịch đó. Cột "Tồn sau duyệt" là tồn kho sau khi phiếu được áp dụng.</p>
@@ -124,8 +146,9 @@ const steps = computed(() => {
                                 <th class="px-4 py-2.5 font-medium">SKU</th>
                                 <th v-if="doc.kind === 'adjustment'" class="px-4 py-2.5 font-medium">Cách nhập</th>
                                 <th class="px-4 py-2.5 text-right font-medium">Số lượng</th>
-                                <th v-if="doc.kind === 'receipt'" class="px-4 py-2.5 text-right font-medium">Đơn giá</th>
-                                <th v-if="doc.kind === 'receipt'" class="px-4 py-2.5 text-right font-medium">Thành tiền</th>
+                                <th v-if="doc.kind === 'transfer' && doc.status === 'received'" class="px-4 py-2.5 text-right font-medium">Thực nhận</th>
+                                <th v-if="doc.kind === 'receipt' && canCost" class="px-4 py-2.5 text-right font-medium">Đơn giá</th>
+                                <th v-if="doc.kind === 'receipt' && canCost" class="px-4 py-2.5 text-right font-medium">Thành tiền</th>
                                 <th v-if="hasSnapshot" class="px-4 py-2.5 text-right font-medium">Tồn lúc đếm</th>
                                 <th v-if="showNow" class="px-4 py-2.5 text-right font-medium">Tồn hiện tại</th>
                                 <th v-if="doc.kind === 'adjustment' && !showNow" class="px-4 py-2.5 text-right font-medium">Tồn trước</th>
@@ -142,8 +165,9 @@ const steps = computed(() => {
                                 </td>
                                 <td v-if="doc.kind === 'adjustment'" class="px-4 py-2.5 text-muted-foreground">{{ l.mode === 'count' ? 'Số đếm thực tế' : 'Chênh lệch' }}</td>
                                 <td class="px-4 py-2.5 text-right tabular-nums">{{ l.mode === 'delta' && l.quantity > 0 ? '+' : '' }}{{ formatNumber(l.quantity) }}</td>
-                                <td v-if="doc.kind === 'receipt'" class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(l.unit_cost) }}</td>
-                                <td v-if="doc.kind === 'receipt'" class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(l.quantity * Number(l.unit_cost)) }}</td>
+                                <td v-if="doc.kind === 'transfer' && doc.status === 'received'" :class="cn('px-4 py-2.5 text-right tabular-nums', (l.received_qty ?? l.quantity) < l.quantity && 'font-medium text-amber-600')">{{ formatNumber(l.received_qty ?? l.quantity) }}</td>
+                                <td v-if="doc.kind === 'receipt' && canCost" class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(l.unit_cost) }}</td>
+                                <td v-if="doc.kind === 'receipt' && canCost" class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(l.quantity * Number(l.unit_cost)) }}</td>
                                 <td v-if="hasSnapshot" class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ l.system_qty === undefined ? '—' : formatNumber(l.system_qty) }}</td>
                                 <td v-if="showNow" :class="cn('px-4 py-2.5 text-right tabular-nums', l.on_hand_now !== l.system_qty ? 'font-medium text-amber-600' : 'text-muted-foreground')">{{ l.on_hand_now === undefined ? '—' : formatNumber(l.on_hand_now) }}</td>
                                 <td v-if="doc.kind === 'adjustment' && !showNow" class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ l.on_hand_before ?? '—' }}</td>
@@ -161,7 +185,7 @@ const steps = computed(() => {
                 </div>
                 <div v-if="doc.kind === 'receipt'" class="flex justify-end gap-8 border-t px-4 py-3 text-sm">
                     <span class="text-muted-foreground">Tổng số lượng <b class="ml-1 text-foreground tabular-nums">{{ formatNumber(doc.total_quantity) }}</b></span>
-                    <span class="text-muted-foreground">Tổng giá trị <b class="ml-1 text-foreground tabular-nums">{{ formatMoney(doc.total_value) }}</b></span>
+                    <span v-if="canCost" class="text-muted-foreground">Tổng giá trị <b class="ml-1 text-foreground tabular-nums">{{ formatMoney(doc.total_value) }}</b></span>
                 </div>
             </Card>
 
@@ -190,6 +214,26 @@ const steps = computed(() => {
             </div>
         </div>
     </template>
+
+    <Dialog v-model:open="receiveOpen" :title="`Nhận hàng vào ${doc?.to_warehouse?.code ?? ''}`" description="Đếm số thực nhận từng dòng. Phần thiếu được ghi vào phiếu điều chỉnh thất lạc chờ duyệt ở kho nhận.">
+        <form id="receive-form" class="space-y-3" @submit.prevent="receive">
+            <div class="max-h-80 divide-y overflow-y-auto rounded-md border">
+                <div v-for="l in doc?.lines ?? []" :key="l.line_id" class="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                    <div class="min-w-0">
+                        <p class="font-mono text-xs font-medium">{{ l.variant.sku }}</p>
+                        <p class="truncate text-xs text-muted-foreground">{{ l.variant.name }} · đã xuất {{ formatNumber(l.quantity) }}</p>
+                    </div>
+                    <input v-model.number="received[l.line_id!]" type="number" min="0" :max="l.quantity" :data-testid="`received-${l.variant.sku}`" aria-label="Thực nhận" class="h-8 w-20 rounded-md border border-input bg-card px-2 text-right tabular-nums" />
+                </div>
+            </div>
+            <Alert v-if="receiveShort" tone="amber" data-testid="receive-short">Thiếu {{ formatNumber(receiveShort) }} so với số đã xuất. ECSO vẫn nhận đủ vào kho rồi tạo phiếu thất lạc chờ duyệt để trừ phần thiếu.</Alert>
+            <FormField v-if="receiveShort" label="Ghi chú" for="receive-note"><Input id="receive-note" v-model="receiveNote" maxlength="500" placeholder="Rách thùng, giao thiếu…" /></FormField>
+        </form>
+        <template #footer>
+            <Button variant="outline" @click="receiveOpen = false">Đóng</Button>
+            <Button type="submit" form="receive-form" :loading="busy === 'receive'" data-testid="receive-confirm">Xác nhận nhận hàng</Button>
+        </template>
+    </Dialog>
 
     <Dialog v-model:open="rejectOpen" title="Từ chối phiếu điều chỉnh" description="Người tạo phiếu sẽ thấy lý do từ chối.">
         <form id="reject-form" @submit.prevent="reject">

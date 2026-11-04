@@ -27,6 +27,8 @@ export interface TenantContextData {
     role: { key: string; name: string };
     permissions: string[];
     entitlements: Record<string, Entitlement>;
+    /** Warehouses this member moves stock in; null = every warehouse. */
+    warehouses?: string[] | null;
 }
 
 export interface Role {
@@ -45,6 +47,8 @@ export interface Member {
     status: 'active' | 'disabled';
     joined_at: string | null;
     is_me: boolean;
+    /** Warehouses the member moves stock in; empty = every warehouse. */
+    warehouses?: string[];
 }
 
 export interface Invitation {
@@ -77,6 +81,12 @@ export interface Variant {
     components?: { variant: { id: string; sku: string; name: string }; quantity: number }[];
     cost_price?: string;
     weight_gram: number | null;
+    supplier?: Ref | null;
+    supplier_sku?: string | null;
+    length_mm?: number | null;
+    width_mm?: number | null;
+    height_mm?: number | null;
+    sellable?: boolean;
     status?: string;
     product?: Ref & { image?: string | null };
     stock?: StockFigures;
@@ -155,6 +165,9 @@ export interface Movement {
 }
 
 export interface DocumentLine {
+    /** Transfer lines: id used when receiving. */
+    line_id?: number;
+    received_qty?: number;
     variant: { id: string; sku: string; name: string };
     quantity: number;
     unit_cost?: string;
@@ -170,6 +183,8 @@ export interface DocumentLine {
 }
 
 export interface InventoryDocument {
+    /** Transfers received short: the pending "thất lạc" adjustment. */
+    shortage?: { ulid: string; number: string; status: string } | null;
     id: string;
     kind: 'receipt' | 'adjustment' | 'transfer';
     number: string;

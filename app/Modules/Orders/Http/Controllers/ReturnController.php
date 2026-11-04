@@ -3,6 +3,7 @@
 namespace App\Modules\Orders\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Access\Support\DataAccess;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Orders\Http\Resources\ReturnResource;
 use App\Modules\Orders\Models\Order;
@@ -98,6 +99,7 @@ class ReturnController extends Controller
             'lines.*.damaged_qty' => ['required', 'integer', 'min:0'],
         ]);
         $warehouse = Warehouse::query()->where('ulid', $data['warehouse_id'])->where('status', 'active')->firstOrFail();
+        app(DataAccess::class)->assertWarehouse($warehouse);
 
         return new ReturnResource($returns->inspect($return, $warehouse, $data['lines'], $data['note'] ?? null)->load(['order', 'warehouse', 'lines.item', 'lines.variant', 'inspector']));
     }

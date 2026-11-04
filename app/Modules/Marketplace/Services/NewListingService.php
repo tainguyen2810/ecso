@@ -3,6 +3,7 @@
 namespace App\Modules\Marketplace\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Catalog\Models\Category;
 use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Catalog\Services\ProductService;
 use App\Modules\Marketplace\Events\ListingMappingChanged;
@@ -57,23 +58,36 @@ class NewListingService
                     return;
                 }
 
-                // A SKU created in ECSO in the meantime is linked, not duplicated.
-                $existing = ProductVariant::query()->whereIn('sku', $variants->map(fn ($v) => $this->sku($v))->all())->pluck('id', 'sku');
-                $toCreate = $variants->reject(fn ($v) => $existing->has($this->sku($v)))->values();
+                // A SKU created in ECSO in the meantime is linked, not duplicated. SKUs compare without case (like the
+                // database), and one in the recycle bin is restored and linked: creating it again would break the unique index.
+                $existing = $this->existingSkus($variants->map(fn ($v) => $this->sku($v))->all());
+                $toCreate = $variants->reject(fn ($v) => $existing->has($this->key($v)))->values();
 
                 if ($toCreate->isNotEmpty()) {
+                    $details = (array) ($listing->raw['details'] ?? []);
+                    $extra = (array) ($listing->raw['variants'] ?? []);
+                    $barcodes = $this->freeBarcodes($toCreate->map(fn ($v) => $extra[$v->external_sku_id]['barcode'] ?? null)->filter()->all());
                     $product = $this->products->create([
                         'name' => mb_substr($listing->title ?: 'Sản phẩm từ website', 0, 255),
                         'status' => 'active',
-                        'variants' => $toCreate->map(fn (ListingVariant $v) => [
-                            'sku' => $this->sku($v),
-                            'name' => $v->name ?: 'Mặc định',
-                            'ref_price' => (string) ($v->price ?? 0),
-                            'status' => 'active',
-                        ])->all(),
+                        'description' => $details['description'] ?? null,
+                        'category_id' => $this->category($details['categories'][0] ?? null),
+                        'variants' => $toCreate->map(function (ListingVariant $v) use ($extra, $details, $barcodes) {
+                            $more = (array) ($extra[$v->external_sku_id] ?? []);
+                            $barcode = $more['barcode'] ?? null;
+
+                            return [
+                                'sku' => $this->sku($v),
+                                'name' => $v->name ?: 'Mặc định',
+                                'ref_price' => (string) ($v->price ?? 0),
+                                'status' => 'active',
+                                'options' => ($more['options'] ?? []) ?: null,
+                                'weight_gram' => $more['weight_gram'] ?? ($details['weight_gram'] ?? null),
+                                'barcode' => $barcode !== null && isset($barcodes[mb_strtolower($barcode)]) ? $barcode : null,
+                            ];
+                        })->all(),
                     ]);
-                    $created = $product->variants()->pluck('id', 'sku');
-                    $existing = $existing->merge($created);
+                    $existing = $existing->merge($product->variants()->pluck('id', 'sku')->mapWithKeys(fn ($id, $sku) => [mb_strtolower($sku) => $id]));
                     $result['created']++;
                 } else {
                     $result['linked']++;
@@ -81,7 +95,7 @@ class NewListingService
 
                 foreach ($variants as $v) {
                     $v->forceFill([
-                        'product_variant_id' => $existing[$this->sku($v)],
+                        'product_variant_id' => $existing[$this->key($v)],
                         'mapping_status' => ListingVariant::MAPPED,
                         'mapped_by' => Auth::id(),
                         'mapped_at' => now(),
@@ -109,6 +123,65 @@ class NewListingService
     }
 
     private string $prefix = 'MP-';
+
+    /**
+     * Variant ids by lower-case SKU, restoring a soft-deleted match (and its product) so it can be linked again.
+     *
+     * @param  array<int, string>  $skus
+     * @return Collection<string, int<0, max>>
+     */
+    private function existingSkus(array $skus): Collection
+    {
+        $found = ProductVariant::query()->withTrashed()->with(['product' => fn ($q) => $q->withTrashed()])->whereIn('sku', $skus)->get();
+        foreach ($found->filter(fn (ProductVariant $v) => $v->trashed()) as $variant) {
+            if ($variant->product?->trashed()) {
+                $variant->product->restore();
+            }
+            $variant->restore();
+        }
+
+        return $found->toBase()->mapWithKeys(fn (ProductVariant $v) => [mb_strtolower($v->sku) => $v->id]);
+    }
+
+    /** The store's first category, found by name (top level) or created. */
+    private function category(?string $name): ?int
+    {
+        $name = $name !== null ? mb_substr(trim($name), 0, 100) : '';
+        if ($name === '') {
+            return null;
+        }
+        $found = Category::query()->whereNull('parent_id')->where('name', $name)->value('id');
+
+        return (int) ($found ?? Category::create(['name' => $name])->id);
+    }
+
+    /**
+     * Barcodes not used by another SKU yet (lower-case keys); a taken one is left out rather than failing the approval.
+     *
+     * @param  array<int, string>  $barcodes
+     * @return array<string, true>
+     */
+    private function freeBarcodes(array $barcodes): array
+    {
+        if ($barcodes === []) {
+            return [];
+        }
+        $taken = ProductVariant::query()->withTrashed()->whereIn('barcode', $barcodes)->pluck('barcode')->map(fn ($b) => mb_strtolower($b))->flip();
+        $free = [];
+        foreach ($barcodes as $b) {
+            $key = mb_strtolower($b);
+            if (! $taken->has($key) && ! isset($free[$key])) {
+                $free[$key] = true;
+            }
+        }
+
+        return $free;
+    }
+
+    private function key(ListingVariant $v): string
+    {
+        return mb_strtolower($this->sku($v));
+    }
 
     private function sku(ListingVariant $v): string
     {

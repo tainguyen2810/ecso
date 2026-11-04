@@ -2,6 +2,7 @@
 
 namespace App\Modules\Inventory\Http\Controllers\Concerns;
 
+use App\Modules\Access\Support\DataAccess;
 use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Inventory\Models\Warehouse;
 use Illuminate\Validation\ValidationException;
@@ -29,10 +30,16 @@ trait ResolvesLines
         return array_values($lines);
     }
 
-    protected function findWarehouse(string $ulid, string $field = 'warehouse_id'): Warehouse
+    /** $assigned: the member must be assigned to the warehouse (documents that move its stock). */
+    protected function findWarehouse(string $ulid, string $field = 'warehouse_id', bool $assigned = true): Warehouse
     {
-        return Warehouse::query()->where('ulid', $ulid)->first()
+        $warehouse = Warehouse::query()->where('ulid', $ulid)->first()
             ?? throw ValidationException::withMessages([$field => 'Kho không tồn tại.']);
+        if ($assigned) {
+            app(DataAccess::class)->assertWarehouse($warehouse, $field);
+        }
+
+        return $warehouse;
     }
 
     /**

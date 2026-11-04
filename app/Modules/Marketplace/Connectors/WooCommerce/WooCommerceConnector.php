@@ -321,12 +321,33 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
             variants: $variants,
             status: (string) ($p['status'] ?? 'publish'),
             imageUrl: $p['images'][0]['src'] ?? ($p['image']['src'] ?? null),
+            details: [
+                'description' => self::plainText((string) (($p['description'] ?? '') ?: ($p['short_description'] ?? ''))),
+                'categories' => collect($p['categories'] ?? [])->pluck('name')->filter()->map(fn ($n) => html_entity_decode((string) $n, ENT_QUOTES))->values()->all(),
+                'weight_gram' => self::grams($p['weight'] ?? null),
+            ],
         );
+    }
+
+    /** Woo descriptions are HTML: ECSO keeps the text, one paragraph per line. */
+    private static function plainText(string $html): ?string
+    {
+        $text = preg_replace('/<\s*(br|\/p|\/li|\/h[1-6])\s*\/?>/i', "\n", $html) ?? $html;
+        $text = html_entity_decode(strip_tags($text), ENT_QUOTES);
+        $text = trim(preg_replace("/[ \t]+/", ' ', preg_replace("/\n\s*\n+/", "\n", $text) ?? $text) ?? $text);
+
+        return $text === '' ? null : mb_substr($text, 0, 20000);
+    }
+
+    /** Woo's weight is in the store's unit; ECSO assumes kg, the WooCommerce default. */
+    private static function grams(mixed $weight): ?int
+    {
+        return is_numeric($weight) && (float) $weight > 0 ? (int) round((float) $weight * 1000) : null;
     }
 
     /**
      * @param  array<string, mixed>  $v
-     * @return array{external_sku_id: string, seller_sku: ?string, name: ?string, price: string, stock: ?int, regular_price: ?string, sale_price: ?string}
+     * @return array{external_sku_id: string, seller_sku: ?string, name: ?string, price: string, stock: ?int, regular_price: ?string, sale_price: ?string, options: array<string, string>, weight_gram: ?int, barcode: ?string}
      */
     private function variant(array $v, ?string $name): array
     {
@@ -340,6 +361,10 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
             'stock' => ($v['manage_stock'] ?? false) === true && isset($v['stock_quantity']) ? (int) $v['stock_quantity'] : null,
             'regular_price' => $money($v['regular_price'] ?? null),
             'sale_price' => $money($v['sale_price'] ?? null),
+            'options' => collect($v['attributes'] ?? [])->filter(fn ($a) => filled($a['name'] ?? null) && filled($a['option'] ?? null))
+                ->mapWithKeys(fn ($a) => [mb_substr((string) $a['name'], 0, 100) => mb_substr((string) $a['option'], 0, 100)])->take(5)->all(),
+            'weight_gram' => self::grams($v['weight'] ?? null),
+            'barcode' => filled($v['global_unique_id'] ?? null) ? mb_substr((string) $v['global_unique_id'], 0, 64) : null,
         ];
     }
 
