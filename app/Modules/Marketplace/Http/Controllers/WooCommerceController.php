@@ -29,7 +29,7 @@ class WooCommerceController extends Controller
     {
         $payload = $request->json()->all() ?: $request->all();
 
-        return $service->receiveKeys(is_array($payload) ? $payload : [])
+        return $service->receiveKeys($payload)
             ? response()->json(['received' => true])
             : response()->json(['message' => 'Phiên kết nối không hợp lệ hoặc đã hết hạn.'], 400);
     }

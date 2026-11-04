@@ -142,21 +142,21 @@ class WooCommerceConnectService
      */
     private function probe(WooClient $client): array
     {
-        $error = null;
+        $error = 'Không kết nối được website.';
         foreach ([WooClient::AUTH_BASIC, WooClient::AUTH_QUERY] as $auth) {
             try {
                 $c = $client->withAuth($auth);
 
                 return [$c, $c->get('system_status', ['_fields' => 'environment,settings'])];
             } catch (ConnectorException $e) {
-                $error = $e;
+                $error = $e->getMessage();
                 if (! $e->authExpired) {
                     break;
                 }
             }
         }
 
-        throw ValidationException::withMessages(['website' => $error?->getMessage() ?? 'Không kết nối được website.']);
+        throw ValidationException::withMessages(['website' => $error]);
     }
 
     private function total(WooClient $client, string $resource): ?int

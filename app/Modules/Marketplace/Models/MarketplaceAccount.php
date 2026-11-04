@@ -14,6 +14,8 @@ use Illuminate\Support\Carbon;
 /**
  * A connected marketplace shop.
  *
+ * @property string|null $base_url
+ * @property array<string, mixed>|null $settings per-store sync switches, auth mode, webhook ids
  * @property Carbon|null $connected_at
  * @property Carbon|null $last_synced_at
  * @property Carbon|null $circuit_open_until
