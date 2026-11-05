@@ -3,6 +3,8 @@
 namespace App\Modules\Sales\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Cashbook\Models\CashVoucherType;
+use App\Modules\Cashbook\Services\CashVoucherService;
 use App\Modules\Identity\Models\User;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Sales\Http\Resources\CashShiftResource;
@@ -42,6 +44,19 @@ class CashShiftController extends Controller
             ->additional(['meta' => ['can_view_all' => $request->user()->can('viewAll', CashShift::class)]]);
     }
 
+    /**
+     * Voucher types a cashier can book drawer money under (active ones; receipt for money in, payment for money out),
+     * so a cashier without finance access can still record an expense paid from the drawer.
+     */
+    public function voucherTypes(CashVoucherService $vouchers): JsonResponse
+    {
+        $this->authorize('create', CashShift::class);
+        $vouchers->ensureDefaultTypes();
+        $types = CashVoucherType::query()->where('is_active', true)->orderBy('name')->get(['ulid', 'direction', 'name']);
+
+        return response()->json(['data' => $types->map(fn ($t) => ['id' => $t->ulid, 'direction' => $t->direction, 'name' => $t->name])->values()]);
+    }
+
     /** The caller's open shift (null when none), and the float the next shift should start with. */
     public function current(Request $request, CashShiftService $shifts): JsonResponse
     {
@@ -51,7 +66,7 @@ class CashShiftController extends Controller
         $warehouse = $request->query('warehouse') ? Warehouse::query()->where('ulid', $request->query('warehouse'))->first() : null;
 
         return response()->json([
-            'data' => $shift ? (new CashShiftResource($shift->load(['user', 'warehouse', 'movements.creator'])))->resolve($request) : null,
+            'data' => $shift ? (new CashShiftResource($shift->load(['user', 'warehouse', 'movements.creator', 'movements.voucher'])))->resolve($request) : null,
             'meta' => ['suggested_opening' => $shifts->suggestedOpening($warehouse), 'denominations' => CashShiftService::DENOMINATIONS],
         ]);
     }
@@ -60,7 +75,7 @@ class CashShiftController extends Controller
     {
         $this->authorize('view', $shift);
 
-        return new CashShiftResource($shift->load(['user', 'warehouse', 'closer', 'movements.creator']));
+        return new CashShiftResource($shift->load(['user', 'warehouse', 'closer', 'movements.creator', 'movements.voucher']));
     }
 
     public function store(Request $request, CashShiftService $shifts): JsonResponse
@@ -89,10 +104,11 @@ class CashShiftController extends Controller
             'kind' => ['required', Rule::in([CashShiftMovement::IN, CashShiftMovement::OUT])],
             'amount' => ['required', 'numeric', 'min:1', 'max:9999999999'],
             'reason' => ['required', 'string', 'max:255'],
+            'voucher_type' => ['nullable', 'string', 'max:40'],
         ]);
         $shifts->move($shift, $data);
 
-        return (new CashShiftResource($shift->refresh()->load(['user', 'warehouse', 'movements.creator'])))->response()->setStatusCode(201);
+        return (new CashShiftResource($shift->refresh()->load(['user', 'warehouse', 'movements.creator', 'movements.voucher'])))->response()->setStatusCode(201);
     }
 
     public function close(Request $request, CashShift $shift, CashShiftService $shifts): CashShiftResource
@@ -106,7 +122,7 @@ class CashShiftController extends Controller
             'closing_note' => ['nullable', 'string', 'max:500'],
         ]);
 
-        return new CashShiftResource($shifts->close($shift, $data)->load(['user', 'warehouse', 'closer', 'movements.creator']));
+        return new CashShiftResource($shifts->close($shift, $data)->load(['user', 'warehouse', 'closer', 'movements.creator', 'movements.voucher']));
     }
 
     /** Opens a closed shift again to correct it (shift supervisors only, reason required, logged). */
@@ -115,6 +131,6 @@ class CashShiftController extends Controller
         $this->authorize('viewAll', CashShift::class);
         $data = $request->validate(['reason' => ['required', 'string', 'max:255']]);
 
-        return new CashShiftResource($shifts->reopen($shift, $data['reason'])->load(['user', 'warehouse', 'closer', 'movements.creator']));
+        return new CashShiftResource($shifts->reopen($shift, $data['reason'])->load(['user', 'warehouse', 'closer', 'movements.creator', 'movements.voucher']));
     }
 }

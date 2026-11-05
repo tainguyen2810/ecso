@@ -55,6 +55,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
 
     Route::get('pos/summary', [PosController::class, 'summary']);
     Route::get('pos/shifts/current', [CashShiftController::class, 'current']);
+    Route::get('pos/shifts/voucher-types', [CashShiftController::class, 'voucherTypes']);
     Route::get('pos/shifts', [CashShiftController::class, 'index']);
     Route::post('pos/shifts', [CashShiftController::class, 'store'])->middleware('throttle:30,1,sales.pos.shifts');
     Route::get('pos/shifts/{shift}', [CashShiftController::class, 'show']);

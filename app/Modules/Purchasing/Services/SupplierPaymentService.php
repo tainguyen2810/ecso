@@ -63,6 +63,45 @@ class SupplierPaymentService
         });
     }
 
+    /**
+     * Money the supplier pays back: allowed up to what they owe the business (a negative debt, e.g. goods returned
+     * after they were paid for). It closes that negative debt and goes into a fund like any receipt.
+     *
+     * @param  array{method: string, amount: string|int|float, reference?: string|null, note?: string|null, paid_at?: string|null, account?: string|null}  $data
+     */
+    public function refund(Supplier $supplier, array $data): SupplierPayment
+    {
+        return DB::transaction(function () use ($supplier, $data) {
+            $supplier = Supplier::query()->lockForUpdate()->findOrFail($supplier->id);
+            $amount = bcadd((string) $data['amount'], '0', 2);
+            if (bccomp($amount, '0', 2) <= 0) {
+                throw ValidationException::withMessages(['amount' => 'Số tiền phải lớn hơn 0.']);
+            }
+            $owed = bcsub('0', (string) Supplier::query()->withBalance()->whereKey($supplier->id)->value('debt'), 2);
+            if (bccomp($amount, $owed, 2) > 0) {
+                throw ValidationException::withMessages(['amount' => bccomp($owed, '0', 2) > 0
+                    ? 'Số tiền vượt quá số nhà cung cấp đang nợ lại ('.number_format((float) $owed, 0, ',', '.').' ₫).'
+                    : 'Nhà cung cấp không nợ lại mình khoản nào. Chỉ ghi hoàn tiền khi đã trả nhiều hơn giá trị hàng nhận.']);
+            }
+            $paidAt = isset($data['paid_at']) ? Carbon::parse($data['paid_at']) : now();
+            PeriodLock::assertOpen($paidAt);
+
+            $payment = new SupplierPayment([
+                'supplier_id' => $supplier->id,
+                'kind' => SupplierPayment::REFUND,
+                'method' => $data['method'],
+                'amount' => $amount,
+                'reference' => $data['reference'] ?? null,
+                'note' => $data['note'] ?? null,
+                'paid_at' => $paidAt,
+            ]);
+            $payment->forceFill(['created_by' => Auth::id(), 'cash_account_id' => $this->accounts->resolve($data['account'] ?? null, $data['method'])])->save();
+            $this->audit->record('purchase.refunded', $payment, ['supplier' => $supplier->code, 'amount' => $amount]);
+
+            return $payment;
+        });
+    }
+
     public function void(SupplierPayment $payment, string $reason): SupplierPayment
     {
         return DB::transaction(function () use ($payment, $reason) {
@@ -94,7 +133,7 @@ class SupplierPaymentService
 
     private function recompute(PurchaseOrder $po): void
     {
-        $paid = (string) SupplierPayment::query()->where('purchase_order_id', $po->id)->whereNull('voided_at')->sum('amount');
+        $paid = (string) SupplierPayment::query()->where('purchase_order_id', $po->id)->where('kind', SupplierPayment::PAYMENT)->whereNull('voided_at')->sum('amount');
         $po->forceFill(['paid_amount' => bcadd($paid, '0', 2)])->save();
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Sales\Models;
 
+use App\Modules\Cashbook\Models\CashVoucher;
 use App\Modules\Identity\Models\User;
 use App\Modules\Tenancy\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
@@ -24,6 +25,12 @@ class CashShiftMovement extends Model
     protected function casts(): array
     {
         return ['amount' => 'decimal:2'];
+    }
+
+    /** @return BelongsTo<CashVoucher, $this> */
+    public function voucher(): BelongsTo
+    {
+        return $this->belongsTo(CashVoucher::class, 'cash_voucher_id');
     }
 
     /** @return BelongsTo<User, $this> */

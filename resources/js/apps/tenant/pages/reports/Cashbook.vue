@@ -22,7 +22,7 @@ import type { Fund } from '../cash/voucher';
 
 interface Entry {
     paid_at: string;
-    type: 'payment' | 'refund' | 'supplier' | 'voucher' | 'transfer_in' | 'transfer_out';
+    type: 'payment' | 'refund' | 'supplier' | 'supplier_refund' | 'voucher' | 'transfer_in' | 'transfer_out';
     label: string | null;
     method: string;
     amount: number;
@@ -44,7 +44,7 @@ interface Book {
     rows: Entry[];
 }
 
-const types: Record<Entry['type'], string> = { payment: 'Thu tiền bán hàng', refund: 'Hoàn tiền khách', supplier: 'Chi trả nhà cung cấp', voucher: 'Phiếu thu chi', transfer_in: 'Chuyển quỹ đến', transfer_out: 'Chuyển quỹ đi' };
+const types: Record<Entry['type'], string> = { payment: 'Thu tiền bán hàng', refund: 'Hoàn tiền khách', supplier: 'Chi trả nhà cung cấp', supplier_refund: 'Nhà cung cấp hoàn tiền', voucher: 'Phiếu thu chi', transfer_in: 'Chuyển quỹ đến', transfer_out: 'Chuyển quỹ đi' };
 const label = (e: Entry) => (e.type === 'voucher' && e.label ? e.label : types[e.type]);
 const methodName = (m: string) => (m === 'transfer' ? 'Chuyển quỹ' : (paymentMethods[m] ?? m));
 const link = (d: NonNullable<Entry['document']>) => (d.kind === 'order' ? `/orders/${d.id}` : d.kind === 'purchase' ? `/purchasing/${d.id}` : `/cash?open=${d.kind}:${d.id}`);

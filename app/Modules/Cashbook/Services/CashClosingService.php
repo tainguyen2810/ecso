@@ -87,25 +87,7 @@ class CashClosingService
             $system = bcadd((string) ($this->flows->balances()[$account->id] ?? '0'), '0', 2);
             $difference = bcsub($counted, $system, 2);
 
-            $voucher = null;
-            if (bccomp($difference, '0', 2) !== 0) {
-                $direction = bccomp($difference, '0', 2) > 0 ? CashVoucher::RECEIPT : CashVoucher::PAYMENT;
-                $type = CashVoucherType::query()->firstOrCreate(
-                    ['direction' => $direction, 'name' => self::COUNT_TYPE],
-                    ['counts_in_pnl' => false, 'pnl_group' => $direction === CashVoucher::PAYMENT ? 'operating' : null, 'description' => 'Thừa hoặc thiếu tiền khi kiểm quỹ.'],
-                );
-                $voucher = $this->vouchers->record([
-                    'direction' => $direction,
-                    'type' => $type->ulid,
-                    'party_kind' => 'other',
-                    'party_name' => $account->name,
-                    'method' => $account->methods[0] ?? self::method($account->kind),
-                    'account' => $account->ulid,
-                    'amount' => ltrim($difference, '-'),
-                    'counts_in_pnl' => $type->counts_in_pnl,
-                    'note' => ($direction === CashVoucher::RECEIPT ? 'Thừa' : 'Thiếu').' khi kiểm quỹ'.($note ? ": {$note}" : ''),
-                ]);
-            }
+            $voucher = $this->bookDifference($account, $difference, 'khi kiểm quỹ'.($note ? ": {$note}" : ''));
 
             $count = new CashCount([
                 'cash_account_id' => $account->id,
@@ -121,6 +103,37 @@ class CashClosingService
 
             return $count;
         });
+    }
+
+    /**
+     * Books a counted difference (counted − on record) as a receipt (more money) or payment (less) voucher of the
+     * fund, type "Chênh lệch kiểm quỹ", dated now. Null when there is no difference. Used by fund counts and by the
+     * drawer count when a POS shift closes.
+     */
+    public function bookDifference(CashAccount $account, string $difference, string $note, ?string $reference = null): ?CashVoucher
+    {
+        if (bccomp($difference, '0', 2) === 0) {
+            return null;
+        }
+        $direction = bccomp($difference, '0', 2) > 0 ? CashVoucher::RECEIPT : CashVoucher::PAYMENT;
+        $this->vouchers->ensureDefaultTypes();
+        $type = CashVoucherType::query()->firstOrCreate(
+            ['direction' => $direction, 'name' => self::COUNT_TYPE],
+            ['counts_in_pnl' => false, 'pnl_group' => $direction === CashVoucher::PAYMENT ? 'operating' : null, 'description' => 'Thừa hoặc thiếu tiền khi kiểm quỹ, kiểm két cuối ca.'],
+        );
+
+        return $this->vouchers->record([
+            'direction' => $direction,
+            'type' => $type->ulid,
+            'party_kind' => 'other',
+            'party_name' => $account->name,
+            'method' => $account->methods[0] ?? self::method($account->kind),
+            'account' => $account->ulid,
+            'amount' => ltrim($difference, '-'),
+            'counts_in_pnl' => $type->counts_in_pnl,
+            'reference' => $reference,
+            'note' => ($direction === CashVoucher::RECEIPT ? 'Thừa ' : 'Thiếu ').$note,
+        ], system: true);
     }
 
     private static function method(string $kind): string

@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from 'vue';
 import { ArrowDownToLine, ArrowUpFromLine, Printer, RotateCcw } from 'lucide-vue-next';
 import Button from '@/shared/ui/Button.vue';
 import Input from '@/shared/ui/Input.vue';
+import Select from '@/shared/ui/Select.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
@@ -25,7 +26,25 @@ const reopenReason = ref('');
 const busy = ref(false);
 const error = ref<string | null>(null);
 const openForm = reactive({ opening_cash: '', opening_note: '' });
-const moveForm = reactive({ kind: 'in' as 'in' | 'out', amount: '', reason: '' });
+const moveForm = reactive({ kind: 'in' as 'in' | 'out', amount: '', reason: '', real: false, voucher_type: '' });
+/** Active cash voucher types, loaded the first time the cashier records a real receipt or payment. */
+const voucherTypes = ref<{ id: string; direction: 'receipt' | 'payment'; name: string }[] | null>(null);
+const typeOptions = computed(() =>
+    (voucherTypes.value ?? []).filter((v) => v.direction === (moveForm.kind === 'in' ? 'receipt' : 'payment')).map((v) => ({ value: v.id, label: v.name })),
+);
+
+async function startMove(kind: 'in' | 'out') {
+    Object.assign(moveForm, { kind, amount: '', reason: '', real: false, voucher_type: '' });
+    error.value = null;
+    mode.value = 'move';
+    if (voucherTypes.value === null) {
+        try {
+            voucherTypes.value = (await api.get('/pos/shifts/voucher-types')).data.data;
+        } catch {
+            voucherTypes.value = [];
+        }
+    }
+}
 const counts = reactive<Record<string, number | string>>({});
 const closeForm = reactive({ counted: '', handed_over: '', closing_note: '', byNotes: true });
 
@@ -73,9 +92,14 @@ async function move() {
     busy.value = true;
     error.value = null;
     try {
-        const { data } = await api.post(`/pos/shifts/${props.shift.id}/movements`, { kind: moveForm.kind, amount: Number(moveForm.amount) || 0, reason: moveForm.reason });
-        toast.success(moveForm.kind === 'in' ? 'Đã ghi nộp tiền vào két' : 'Đã ghi rút tiền khỏi két');
-        Object.assign(moveForm, { amount: '', reason: '' });
+        const { data } = await api.post(`/pos/shifts/${props.shift.id}/movements`, {
+            kind: moveForm.kind,
+            amount: Number(moveForm.amount) || 0,
+            reason: moveForm.reason,
+            voucher_type: moveForm.real ? moveForm.voucher_type || null : null,
+        });
+        toast.success(moveForm.real ? 'Đã ghi phiếu vào sổ quỹ tiền mặt' : moveForm.kind === 'in' ? 'Đã ghi nộp tiền vào két' : 'Đã ghi rút tiền khỏi két');
+        Object.assign(moveForm, { amount: '', reason: '', real: false, voucher_type: '' });
         mode.value = 'view';
         emit('changed', data.data);
     } catch (e) {
@@ -189,7 +213,9 @@ function print() {
             <p class="mb-1 font-medium">Nộp / rút tiền trong ca</p>
             <ul class="divide-y rounded-md border">
                 <li v-for="(m, i) in shift.movements" :key="i" class="flex items-center justify-between px-3 py-1.5">
-                    <span><span :class="m.kind === 'in' ? 'text-success' : 'text-destructive'">{{ m.kind === 'in' ? 'Nộp vào' : 'Rút ra' }}</span> · {{ m.reason }} <span class="text-xs text-muted-foreground">{{ formatDateTime(m.created_at) }}</span></span>
+                    <span><span :class="m.kind === 'in' ? 'text-success' : 'text-destructive'">{{ m.kind === 'in' ? 'Nộp vào' : 'Rút ra' }}</span> · {{ m.reason }}&nbsp;<template v-if="m.voucher"><RouterLink v-if="tenant.can('finance.view')" :to="{ path: '/cash', query: { q: m.voucher.number } }" class="font-mono text-xs text-primary hover:underline" :data-testid="`shift-movement-voucher-${i}`">{{ m.voucher.number }}</RouterLink><span v-else class="font-mono text-xs" :data-testid="`shift-movement-voucher-${i}`">{{ m.voucher.number }}</span></template>
+                        <span v-else class="text-xs text-muted-foreground">(két tổng)</span>
+                        <span class="ml-1 text-xs text-muted-foreground">{{ formatDateTime(m.created_at) }}</span></span>
                     <span class="tabular-nums">{{ m.kind === 'in' ? '+' : '−' }}{{ formatNumber(m.amount) }}</span>
                 </li>
             </ul>
@@ -197,19 +223,30 @@ function print() {
 
         <template v-if="shift.status === 'open'">
             <div v-if="mode === 'view'" class="flex flex-wrap gap-2">
-                <Button variant="outline" data-testid="shift-cash-in" @click="(moveForm.kind = 'in'), (mode = 'move')"><ArrowDownToLine /> Nộp tiền vào két</Button>
-                <Button variant="outline" data-testid="shift-cash-out" @click="(moveForm.kind = 'out'), (mode = 'move')"><ArrowUpFromLine /> Rút tiền</Button>
+                <Button variant="outline" data-testid="shift-cash-in" @click="startMove('in')"><ArrowDownToLine /> Nộp tiền vào két</Button>
+                <Button variant="outline" data-testid="shift-cash-out" @click="startMove('out')"><ArrowUpFromLine /> Rút tiền</Button>
                 <Button class="ml-auto" data-testid="shift-close-start" @click="mode = 'close'">Đóng ca</Button>
             </div>
 
             <form v-else-if="mode === 'move'" class="space-y-2 rounded-md border p-3" @submit.prevent="move">
-                <p class="font-medium">{{ moveForm.kind === 'in' ? 'Nộp tiền vào két (tiền lẻ, tiền đổi)' : 'Rút tiền khỏi két (nộp két sắt, nộp ngân hàng)' }}</p>
+                <p class="font-medium">{{ moveForm.kind === 'in' ? 'Nộp tiền vào két' : 'Rút tiền khỏi két' }}</p>
+                <div class="grid gap-2 sm:grid-cols-2" role="radiogroup">
+                    <label class="flex cursor-pointer gap-2 rounded-md border p-2" :class="!moveForm.real && 'border-primary bg-primary/5'">
+                        <input v-model="moveForm.real" type="radio" :value="false" data-testid="shift-move-internal" />
+                        <span><span class="font-medium">Chuyển với két tổng</span><span class="block text-xs text-muted-foreground">{{ moveForm.kind === 'in' ? 'Lấy tiền lẻ từ két tổng.' : 'Nộp về két tổng / két sắt.' }} Quỹ tiền mặt không đổi.</span></span>
+                    </label>
+                    <label class="flex cursor-pointer gap-2 rounded-md border p-2" :class="moveForm.real && 'border-primary bg-primary/5'">
+                        <input v-model="moveForm.real" type="radio" :value="true" data-testid="shift-move-real" />
+                        <span><span class="font-medium">{{ moveForm.kind === 'in' ? 'Thu tiền thật' : 'Chi tiền thật' }}</span><span class="block text-xs text-muted-foreground">{{ moveForm.kind === 'in' ? 'Tiền từ ngoài vào (thu khác).' : 'Trả chi phí, mua đồ lặt vặt.' }} Ghi phiếu vào sổ quỹ.</span></span>
+                    </label>
+                </div>
+                <Select v-if="moveForm.real" v-model="moveForm.voucher_type" :options="[{ value: '', label: moveForm.kind === 'in' ? 'Chọn loại thu…' : 'Chọn loại chi…' }, ...typeOptions]" data-testid="shift-move-type" />
                 <div class="flex gap-2">
                     <Input v-model="moveForm.amount" type="number" min="1" placeholder="Số tiền" class="w-40 text-right tabular-nums" data-testid="shift-move-amount" />
                     <Input v-model="moveForm.reason" placeholder="Lý do" class="flex-1" data-testid="shift-move-reason" />
                 </div>
                 <p v-if="error" class="text-sm text-destructive" data-testid="shift-error">{{ error }}</p>
-                <div class="flex justify-end gap-2"><Button variant="ghost" type="button" @click="mode = 'view'">Hủy</Button><Button type="submit" :loading="busy" data-testid="shift-move-save">Ghi nhận</Button></div>
+                <div class="flex justify-end gap-2"><Button variant="ghost" type="button" @click="mode = 'view'">Hủy</Button><Button type="submit" :loading="busy" :disabled="moveForm.real && !moveForm.voucher_type" data-testid="shift-move-save">Ghi nhận</Button></div>
             </form>
 
             <form v-else class="space-y-3 rounded-md border p-3" data-testid="shift-close-form" @submit.prevent="close">

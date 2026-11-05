@@ -67,10 +67,13 @@ class CashVoucherService
         private readonly CashAccountService $accounts,
     ) {}
 
-    /** Creates the default types the first time a business opens its voucher types. */
+    /**
+     * Creates the default types the first time a business opens its voucher types. The count-difference type the
+     * system adds on its own does not count: a business whose first voucher was a shift or fund count still gets them.
+     */
     public function ensureDefaultTypes(): void
     {
-        if (CashVoucherType::query()->exists()) {
+        if (CashVoucherType::query()->where('name', '!=', CashClosingService::COUNT_TYPE)->exists()) {
             return;
         }
         DB::transaction(function () {
@@ -121,14 +124,15 @@ class CashVoucherService
     /**
      * @param  array{direction: string, type: string, party_kind: string, party_id?: string|null, party_name?: string|null, method: string, amount: string|int|float, counts_in_pnl?: bool|null, reference?: string|null, note?: string|null, paid_at?: string|null, account?: string|null}  $data
      */
-    public function record(array $data): CashVoucher
+    public function record(array $data, bool $system = false): CashVoucher
     {
-        return DB::transaction(function () use ($data) {
+        return DB::transaction(function () use ($data, $system) {
             $type = CashVoucherType::query()->where('ulid', $data['type'])->first();
             if (! $type || $type->direction !== $data['direction']) {
                 throw ValidationException::withMessages(['type' => 'Loại phiếu không hợp lệ.']);
             }
-            if (! $type->is_active) {
+            // A voucher the system books itself (a count difference) still goes through when its type was turned off.
+            if (! $type->is_active && ! $system) {
                 throw ValidationException::withMessages(['type' => 'Loại phiếu này đã ngừng dùng.']);
             }
             $amount = bcadd((string) $data['amount'], '0', 2);
@@ -169,6 +173,10 @@ class CashVoucherService
                 throw ValidationException::withMessages(['voucher' => 'Phiếu đã hủy.']);
             }
             PeriodLock::assertOpen($voucher->paid_at, 'voucher', 'hủy');
+            // The drawer count of the shift already includes this money: voiding only the voucher would split them.
+            if (DB::table('cash_shift_movements')->where('cash_voucher_id', $voucher->id)->exists()) {
+                throw ValidationException::withMessages(['voucher' => 'Phiếu này ghi từ thu chi trong ca POS, đã tính vào két của ca. Không hủy riêng được; lập phiếu ngược lại nếu ghi nhầm.']);
+            }
             $voucher->forceFill(['voided_at' => now(), 'voided_by' => Auth::id(), 'void_reason' => $reason])->save();
             $this->audit->record('cash.voided', $voucher, ['number' => $voucher->number, 'amount' => $voucher->amount, 'reason' => $reason]);
 

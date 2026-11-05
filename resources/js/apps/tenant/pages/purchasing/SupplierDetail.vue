@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, HandCoins, PackageCheck, Pencil, Plus, Trash2, Wallet } from 'lucide-vue-next';
+import { ArrowLeft, HandCoins, PackageCheck, Pencil, Plus, Trash2, Undo2, Wallet } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import SupplierDialog from './SupplierDialog.vue';
 import SupplierPaymentDialog from './SupplierPaymentDialog.vue';
@@ -27,6 +27,7 @@ const loading = ref(true);
 const loadError = ref<string | null>(null);
 const dialog = ref(false);
 const payOpen = ref(false);
+const refundOpen = ref(false);
 
 async function load() {
     loading.value = true;
@@ -61,6 +62,7 @@ async function remove() {
             <Badge v-if="!supplier.is_active" tone="muted" class="self-center">Ngừng giao dịch</Badge>
             <Button v-if="tenant.can('purchasing.manage') && supplier.is_active" @click="$router.push({ path: '/purchasing/new', query: { supplier: supplier.id } })"><Plus /> Tạo đơn nhập</Button>
             <Button v-if="tenant.can('purchasing.payment')" variant="outline" data-testid="supplier-pay" @click="payOpen = true"><Wallet /> Chi tiền</Button>
+            <Button v-if="tenant.can('purchasing.payment') && Number(supplier.debt) < 0" variant="outline" data-testid="supplier-refund" @click="refundOpen = true"><Undo2 /> Nhận hoàn tiền</Button>
             <Button v-if="tenant.can('purchasing.manage')" variant="outline" @click="dialog = true"><Pencil /> Sửa</Button>
             <Button v-if="tenant.can('purchasing.manage') && !supplier.orders.length && !supplier.payments.length" variant="ghost" title="Xóa" @click="remove"><Trash2 /></Button>
         </PageHeader>
@@ -90,11 +92,11 @@ async function remove() {
                 <p v-else class="px-5 py-4 text-sm text-muted-foreground">Chưa có đơn nhập.</p>
             </Card>
             <div class="space-y-4">
-                <Card title="Phiếu chi">
+                <Card title="Phiếu chi, tiền hoàn">
                     <ul v-if="supplier.payments.length" class="divide-y text-sm">
                         <li v-for="p in supplier.payments" :key="p.id" class="flex items-center justify-between px-5 py-2.5" :class="p.voided_at && 'opacity-50 line-through'">
-                            <div><div>{{ supplierPaymentMethods[p.method] }}<span v-if="p.reference" class="text-muted-foreground"> · {{ p.reference }}</span></div><div class="text-xs text-muted-foreground">{{ p.order?.number ?? 'Thanh toán chung' }} · {{ formatDateTime(p.paid_at) }}</div></div>
-                            <span class="tabular-nums">{{ formatMoney(p.amount) }}</span>
+                            <div><div>{{ p.kind === 'refund' ? 'NCC hoàn tiền · ' : '' }}{{ supplierPaymentMethods[p.method] }}<span v-if="p.reference" class="text-muted-foreground"> · {{ p.reference }}</span></div><div class="text-xs text-muted-foreground">{{ p.kind === 'refund' ? 'Tiền về' : (p.order?.number ?? 'Thanh toán chung') }} · {{ formatDateTime(p.paid_at) }}</div></div>
+                            <span class="tabular-nums" :class="p.kind === 'refund' && 'text-success'">{{ p.kind === 'refund' ? '+' : '' }}{{ formatMoney(p.amount) }}</span>
                         </li>
                     </ul>
                     <p v-else class="px-5 py-4 text-sm text-muted-foreground">Chưa có.</p>
@@ -120,5 +122,6 @@ async function remove() {
         </div>
         <SupplierDialog v-model:open="dialog" :supplier="supplier" @saved="load" />
         <SupplierPaymentDialog v-model:open="payOpen" :supplier-id="supplier.id" :suggested="Number(supplier.debt)" @saved="load" />
+        <SupplierPaymentDialog v-model:open="refundOpen" refund :supplier-id="supplier.id" :suggested="-Number(supplier.debt)" @saved="load" />
     </template>
 </template>
