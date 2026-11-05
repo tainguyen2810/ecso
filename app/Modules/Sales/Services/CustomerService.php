@@ -3,10 +3,12 @@
 namespace App\Modules\Sales\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Cashbook\Models\CashVoucher;
 use App\Modules\Identity\Models\User;
 use App\Modules\Inventory\Support\DocumentNumber;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\CustomerGroup;
+use App\Modules\Sales\Models\CustomerMerge;
 use App\Modules\Sales\Support\PhoneNumber;
 use App\Modules\Tenancy\Models\TenantUser;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -79,15 +81,31 @@ class CustomerService
 
     public function delete(Customer $customer): void
     {
-        if ($customer->orders()->exists()) {
-            throw ValidationException::withMessages(['customer' => 'Khách đã có đơn hàng, không thể xóa. Hãy chuyển sang ngừng giao dịch.']);
+        if ($reason = $this->deleteBlocker($customer)) {
+            throw ValidationException::withMessages(['customer' => "Khách {$reason}, không thể xóa. Hãy chuyển sang ngừng giao dịch."]);
         }
         $customer->delete();
         $this->audit->record('customer.deleted', $customer, ['code' => $customer->code]);
     }
 
     /**
-     * Applies one action to many customers. Deleting skips customers that already have orders.
+     * Why a card must stay: anything that carries money or history for it. Deleting would either fail on a foreign
+     * key (debt entries) or silently unlink money rows and merge records (vouchers, payments, merges set null).
+     */
+    private function deleteBlocker(Customer $customer): ?string
+    {
+        return match (true) {
+            $customer->orders()->exists() => 'đã có đơn hàng',
+            $customer->debtEntries()->exists() => 'có chứng từ công nợ',
+            $customer->payments()->exists() => 'có thanh toán',
+            CashVoucher::query()->where('customer_id', $customer->id)->exists() => 'có phiếu thu chi',
+            CustomerMerge::query()->where('customer_id', $customer->id)->exists() => 'có lịch sử gộp khách',
+            default => null,
+        };
+    }
+
+    /**
+     * Applies one action to many customers. Deleting skips customers that must stay (deleteBlocker).
      *
      * @param  Collection<int, Customer>  $customers
      * @return array{updated: int, skipped: list<array{id: string, message: string}>}
@@ -109,8 +127,8 @@ class CustomerService
             $skipped = [];
             foreach ($customers as $customer) {
                 if ($action === 'delete') {
-                    if ($customer->orders()->exists()) {
-                        $skipped[] = ['id' => $customer->ulid, 'message' => "{$customer->code} đã có đơn hàng"];
+                    if ($reason = $this->deleteBlocker($customer)) {
+                        $skipped[] = ['id' => $customer->ulid, 'message' => "{$customer->code} {$reason}"];
 
                         continue;
                     }
