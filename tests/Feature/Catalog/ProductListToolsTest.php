@@ -74,3 +74,14 @@ it('saves the usual supplier, its code and the package size of a SKU', function 
     $foreign = actingInTenant($otherOwner, $other)->postJson('/api/v1/suppliers', ['name' => 'Khác'])->json('data.id');
     actingInTenant($this->owner, $this->tenant)->putJson("/api/v1/products/{$product}", ['variants' => [['supplier_id' => $foreign] + $variant]])->assertUnprocessable();
 });
+
+it('reads the created date filter as a day on the shop clock, not UTC', function () {
+    // 2026-11-05 01:30 in Vietnam is still 2026-11-04 in UTC.
+    TenantContext::run($this->tenant, fn () => $this->plenty->product->forceFill(['created_at' => '2026-11-04 18:30:00'])->save());
+    TenantContext::run($this->tenant, fn () => $this->low->product->forceFill(['created_at' => '2026-11-04 16:59:00'])->save()); // 23:59 on the 4th
+    TenantContext::run($this->tenant, fn () => $this->none->product->forceFill(['created_at' => '2026-10-01 03:00:00'])->save());
+    $names = fn (string $query) => collect($this->api->getJson("/api/v1/products?{$query}")->assertOk()->json('data'))->pluck('name')->all();
+
+    expect($names('created_from=2026-11-05&created_to=2026-11-05'))->toBe(['Trà xanh'])
+        ->and($names('created_from=2026-11-04&created_to=2026-11-04'))->toBe(['Trà đen']);
+});

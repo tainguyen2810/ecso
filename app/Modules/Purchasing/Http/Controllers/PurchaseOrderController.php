@@ -12,6 +12,7 @@ use App\Modules\Purchasing\Models\Supplier;
 use App\Modules\Purchasing\Models\SupplierPayment;
 use App\Modules\Purchasing\Services\PurchaseService;
 use App\Modules\Purchasing\Services\SupplierPaymentService;
+use App\Shared\Support\ReportRange;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -60,10 +61,10 @@ class PurchaseOrderController extends Controller
             $query->whereHas('warehouse', fn ($s) => $s->where('ulid', $ulid));
         }
         if ($from = $filters['created_from'] ?? null) {
-            $query->where('created_at', '>=', $from);
+            $query->where('created_at', '>=', ReportRange::date($from)); // shop's day, stored in UTC
         }
         if ($to = $filters['created_to'] ?? null) {
-            $query->where('created_at', '<', now()->parse($to)->addDay());
+            $query->where('created_at', '<', ReportRange::date($to)->addDay());
         }
         if ($q = trim((string) ($filters['q'] ?? ''))) {
             $query->where(fn ($w) => $w->where('number', 'like', "%{$q}%")
