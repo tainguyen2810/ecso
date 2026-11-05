@@ -2,6 +2,7 @@
 
 namespace App\Modules\Platform\Services;
 
+use App\Modules\Marketplace\Services\SyncHealth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -52,6 +53,7 @@ class SystemMonitor
             'outbox' => DB::table('inventory_sync_outbox')->whereIn('status', ['pending', 'failed'])
                 ->selectRaw('status, COUNT(*) as n')->groupBy('status')->pluck('n', 'status')->map(fn ($n) => (int) $n),
             'circuits_open' => DB::table('marketplace_accounts')->where('circuit_open_until', '>', now())->count(),
+            'reconcile_overdue' => app(SyncHealth::class)->overdueReconciles(),
             'disk_free_percent' => $this->diskFreePercent(),
         ];
     }
@@ -78,6 +80,9 @@ class SystemMonitor
         }
         if ($snapshot['circuits_open'] > 0) {
             $problems[] = "{$snapshot['circuits_open']} shop đang ngắt mạch đồng bộ tồn";
+        }
+        if (($snapshot['reconcile_overdue'] ?? 0) > 0) {
+            $problems[] = "{$snapshot['reconcile_overdue']} shop quá hạn đối soát đơn (webhook bị mất sẽ không được bù)";
         }
         if ($snapshot['disk_free_percent'] !== null && $snapshot['disk_free_percent'] < 10) {
             $problems[] = "Ổ đĩa còn {$snapshot['disk_free_percent']}%";

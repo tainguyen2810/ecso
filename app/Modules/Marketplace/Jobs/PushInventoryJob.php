@@ -8,6 +8,7 @@ use App\Modules\Marketplace\Connectors\Data\StockUpdateResult;
 use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Exceptions\UnsupportedCapability;
 use App\Modules\Marketplace\Models\InventorySyncOutbox;
+use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Support\TenantContext;
@@ -72,6 +73,12 @@ class PushInventoryJob implements ShouldQueue
             ->where('next_attempt_at', '<=', now())
             ->orderBy('next_attempt_at')->limit($config['batch_size'])->get();
 
+        // A listing unlinked from its SKU since the row was queued: its stock is not ours to publish any more.
+        [$rows, $unlinked] = $rows->partition(fn (InventorySyncOutbox $row) => $row->listingVariant?->mapping_status === ListingVariant::MAPPED);
+        foreach ($unlinked as $row) {
+            $row->forceFill(['status' => InventorySyncOutbox::CANCELLED, 'last_error' => 'Đã bỏ liên kết SKU'])->save();
+        }
+
         if ($rows->isNotEmpty()) {
             $this->send($account, $connectors, $rows);
         }
@@ -81,7 +88,7 @@ class PushInventoryJob implements ShouldQueue
         $moreDue = InventorySyncOutbox::query()->where('marketplace_account_id', $account->id)
             ->where('status', InventorySyncOutbox::PENDING)->where('next_attempt_at', '<=', now())->exists();
 
-        return $moreDue && $rows->count() >= $config['batch_size'] ? now() : null;
+        return $moreDue && $rows->count() + $unlinked->count() >= $config['batch_size'] ? now() : null;
     }
 
     /**

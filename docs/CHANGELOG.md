@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+### Trung tâm đồng bộ, vòng 0: sửa lỗi nền đồng bộ (2026-11-05)
+- **Scheduler không còn bị "khóa" 24 giờ**: mọi lệnh định kỳ chống chạy chồng có thời hạn khóa (5–120 phút). Trước đây nếu scheduler bị dừng giữa chừng (khi deploy), đối soát đơn và đẩy tồn có thể ngưng cả ngày mà không báo.
+- **Job dài chạy trên hàng đợi riêng `sync-long`** (kết nối `redis-long`, retry_after 1900 s, supervisor Horizon riêng): lấy toàn bộ sản phẩm, đối soát đơn của một shop, nhập file khách hàng không còn bị chạy đôi khi quá 90 giây.
+- **Đối soát đơn chạy theo từng shop** (`ReconcileShopJob`): website chậm không làm trễ các shop khác. `ecso:orders:reconcile --account=` vẫn chạy trực tiếp.
+- **Bỏ liên kết SKU hủy lượt đẩy tồn đang chờ**: không còn đẩy tồn của SKU cũ lên listing vừa bỏ liên kết.
+- **Không lưu nội dung webhook** (chứa tên, SĐT, địa chỉ người mua); nội dung cũ được xóa khi migrate. Nhật ký webhook, lượt đồng bộ, lỗi đã xử lý cũ hơn 30 ngày được dọn hằng ngày (`ecso:sync:prune`).
+- **Khôi phục tác vụ treo** mỗi 10 phút (`ecso:sync:recover`): lượt đồng bộ "đang chạy" quá 30 phút được đóng, webhook chưa xử lý sau 60 phút được xếp lại. Trang Giám sát cảnh báo shop quá hạn đối soát đơn.
+- Lượt đồng bộ lỗi bất kỳ (không chỉ lỗi API) được đóng là thất bại. Bật lại đồng bộ tồn sẽ đẩy lại tồn hiện tại; nhật ký thao tác ghi lại thay đổi công tắc đồng bộ.
+
 ### Khách hàng: lọc theo ngày đúng giờ Việt Nam, không xóa khách còn chứng từ (2026-11-05)
 - **Lọc "Mua lần cuối" và "Ngày thêm"** tính theo ngày của cửa hàng (giờ Việt Nam). Trước đây máy chủ tính theo giờ UTC nên đơn mua từ 00:00 đến 06:59 bị xếp vào ngày hôm trước. Số ngày "Chưa mua lại" ở trang khách cũng tính theo giờ cửa hàng.
 - **Không xóa được khách còn chứng từ**: ngoài đơn hàng, khách có nợ đầu kỳ hoặc phiếu điều chỉnh công nợ, thanh toán, phiếu thu chi hay lịch sử gộp đều không xóa được (xóa một khách và xóa hàng loạt). Trước đây khách có nợ đầu kỳ gây lỗi máy chủ khi xóa, còn khách có phiếu thu chi bị xóa và phiếu mất liên kết với khách. Hãy chuyển khách sang "Ngừng giao dịch".

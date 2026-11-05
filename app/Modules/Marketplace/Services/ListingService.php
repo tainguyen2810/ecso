@@ -8,6 +8,7 @@ use App\Modules\Marketplace\Connectors\ConnectorRegistry;
 use App\Modules\Marketplace\Connectors\Data\ProductData;
 use App\Modules\Marketplace\Connectors\FetchesSingleProduct;
 use App\Modules\Marketplace\Events\ListingMappingChanged;
+use App\Modules\Marketplace\Models\InventorySyncOutbox;
 use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Models\MarketplaceListing;
@@ -175,6 +176,9 @@ class ListingService
             'mapped_at' => now(),
             'push_status' => null,
         ])->save();
+        // A push still waiting carries the stock of the SKU that was just unlinked: it must never go out.
+        InventorySyncOutbox::query()->where('listing_variant_id', $listing->id)->where('status', InventorySyncOutbox::PENDING)
+            ->update(['status' => InventorySyncOutbox::CANCELLED, 'last_error' => 'Đã bỏ liên kết SKU', 'updated_at' => now()]);
         $this->audit->record($ignore ? 'listing.ignored' : 'listing.unmapped', $listing, ['external_sku_id' => $listing->external_sku_id]);
 
         return $listing;

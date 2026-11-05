@@ -12,11 +12,11 @@ use Illuminate\Database\UniqueConstraintViolationException;
 /**
  * Step [1] of ORDER-LIFECYCLE §3: verify, store in the inbox, answer fast. Processing happens in a queued job.
  * Nothing in the payload is trusted to pick the tenant; that is resolved later from marketplace_accounts.
+ * The body itself is not kept (only its hash): order webhooks carry the buyer's name, phone and address, and the
+ * processing job reads the order again from the marketplace API anyway.
  */
 class WebhookReceiver
 {
-    private const MAX_STORED_PAYLOAD = 65535;
-
     public function __construct(private readonly ConnectorRegistry $connectors) {}
 
     /**
@@ -62,7 +62,6 @@ class WebhookReceiver
                 'external_product_id' => $message->productId,
                 'payload_hash' => $hash,
                 'signature_valid' => true,
-                'payload' => strlen($body) <= self::MAX_STORED_PAYLOAD ? json_decode($body, true) : null,
                 'status' => WebhookEvent::RECEIVED,
                 'received_at' => now(),
             ]);

@@ -10,7 +10,7 @@ return [
 
     // Monitoring thresholds used by the admin monitoring page and `ecso:monitor` alerts.
     'monitoring' => [
-        'queues' => ['default', 'webhooks', 'sync'],
+        'queues' => ['default', 'webhooks', 'sync', 'sync-long'],
         'backlog_alert' => 1000,
         'failed_jobs_alert_24h' => 20,
         'scheduler_stale_minutes' => 3,

@@ -26,6 +26,9 @@ class InventorySyncOutbox extends Model
 
     public const UNSUPPORTED = 'unsupported';
 
+    /** Dropped before it was sent (e.g. the listing was unlinked from its SKU). */
+    public const CANCELLED = 'cancelled';
+
     protected $table = 'inventory_sync_outbox';
 
     protected $fillable = ['marketplace_account_id', 'listing_variant_id', 'desired_qty', 'status', 'attempts', 'next_attempt_at', 'last_error'];

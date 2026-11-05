@@ -7,6 +7,7 @@ use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Services\ListingService;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Support\TenantContext;
+use App\Shared\Concerns\RunsOnLongQueue;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -17,7 +18,7 @@ use Illuminate\Queue\SerializesModels;
 /** Imports every listing of a shop in the background (a store can have thousands of products). */
 class SyncListingsJob implements ShouldBeUnique, ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, Queueable, RunsOnLongQueue, SerializesModels;
 
     public int $tries = 3;
 
@@ -27,7 +28,7 @@ class SyncListingsJob implements ShouldBeUnique, ShouldQueue
 
     public function __construct(public readonly int $accountId)
     {
-        $this->onQueue('sync');
+        $this->onLongQueue();
     }
 
     public function uniqueId(): string

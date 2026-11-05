@@ -73,6 +73,17 @@ return [
             'after_commit' => false,
         ],
 
+        // Long jobs (whole-store product import, one shop's order poll, customer import) run on their own connection:
+        // retry_after must be longer than the longest job, or Redis hands a running job to a second worker.
+        'redis-long' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => 'sync-long',
+            'retry_after' => (int) env('REDIS_LONG_QUEUE_RETRY_AFTER', 1900),
+            'block_for' => null,
+            'after_commit' => false,
+        ],
+
         'deferred' => [
             'driver' => 'deferred',
         ],
