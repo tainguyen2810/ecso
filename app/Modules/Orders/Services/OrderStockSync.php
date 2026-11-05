@@ -19,6 +19,7 @@ class OrderStockSync
     public function __construct(
         private readonly ReservationLedger $ledger,
         private readonly ReturnService $returns,
+        private readonly ShipmentSync $shipments,
     ) {}
 
     public function apply(Order $order): void
@@ -57,6 +58,7 @@ class OrderStockSync
         }
 
         $this->refreshFlags($order, $items);
+        $this->shipments->apply($order);
     }
 
     /** Recomputes has_shortage / has_unmapped from the current reservations. */

@@ -15,6 +15,7 @@ use App\Modules\Orders\Models\OrderNote;
 use App\Modules\Orders\Support\Tracking;
 use App\Modules\Sales\Services\ManualOrderService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -45,6 +46,7 @@ class OrderActions
         private readonly OrderSync $sync,
         private readonly AuditLogger $audit,
         private readonly ManualOrderService $manual,
+        private readonly ShipmentSync $shipments,
     ) {}
 
     /**
@@ -113,7 +115,10 @@ class OrderActions
         if ($tracking === null && $carrier === null) {
             return;
         }
-        $order->forceFill(['tracking_number' => $tracking ?? $order->tracking_number, 'shipping_carrier' => $carrier ?? $order->shipping_carrier])->save();
+        DB::transaction(function () use ($order, $tracking, $carrier) {
+            $order->forceFill(['tracking_number' => $tracking ?? $order->tracking_number, 'shipping_carrier' => $carrier ?? $order->shipping_carrier])->save();
+            $this->shipments->apply($order);
+        });
     }
 
     /**

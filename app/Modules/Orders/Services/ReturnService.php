@@ -36,6 +36,7 @@ class ReturnService
         private readonly AuditLogger $audit,
         private readonly ComboResolver $combos,
         private readonly WarehouseService $warehouses,
+        private readonly ShipmentSync $shipments,
     ) {}
 
     /**
@@ -375,6 +376,7 @@ class ReturnService
             'raw_status' => OrderStatus::RETURNED, 'source' => 'user', 'actor_id' => Auth::id(), 'occurred_at' => now(),
             'note' => "Đã nhận và kiểm hàng hoàn {$return->number}",
         ]);
+        $this->shipments->apply($order);
     }
 
     /**

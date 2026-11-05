@@ -2,9 +2,13 @@
 
 use App\Modules\Orders\Http\Controllers\OrderController;
 use App\Modules\Orders\Http\Controllers\ReturnController;
+use App\Modules\Orders\Http\Controllers\ShipmentController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
+    Route::get('shipments', [ShipmentController::class, 'index']);
+    Route::get('shipments/summary', [ShipmentController::class, 'summary']);
+    Route::get('shipments/{shipment}', [ShipmentController::class, 'show']);
     Route::get('orders', [OrderController::class, 'index']);
     Route::get('orders/summary', [OrderController::class, 'summary']);
     Route::get('orders/pipeline', [OrderController::class, 'pipeline']);

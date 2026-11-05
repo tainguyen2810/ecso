@@ -13,17 +13,20 @@ use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Http\Resources\OrderResource;
 use App\Modules\Orders\Http\Resources\ReturnResource;
+use App\Modules\Orders\Http\Resources\ShipmentResource;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
 use App\Modules\Orders\Models\OrderNote;
 use App\Modules\Orders\Models\OrderRefund;
 use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Orders\Models\OrderStatusHistory;
+use App\Modules\Orders\Models\Shipment;
 use App\Modules\Orders\Services\OrderActions;
 use App\Modules\Orders\Services\OrderExporter;
 use App\Modules\Orders\Services\OrderQuery;
 use App\Modules\Orders\Services\OrderSync;
 use App\Modules\Orders\Services\ReturnService;
+use App\Modules\Orders\Services\ShipmentSync;
 use App\Modules\Orders\Support\OrderTags;
 use App\Modules\Orders\Support\Tracking;
 use App\Modules\Sales\Http\Resources\PaymentResource;
@@ -35,6 +38,7 @@ use App\Modules\Tenancy\Models\TenantUser;
 use App\Shared\Support\ReportRange;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -127,6 +131,7 @@ class OrderController extends Controller
                 'id' => $n->id, 'body' => $n->body, 'user' => $n->user?->name, 'created_at' => $n->created_at?->toIso8601String(),
             ]),
             'returns' => ReturnResource::collection($order->returns()->with('exchangeOrder')->get()),
+            'shipments' => ShipmentResource::collection(Shipment::query()->where('order_id', $order->id)->with('events')->orderBy('id')->get()),
             'refunds' => OrderRefund::query()->with('orderReturn:id,ulid,number,status')->where('order_id', $order->id)->orderBy('refunded_at')->get()
                 ->map(fn (OrderRefund $r) => [
                     'id' => $r->ulid, 'external_refund_id' => $r->external_refund_id, 'amount' => $r->amount, 'reason' => $r->reason,
@@ -220,7 +225,7 @@ class OrderController extends Controller
     }
 
     /** Internal tags and the date promised to the buyer: editable on any order, marketplace ones included. */
-    public function meta(Request $request, Order $order, AuditLogger $audit): OrderResource
+    public function meta(Request $request, Order $order, AuditLogger $audit, ShipmentSync $shipments): OrderResource
     {
         $this->authorize('update', $order);
         $data = $request->validate([
@@ -252,7 +257,12 @@ class OrderController extends Controller
         if (array_key_exists('deliver_on', $data)) {
             $order->deliver_on = $data['deliver_on'];
         }
-        $order->save();
+        DB::transaction(function () use ($order, $shipping, $shipments) {
+            $order->save();
+            if ($shipping) {
+                $shipments->apply($order);
+            }
+        });
         $audit->record('order.meta_updated', $order, ['order' => $order->external_order_id, 'tags' => $order->tags, 'deliver_on' => $order->deliver_on?->toDateString()] + ($shipping ? ['shipping' => $shipping] : []));
 
         return new OrderResource($order->load(['account', 'channel', 'customer', 'assignee']));
