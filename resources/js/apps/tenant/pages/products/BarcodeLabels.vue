@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, shallowRef, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { Download, ImageOff, Printer, Tags, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
 import { barcodeSvg } from './barcode';
-import { codeWarning, defaultOptions, expandLabels, isRoll, labelBoxes, labelCode, MM, paginate, paperGroups, papers, printLabels, type LabelBox, type LabelItem, type LabelOptions, type Paper, type PaperKey } from './labels';
+import LabelPreview from './LabelPreview.vue';
+import { approxMetrics, parseFontMetrics, type FontMetrics } from './fontMetrics';
+import { codeWarning, defaultOptions, expandLabels, isRoll, labelCode, loadLabelFont, MM, paginate, paperGroups, papers, printLabels, type LabelItem, type LabelOptions, type Paper, type PaperKey } from './labels';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
@@ -58,10 +60,7 @@ watch([options, showStore, priceList], () => {
 
 const paper = computed<Paper>(() => papers[options.paper]);
 const roll = computed(() => isRoll(paper.value));
-watch(roll, (r) => {
-    if (!r) options.wide = false;
-});
-const printOptions = computed<LabelOptions>(() => ({ ...options, wide: roll.value && options.wide, storeName: showStore.value ? (tenant.current?.name ?? '') : '' }));
+const printOptions = computed<LabelOptions>(() => ({ ...options, storeName: showStore.value ? (tenant.current?.name ?? '') : '' }));
 
 function toRow(v: Variant, quantity = 1): Row {
     const row: Row = {
@@ -157,7 +156,7 @@ async function print(mode: 'open' | 'download') {
     if (!labels.value.length) return;
     busy.value = true;
     try {
-        await printLabels(printable.value, printOptions.value, mode);
+        await printLabels(printable.value, printOptions.value, metrics.value, mode);
     } catch (e) {
         toast.error((e as Error).message);
     } finally {
@@ -165,27 +164,33 @@ async function print(mode: 'open' | 'download') {
     }
 }
 
-// Preview: the first page drawn at scale (px per mm), from the same boxes the PDF uses.
-const scale = computed(() => (roll.value ? 400 / paper.value.page[0] : 300 / paper.value.page[1]));
+/** Real font widths, so the preview and the PDF wrap names exactly like Sapo (Arial metrics). */
+const metrics = shallowRef<FontMetrics>(approxMetrics);
+const FONT = 'EcsoLabelSans';
+onMounted(async () => {
+    try {
+        const font = await loadLabelFont();
+        metrics.value = parseFontMetrics(font.regular);
+        for (const [data, weight] of [[font.regular, '400'], [font.bold, '700']] as const) {
+            const face = new FontFace(FONT, data, { weight });
+            await face.load();
+            document.fonts.add(face);
+        }
+    } catch {
+        // Preview falls back to approximate widths; printing loads the font again and reports its own error.
+    }
+});
+
+// Preview: the first page at scale (px per pt), drawn from the same parts as the PDF.
+const scale = computed(() => (roll.value ? 420 / (paper.value.page[0] * MM) : 300 / (paper.value.page[1] * MM)));
 const previewPage = computed(() => {
     const first = pages.value[0];
     if (first) return first;
     const sample: LabelItem = { sku: 'SP-0001', barcode: null, productName: 'Tên sản phẩm', variantName: null, price: 100000, unit: 'Cái', quantity: 1 };
     return paginate(paper.value, printOptions.value, [sample])[0]!;
 });
-const zoomScale = computed(() => 200 / paper.value.width);
+const zoomScale = computed(() => 220 / (paper.value.width * MM));
 const zoomLabel = computed(() => previewPage.value[0]!);
-
-function boxStyle(box: LabelBox, k: number) {
-    return {
-        left: `${box.x * k}px`,
-        top: `${box.y * k}px`,
-        width: `${box.width * k}px`,
-        height: `${box.height * k}px`,
-        fontSize: `${(box.fontSize / MM) * k}px`,
-        fontWeight: box.bold ? 700 : 400,
-    };
-}
 
 const fields: { key: 'showName' | 'showPrice' | 'priceCurrency' | 'priceUnit'; label: string }[] = [
     { key: 'showName', label: 'Tên sản phẩm' },
@@ -275,39 +280,23 @@ const fields: { key: 'showName' | 'showPrice' | 'priceCurrency' | 'priceUnit'; l
                     <label class="flex items-center gap-2"><input v-model="options.showName" type="checkbox" class="size-4" /> Tên sản phẩm</label>
                     <label class="flex items-center gap-2 text-muted-foreground"><input type="checkbox" class="size-4" checked disabled /> Mã Barcode</label>
                     <label v-for="f in fields.slice(1)" :key="f.key" class="flex items-center gap-2"><input v-model="options[f.key]" type="checkbox" class="size-4" :data-testid="`label-opt-${f.key}`" /> {{ f.label }}</label>
-                    <label class="flex items-start gap-2" :class="{ 'text-muted-foreground': !roll }">
-                        <input v-model="options.wide" type="checkbox" class="mt-0.5 size-4" :disabled="!roll" data-testid="label-opt-wide" />
-                        <span>Khổ rộng<span class="block text-xs text-muted-foreground">Gộp cả hàng tem cuộn thành 1 tem</span></span>
-                    </label>
+                    <label class="flex items-center gap-2"><input v-model="options.wide" type="checkbox" class="size-4" data-testid="label-opt-wide" /> Khổ rộng</label>
                     <label class="flex items-center gap-2"><input v-model="showStore" type="checkbox" class="size-4" data-testid="label-opt-store" /> Tên cửa hàng</label>
                 </div>
                 <div class="flex flex-col items-center justify-center gap-3 rounded-lg bg-muted/50 p-4">
                     <div class="flex flex-wrap items-center justify-center gap-4">
-                        <div class="relative bg-white shadow-sm" :style="{ width: `${paper.page[0] * scale}px`, height: `${paper.page[1] * scale}px` }" data-testid="label-preview">
-                            <div
-                                v-for="(l, i) in previewPage"
-                                :key="i"
-                                class="absolute overflow-hidden border border-dashed border-slate-300 text-black"
-                                :style="{ left: `${l.slot.x * scale}px`, top: `${l.slot.y * scale}px`, width: `${l.slot.width * scale}px`, height: `${l.slot.height * scale}px` }"
-                            >
-                                <template v-for="(b, j) in labelBoxes(l.item, printOptions, l.slot.width, l.slot.height)" :key="j">
-                                    <div v-if="b.kind === 'barcode'" class="absolute [&>svg]:size-full" :style="boxStyle(b, scale)" v-html="barcodeSvg(b.text)" />
-                                    <div v-else class="absolute overflow-hidden text-center leading-[1.05]" :class="{ 'whitespace-nowrap': (b.lines ?? 1) < 2 }" :style="boxStyle(b, scale)">{{ b.text }}</div>
-                                </template>
+                        <div class="relative bg-white shadow-sm" :style="{ width: `${paper.page[0] * MM * scale}px`, height: `${paper.page[1] * MM * scale}px` }" data-testid="label-preview">
+                            <div v-for="(l, i) in previewPage" :key="i" class="absolute outline-dashed outline-1 outline-slate-300" :style="{ left: `${l.slot.x * MM * scale}px`, top: `${l.slot.y * MM * scale}px` }">
+                                <LabelPreview :item="l.item" :options="printOptions" :paper="paper" :metrics="metrics" :scale="scale" :font-family="FONT" />
                             </div>
                         </div>
                         <div v-if="!roll" class="text-center">
-                            <div class="relative overflow-hidden border border-dashed border-slate-300 bg-white text-black shadow-sm" :style="{ width: `${paper.width * zoomScale}px`, height: `${paper.height * zoomScale}px` }">
-                                <template v-for="(b, j) in labelBoxes(zoomLabel.item, printOptions, paper.width, paper.height)" :key="j">
-                                    <div v-if="b.kind === 'barcode'" class="absolute [&>svg]:size-full" :style="boxStyle(b, zoomScale)" v-html="barcodeSvg(b.text)" />
-                                    <div v-else class="absolute overflow-hidden text-center leading-[1.05]" :class="{ 'whitespace-nowrap': (b.lines ?? 1) < 2 }" :style="boxStyle(b, zoomScale)">{{ b.text }}</div>
-                                </template>
-                            </div>
+                            <LabelPreview class="border border-dashed border-slate-300 shadow-sm" :item="zoomLabel.item" :options="printOptions" :paper="paper" :metrics="metrics" :scale="zoomScale" :font-family="FONT" />
                             <p class="mt-1 text-xs text-muted-foreground">Phóng to 1 tem</p>
                         </div>
                     </div>
                     <p class="text-xs text-muted-foreground">
-                        <template v-if="roll">Khổ {{ paper.page[0] }}×{{ paper.page[1] }} mm{{ printOptions.wide ? ', 1 tem rộng mỗi hàng' : `, mỗi tem ${paper.width}×${paper.height} mm` }}</template>
+                        <template v-if="roll">Khổ in {{ paper.page[0] }}×{{ paper.page[1] }} mm, mỗi tem {{ paper.width }}×{{ paper.height }} mm</template>
                         <template v-else>Trang {{ paper.group === 'a4' ? 'A4' : 'A5' }}, mỗi tem {{ paper.width }}×{{ paper.height }} mm, {{ paper.columns * paper.rows }} tem/trang</template>
                     </p>
                 </div>
