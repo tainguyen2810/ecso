@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Marketplace\Http\Controllers\AllocationController;
 use App\Modules\Marketplace\Http\Controllers\FakeMarketplaceController;
 use App\Modules\Marketplace\Http\Controllers\ListingController;
 use App\Modules\Marketplace\Http\Controllers\MarketplaceAccountController;
@@ -80,6 +81,9 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
         Route::get('tasks/{type}/{id}', 'task')->whereNumber('id');
         Route::post('tasks/{type}/{id}/retry', 'retry')->whereNumber('id')->middleware('throttle:60,1,marketplace.sync-center.retry');
         Route::post('tasks/{type}/{id}/cancel', 'cancel')->whereNumber('id');
+        Route::get('allocations', [AllocationController::class, 'index']);
+        Route::post('allocations/preview', [AllocationController::class, 'preview'])->middleware('throttle:60,1,marketplace.sync-center.allocation-preview');
+        Route::put('allocations', [AllocationController::class, 'save'])->middleware('throttle:30,1,marketplace.sync-center.allocation-save');
         Route::post('accounts/{account}/sync-now', 'syncNow')->middleware('throttle:6,1,marketplace.sync-center.sync-now');
     });
 

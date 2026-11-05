@@ -38,3 +38,15 @@ it('never publishes more than sellable (randomised)', function () {
         expect($published)->toBeGreaterThanOrEqual(0)->toBeLessThanOrEqual(max(0, $sellable));
     }
 });
+
+it('holds the buffer back first, then applies the mode, then the cap', function () {
+    $rule = fn (string $mode, ?int $value = null, int $buffer = 0, ?int $max = null) => ['mode' => $mode, 'value' => $value, 'buffer_qty' => $buffer, 'max_qty' => $max];
+
+    expect(A::publish(100, $rule('all')))->toBe(100)
+        ->and(A::publish(100, $rule('percent', 80, 2)))->toBe(78)
+        ->and(A::publish(100, $rule('percent', 50, 0, 30)))->toBe(30)
+        ->and(A::publish(5, $rule('fixed', 10)))->toBe(5)
+        ->and(A::publish(1, $rule('percent', 80, 2)))->toBe(0)
+        ->and(A::publish(40, $rule('none')))->toBe(0)
+        ->and(A::publish(-3, $rule('all')))->toBe(0);
+});

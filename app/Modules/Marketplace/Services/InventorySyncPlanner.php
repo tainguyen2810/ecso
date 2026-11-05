@@ -19,7 +19,11 @@ use App\Modules\Marketplace\Support\SyncCorrelation;
  */
 class InventorySyncPlanner
 {
-    public function __construct(private readonly StockReader $stock, private readonly ComboResolver $combos) {}
+    public function __construct(
+        private readonly StockReader $stock,
+        private readonly ComboResolver $combos,
+        private readonly AllocationPolicy $allocations,
+    ) {}
 
     /**
      * @param  array<int, int>  $variantIds
@@ -48,10 +52,12 @@ class InventorySyncPlanner
             $sellable = $this->stock->sellable([$warehouseId], $ids);
             // A SKU stopped in ECSO (Ngừng bán / Lưu trữ) is published as 0 so the shop stops taking orders for it.
             $stopped = array_flip(ProductVariant::stoppedIds($ids));
+            // How much of it this shop publishes (Phân bổ tồn); no rule = everything, as before.
+            $rules = $this->allocations->rules($account->id, $ids);
             $soonest = null;
 
             foreach ($rows as $listing) {
-                $desired = isset($stopped[$listing->product_variant_id]) ? 0 : AllocationCalculator::published($sellable[$listing->product_variant_id] ?? 0);
+                $desired = isset($stopped[$listing->product_variant_id]) ? 0 : AllocationCalculator::publish($sellable[$listing->product_variant_id] ?? 0, $rules[$listing->product_variant_id] ?? AllocationPolicy::DEFAULT_RULE);
                 $outbox = InventorySyncOutbox::query()->where('listing_variant_id', $listing->id)->first();
                 $upToDate = $listing->push_status === 'ok' && $listing->last_pushed_qty === $desired
                     && $listing->last_pushed_at?->gt(now()->subDay());
