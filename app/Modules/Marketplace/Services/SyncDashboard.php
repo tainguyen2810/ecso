@@ -116,7 +116,7 @@ class SyncDashboard
         foreach ($sources as $query) {
             $rows = $query->whereIn('marketplace_account_id', $accountIds)->selectRaw('error_code, COUNT(*) as n')->groupBy('error_code')->pluck('n', 'error_code');
             foreach ($rows as $code => $n) {
-                $key = $code === '' || $code === null ? 'other' : (string) $code;
+                $key = $code === '' ? 'other' : (string) $code; // a NULL code groups under the '' key
                 $counts[$key] = ($counts[$key] ?? 0) + (int) $n;
             }
         }
