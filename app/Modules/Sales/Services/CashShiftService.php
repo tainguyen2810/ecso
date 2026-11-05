@@ -4,8 +4,10 @@ namespace App\Modules\Sales\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Cashbook\Models\CashAccount;
+use App\Modules\Cashbook\Models\CashVoucher;
 use App\Modules\Cashbook\Services\CashAccountService;
 use App\Modules\Cashbook\Services\CashClosingService;
+use App\Modules\Cashbook\Services\CashVoucherService;
 use App\Modules\Identity\Models\User;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Support\DocumentNumber;
@@ -115,7 +117,11 @@ class CashShiftService
     }
 
     /**
-     * @param  array{kind: string, amount: string|int|float, reason: string}  $data
+     * Cash put into or taken out of the drawer. Without a voucher type it is a move between the drawer and the
+     * store's safe: the cash fund does not change. With one (in: a receipt type, out: a payment type) it is real
+     * money in or out, booked as that voucher in the cash fund, so an expense paid from the drawer is an expense.
+     *
+     * @param  array{kind: string, amount: string|int|float, reason: string, voucher_type?: string|null}  $data
      */
     public function move(CashShift $shift, array $data): CashShiftMovement
     {
@@ -133,8 +139,24 @@ class CashShiftService
                 }
             }
 
+            $voucher = null;
+            if ($data['voucher_type'] ?? null) {
+                $user = Auth::user();
+                $voucher = app(CashVoucherService::class)->record([
+                    'direction' => $data['kind'] === CashShiftMovement::OUT ? CashVoucher::PAYMENT : CashVoucher::RECEIPT,
+                    'type' => $data['voucher_type'],
+                    'party_kind' => 'staff',
+                    'party_id' => $user?->ulid,
+                    'party_name' => $user?->name,
+                    'method' => 'cash',
+                    'amount' => $amount,
+                    'reference' => $shift->number,
+                    'note' => $data['reason'],
+                ]);
+            }
+
             $movement = new CashShiftMovement(['cash_shift_id' => $shift->id, 'kind' => $data['kind'], 'amount' => $amount, 'reason' => $data['reason']]);
-            $movement->forceFill(['created_by' => Auth::id()])->save();
+            $movement->forceFill(['created_by' => Auth::id(), 'cash_voucher_id' => $voucher?->id])->save();
             $this->audit->record("shift.cash_{$data['kind']}", $shift, ['number' => $shift->number, 'amount' => $amount, 'reason' => $data['reason']]);
 
             return $movement;

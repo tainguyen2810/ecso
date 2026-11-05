@@ -811,7 +811,7 @@ export interface CashShift {
     denominations: Record<string, number> | null;
     closing_note: string | null;
     totals: CashShiftTotals;
-    movements?: { kind: 'in' | 'out'; amount: string; reason: string; created_by: string | null; created_at: string }[];
+    movements?: { kind: 'in' | 'out'; amount: string; reason: string; created_by: string | null; created_at: string; voucher?: { id: string; number: string } | null }[];
 }
 
 /** Round 3: fee table of one marketplace shop with its category overrides and the actual fees (settlement data). */

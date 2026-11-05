@@ -170,6 +170,10 @@ class CashVoucherService
                 throw ValidationException::withMessages(['voucher' => 'Phiếu đã hủy.']);
             }
             PeriodLock::assertOpen($voucher->paid_at, 'voucher', 'hủy');
+            // The drawer count of the shift already includes this money: voiding only the voucher would split them.
+            if (DB::table('cash_shift_movements')->where('cash_voucher_id', $voucher->id)->exists()) {
+                throw ValidationException::withMessages(['voucher' => 'Phiếu này ghi từ thu chi trong ca POS, đã tính vào két của ca. Không hủy riêng được; lập phiếu ngược lại nếu ghi nhầm.']);
+            }
             $voucher->forceFill(['voided_at' => now(), 'voided_by' => Auth::id(), 'void_reason' => $reason])->save();
             $this->audit->record('cash.voided', $voucher, ['number' => $voucher->number, 'amount' => $voucher->amount, 'reason' => $reason]);
 

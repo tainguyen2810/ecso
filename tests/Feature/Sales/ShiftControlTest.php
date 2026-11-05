@@ -93,7 +93,7 @@ it('needs the shift supervisor to void a payment of a closed shift', function ()
     actingInTenant($owner, $tenant)->postJson("/api/v1/payments/{$payment}/void", ['reason' => 'Nhầm'])->assertOk();
 });
 
-it('shows cash put in or taken out of a shift in the cash book', function () {
+it('shows cash moved between a shift drawer and the safe in the cash book as internal transfers', function () {
     [$tenant, $owner] = tenantWithOwner();
     $cashier = addMember($tenant, Role::ORDER_STAFF);
     $shift = startShift($cashier, $tenant)->json('data.id');
@@ -102,5 +102,5 @@ it('shows cash put in or taken out of a shift in the cash book', function () {
 
     $rows = collect(actingInTenant($owner, $tenant)->getJson('/api/v1/cash-vouchers?source=shift_movement')->assertOk()->json('data'));
     expect($rows)->toHaveCount(2)
-        ->and($rows->pluck('direction')->sort()->values()->all())->toBe(['payment', 'receipt']);
+        ->and($rows->pluck('direction')->unique()->values()->all())->toBe(['transfer']);
 });

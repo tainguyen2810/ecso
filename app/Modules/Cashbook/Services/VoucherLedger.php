@@ -116,8 +116,9 @@ class VoucherLedger
             ->join('cash_shifts as cs', 'cs.id', '=', 'm.cash_shift_id')
             ->leftJoin('users as u', 'u.id', '=', 'm.created_by')
             ->where('m.tenant_id', $tenant)
-            ->selectRaw("'shift_movement' as source, CAST(m.id AS CHAR) as id, NULL as number, CASE WHEN m.kind = 'out' THEN 'payment' ELSE 'receipt' END as direction, "
-                ."NULL as type_id, CASE WHEN m.kind = 'out' THEN 'Chi tiền trong ca' ELSE 'Thu tiền vào ca' END as type_name, 0 as counts_in_pnl, "
+            ->whereNull('m.cash_voucher_id') // booked as a voucher: that row is listed instead
+            ->selectRaw("'shift_movement' as source, CAST(m.id AS CHAR) as id, NULL as number, 'transfer' as direction, "
+                ."NULL as type_id, CASE WHEN m.kind = 'out' THEN 'Rút két nộp về két tổng' ELSE 'Đưa tiền từ két tổng vào két' END as type_name, 0 as counts_in_pnl, "
                 ."'staff' as party_kind, NULL as party_id, u.name as party_name, 'cash' as method, m.amount, m.created_at as paid_at, "
                 ."'shift' as document_kind, cs.ulid as document_id, cs.number as document_number, NULL as reference, m.reason as note, u.name as created_by, "
                 .'NULL as voided_at, NULL as void_reason, m.created_at, NULL as account_key, NULL as account_id, NULL as account_name, NULL as counter_account_name');

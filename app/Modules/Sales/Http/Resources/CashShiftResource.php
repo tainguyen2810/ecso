@@ -36,6 +36,8 @@ class CashShiftResource extends JsonResource
                 'kind' => $m->kind,
                 'amount' => $m->amount,
                 'reason' => $m->reason,
+                // A voucher when the money really came in or went out; none when moved with the store's safe.
+                'voucher' => $m->cash_voucher_id && $m->relationLoaded('voucher') && $m->voucher ? ['id' => $m->voucher->ulid, 'number' => $m->voucher->number] : null,
                 'created_by' => $m->creator?->name,
                 'created_at' => $m->created_at?->toIso8601String(),
             ])),
