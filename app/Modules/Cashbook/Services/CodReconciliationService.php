@@ -12,7 +12,9 @@ use App\Modules\Cashbook\Support\PeriodLock;
 use App\Modules\Inventory\Support\DocumentNumber;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Orders\Support\Tracking;
 use App\Modules\Sales\Models\OrderPayment;
+use App\Modules\Sales\Services\ManualOrderService;
 use App\Modules\Sales\Services\PaymentService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -44,7 +46,11 @@ class CodReconciliationService
         'fee' => ['tong phi', 'tong cuoc', 'phi van chuyen', 'cuoc phi', 'phi giao hang', 'phi dich vu', 'shipping fee', 'total fee', 'cuoc', 'phi'],
     ];
 
+    /** Own-channel order statuses a COD collection proves delivered (the carrier only pays for parcels it handed over). */
+    public const DELIVERABLE = [OrderStatus::HANDED_OVER, OrderStatus::IN_TRANSIT, OrderStatus::FAILED_DELIVERY];
+
     public function __construct(
+        private readonly ManualOrderService $orders,
         private readonly PaymentService $payments,
         private readonly CashVoucherService $vouchers,
         private readonly CashAccountService $accounts,
@@ -102,12 +108,13 @@ class CodReconciliationService
      * @param  list<array{tracking: string, cod: string|int|float, fee?: string|int|float|null}>  $lines
      * @return array{lines: list<array<string, mixed>>, totals: array{cod: string, fee: string, booked: string, transferred: string, matched: int, problems: int}}
      */
-    public function preview(array $lines): array
+    public function preview(array $lines, ?string $carrier = null): array
     {
+        /** @var array<int, string> $owed */
         $owed = []; // what each order still owes after the lines above it
         $out = [];
         foreach ($lines as $line) {
-            $out[] = $this->match($line, $owed);
+            $out[] = $this->match($line, $owed, carrier: $carrier);
         }
 
         return ['lines' => $out, 'totals' => $this->totals($out)];
@@ -116,7 +123,7 @@ class CodReconciliationService
     /**
      * Books the statement.
      *
-     * @param  array{carrier: string, account?: string|null, remitted_at?: string|null, file_name?: string|null, reference?: string|null, note?: string|null, lines: list<array{tracking: string, cod: string|int|float, fee?: string|int|float|null}>}  $data
+     * @param  array{carrier: string, account?: string|null, remitted_at?: string|null, file_name?: string|null, reference?: string|null, note?: string|null, mark_delivered?: bool, lines: list<array{tracking: string, cod: string|int|float, fee?: string|int|float|null}>}  $data
      */
     public function confirm(array $data): CodReconciliation
     {
@@ -138,10 +145,16 @@ class CodReconciliationService
                 'created_by' => Auth::id(),
             ])->save();
 
+            /** @var array<int, string> $owed */
             $owed = [];
             $rows = [];
+            /** @var array<int, true> $deliver */
+            $deliver = [];
             foreach ($data['lines'] as $line) {
-                $m = $this->match($line, $owed, lock: true);
+                $m = $this->match($line, $owed, lock: true, carrier: $data['carrier']);
+                if (($data['mark_delivered'] ?? false) && $m['deliverable'] && $m['order_key'] !== null) {
+                    $deliver[$m['order_key']] = true;
+                }
                 $payment = null;
                 if (bccomp($m['booked'], '0', 2) > 0) {
                     $payment = $this->payments->record(Order::query()->findOrFail($m['order_key']), [
@@ -198,7 +211,15 @@ class CodReconciliationService
                 'matched_count' => $totals['matched'],
                 'fee_voucher_id' => $fee?->id,
             ])->save();
-            $this->audit->record('cash.cod_reconciled', $rec, ['number' => $rec->number, 'carrier' => $rec->carrier, 'lines' => count($rows), 'booked' => $totals['booked'], 'fee' => $totals['fee']]);
+            // The carrier collected the money, so the parcel reached the buyer: on the user's word (never by itself),
+            // orders still shown as on their way are marked delivered, which is when their revenue counts.
+            foreach (array_keys($deliver) as $orderId) {
+                $order = Order::query()->whereKey($orderId)->first();
+                if ($order !== null && in_array($order->status, self::DELIVERABLE, true)) {
+                    $this->orders->transition($order, 'deliver', ['reason' => "Hãng đã thu COD (đối soát {$rec->number})"]);
+                }
+            }
+            $this->audit->record('cash.cod_reconciled', $rec, ['number' => $rec->number, 'carrier' => $rec->carrier, 'lines' => count($rows), 'booked' => $totals['booked'], 'fee' => $totals['fee'], 'delivered' => count($deliver)]);
 
             return $rec;
         });
@@ -234,28 +255,49 @@ class CodReconciliationService
     /**
      * @param  array{tracking: string, cod: string|int|float, fee?: string|int|float|null}  $line
      * @param  array<int, string>  $owed  order id => still owed, updated as lines are matched
-     * @return array{tracking: string, cod: string, fee: string, status: string, booked: string, note: string|null, order: array{id: string, number: string, total: string, due: string}|null, order_key: int|null}
+     *
+     * @param-out array<int, string>  $owed
+     *
+     * @return array{tracking: string, cod: string, fee: string, status: string, booked: string, note: string|null, order: array{id: string, number: string, total: string, due: string, status: string}|null, order_key: int|null, deliverable: bool}
      */
-    private function match(array $line, array &$owed, bool $lock = false): array
+    private function match(array $line, array &$owed, bool $lock = false, ?string $carrier = null): array
     {
         $tracking = trim((string) $line['tracking']);
         $cod = bcadd((string) ($line['cod'] ?: '0'), '0', 2);
         $fee = bcadd((string) (($line['fee'] ?? null) ?: '0'), '0', 2);
-        $result = ['tracking' => $tracking, 'cod' => $cod, 'fee' => $fee, 'status' => CodReconciliationLine::NOT_FOUND, 'booked' => '0.00', 'note' => null, 'order' => null, 'order_key' => null];
+        $result = ['tracking' => $tracking, 'cod' => $cod, 'fee' => $fee, 'status' => CodReconciliationLine::NOT_FOUND, 'booked' => '0.00', 'note' => null, 'order' => null, 'order_key' => null, 'deliverable' => false];
 
-        // Manual orders and website orders: both are shipped and collected by the shop's own carrier.
-        $order = Order::query()->whereIn('marketplace', [Order::SOURCE_MANUAL, PaymentService::WEBSITE])
-            ->where(fn ($q) => $q->where('tracking_number', $tracking)->orWhere('external_order_id', $tracking))
-            ->when($lock, fn ($q) => $q->lockForUpdate())
-            ->orderByRaw('tracking_number = ? DESC', [$tracking])->first();
+        // Manual orders and website orders: both are shipped and collected by the shop's own carrier. The tracking
+        // number comes first; the order number is a fallback for statements that list it instead.
+        $own = fn () => Order::query()->whereIn('marketplace', [Order::SOURCE_MANUAL, PaymentService::WEBSITE]);
+        $candidates = $own()->where('tracking_number', $tracking)->orderBy('id')->get();
+        if ($candidates->count() > 1) {
+            // The same tracking number typed on several orders: the carrier's own name decides, then live orders.
+            $narrowed = $carrier ? $candidates->filter(fn (Order $o) => Tracking::carrierKey($o->shipping_carrier) === $carrier) : collect();
+            $candidates = $narrowed->isNotEmpty() ? $narrowed : $candidates;
+            $live = $candidates->where('status', '!=', OrderStatus::CANCELLED);
+            $candidates = $live->isNotEmpty() ? $live : $candidates;
+        }
+        if ($candidates->count() > 1) {
+            $result['note'] = 'Mã vận đơn có ở nhiều đơn ('.$candidates->pluck('external_order_id')->implode(', ').'). Sửa mã vận đơn trên đơn sai rồi đối soát lại dòng này.';
+
+            return $result;
+        }
+        /** @var Order|null $order */
+        $order = $candidates->first() ?? $own()->where('external_order_id', $tracking)->first();
+        if ($order && $lock) {
+            /** @var Order|null $order */
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->first();
+        }
         if (! $order) {
             $result['note'] = 'Không tìm thấy đơn tự bán hoặc đơn website có mã vận đơn này.';
 
             return $result;
         }
-        $owed[$order->id] ??= $order->isManual() ? $order->balanceDue() : $this->payments->unconfirmed($order);
-        $due = $owed[$order->id];
-        $result['order'] = ['id' => $order->ulid, 'number' => $order->external_order_id, 'total' => (string) $order->total, 'due' => $due];
+        $key = (int) $order->id;
+        $owed[$key] ??= (string) ($order->isManual() ? $order->balanceDue() : $this->payments->unconfirmed($order));
+        $due = $owed[$key];
+        $result['order'] = ['id' => $order->ulid, 'number' => $order->external_order_id, 'total' => (string) $order->total, 'due' => $due, 'status' => $order->status];
         $result['order_key'] = $order->id;
 
         if ($order->status === OrderStatus::CANCELLED) {
@@ -269,7 +311,7 @@ class CodReconciliationService
         } else {
             $booked = bccomp($cod, $due, 2) <= 0 ? $cod : $due;
             $result['booked'] = $booked;
-            $owed[$order->id] = bcsub($due, $booked, 2);
+            $owed[$key] = bcsub($due, $booked, 2);
             if (bccomp($cod, $due, 2) === 0) {
                 $result['status'] = CodReconciliationLine::MATCHED;
             } else {
@@ -278,6 +320,12 @@ class CodReconciliationService
                     ? 'Hãng thu ít hơn số đơn còn phải thu '.number_format((float) bcsub($due, $cod, 2), 0, ',', '.').' đ.'
                     : 'Hãng thu nhiều hơn số đơn còn phải thu '.number_format((float) bcsub($cod, $due, 2), 0, ',', '.').' đ. Chỉ ghi số còn phải thu.';
             }
+            // Money collected by the carrier for an order of the shop still shown on its way: it can be marked delivered.
+            $result['deliverable'] = $order->isManual() && in_array($order->status, self::DELIVERABLE, true);
+        }
+        $orderCarrier = Tracking::carrierKey($order->shipping_carrier);
+        if ($carrier && $orderCarrier && $orderCarrier !== $carrier) {
+            $result['note'] = trim(($result['note'] ?? '').' Đơn ghi hãng '.Tracking::carrierName($orderCarrier).', khác hãng của phiên đối soát.');
         }
 
         return $result;

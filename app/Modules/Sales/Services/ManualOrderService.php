@@ -18,6 +18,7 @@ use App\Modules\Orders\Services\ExchangeService;
 use App\Modules\Orders\Services\OrderIngestor;
 use App\Modules\Orders\Services\OrderStockSync;
 use App\Modules\Orders\Support\OrderTags;
+use App\Modules\Orders\Support\Tracking;
 use App\Modules\Sales\Models\CashShift;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\OrderPayment;
@@ -44,9 +45,12 @@ class ManualOrderService
         'confirm' => [[OrderStatus::PENDING_CONFIRMATION], OrderStatus::READY_TO_PACK],
         'pack' => [[OrderStatus::READY_TO_PACK], OrderStatus::PACKED],
         'handover' => [[OrderStatus::READY_TO_PACK, OrderStatus::PACKED], OrderStatus::HANDED_OVER],
-        'deliver' => [[OrderStatus::HANDED_OVER, OrderStatus::IN_TRANSIT], OrderStatus::DELIVERED],
+        // From a failed delivery too: the carrier tried again and the buyer took the parcel.
+        'deliver' => [[OrderStatus::HANDED_OVER, OrderStatus::IN_TRANSIT, OrderStatus::FAILED_DELIVERY], OrderStatus::DELIVERED],
         'complete' => [[OrderStatus::PENDING_CONFIRMATION, OrderStatus::READY_TO_PACK, OrderStatus::PACKED, OrderStatus::DELIVERED], OrderStatus::COMPLETED],
         'fail_delivery' => [[OrderStatus::HANDED_OVER, OrderStatus::IN_TRANSIT], OrderStatus::FAILED_DELIVERY],
+        // "Giao lại": after a failed attempt the parcel goes out again instead of coming back.
+        'redeliver' => [[OrderStatus::FAILED_DELIVERY], OrderStatus::IN_TRANSIT],
         'cancel' => [OrderStatus::OPEN, OrderStatus::CANCELLED],
     ];
 
@@ -212,7 +216,8 @@ class ManualOrderService
 
             if ($action === 'handover') {
                 $order->shipping_carrier = $params['carrier'] ?? $order->shipping_carrier;
-                $order->tracking_number = $params['tracking_number'] ?? $order->tracking_number;
+                $order->tracking_number = Tracking::normalize($params['tracking_number'] ?? null) ?? $order->tracking_number;
+                Tracking::assertUnique($order, $order->tracking_number);
             }
             if ($action === 'cancel') {
                 $order->cancel_reason = $params['reason'] ?? null;
@@ -323,6 +328,10 @@ class ManualOrderService
             if (array_key_exists($input, $data)) {
                 $order->{$column} = $data[$input];
             }
+        }
+        if (array_key_exists('tracking_number', $data)) {
+            $order->tracking_number = Tracking::normalize($data['tracking_number']);
+            Tracking::assertUnique($order, $order->tracking_number);
         }
         if (array_key_exists('tags', $data)) {
             $order->tags = OrderTags::normalize($data['tags']);

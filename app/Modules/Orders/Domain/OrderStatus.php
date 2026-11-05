@@ -57,7 +57,8 @@ final class OrderStatus
         self::IN_TRANSIT => [self::DELIVERED, self::FAILED_DELIVERY],
         self::DELIVERED => [self::COMPLETED, self::RETURN_REQUESTED],
         self::COMPLETED => [self::RETURN_REQUESTED],
-        self::FAILED_DELIVERY => [self::RETURNED],
+        // A failed attempt is not final: the carrier may try again (giao lại) and deliver.
+        self::FAILED_DELIVERY => [self::RETURNED, self::IN_TRANSIT, self::DELIVERED],
         self::RETURN_REQUESTED => [self::RETURNED, self::COMPLETED],
         self::CANCELLED => [],
         self::RETURNED => [],

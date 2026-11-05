@@ -136,10 +136,36 @@ const payError = ref<ApiError | null>(null);
 
 function startAction(action: string) {
     if (action === 'cancel') cancelOpen.value = true;
-    else if (action === 'handover' && isManual.value) {
+    else if (action === 'handover' && shipsItself.value) {
         handover.value = { carrier: order.value!.carrier ?? '', tracking_number: order.value!.tracking_number ?? '' };
         handoverOpen.value = true;
     } else act(action);
+}
+
+// Orders the shop ships with its own carrier (own channels, website): carrier and tracking number are kept in ECSO and
+// can be corrected after handover. Marketplace orders get theirs from the marketplace.
+const shipsItself = computed(() => isManual.value || isWebsite.value);
+const shippingOpen = ref(false);
+const shippingForm = ref({ carrier: '', tracking_number: '' });
+const shippingError = ref<string | null>(null);
+function editShipping() {
+    shippingForm.value = { carrier: order.value!.carrier ?? '', tracking_number: order.value!.tracking_number ?? '' };
+    shippingError.value = null;
+    shippingOpen.value = true;
+}
+async function saveShipping() {
+    busy.value = 'shipping';
+    shippingError.value = null;
+    try {
+        const { data } = await api.put(`/orders/${order.value!.id}/meta`, { carrier: shippingForm.value.carrier.trim() || null, tracking_number: shippingForm.value.tracking_number.trim() || null });
+        order.value = { ...order.value!, carrier: data.data.carrier, tracking_number: data.data.tracking_number };
+        shippingOpen.value = false;
+        toast.success('Đã cập nhật vận đơn.');
+    } catch (e) {
+        shippingError.value = (e as ApiError).field('tracking_number') ?? (e as ApiError).message;
+    } finally {
+        busy.value = null;
+    }
 }
 
 // One key per opening of the payment dialog: pressing Save twice records one payment.
@@ -215,7 +241,7 @@ async function act(action: string, params: Record<string, unknown> = {}) {
         await load();
     } catch (e) {
         const err = e as ApiError;
-        toast.error(err.body.code === 'UNSUPPORTED_CAPABILITY' ? `Sàn chưa hỗ trợ thao tác này qua API (${err.message}). Hãy thực hiện trên trang quản lý của sàn.` : (err.field('stock') ?? err.message));
+        toast.error(err.body.code === 'UNSUPPORTED_CAPABILITY' ? `Sàn chưa hỗ trợ thao tác này qua API (${err.message}). Hãy thực hiện trên trang quản lý của sàn.` : (err.field('stock') ?? err.field('tracking_number') ?? err.message));
     } finally {
         busy.value = null;
     }
@@ -602,7 +628,7 @@ async function createReturn() {
                         <div v-if="order.buyer_email" class="flex gap-3"><Mail class="mt-0.5 size-4 shrink-0 text-muted-foreground" /><div><dt class="text-xs text-muted-foreground">Email</dt><dd class="break-all" data-testid="buyer-email">{{ order.buyer_email }}</dd></div></div>
                         <div class="flex gap-3"><MapPin class="mt-0.5 size-4 shrink-0 text-muted-foreground" /><div><dt class="text-xs text-muted-foreground">{{ isWebsite ? 'Địa chỉ giao hàng' : 'Địa chỉ' }}</dt><dd>{{ order.shipping_address ?? '—' }}</dd></div></div>
                         <div v-if="billingAddress" class="flex gap-3"><MapPin class="mt-0.5 size-4 shrink-0 text-muted-foreground" /><div><dt class="text-xs text-muted-foreground">Địa chỉ thanh toán</dt><dd>{{ billingAddress }}</dd></div></div>
-                        <div class="flex gap-3"><Truck class="mt-0.5 size-4 shrink-0 text-muted-foreground" /><div><dt class="text-xs text-muted-foreground">Đơn vị vận chuyển · Mã vận đơn</dt><dd>{{ order.carrier ?? '—' }} · <span class="font-mono text-xs">{{ order.tracking_number ?? '—' }}</span></dd></div></div>
+                        <div class="flex gap-3"><Truck class="mt-0.5 size-4 shrink-0 text-muted-foreground" /><div><dt class="text-xs text-muted-foreground">Đơn vị vận chuyển · Mã vận đơn</dt><dd>{{ order.carrier ?? '—' }} · <span class="font-mono text-xs">{{ order.tracking_number ?? '—' }}</span><button v-if="shipsItself && tenant.can('orders.update') && order.status !== 'CANCELLED'" type="button" class="ml-1.5 inline-flex align-middle text-muted-foreground hover:text-primary" title="Sửa hãng, mã vận đơn" data-testid="edit-shipping" @click="editShipping"><Pencil class="size-3.5" /></button></dd></div></div>
                         <div v-if="!isManual || order.is_cod" class="flex gap-3"><Wallet class="mt-0.5 size-4 shrink-0 text-muted-foreground" /><div><dt class="text-xs text-muted-foreground">Thanh toán</dt><dd>{{ isManual ? 'Thu hộ (COD) khi giao' : order.is_cod ? 'Thu hộ (COD)' : (order.payment_method ?? 'Đã thanh toán') }}<span v-if="order.transaction_id" class="ml-1 font-mono text-xs text-muted-foreground" data-testid="transaction-id">· GD {{ order.transaction_id }}</span></dd></div></div>
                         <div class="flex gap-3"><Warehouse class="mt-0.5 size-4 shrink-0 text-muted-foreground" /><div><dt class="text-xs text-muted-foreground">Kho xuất</dt><dd>{{ order.warehouse ? `${order.warehouse.code} · ${order.warehouse.name}` : '—' }}</dd></div></div>
                         <div v-if="order.buyer_note" class="flex gap-3"><MessageSquare class="mt-0.5 size-4 shrink-0 text-muted-foreground" /><div><dt class="text-xs text-muted-foreground">Ghi chú của khách</dt><dd class="italic">{{ order.buyer_note }}</dd></div></div>
@@ -700,12 +726,23 @@ async function createReturn() {
 
         <Dialog v-model:open="handoverOpen" title="Bàn giao vận chuyển" description="Hàng được trừ khỏi kho khi bàn giao. Kho phải đủ hàng.">
             <div class="space-y-3">
-                <FormField label="Đơn vị vận chuyển"><Input v-model="handover.carrier" placeholder="GHN, GHTK, tự giao…" /></FormField>
+                <FormField label="Đơn vị vận chuyển"><Input v-model="handover.carrier" placeholder="GHN, Viettel Post, SPX Express, J&T Express, tự giao…" /></FormField>
                 <FormField label="Mã vận đơn"><Input v-model="handover.tracking_number" data-testid="tracking-input" /></FormField>
             </div>
             <template #footer>
                 <Button variant="outline" @click="handoverOpen = false">Đóng</Button>
                 <Button :loading="busy === 'handover'" data-testid="confirm-handover" @click="act('handover', { carrier: handover.carrier || null, tracking_number: handover.tracking_number || null })">Bàn giao</Button>
+            </template>
+        </Dialog>
+
+        <Dialog v-model:open="shippingOpen" title="Sửa vận đơn" description="Sửa hãng vận chuyển hoặc mã vận đơn nhập sai. Mỗi kiện hàng một mã: mã đã dùng cho đơn khác sẽ bị từ chối.">
+            <div class="space-y-3">
+                <FormField label="Đơn vị vận chuyển"><Input v-model="shippingForm.carrier" placeholder="GHN, Viettel Post, SPX Express, J&T Express, tự giao…" /></FormField>
+                <FormField label="Mã vận đơn" :error="shippingError ?? undefined"><Input v-model="shippingForm.tracking_number" data-testid="shipping-tracking-input" /></FormField>
+            </div>
+            <template #footer>
+                <Button variant="outline" @click="shippingOpen = false">Đóng</Button>
+                <Button :loading="busy === 'shipping'" data-testid="save-shipping" @click="saveShipping">Lưu</Button>
             </template>
         </Dialog>
 

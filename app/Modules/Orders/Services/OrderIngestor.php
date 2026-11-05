@@ -197,8 +197,10 @@ class OrderIngestor
             // Marketplaces that send the full number can be searched by it; a masked one gives no lookup key.
             'buyer_phone_hash' => str_contains((string) $data->buyerPhone, '*') ? null : PhoneNumber::hash(PhoneNumber::normalize($data->buyerPhone)),
             'shipping_address' => $data->shippingAddress,
-            'shipping_carrier' => $data->carrier,
-            'tracking_number' => $data->trackingNumber,
+            // A snapshot without a tracking number never erases one: the shop may have typed it in ECSO (website orders),
+            // and the carrier it was typed with stays as well.
+            'shipping_carrier' => blank($data->trackingNumber) && filled($order->tracking_number) ? $order->shipping_carrier : ($data->carrier ?? $order->shipping_carrier),
+            'tracking_number' => filled($data->trackingNumber) ? $data->trackingNumber : $order->tracking_number,
             'buyer_note' => $data->buyerNote,
             'placed_at' => $data->placedAt ?? $order->placed_at ?? now(),
             'paid_at' => $data->paidAt,

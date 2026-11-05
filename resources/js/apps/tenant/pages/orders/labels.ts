@@ -46,10 +46,11 @@ export const actionLabels: Record<string, string> = {
     deliver: 'Đã giao cho khách',
     complete: 'Hoàn tất đơn',
     fail_delivery: 'Giao thất bại',
+    redeliver: 'Giao lại',
 };
 
 /** Order of the buttons on a manual order (primary action first). */
-export const manualActionOrder = ['confirm', 'pack', 'handover', 'deliver', 'complete', 'fail_delivery', 'cancel'];
+export const manualActionOrder = ['confirm', 'pack', 'handover', 'redeliver', 'deliver', 'complete', 'fail_delivery', 'cancel'];
 
 export const channelTypes: Record<string, string> = {
     pos: 'Bán tại quầy',

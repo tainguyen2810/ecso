@@ -12,6 +12,7 @@ use App\Modules\Marketplace\Exceptions\UnsupportedCapability;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderNote;
+use App\Modules\Orders\Support\Tracking;
 use App\Modules\Sales\Services\ManualOrderService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
@@ -63,9 +64,13 @@ class OrderActions
         }
 
         $account = $order->account;
+        if ($action === 'handover' && $order->marketplace === WooCommerceConnector::MARKETPLACE) {
+            Tracking::assertUnique($order, Tracking::normalize($params['tracking_number'] ?? null)); // before anything moves
+        }
         // One-way store (the seller chose "chỉ website → ECSO"): the action stays in ECSO, the store is not written.
         if ($account->marketplace === WooCommerceConnector::MARKETPLACE && ! $account->syncs('push_status')) {
             $order = $this->ingestor->applyLocal($order, self::RESULTS[$action], 'user', Auth::id(), $params['reason'] ?? null);
+            $this->keepShipping($order, $action, $params);
             $this->audit->record("order.{$action}", $order, ['order' => $order->external_order_id, 'local' => true]);
 
             return $order;
@@ -84,9 +89,31 @@ class OrderActions
         }
 
         $result = $this->sync->syncOne($account, $order->external_order_id, 'user', null, Auth::id());
+        $order = $result['order'] ?? $order;
+        $this->keepShipping($order, $action, $params);
         $this->audit->record("order.{$action}", $order, ['order' => $order->external_order_id]);
 
-        return $result['order'] ?? $order;
+        return $order;
+    }
+
+    /**
+     * Website orders are shipped by the shop's own carrier: the carrier and tracking number typed at handover stay on
+     * the order (the store has no such fields, so later syncs keep them). Marketplace orders get theirs from the
+     * marketplace.
+     *
+     * @param  array<string, mixed>  $params
+     */
+    private function keepShipping(Order $order, string $action, array $params): void
+    {
+        if ($action !== 'handover' || $order->marketplace !== WooCommerceConnector::MARKETPLACE) {
+            return;
+        }
+        $tracking = Tracking::normalize($params['tracking_number'] ?? null);
+        $carrier = filled($params['carrier'] ?? null) ? trim($params['carrier']) : null;
+        if ($tracking === null && $carrier === null) {
+            return;
+        }
+        $order->forceFill(['tracking_number' => $tracking ?? $order->tracking_number, 'shipping_carrier' => $carrier ?? $order->shipping_carrier])->save();
     }
 
     /**
