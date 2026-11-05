@@ -3,6 +3,7 @@
 namespace App\Modules\Analytics\Support;
 
 use App\Modules\Analytics\Services\BusinessReports;
+use App\Modules\Cashbook\Models\CashVoucher;
 use App\Modules\Tenancy\Support\TenantContext;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Query\Builder;
@@ -173,12 +174,16 @@ final class ProfitFigures
         $writeOff = -$value(BusinessReports::STOCK_COLUMNS['damage_out']) - $value(['ADJUSTMENT_OUT'], $writeOffReasons);
         $stocktake = -$value(['ADJUSTMENT_OUT'], "(m.reason IS NULL OR NOT {$writeOffReasons})") - $value(BusinessReports::STOCK_COLUMNS['adjust_in']);
 
-        $vouchers = DB::table('cash_vouchers as cv')->leftJoin('cash_voucher_types as t', 't.id', '=', 'cv.cash_voucher_type_id')
-            ->where('cv.tenant_id', $this->tenant())->whereNull('cv.voided_at')->where('cv.counts_in_pnl', true)->whereBetween('cv.paid_at', [$from, $to])
-            ->selectRaw("COALESCE(SUM(CASE WHEN cv.direction = 'receipt' THEN cv.amount ELSE 0 END), 0) as income, "
-                ."COALESCE(SUM(CASE WHEN cv.direction = 'payment' AND t.pnl_group = 'sales' THEN cv.amount ELSE 0 END), 0) as selling, "
-                ."COALESCE(SUM(CASE WHEN cv.direction = 'payment' AND t.pnl_group = 'operating' THEN cv.amount ELSE 0 END), 0) as operating, "
-                ."COALESCE(SUM(CASE WHEN cv.direction = 'payment' THEN cv.amount ELSE 0 END), 0) as expenses")
+        // A voucher counts on its day; one voided after its day was closed is taken back on the day of the void
+        // (a negative amount), so a closed period's result does not change. Pending payments count nowhere.
+        $rows = fn (string $when, string $date, string $sign) => DB::table('cash_vouchers as cv')->leftJoin('cash_voucher_types as t', 't.id', '=', 'cv.cash_voucher_type_id')
+            ->where('cv.tenant_id', $this->tenant())->whereRaw($when)->where('cv.counts_in_pnl', true)->whereBetween($date, [$from, $to])
+            ->selectRaw("cv.direction, t.pnl_group, {$sign}cv.amount as amount");
+        $vouchers = DB::query()->fromSub($rows(CashVoucher::COUNTS_SQL, 'cv.paid_at', '')->unionAll($rows(CashVoucher::REVERSAL_SQL, 'cv.voided_at', '-')), 'x')
+            ->selectRaw("COALESCE(SUM(CASE WHEN direction = 'receipt' THEN amount ELSE 0 END), 0) as income, "
+                ."COALESCE(SUM(CASE WHEN direction = 'payment' AND pnl_group = 'sales' THEN amount ELSE 0 END), 0) as selling, "
+                ."COALESCE(SUM(CASE WHEN direction = 'payment' AND pnl_group = 'operating' THEN amount ELSE 0 END), 0) as operating, "
+                ."COALESCE(SUM(CASE WHEN direction = 'payment' THEN amount ELSE 0 END), 0) as expenses")
             ->first();
 
         return [

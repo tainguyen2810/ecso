@@ -25,7 +25,7 @@ const active = computed(() => props.funds.filter((f) => f.is_active));
 const source = computed(() => active.value.find((f) => f.id === form.from));
 const amount = computed(() => Number(form.amount || 0));
 const fee = computed(() => Number(form.fee || 0));
-const short = computed(() => !!source.value && amount.value + fee.value > source.value.balance);
+const short = computed(() => !!source.value && source.value.balance !== null && amount.value + fee.value > source.value.balance);
 
 function nowLocal(): string {
     const d = new Date();
@@ -75,7 +75,7 @@ async function save() {
     <Dialog v-model:open="open" title="Chuyển quỹ" description="Chuyển tiền giữa các quỹ của cửa hàng, ví dụ nộp tiền mặt vào ngân hàng. Không tính là thu hay chi." size="lg">
         <form id="transfer-form" class="grid gap-4 sm:grid-cols-[1fr_auto_1fr]" data-testid="transfer-form" @submit.prevent="save">
             <FormField label="Từ quỹ" for="t-from" :error="error?.field('from')">
-                <Select id="t-from" v-model="form.from" :options="active.map((f) => ({ value: f.id, label: `${f.name} · ${formatMoney(f.balance)}` }))" data-testid="t-from" />
+                <Select id="t-from" v-model="form.from" :options="active.map((f) => ({ value: f.id, label: f.balance === null ? f.name : `${f.name} · ${formatMoney(f.balance)}` }))" data-testid="t-from" />
             </FormField>
             <ArrowRight class="mt-8 hidden size-4 text-muted-foreground sm:block" />
             <FormField label="Sang quỹ" for="t-to" :error="error?.field('to')">

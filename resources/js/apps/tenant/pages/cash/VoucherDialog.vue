@@ -59,7 +59,7 @@ const kinds = computed(() => (Object.keys(partyKinds) as PartyKind[]).filter((k)
 const amount = computed(() => Number(form.amount || 0));
 const supplierMethods = ['cash', 'bank_transfer', 'card', 'other'];
 const funds = ref<Fund[]>([]);
-const fundOptions = computed(() => funds.value.filter((f) => f.is_active).map((f) => ({ value: f.id, label: `${f.name} · ${formatMoney(f.balance)}` })));
+const fundOptions = computed(() => funds.value.filter((f) => f.is_active).map((f) => ({ value: f.id, label: f.balance === null ? f.name : `${f.name} · ${formatMoney(f.balance)}` })));
 // The fund follows the payment method (its default fund) until the user picks one.
 watch(() => form.method, (m) => (form.account = defaultFund(funds.value, m)?.id ?? form.account));
 const methodOptions = computed(() =>
@@ -172,7 +172,7 @@ async function save(again = false) {
                 counts_in_pnl: form.counts_in_pnl,
             }, idempotent(key));
             saved = data.data;
-            toast.success(`Đã lập ${directionLabels[props.direction].toLowerCase()} ${data.data.number}.`);
+            toast.success(data.data.status === 'pending' ? `Đã lập ${data.data.number}. Phiếu chi lớn, chờ người có quyền duyệt rồi mới trừ quỹ.` : `Đã lập ${directionLabels[props.direction].toLowerCase()} ${data.data.number}.`);
         }
         key = newIdempotencyKey();
         emit('saved', saved);

@@ -25,6 +25,8 @@ class TenantSettings
             'default_pos' => 'cash',
             'default_online' => 'bank_transfer',
             'bank_accounts' => [],
+            // Payment vouchers of at least this amount wait for approval (finance.approve) before they count. 0: off.
+            'approval_threshold' => 0,
         ],
         'sales' => ['allow_change_sale_time' => false, 'invoice_copies' => 1, 'pos_require_cash' => false, 'pos_auto_print' => true, 'pos_require_shift' => true],
         'reasons' => [

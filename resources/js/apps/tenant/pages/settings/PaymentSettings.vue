@@ -6,6 +6,7 @@ import SettingsSection from './SettingsSection.vue';
 import { useSettingsForm } from './useSettingsForm';
 import { BANKS } from './banks';
 import Button from '@/shared/ui/Button.vue';
+import Input from '@/shared/ui/Input.vue';
 import FormField from '@/shared/ui/FormField.vue';
 import Select from '@/shared/ui/Select.vue';
 import Switch from '@/shared/ui/Switch.vue';
@@ -16,6 +17,11 @@ import type { PaymentMethodKey } from '@/shared/stores/settings';
 const { form, dirty, saving, error, canSave, save, cancel } = useSettingsForm('payments', (s) => JSON.parse(JSON.stringify(s.payments)) as typeof s.payments);
 const methodKeys = Object.keys(PAYMENT_METHOD_LABELS) as PaymentMethodKey[];
 const enabled = computed(() => methodKeys.filter((m) => form.value?.methods[m]).map((m) => ({ value: m, label: PAYMENT_METHOD_LABELS[m] })));
+/** Approval of large payment vouchers: on with an amount, off at 0. */
+const approvalOn = computed({
+    get: () => (form.value?.approval_threshold ?? 0) > 0,
+    set: (on: boolean) => form.value && (form.value.approval_threshold = on ? form.value.approval_threshold || 5000000 : 0),
+});
 const bankOptions = BANKS.map((b) => ({ value: b.code, label: `${b.code} · ${b.name}` }));
 
 function addAccount() {
@@ -59,6 +65,18 @@ function setDefault(i: number) {
                     <FormField label="Bán tại quầy" :error="error?.field('default_pos')"><Select v-model="form.default_pos" :options="enabled" data-testid="default-pos" /></FormField>
                     <FormField label="Tạo đơn, bán online" :error="error?.field('default_online')"><Select v-model="form.default_online" :options="enabled" data-testid="default-online" /></FormField>
                 </div>
+            </SettingsSection>
+            <SettingsSection title="Duyệt phiếu chi" description="Phiếu chi từ mức tiền này trở lên, do người không có quyền &quot;Duyệt phiếu chi lớn&quot; lập, phải được duyệt rồi mới trừ quỹ và tính vào báo cáo. Chủ cửa hàng và quản trị có quyền duyệt.">
+                <Switch v-model="approvalOn" label="Bật duyệt phiếu chi lớn" data-testid="approval-on" />
+                <FormField v-if="approvalOn" label="Từ số tiền" class="mt-3 max-w-xs" :error="error?.field('approval_threshold')">
+                    <Input
+                        :model-value="form.approval_threshold ? form.approval_threshold.toLocaleString('vi-VN') : ''"
+                        inputmode="numeric"
+                        class="text-right tabular-nums"
+                        data-testid="approval-threshold"
+                        @input="form.approval_threshold = Number(($event.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, 11)) || 0"
+                    />
+                </FormField>
             </SettingsSection>
         </template>
     </SettingsPage>

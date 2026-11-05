@@ -39,6 +39,9 @@ class VoucherRowResource extends JsonResource
             'created_at' => $r->created_at ? Carbon::parse($r->created_at)->toIso8601String() : null,
             'voided_at' => $r->voided_at ? Carbon::parse($r->voided_at)->toIso8601String() : null,
             'void_reason' => $r->void_reason,
+            // completed, pending (waiting for approval), rejected, voided, or reversed (voided after its day was
+            // closed: still counted that day, the void is a row of its own on the day it was made)
+            'status' => $r->status ?? 'completed',
         ];
     }
 }

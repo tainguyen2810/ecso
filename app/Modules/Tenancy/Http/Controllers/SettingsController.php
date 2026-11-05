@@ -152,6 +152,7 @@ class SettingsController extends Controller
                 'bank_accounts.*.number' => ['required', 'string', 'regex:/^[0-9]{6,20}$/'],
                 'bank_accounts.*.holder' => ['required', 'string', 'max:100'],
                 'bank_accounts.*.is_default' => ['boolean'],
+                'approval_threshold' => ['sometimes', 'integer', 'min:0', 'max:100000000000'],
             ],
             'sales' => [
                 'allow_change_sale_time' => ['sometimes', 'boolean'],

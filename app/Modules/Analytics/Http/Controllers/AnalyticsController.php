@@ -133,8 +133,14 @@ class AnalyticsController extends Controller
         ]);
         $account = isset($data['account']) ? (CashAccount::query()->where('ulid', $data['account'])->first() ?? abort(404)) : null;
 
+        $book = $reports->cashbook($from, $to, $data['method'] ?? null, BusinessReports::CASHBOOK_ROWS, $account?->id);
+        // Without finance.balances: what came in and went out, not how much the funds hold.
+        if (! $context->can('finance.balances')) {
+            $book = ['opening' => null, 'closing' => null, 'rows' => array_map(fn ($r) => ['balance' => null] + $r, $book['rows'])] + $book;
+        }
+
         return response()->json(['data' => [
-            ...$reports->cashbook($from, $to, $data['method'] ?? null, BusinessReports::CASHBOOK_ROWS, $account?->id),
+            ...$book,
             'account' => $account ? ['id' => $account->ulid, 'name' => $account->name, 'kind' => $account->kind] : null,
         ]]);
     }

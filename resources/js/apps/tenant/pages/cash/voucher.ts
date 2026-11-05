@@ -4,7 +4,9 @@ import { paymentMethods } from '../orders/labels';
 export type Direction = 'receipt' | 'payment';
 /** A row's direction: a transfer between funds is "transfer" in the list of every fund, receipt/payment in one fund's list. */
 export type RowDirection = Direction | 'transfer';
-export type Source = 'voucher' | 'order_payment' | 'supplier_payment' | 'shift_movement' | 'transfer';
+export type Source = 'voucher' | 'voucher_reversal' | 'order_payment' | 'supplier_payment' | 'shift_movement' | 'transfer';
+/** completed counts; pending waits for approval; reversed: voided after its day was closed (a reversal row moves the money back on the void day). */
+export type VoucherStatus = 'completed' | 'pending' | 'rejected' | 'voided' | 'reversed';
 export type PartyKind = 'customer' | 'supplier' | 'staff' | 'carrier' | 'other';
 
 export interface VoucherRow {
@@ -21,14 +23,23 @@ export interface VoucherRow {
     counter_account: string | null;
     amount: number;
     paid_at: string;
-    document: { kind: 'order' | 'purchase' | 'shift' | 'transfer'; id: string; number: string } | null;
+    document: { kind: 'order' | 'purchase' | 'shift' | 'transfer' | 'voucher'; id: string; number: string } | null;
     reference: string | null;
     note: string | null;
     created_by: string | null;
     created_at: string | null;
     voided_at: string | null;
     void_reason: string | null;
+    status: VoucherStatus;
 }
+
+export const voucherStatuses: Record<VoucherStatus, { label: string; tone: 'success' | 'warning' | 'danger' | 'muted' }> = {
+    completed: { label: 'Hoàn thành', tone: 'success' },
+    pending: { label: 'Chờ duyệt', tone: 'warning' },
+    rejected: { label: 'Từ chối', tone: 'danger' },
+    voided: { label: 'Đã hủy', tone: 'danger' },
+    reversed: { label: 'Đã hủy (ghi đảo)', tone: 'danger' },
+};
 
 export type FundKind = 'cash' | 'bank' | 'ewallet' | 'cod' | 'other';
 
@@ -41,11 +52,12 @@ export interface Fund {
     holder: string | null;
     /** Payment methods whose money lands in this fund unless another is picked. */
     methods: string[];
-    opening_balance: number;
+    /** Null for members without finance.balances. */
+    opening_balance: number | null;
     opening_at: string | null;
     note: string | null;
     is_active: boolean;
-    balance: number;
+    balance: number | null;
 }
 
 export const fundKinds: Record<FundKind, string> = { cash: 'Tiền mặt', bank: 'Ngân hàng', ewallet: 'Ví điện tử', cod: 'COD chờ đối soát', other: 'Khác' };
@@ -75,7 +87,7 @@ export const partyKinds: Record<PartyKind, string> = {
     other: 'Đối tượng khác',
 };
 
-export const sourceLabels: Record<Source, string> = { voucher: 'Lập tay', order_payment: 'Tự động từ đơn hàng', supplier_payment: 'Tự động từ trả NCC', shift_movement: 'Tự động từ ca bán hàng', transfer: 'Chuyển quỹ' };
+export const sourceLabels: Record<Source, string> = { voucher: 'Lập tay', voucher_reversal: 'Tự động khi hủy phiếu của kỳ đã khóa', order_payment: 'Tự động từ đơn hàng', supplier_payment: 'Tự động từ trả NCC', shift_movement: 'Tự động từ ca bán hàng', transfer: 'Chuyển quỹ' };
 
 /** Code shown for a row: the voucher number, or the source document for automatic rows. */
 export function voucherCode(v: VoucherRow): string {
@@ -85,7 +97,7 @@ export function voucherCode(v: VoucherRow): string {
 export function documentLink(v: Pick<VoucherRow, 'document'>): string | null {
     if (!v.document) return null;
     if (v.document.kind === 'shift') return '/pos/shifts';
-    if (v.document.kind === 'transfer') return null;
+    if (v.document.kind === 'transfer' || v.document.kind === 'voucher') return null;
     return v.document.kind === 'order' ? `/orders/${v.document.id}` : `/purchasing/${v.document.id}`;
 }
 

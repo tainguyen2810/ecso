@@ -22,7 +22,7 @@ import { api, ApiError } from '@/shared/lib/api';
 import { formatDateTime, formatMoney } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { paymentMethods } from '../orders/labels';
-import { directionLabels, partyKinds, sourceLabels, voucherCode, type Direction, type Fund, type VoucherRow, type VoucherType } from './voucher';
+import { directionLabels, partyKinds, sourceLabels, voucherCode, voucherStatuses, type Direction, type Fund, type VoucherRow, type VoucherType } from './voucher';
 
 const tenant = useTenantStore();
 const route = useRoute();
@@ -45,6 +45,9 @@ const page = ref(Number(qs('page')) || 1);
 const rows = ref<VoucherRow[]>([]);
 const meta = ref({ current_page: 1, last_page: 1, total: 0 });
 const totals = ref({ count: 0, in: 0, out: 0 });
+/** Payments waiting for approval (whatever the filters) and the amount from which a payment needs approval. */
+const pending = ref(0);
+const threshold = ref<string | null>(null);
 const types = ref<VoucherType[]>([]);
 const loading = ref(true);
 const loadError = ref<string | null>(null);
@@ -75,6 +78,8 @@ async function load() {
         rows.value = data.data;
         meta.value = data.meta;
         totals.value = data.totals;
+        pending.value = data.pending ?? 0;
+        threshold.value = data.approval_threshold ?? null;
     } catch (e) {
         loadError.value = (e as ApiError).message;
     } finally {
@@ -157,7 +162,7 @@ async function exportCsv() {
                     v.reference,
                     v.note,
                     v.source === 'voucher' ? (v.counts_in_pnl ? 'Có' : 'Không') : '',
-                    v.voided_at ? `Đã hủy: ${v.void_reason}` : 'Hoàn thành',
+                    v.voided_at ? `${voucherStatuses[v.status]?.label ?? 'Đã hủy'}: ${v.void_reason}` : voucherStatuses[v.status]?.label ?? 'Hoàn thành',
                     v.created_by,
                 ]),
             ),
@@ -177,6 +182,15 @@ async function exportCsv() {
     </PageHeader>
     <CashNav />
 
+    <button
+        v-if="pending && tenant.can('finance.approve') && status !== 'pending'"
+        type="button"
+        class="mb-4 flex w-full items-center justify-between rounded-md border border-warning/40 bg-warning/10 px-4 py-2.5 text-left text-sm text-amber-700 hover:bg-warning/20"
+        data-testid="pending-banner"
+        @click="status = 'pending'"
+    >
+        <span><b>{{ pending }}</b> phiếu chi đang chờ anh/chị duyệt (từ {{ formatMoney(Number(threshold ?? 0)) }} trở lên).</span><span class="font-medium">Xem và duyệt →</span>
+    </button>
     <div class="mb-4 grid gap-3 sm:grid-cols-3" data-testid="voucher-totals">
         <Card><div class="p-4"><p class="text-xs text-muted-foreground">Tổng thu (đang lọc)</p><p class="mt-1 text-xl font-semibold tabular-nums text-success">+{{ formatMoney(totals.in) }}</p></div></Card>
         <Card><div class="p-4"><p class="text-xs text-muted-foreground">Tổng chi (đang lọc)</p><p class="mt-1 text-xl font-semibold tabular-nums text-destructive">−{{ formatMoney(totals.out) }}</p></div></Card>
@@ -186,7 +200,7 @@ async function exportCsv() {
     <Card>
         <div class="flex flex-wrap items-center gap-2 border-b p-3">
             <Tabs v-model="direction" :tabs="[{ value: 'all', label: 'Tất cả' }, { value: 'receipt', label: 'Phiếu thu' }, { value: 'payment', label: 'Phiếu chi' }]" data-testid="voucher-direction" />
-            <Tabs v-model="status" :tabs="[{ value: 'all', label: 'Mọi trạng thái' }, { value: 'active', label: 'Hoàn thành' }, { value: 'voided', label: 'Đã hủy' }]" data-testid="voucher-status" />
+            <Tabs v-model="status" :tabs="[{ value: 'all', label: 'Mọi trạng thái' }, { value: 'active', label: 'Hoàn thành' }, ...(threshold || pending ? [{ value: 'pending', label: pending ? `Chờ duyệt (${pending})` : 'Chờ duyệt' }] : []), { value: 'voided', label: 'Đã hủy' }]" data-testid="voucher-status" />
             <div class="ml-auto"><RangePicker v-model:from="range.from" v-model:to="range.to" /></div>
         </div>
         <div class="flex flex-wrap gap-2 border-b p-3">
@@ -237,7 +251,7 @@ async function exportCsv() {
                             <td class="px-4 py-2.5 text-right tabular-nums text-success">{{ v.direction === 'receipt' ? formatMoney(v.amount) : '' }}</td>
                             <td class="px-4 py-2.5 text-right tabular-nums text-destructive">{{ v.direction === 'payment' ? formatMoney(v.amount) : '' }}</td>
                         </template>
-                        <td class="px-4 py-2.5"><Badge :tone="v.voided_at ? 'danger' : 'success'">{{ v.voided_at ? 'Đã hủy' : 'Hoàn thành' }}</Badge></td>
+                        <td class="px-4 py-2.5"><Badge :tone="voucherStatuses[v.status]?.tone ?? 'success'">{{ voucherStatuses[v.status]?.label ?? 'Hoàn thành' }}</Badge></td>
                     </tr>
                 </tbody>
             </table>

@@ -27,7 +27,7 @@ import { fundKinds, type Fund, type FundKind } from './voucher';
 const tenant = useTenantStore();
 const toast = useToast();
 const funds = ref<Fund[] | null>(null);
-const total = ref(0);
+const total = ref<number | null>(0);
 const loadError = ref<string | null>(null);
 const canManage = computed(() => tenant.can('finance.accounts'));
 const transferOpen = ref(false);
@@ -91,7 +91,8 @@ async function save() {
         account_number: form.account_number || null,
         holder: form.holder || null,
         methods: form.methods,
-        opening_balance: Number(form.opening_balance || 0),
+        // Without finance.balances the opening balance is not shown, so it is not sent either (it would reset it).
+        ...(tenant.can('finance.balances') ? { opening_balance: Number(form.opening_balance || 0) } : {}),
         note: form.note || null,
     };
     try {
@@ -141,7 +142,7 @@ function transfer(from: string | null) {
             <div class="flex flex-wrap items-center justify-between gap-3 p-4" data-testid="funds-total">
                 <div>
                     <p class="text-xs text-muted-foreground">Tổng tiền các quỹ đang dùng</p>
-                    <p class="mt-1 text-2xl font-semibold tabular-nums">{{ formatMoney(total) }}</p>
+                    <p class="mt-1 text-2xl font-semibold tabular-nums">{{ total === null ? '•••' : formatMoney(total) }}</p>
                 </div>
                 <p class="max-w-md text-xs text-muted-foreground">Chuyển tiền giữa các quỹ không làm thay đổi tổng này và không tính là thu hay chi. Số dư = số dư đầu + thu − chi + chuyển đến − chuyển đi.</p>
             </div>
@@ -166,7 +167,7 @@ function transfer(from: string | null) {
                     <Button v-if="canManage" size="icon" variant="ghost" class="size-8" :aria-label="`Sửa ${f.name}`" @click="openForm(f)"><Pencil /></Button>
                 </div>
                 <div class="px-4 pb-3">
-                    <p class="text-2xl font-semibold tabular-nums" :class="f.balance < 0 && 'text-destructive'">{{ formatMoney(f.balance) }}</p>
+                    <p class="text-2xl font-semibold tabular-nums" :class="(f.balance ?? 0) < 0 && 'text-destructive'" :title="f.balance === null ? 'Bạn không có quyền xem số dư quỹ' : undefined">{{ f.balance === null ? '•••' : formatMoney(f.balance) }}</p>
                     <p v-if="f.opening_balance" class="text-xs text-muted-foreground">Số dư đầu {{ formatMoney(f.opening_balance) }}</p>
                     <div class="mt-2 flex flex-wrap gap-1">
                         <Badge v-for="m in f.methods" :key="m" tone="info">{{ paymentMethods[m] ?? m }}</Badge>
@@ -187,7 +188,7 @@ function transfer(from: string | null) {
                 <ul class="divide-y text-sm">
                     <li v-for="f in inactive" :key="f.id" class="flex items-center gap-3 px-4 py-2.5 text-muted-foreground">
                         <span class="flex-1">{{ f.name }}</span>
-                        <span class="tabular-nums">{{ formatMoney(f.balance) }}</span>
+                        <span class="tabular-nums">{{ f.balance === null ? '•••' : formatMoney(f.balance) }}</span>
                         <Button v-if="canManage" size="sm" variant="ghost" @click="setActive(f, true)">Dùng lại</Button>
                     </li>
                 </ul>

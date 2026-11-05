@@ -3,6 +3,7 @@ import { amountInWords, documentLink, voucherCode, voucherHtml, type VoucherRow 
 
 const row = (over: Partial<VoucherRow> = {}): VoucherRow => ({
     source: 'voucher',
+    status: 'completed',
     id: '01V',
     number: 'PC-000007',
     direction: 'payment',
