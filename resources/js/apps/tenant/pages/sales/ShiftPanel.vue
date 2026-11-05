@@ -213,10 +213,9 @@ function print() {
             <p class="mb-1 font-medium">Nộp / rút tiền trong ca</p>
             <ul class="divide-y rounded-md border">
                 <li v-for="(m, i) in shift.movements" :key="i" class="flex items-center justify-between px-3 py-1.5">
-                    <span><span :class="m.kind === 'in' ? 'text-success' : 'text-destructive'">{{ m.kind === 'in' ? 'Nộp vào' : 'Rút ra' }}</span> · {{ m.reason }}
-                        <template v-if="m.voucher"><RouterLink v-if="tenant.can('finance.view')" :to="{ path: '/cash', query: { q: m.voucher.number } }" class="font-mono text-xs text-primary hover:underline" :data-testid="`shift-movement-voucher-${i}`">{{ m.voucher.number }}</RouterLink><span v-else class="font-mono text-xs" :data-testid="`shift-movement-voucher-${i}`">{{ m.voucher.number }}</span></template>
+                    <span><span :class="m.kind === 'in' ? 'text-success' : 'text-destructive'">{{ m.kind === 'in' ? 'Nộp vào' : 'Rút ra' }}</span> · {{ m.reason }}&nbsp;<template v-if="m.voucher"><RouterLink v-if="tenant.can('finance.view')" :to="{ path: '/cash', query: { q: m.voucher.number } }" class="font-mono text-xs text-primary hover:underline" :data-testid="`shift-movement-voucher-${i}`">{{ m.voucher.number }}</RouterLink><span v-else class="font-mono text-xs" :data-testid="`shift-movement-voucher-${i}`">{{ m.voucher.number }}</span></template>
                         <span v-else class="text-xs text-muted-foreground">(két tổng)</span>
-                        <span class="text-xs text-muted-foreground">{{ formatDateTime(m.created_at) }}</span></span>
+                        <span class="ml-1 text-xs text-muted-foreground">{{ formatDateTime(m.created_at) }}</span></span>
                     <span class="tabular-nums">{{ m.kind === 'in' ? '+' : '−' }}{{ formatNumber(m.amount) }}</span>
                 </li>
             </ul>
