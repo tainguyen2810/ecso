@@ -21,6 +21,9 @@ use Illuminate\Validation\ValidationException;
  */
 class PaymentService
 {
+    /** The shop's own website: its orders' money reaches a fund only when someone confirms it arrived. */
+    public const WEBSITE = 'woocommerce';
+
     public function __construct(private readonly AuditLogger $audit, private readonly CashAccountService $accounts) {}
 
     /**
@@ -30,17 +33,28 @@ class PaymentService
     {
         return DB::transaction(function () use ($order, $data) {
             $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
-            if (! $order->isManual()) {
+            $kind = $data['kind'] ?? OrderPayment::PAYMENT;
+            $website = $order->marketplace === self::WEBSITE;
+            if (! $order->isManual() && ! ($website && $kind === OrderPayment::PAYMENT)) {
                 throw ValidationException::withMessages(['order' => 'Đơn sàn do sàn thu tiền, không ghi nhận thanh toán ở đây.']);
             }
 
-            $kind = $data['kind'] ?? OrderPayment::PAYMENT;
             $amount = $this->money($data['amount']);
             if (bccomp($amount, '0', 2) <= 0) {
                 throw ValidationException::withMessages(['amount' => 'Số tiền phải lớn hơn 0.']);
             }
 
-            if ($kind === OrderPayment::PAYMENT) {
+            if ($website) {
+                // Website (Woo) order: the store says what the buyer paid; this row only confirms the money reached a
+                // fund. It never changes the order's payment status, which stays as the store reports it.
+                if ($order->status === OrderStatus::CANCELLED && bccomp((string) $order->refunded_amount, (string) $order->total, 2) >= 0) {
+                    throw ValidationException::withMessages(['order' => 'Đơn đã hủy và hoàn tiền, không còn tiền để xác nhận.']);
+                }
+                $left = $this->unconfirmed($order);
+                if (bccomp($amount, $left, 2) > 0) {
+                    throw ValidationException::withMessages(['amount' => 'Số tiền vượt quá số chưa xác nhận ('.number_format((float) $left, 0, ',', '.').' đ).']);
+                }
+            } elseif ($kind === OrderPayment::PAYMENT) {
                 if ($order->status === OrderStatus::CANCELLED) {
                     throw ValidationException::withMessages(['order' => 'Đơn đã hủy, không thu tiền.']);
                 }
@@ -60,11 +74,12 @@ class PaymentService
 
             $payment = new OrderPayment;
             $payment->forceFill([
-                'cash_account_id' => $this->accounts->resolve($data['account'] ?? null, $data['method']),
+                // Website money lands in the bank fund unless the person confirming picks another one.
+                'cash_account_id' => $this->accounts->resolve($data['account'] ?? null, $website && ! isset($data['account']) ? 'bank_transfer' : $data['method']),
                 'order_id' => $order->id,
                 'order_return_id' => $data['order_return_id'] ?? null,
                 // Money taken or paid back by a cashier with an open shift goes through that drawer.
-                'cash_shift_id' => Auth::id() ? CashShift::query()->where('open_user_id', Auth::id())->value('id') : null,
+                'cash_shift_id' => ! $website && Auth::id() ? CashShift::query()->where('open_user_id', Auth::id())->value('id') : null,
                 'customer_id' => $order->customer_id,
                 'kind' => $kind,
                 'method' => $data['method'],
@@ -75,8 +90,10 @@ class PaymentService
                 'created_by' => Auth::id(),
             ])->save();
 
-            $this->recompute($order);
-            $this->audit->record("order.{$kind}", $order, ['order' => $order->external_order_id, 'amount' => $amount, 'method' => $payment->method]);
+            if (! $website) {
+                $this->recompute($order);
+            }
+            $this->audit->record($website ? 'order.receipt_confirmed' : "order.{$kind}", $order, ['order' => $order->external_order_id, 'amount' => $amount, 'method' => $payment->method]);
 
             return $payment;
         });
@@ -102,11 +119,22 @@ class PaymentService
             }
 
             $payment->forceFill(['voided_at' => now(), 'voided_by' => Auth::id(), 'void_reason' => $reason])->save();
-            $this->recompute($order);
+            if ($order->isManual()) {
+                $this->recompute($order);
+            }
             $this->audit->record('order.payment_voided', $order, ['order' => $order->external_order_id, 'amount' => $payment->amount, 'reason' => $reason]);
 
             return $payment;
         });
+    }
+
+    /** Money of a website order the store reports as paid that nobody has yet confirmed in a fund. */
+    public function unconfirmed(Order $order): string
+    {
+        $confirmed = OrderPayment::query()->where('order_id', $order->id)->whereNull('voided_at')->where('kind', OrderPayment::PAYMENT)->sum('amount');
+        $left = bcsub(bcsub((string) $order->total, (string) $order->refunded_amount, 2), $this->money($confirmed), 2);
+
+        return bccomp($left, '0', 2) > 0 ? $left : '0.00';
     }
 
     /** Must run under the order row lock. */

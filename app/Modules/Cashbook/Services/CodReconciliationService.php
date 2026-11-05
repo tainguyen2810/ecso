@@ -215,16 +215,17 @@ class CodReconciliationService
         $fee = bcadd((string) (($line['fee'] ?? null) ?: '0'), '0', 2);
         $result = ['tracking' => $tracking, 'cod' => $cod, 'fee' => $fee, 'status' => CodReconciliationLine::NOT_FOUND, 'booked' => '0.00', 'note' => null, 'order' => null, 'order_key' => null];
 
-        $order = Order::query()->where('marketplace', Order::SOURCE_MANUAL)
+        // Manual orders and website orders: both are shipped and collected by the shop's own carrier.
+        $order = Order::query()->whereIn('marketplace', [Order::SOURCE_MANUAL, PaymentService::WEBSITE])
             ->where(fn ($q) => $q->where('tracking_number', $tracking)->orWhere('external_order_id', $tracking))
             ->when($lock, fn ($q) => $q->lockForUpdate())
             ->orderByRaw('tracking_number = ? DESC', [$tracking])->first();
         if (! $order) {
-            $result['note'] = 'Không tìm thấy đơn tự bán có mã vận đơn này.';
+            $result['note'] = 'Không tìm thấy đơn tự bán hoặc đơn website có mã vận đơn này.';
 
             return $result;
         }
-        $owed[$order->id] ??= $order->balanceDue();
+        $owed[$order->id] ??= $order->isManual() ? $order->balanceDue() : $this->payments->unconfirmed($order);
         $due = $owed[$order->id];
         $result['order'] = ['id' => $order->ulid, 'number' => $order->external_order_id, 'total' => (string) $order->total, 'due' => $due];
         $result['order_key'] = $order->id;
