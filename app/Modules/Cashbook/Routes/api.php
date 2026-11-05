@@ -4,6 +4,7 @@ use App\Modules\Cashbook\Http\Controllers\CashAccountController;
 use App\Modules\Cashbook\Http\Controllers\CashClosingController;
 use App\Modules\Cashbook\Http\Controllers\CashVoucherController;
 use App\Modules\Cashbook\Http\Controllers\CashVoucherTypeController;
+use App\Modules\Cashbook\Http\Controllers\CodReconciliationController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
@@ -20,6 +21,10 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::post('cash-transfers', [CashAccountController::class, 'transfer'])->middleware('idempotent');
     Route::post('cash-transfers/{cashTransfer}/void', [CashAccountController::class, 'voidTransfer']);
 
+    Route::get('cod-reconciliations', [CodReconciliationController::class, 'index']);
+    Route::post('cod-reconciliations/preview', [CodReconciliationController::class, 'preview']);
+    Route::post('cod-reconciliations', [CodReconciliationController::class, 'store'])->middleware('idempotent');
+    Route::get('cod-reconciliations/{codReconciliation}', [CodReconciliationController::class, 'show']);
     Route::get('cash-vouchers/staff', [CashVoucherController::class, 'staff']);
     Route::get('cash-vouchers', [CashVoucherController::class, 'index']);
     Route::post('cash-vouchers', [CashVoucherController::class, 'store'])->middleware('idempotent');
