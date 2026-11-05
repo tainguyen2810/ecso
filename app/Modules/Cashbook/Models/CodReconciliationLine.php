@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $status
  * @property string $booked
  * @property string|null $note
+ * @property int|null $shipment_id
  */
 class CodReconciliationLine extends Model
 {
@@ -41,6 +42,12 @@ class CodReconciliationLine extends Model
     protected function casts(): array
     {
         return ['cod_amount' => 'decimal:2', 'fee' => 'decimal:2', 'booked' => 'decimal:2'];
+    }
+
+    /** @return BelongsTo<CodReconciliation, $this> */
+    public function reconciliation(): BelongsTo
+    {
+        return $this->belongsTo(CodReconciliation::class, 'cod_reconciliation_id');
     }
 
     /** @return BelongsTo<Order, $this> */

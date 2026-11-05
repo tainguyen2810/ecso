@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
-import { Pencil, Undo2, X } from 'lucide-vue-next';
+import { Pencil, Undo2, Wallet, X } from 'lucide-vue-next';
 import Alert from '@/shared/ui/Alert.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
@@ -20,7 +20,8 @@ const props = defineProps<{ id: string }>();
 const emit = defineEmits<{ close: []; changed: [] }>();
 const tenant = useTenantStore();
 
-const shipment = ref<(ShipmentData & { returns?: OrderReturnData[] }) | null>(null);
+interface CodLink { id: string | null; number: string | null; remitted_at: string | null; voided: boolean; cod: string; fee: string; status: string }
+const shipment = ref<(ShipmentData & { returns?: OrderReturnData[]; cod_reconciliations?: CodLink[] }) | null>(null);
 const error = ref<string | null>(null);
 const editOpen = ref(false);
 
@@ -83,7 +84,7 @@ const dot = (status: string) => (['failed'].includes(status) ? 'bg-red-400 ring-
 
                     <div class="flex flex-wrap gap-2">
                         <ShipmentActionButtons :shipment="shipment" @done="changed" />
-                        <Button v-if="tenant.can('orders.update') && !['cancelled'].includes(shipment.status)" size="sm" variant="outline" class="ml-auto" data-testid="shipment-edit" @click="editOpen = true"><Pencil /> Sửa vận đơn</Button>
+                        <Button v-if="tenant.can('shipments.manage') && !['cancelled'].includes(shipment.status)" size="sm" variant="outline" class="ml-auto" data-testid="shipment-edit" @click="editOpen = true"><Pencil /> Sửa vận đơn</Button>
                     </div>
                     <p v-if="shipment.source === 'marketplace'" class="text-xs text-muted-foreground">Đơn sàn: trạng thái giao do sàn cập nhật khi đồng bộ.</p>
 
@@ -127,7 +128,12 @@ const dot = (status: string) => (['failed'].includes(status) ? 'bg-red-400 ring-
                             <RouterLink :to="`/returns/${r.id}`" class="text-primary hover:underline">{{ r.number }}</RouterLink>
                             <Badge :tone="returnStatus[r.status]?.tone">{{ returnStatus[r.status]?.label }}</Badge>
                         </div>
-                        <p v-if="!(shipment.returns ?? []).length" class="text-sm text-muted-foreground">Chưa có phiếu trả hàng.</p>
+                        <div v-for="(c, i) in shipment.cod_reconciliations ?? []" :key="`cod-${i}`" :class="cn('flex flex-wrap items-center gap-1.5 text-sm', c.voided && 'text-muted-foreground line-through')" data-testid="shipment-cod-link">
+                            <Wallet class="size-4 text-muted-foreground" /> Đối soát COD
+                            <RouterLink to="/cash/cod" class="text-primary hover:underline">{{ c.number }}</RouterLink>
+                            <span class="tabular-nums text-muted-foreground">· hãng trả {{ formatMoney(c.cod) }}<template v-if="Number(c.fee) > 0"> · phí {{ formatMoney(c.fee) }}</template><template v-if="c.remitted_at"> · {{ formatDateTime(c.remitted_at) }}</template></span>
+                        </div>
+                        <p v-if="!(shipment.returns ?? []).length && !(shipment.cod_reconciliations ?? []).length" class="text-sm text-muted-foreground">Chưa có phiếu trả hàng hay phiên đối soát COD.</p>
                     </section>
                 </div>
             </aside>

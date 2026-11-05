@@ -8,6 +8,9 @@ use Illuminate\Support\Facades\Route;
 Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::get('shipments', [ShipmentController::class, 'index']);
     Route::get('shipments/summary', [ShipmentController::class, 'summary']);
+    Route::get('shipments/export', [ShipmentController::class, 'export'])->middleware('throttle:10,1,orders.shipments.export');
+    Route::post('shipments/import/preview', [ShipmentController::class, 'importPreview'])->middleware('throttle:20,1,orders.shipments.import-preview');
+    Route::post('shipments/import', [ShipmentController::class, 'import'])->middleware(['idempotent', 'throttle:10,1,orders.shipments.import']);
     Route::get('shipments/{shipment}', [ShipmentController::class, 'show']);
     Route::put('shipments/{shipment}', [ShipmentController::class, 'update']);
     Route::post('shipments/{shipment}/actions/{action}', [ShipmentController::class, 'action'])->whereIn('action', ['pick_up', 'deliver', 'fail', 'redeliver', 'return', 'cancel']);

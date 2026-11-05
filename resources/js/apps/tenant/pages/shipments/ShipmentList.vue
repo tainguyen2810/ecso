@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { AlarmClock, CircleAlert, Clock, PackageCheck, Search, Truck, Undo2, Wallet } from 'lucide-vue-next';
+import { AlarmClock, CircleAlert, Clock, Download, FileUp, PackageCheck, Search, Truck, Undo2, Wallet } from 'lucide-vue-next';
 import Badge from '@/shared/ui/Badge.vue';
 import Card from '@/shared/ui/Card.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
@@ -11,18 +11,24 @@ import KpiCard from '@/shared/ui/KpiCard.vue';
 import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
-import { api, ApiError } from '@/shared/lib/api';
+import { api, ApiError, downloadFile } from '@/shared/lib/api';
+import { useToast } from '@/shared/composables/useToast';
+import { useTenantStore } from '@/shared/stores/tenant';
 import { cn, formatDateTime, formatMoney } from '@/shared/lib/utils';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
+import HeaderLink from '../../components/HeaderLink.vue';
 import Tabs from '../../components/Tabs.vue';
 import { marketplaceNames } from '../orders/labels';
 import ShipmentDrawer from './ShipmentDrawer.vue';
+import ShipmentImportDialog from './ShipmentImportDialog.vue';
 import { carrierKeys, carrierText, shipmentTabs, shipmentTone, statusText, type ShipmentData, type ShipmentSummary } from './shipments';
 
 /** "Vận chuyển & giao hàng": every shipment, what needs the shop's attention, and the COD carriers hold. */
 const route = useRoute();
 const router = useRouter();
+const tenant = useTenantStore();
+const toast = useToast();
 
 const rows = ref<ShipmentData[]>([]);
 const meta = ref({ current_page: 1, last_page: 1, total: 0 });
@@ -44,11 +50,8 @@ const warehouses = ref<{ id: string; name: string }[]>([]);
 
 const tabs = computed(() => shipmentTabs.map((t) => ({ ...t, count: summary.value?.tabs[t.value] ?? null })));
 
-async function load() {
-    loading.value = true;
-    loadError.value = null;
-    try {
-        const params = {
+function filterParams() {
+    return {
             tab: tab.value === 'all' ? undefined : tab.value,
             q: q.value || undefined,
             carrier: carrier.value || undefined,
@@ -57,9 +60,15 @@ async function load() {
             cod: cod.value || undefined,
             from: from.value || undefined,
             to: to.value || undefined,
-            late: late.value ? 1 : undefined,
-            page: page.value,
-        };
+        late: late.value ? 1 : undefined,
+    };
+}
+
+async function load() {
+    loading.value = true;
+    loadError.value = null;
+    try {
+        const params = { ...filterParams(), page: page.value };
         const [list, sum] = await Promise.all([api.get('/shipments', { params }), api.get('/shipments/summary')]);
         rows.value = list.data.data;
         meta.value = list.data.meta;
@@ -91,6 +100,20 @@ function pickTab(value: string, onlyLate = false) {
     tab.value = value;
 }
 
+const importOpen = ref(false);
+const exporting = ref(false);
+async function exportXlsx() {
+    exporting.value = true;
+    try {
+        const query = new URLSearchParams(Object.entries(filterParams()).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]));
+        await downloadFile(`/shipments/export?${query}`, 'van-don.xlsx');
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    } finally {
+        exporting.value = false;
+    }
+}
+
 const codHeld = computed(() => (summary.value?.cod_held ?? []).reduce((s, r) => s + Number(r.amount), 0));
 const codHeldBy = computed(() => (summary.value?.cod_held ?? []).map((r) => `${r.carrier ? carrierKeys[r.carrier] : r.carrier_name ?? 'Khác'} ${formatMoney(r.amount)}`).join(' · '));
 const daysSince = (iso: string | null) => (iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86400000) : 0);
@@ -98,7 +121,12 @@ const isLate = (s: ShipmentData) => ['picked_up', 'in_transit', 'out_for_deliver
 </script>
 
 <template>
-    <PageHeader title="Vận chuyển & giao hàng" description="Theo dõi từng vận đơn: hãng, mã vận đơn, trạng thái giao và tiền COD hãng đang giữ." />
+    <PageHeader title="Vận chuyển & giao hàng" description="Theo dõi từng vận đơn: hãng, mã vận đơn, trạng thái giao và tiền COD hãng đang giữ.">
+        <template #links>
+            <HeaderLink :icon="Download" :disabled="exporting" data-testid="shipment-export" @click="exportXlsx">Xuất file</HeaderLink>
+            <HeaderLink v-if="tenant.can('shipments.import')" :icon="FileUp" data-testid="shipment-import" @click="importOpen = true">Nhập mã vận đơn từ file</HeaderLink>
+        </template>
+    </PageHeader>
 
     <div class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6" data-testid="shipment-kpis">
         <button class="text-left" @click="pickTab('awaiting')"><KpiCard label="Chờ lấy hàng" :value="String(summary?.tabs.awaiting ?? 0)" :icon="Clock" :active="tab === 'awaiting' && !late">đã có mã, hãng chưa lấy</KpiCard></button>
@@ -180,4 +208,5 @@ const isLate = (s: ShipmentData) => ['picked_up', 'in_transit', 'out_for_deliver
     </Card>
 
     <ShipmentDrawer v-if="openId" :id="openId" :key="openId" @close="openId = null" @changed="load" />
+    <ShipmentImportDialog v-model:open="importOpen" @saved="load" />
 </template>

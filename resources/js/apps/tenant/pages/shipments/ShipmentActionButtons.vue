@@ -51,7 +51,7 @@ async function run(key: string) {
 </script>
 
 <template>
-    <template v-if="tenant.can('orders.update')">
+    <template v-if="tenant.can('shipments.manage')">
         <Button
             v-for="(a, i) in list"
             :key="a.key"

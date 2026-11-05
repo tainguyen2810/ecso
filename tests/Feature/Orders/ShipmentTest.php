@@ -4,7 +4,9 @@ use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Orders\Models\Shipment;
 use App\Modules\Orders\Models\ShipmentEvent;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use OpenSpout\Reader\XLSX\Reader;
 
 /** Shipping round S2: every order that goes out with a carrier has a shipment (vận đơn) that follows it. */
 beforeEach(function () {
@@ -177,4 +179,90 @@ it('cancels a shipment not picked up yet so a new one can be made, and edits the
     expect($this->api->getJson('/api/v1/shipments?late=1')->json('data.0.id'))->toBe($self['id']);
     expect($this->api->getJson('/api/v1/shipments?tab=cancelled')->json('data.0.id'))->toBe($sid);
     expect($this->api->getJson('/api/v1/shipments?carrier=other&tab=delivering')->json('data'))->toHaveCount(1);
+});
+
+it('writes what a COD statement paid and charged on the shipment, display only, and undoes it when voided', function () {
+    $id = createSalesOrder($this->owner, $this->tenant, [[$this->variant, 1, 300000]], ['stage' => 'confirmed', 'is_cod' => true])->json('data.id');
+    $this->api->postJson("/api/v1/sales-orders/{$id}/actions/handover", ['carrier' => 'GHN', 'tracking_number' => 'GHNC1'])->assertOk();
+    $shipment = ($this->shipmentOf)($id);
+    $this->api->putJson("/api/v1/shipments/{$shipment->ulid}", ['fee_estimated' => 25000])->assertOk();
+
+    $rec = postOnce($this->owner, $this->tenant, '/api/v1/cod-reconciliations', ['carrier' => 'ghn', 'mark_delivered' => true, 'lines' => [['tracking' => 'GHNC1', 'cod' => 300000, 'fee' => 22000]]], 'cod-s4')->assertCreated()->json('data.id');
+    $this->api = actingInTenant($this->owner, $this->tenant); // postOnce cleared the request headers
+    $shipment->refresh();
+    expect($shipment->status)->toBe('delivered')->and($shipment->cod_status)->toBe('remitted')->and($shipment->cod_collected)->toBe('300000.00')
+        ->and($shipment->fee_actual)->toBe('22000.00')->and($shipment->fee_status)->toBe('confirmed');
+    $detail = $this->api->getJson("/api/v1/shipments/{$shipment->ulid}")->json('data');
+    expect($detail['cod_reconciliations'][0]['fee'])->toBe('22000.00')->and($detail['events'][0]['description'])->toContain('phí 22.000 ₫');
+    // Not "held by the carrier" any more: it was paid to the shop.
+    expect($this->api->getJson('/api/v1/shipments/summary')->json('data.cod_held'))->toBe([]);
+
+    $this->api->postJson("/api/v1/cod-reconciliations/{$rec}/void", ['reason' => 'Nhập nhầm file'])->assertOk();
+    $shipment->refresh();
+    expect($shipment->cod_status)->toBe('collected')->and($shipment->cod_collected)->toBeNull()
+        ->and($shipment->fee_actual)->toBeNull()->and($shipment->fee_status)->toBe('estimated');
+});
+
+it('imports tracking numbers from a file: preview first, then each row on its own', function () {
+    $a = createSalesOrder($this->owner, $this->tenant, [[$this->variant, 1, 100000]], ['stage' => 'confirmed'])->json('data');
+    $b = createSalesOrder($this->owner, $this->tenant, [[$this->variant, 1, 100000]], ['stage' => 'confirmed', 'carrier' => 'GHN', 'tracking_number' => 'GHNOLD'])->json('data');
+    $shop = fakeShop($this->tenant);
+    $marketplace = fakeOrder($shop, [[$this->variant, 1]], 'fake_ready', ['cod' => false]);
+    $csv = "\xEF\xBB\xBFMã đơn hàng,Mã vận đơn,Đơn vị vận chuyển,Khối lượng\n"
+        ."{$a['external_order_id']},VTP777,Viettel Post,500\n"
+        ."{$b['external_order_id']},GHN888,GHN,\n"
+        ."{$marketplace->external_order_id},SPX1,SPX,\n"
+        ."KHONGCO,X1,GHN,\n"
+        ."{$a['external_order_id']},vtp 777,Viettel Post,\n";
+    $file = UploadedFile::fake()->createWithContent('van-don.csv', $csv);
+
+    $preview = $this->api->post('/api/v1/shipments/import/preview', ['file' => $file], ['Accept' => 'application/json'])->assertOk()->json('data');
+    expect(array_column($preview['plan'], 'action'))->toBe(['create', 'update', 'error', 'error', 'error'])
+        ->and($preview['plan'][0]['tracking'])->toBe('VTP777')->and($preview['rows'][0]['weight_g'])->toBe(500)
+        ->and($preview['plan'][2]['note'])->toContain('Đơn sàn')->and($preview['plan'][4]['note'])->toContain('trùng với dòng 1');
+    expect(Shipment::withoutGlobalScopes()->where('tracking_number', 'VTP777')->exists())->toBeFalse(); // preview writes nothing
+
+    $result = postOnce($this->owner, $this->tenant, '/api/v1/shipments/import', ['rows' => $preview['rows']], 'imp-1')->assertOk()->json('data');
+    $this->api = actingInTenant($this->owner, $this->tenant);
+    expect($result)->toMatchArray(['created' => 1, 'updated' => 1, 'skipped' => 0, 'failed' => 3]);
+    $sa = ($this->shipmentOf)($a['id']);
+    expect($sa->tracking_number)->toBe('VTP777')->and($sa->carrier)->toBe('viettelpost')->and($sa->weight_g)->toBe(500)->and($sa->status)->toBe('awaiting_pickup');
+    expect(($this->shipmentOf)($b['id'])->tracking_number)->toBe('GHN888')
+        ->and(Order::withoutGlobalScopes()->where('ulid', $b['id'])->value('tracking_number'))->toBe('GHN888');
+
+    // The same file again: nothing new, nothing doubled.
+    $again = postOnce($this->owner, $this->tenant, '/api/v1/shipments/import', ['rows' => $preview['rows']], 'imp-2')->json('data');
+    expect($again)->toMatchArray(['created' => 0, 'updated' => 0, 'skipped' => 2]);
+    expect(Shipment::withoutGlobalScopes()->whereIn('tracking_number', ['VTP777', 'GHN888'])->count())->toBe(2);
+});
+
+it('exports the shipment list with the screen filters and keeps shipment work to members allowed to do it', function () {
+    $id = createSalesOrder($this->owner, $this->tenant, [[$this->variant, 1, 150000]], ['stage' => 'confirmed', 'is_cod' => true])->json('data.id');
+    $this->api->postJson("/api/v1/sales-orders/{$id}/actions/handover", ['carrier' => 'GHN', 'tracking_number' => 'GHNX1'])->assertOk();
+
+    $response = $this->api->get('/api/v1/shipments/export?tab=delivering')->assertOk();
+    expect($response->headers->get('content-disposition'))->toContain('van-don-');
+    $path = tempnam(sys_get_temp_dir(), 'shp').'.xlsx';
+    file_put_contents($path, $response->streamedContent());
+    $reader = new Reader;
+    $reader->open($path);
+    $rows = [];
+    foreach ($reader->getSheetIterator() as $sheet) {
+        foreach ($sheet->getRowIterator() as $row) {
+            $rows[] = $row->toArray();
+        }
+    }
+    $reader->close();
+    expect($rows)->toHaveCount(2)->and($rows[1][0])->toBe('GHNX1')->and($rows[1][7])->toBe('Đã lấy hàng')->and($rows[1][9])->toBe('Chưa thu');
+    expect(DB::table('audit_logs')->where('action', 'shipment.exported')->exists())->toBeTrue();
+    expect(substr_count($this->api->get('/api/v1/shipments/export?tab=delivered')->streamedContent(), 'GHNX1'))->toBe(0);
+
+    // Warehouse staff can see shipments but not create, change or import them.
+    $staff = addMember($this->tenant, 'warehouse_staff');
+    $shipment = ($this->shipmentOf)($id);
+    $asStaff = actingInTenant($staff, $this->tenant);
+    $asStaff->getJson('/api/v1/shipments')->assertOk();
+    $asStaff->postJson("/api/v1/shipments/{$shipment->ulid}/actions/deliver")->assertForbidden();
+    $asStaff->putJson("/api/v1/shipments/{$shipment->ulid}", ['packages' => 2])->assertForbidden();
+    $asStaff->postJson('/api/v1/shipments/import/preview', ['file' => UploadedFile::fake()->createWithContent('a.csv', "Mã đơn,Mã vận đơn\nA,B")])->assertForbidden();
 });

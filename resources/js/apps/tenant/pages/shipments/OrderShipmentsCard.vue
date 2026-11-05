@@ -22,7 +22,7 @@ const tenant = useTenantStore();
 const toast = useToast();
 
 const live = computed(() => props.shipments.some((s) => s.status !== 'cancelled'));
-const canCreate = computed(() => props.shipsItself && !live.value && tenant.can('orders.update') && !['CANCELLED', 'RETURNED', 'UNPAID'].includes(props.orderStatus));
+const canCreate = computed(() => props.shipsItself && !live.value && tenant.can('shipments.manage') && !['CANCELLED', 'RETURNED', 'UNPAID'].includes(props.orderStatus));
 const ordered = computed(() => [...props.shipments].sort((a, b) => Number(a.status === 'cancelled') - Number(b.status === 'cancelled')));
 const openId = ref<string | null>(null);
 

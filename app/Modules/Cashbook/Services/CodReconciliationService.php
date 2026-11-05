@@ -12,6 +12,8 @@ use App\Modules\Cashbook\Support\PeriodLock;
 use App\Modules\Inventory\Support\DocumentNumber;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Orders\Models\Shipment;
+use App\Modules\Orders\Services\ShipmentCod;
 use App\Modules\Orders\Support\Tracking;
 use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Sales\Services\ManualOrderService;
@@ -55,6 +57,7 @@ class CodReconciliationService
         private readonly CashVoucherService $vouchers,
         private readonly CashAccountService $accounts,
         private readonly AuditLogger $audit,
+        private readonly ShipmentCod $shipments,
     ) {}
 
     /**
@@ -150,6 +153,8 @@ class CodReconciliationService
             $rows = [];
             /** @var array<int, true> $deliver */
             $deliver = [];
+            /** @var list<array{0: array<string, mixed>, 1: CodReconciliationLine}> $lines */
+            $lines = [];
             foreach ($data['lines'] as $line) {
                 $m = $this->match($line, $owed, lock: true, carrier: $data['carrier']);
                 if (($data['mark_delivered'] ?? false) && $m['deliverable'] && $m['order_key'] !== null) {
@@ -167,7 +172,7 @@ class CodReconciliationService
                     ]);
                 }
                 $rows[] = $m;
-                CodReconciliationLine::query()->create([
+                $lines[] = [$m, CodReconciliationLine::query()->create([
                     'cod_reconciliation_id' => $rec->id,
                     'tracking_number' => $m['tracking'],
                     'cod_amount' => $m['cod'],
@@ -177,7 +182,7 @@ class CodReconciliationService
                     'status' => $m['status'],
                     'booked' => $m['booked'],
                     'note' => $m['note'],
-                ]);
+                ])];
             }
             $totals = $this->totals($rows);
 
@@ -219,6 +224,15 @@ class CodReconciliationService
                     $this->orders->transition($order, 'deliver', ['reason' => "Hãng đã thu COD (đối soát {$rec->number})"]);
                 }
             }
+            // Each paid line is written on its shipment (display only: the money is booked above, once).
+            foreach ($lines as [$m, $lineModel]) {
+                $order = $m['order_key'] !== null ? Order::query()->find($m['order_key']) : null;
+                $shipment = $order instanceof Order ? $this->shipments->find($order, (string) $m['tracking']) : null;
+                if ($shipment !== null) {
+                    $lineModel->forceFill(['shipment_id' => $shipment->id])->save();
+                    $this->shipments->remitted($shipment, (string) $m['cod'], (string) $m['fee'], $rec->number, $remittedAt);
+                }
+            }
             $this->audit->record('cash.cod_reconciled', $rec, ['number' => $rec->number, 'carrier' => $rec->carrier, 'lines' => count($rows), 'booked' => $totals['booked'], 'fee' => $totals['fee'], 'delivered' => count($deliver)]);
 
             return $rec;
@@ -244,6 +258,12 @@ class CodReconciliationService
             $fee = $rec->fee_voucher_id ? CashVoucher::query()->find($rec->fee_voucher_id) : null;
             if ($fee !== null && $fee->voided_at === null) {
                 $this->vouchers->void($fee, mb_substr($note, 0, 255));
+            }
+            foreach (CodReconciliationLine::query()->where('cod_reconciliation_id', $rec->id)->whereNotNull('shipment_id')->get() as $line) {
+                $shipment = Shipment::query()->find($line->shipment_id);
+                if ($shipment instanceof Shipment) {
+                    $this->shipments->voided($shipment, (string) $line->cod_amount, (string) $line->fee, $rec->number);
+                }
             }
             $rec->forceFill(['voided_at' => now(), 'voided_by' => Auth::id(), 'void_reason' => $reason])->save();
             $this->audit->record('cash.cod_reconciliation_voided', $rec, ['number' => $rec->number, 'reason' => $reason]);
