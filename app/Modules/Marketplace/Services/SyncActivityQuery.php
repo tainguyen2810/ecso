@@ -13,6 +13,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
+use InvalidArgumentException;
 
 /**
  * The Sync Center queue: one list of sync tasks read from the rows the sync machinery already keeps. Nothing here
@@ -140,7 +141,11 @@ class SyncActivityQuery
             'order_poll' => SyncRun::query(),
             'price_push' => ListingVariant::query()->whereIn('price_push_status', ['pending', 'failed', 'ok'])
                 ->where(fn ($q) => $q->where('price_push_status', '!=', 'ok')->orWhereNotNull('price_pushed_at')),
+            default => null,
         };
+        if ($query === null) {
+            return null;
+        }
         if (isset($filters['status']) && ! $this->whereStatus($type, $query, (string) $filters['status'])) {
             return null;
         }
@@ -171,6 +176,7 @@ class SyncActivityQuery
                 'stock_push' => $query->where(fn ($w) => $w->where('correlation_id', $q)->orWhereHas('listingVariant', fn ($l) => $l->where('seller_sku', $q)->orWhere('external_sku_id', $q))),
                 'order_poll' => $query->where('correlation_id', $q),
                 'price_push' => $query->where(fn ($w) => $w->where('seller_sku', $q)->orWhere('external_sku_id', $q)),
+                default => null,
             };
         }
 
@@ -206,6 +212,7 @@ class SyncActivityQuery
                 self::SUCCESS => fn ($q) => $q->where('price_push_status', 'ok'),
                 self::FAILED => fn ($q) => $q->where('price_push_status', 'failed'),
             ],
+            default => [],
         };
         if (! isset($map[$status])) {
             return false;
@@ -219,96 +226,20 @@ class SyncActivityQuery
     private function row(string $type, Model $m): array
     {
         $accounts = $this->accounts();
-        $account = $accounts->get($m->marketplace_account_id);
+        $account = $accounts->get($m->getAttribute('marketplace_account_id'));
         $base = [
-            'id' => "{$type}:{$m->id}",
-            'key' => $m->id,
+            'id' => $type.':'.$m->getKey(),
+            'key' => $m->getKey(),
             'type' => $type,
             'account' => $account ? ['id' => $account->ulid, 'name' => $account->shop_name, 'marketplace' => $account->marketplace] : null,
         ];
 
-        $row = match ($type) {
-            'webhook' => [
-                'status' => match ($m->status) {
-                    WebhookEvent::RECEIVED => $m->attempts > 0 ? self::RETRY_SCHEDULED : self::PENDING,
-                    WebhookEvent::PROCESSED, WebhookEvent::IGNORED => self::SUCCESS,
-                    WebhookEvent::FAILED => self::DEAD_LETTER,
-                    WebhookEvent::CANCELLED => self::CANCELLED,
-                    default => self::FAILED,
-                },
-                'raw_status' => $m->status,
-                'object' => $m->external_order_id !== null ? "Đơn {$m->external_order_id}" : ($m->external_product_id !== null ? "Sản phẩm {$m->external_product_id}" : null),
-                'action' => $m->event_type,
-                'attempts' => (int) $m->attempts,
-                'next_retry_at' => null,
-                'message' => $m->result,
-                'error_code' => $m->error_code,
-                'correlation_id' => $m->correlation_id,
-                'created_at' => $m->received_at?->toIso8601String(),
-                'started_at' => null,
-                'completed_at' => $m->processed_at?->toIso8601String(),
-                'at' => $m->received_at?->format('YmdHis'),
-            ],
-            'stock_push' => [
-                'status' => match ($m->status) {
-                    InventorySyncOutbox::PENDING => $m->attempts > 0 ? self::RETRY_SCHEDULED : self::PENDING,
-                    InventorySyncOutbox::SUCCEEDED => self::SUCCESS,
-                    InventorySyncOutbox::FAILED => self::DEAD_LETTER,
-                    InventorySyncOutbox::CANCELLED => self::CANCELLED,
-                    default => self::FAILED,
-                },
-                'raw_status' => $m->status,
-                'object' => $m->listingVariant ? trim(($m->listingVariant->seller_sku ?? $m->listingVariant->external_sku_id).' · '.$m->listingVariant->name, ' ·') : null,
-                'action' => "Đẩy tồn = {$m->desired_qty}",
-                'attempts' => (int) $m->attempts,
-                'next_retry_at' => $m->status === InventorySyncOutbox::PENDING ? $m->next_attempt_at?->toIso8601String() : null,
-                'message' => $m->last_error,
-                'error_code' => $m->error_code,
-                'correlation_id' => $m->correlation_id,
-                'created_at' => $m->created_at?->toIso8601String(),
-                'started_at' => $m->last_attempt_at?->toIso8601String(),
-                'completed_at' => in_array($m->status, [InventorySyncOutbox::PENDING], true) ? null : $m->updated_at?->toIso8601String(),
-                'at' => $m->updated_at?->format('YmdHis'),
-            ],
-            'order_poll' => [
-                'status' => match ($m->status) {
-                    SyncRun::RUNNING => self::PROCESSING,
-                    SyncRun::OK => self::SUCCESS,
-                    default => self::FAILED,
-                },
-                'raw_status' => $m->status,
-                'object' => 'Đơn hàng thay đổi',
-                'action' => $m->trigger === 'user' ? 'Đồng bộ thủ công' : 'Đối soát định kỳ',
-                'attempts' => 1,
-                'next_retry_at' => null,
-                'message' => $m->error,
-                'error_code' => $m->error_code,
-                'correlation_id' => $m->correlation_id,
-                'counts' => (object) ($m->counts ?? []),
-                'created_at' => $m->started_at?->toIso8601String(),
-                'started_at' => $m->started_at?->toIso8601String(),
-                'completed_at' => $m->finished_at?->toIso8601String(),
-                'at' => $m->started_at?->format('YmdHis'),
-            ],
-            'price_push' => [
-                'status' => match ($m->price_push_status) {
-                    'pending' => self::PENDING,
-                    'ok' => self::SUCCESS,
-                    default => self::FAILED,
-                },
-                'raw_status' => $m->price_push_status,
-                'object' => trim(($m->seller_sku ?? $m->external_sku_id).' · '.$m->name, ' ·'),
-                'action' => 'Đẩy giá = '.number_format((float) $m->target_price, 0, ',', '.').' đ',
-                'attempts' => null,
-                'next_retry_at' => null,
-                'message' => $m->price_push_error,
-                'error_code' => null,
-                'correlation_id' => null,
-                'created_at' => $m->updated_at?->toIso8601String(),
-                'started_at' => null,
-                'completed_at' => $m->price_pushed_at?->toIso8601String(),
-                'at' => ($m->price_push_status === 'ok' ? $m->price_pushed_at : $m->updated_at)?->format('YmdHis'),
-            ],
+        $row = match (true) {
+            $m instanceof WebhookEvent => $this->webhookRow($m),
+            $m instanceof InventorySyncOutbox => $this->stockRow($m),
+            $m instanceof SyncRun => $this->pollRow($m),
+            $m instanceof ListingVariant => $this->priceRow($m),
+            default => throw new InvalidArgumentException('Unknown sync task '.$type),
         };
         $row['error_label'] = SyncErrorCode::label($row['error_code']);
         $row['duration_ms'] = $row['started_at'] && $row['completed_at']
@@ -318,6 +249,107 @@ class SyncActivityQuery
         $row['at'] = (string) $row['at'];
 
         return $base + $row;
+    }
+
+    /** @return array<string, mixed> */
+    private function webhookRow(WebhookEvent $m): array
+    {
+        return [
+            'status' => match ($m->status) {
+                WebhookEvent::RECEIVED => $m->attempts > 0 ? self::RETRY_SCHEDULED : self::PENDING,
+                WebhookEvent::PROCESSED, WebhookEvent::IGNORED => self::SUCCESS,
+                WebhookEvent::FAILED => self::DEAD_LETTER,
+                WebhookEvent::CANCELLED => self::CANCELLED,
+                default => self::FAILED,
+            },
+            'raw_status' => $m->status,
+            'object' => $m->external_order_id !== null ? "Đơn {$m->external_order_id}" : ($m->external_product_id !== null ? "Sản phẩm {$m->external_product_id}" : null),
+            'action' => $m->event_type,
+            'attempts' => (int) $m->attempts,
+            'next_retry_at' => null,
+            'message' => $m->result,
+            'error_code' => $m->error_code,
+            'correlation_id' => $m->correlation_id,
+            'created_at' => $m->received_at?->toIso8601String(),
+            'started_at' => null,
+            'completed_at' => $m->processed_at?->toIso8601String(),
+            'at' => $m->received_at?->format('YmdHis'),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function stockRow(InventorySyncOutbox $m): array
+    {
+        return [
+            'status' => match ($m->status) {
+                InventorySyncOutbox::PENDING => $m->attempts > 0 ? self::RETRY_SCHEDULED : self::PENDING,
+                InventorySyncOutbox::SUCCEEDED => self::SUCCESS,
+                InventorySyncOutbox::FAILED => self::DEAD_LETTER,
+                InventorySyncOutbox::CANCELLED => self::CANCELLED,
+                default => self::FAILED,
+            },
+            'raw_status' => $m->status,
+            'object' => $m->listingVariant ? trim(($m->listingVariant->seller_sku ?? $m->listingVariant->external_sku_id).' · '.$m->listingVariant->name, ' ·') : null,
+            'action' => "Đẩy tồn = {$m->desired_qty}",
+            'attempts' => (int) $m->attempts,
+            'next_retry_at' => $m->status === InventorySyncOutbox::PENDING ? $m->next_attempt_at?->toIso8601String() : null,
+            'message' => $m->last_error,
+            'error_code' => $m->error_code,
+            'correlation_id' => $m->correlation_id,
+            'created_at' => $m->created_at?->toIso8601String(),
+            'started_at' => $m->last_attempt_at?->toIso8601String(),
+            'completed_at' => in_array($m->status, [InventorySyncOutbox::PENDING], true) ? null : $m->updated_at?->toIso8601String(),
+            'at' => $m->updated_at?->format('YmdHis'),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function pollRow(SyncRun $m): array
+    {
+        return [
+            'status' => match ($m->status) {
+                SyncRun::RUNNING => self::PROCESSING,
+                SyncRun::OK => self::SUCCESS,
+                default => self::FAILED,
+            },
+            'raw_status' => $m->status,
+            'object' => 'Đơn hàng thay đổi',
+            'action' => $m->trigger === 'user' ? 'Đồng bộ thủ công' : 'Đối soát định kỳ',
+            'attempts' => 1,
+            'next_retry_at' => null,
+            'message' => $m->error,
+            'error_code' => $m->error_code,
+            'correlation_id' => $m->correlation_id,
+            'counts' => (object) ($m->counts ?? []),
+            'created_at' => $m->started_at?->toIso8601String(),
+            'started_at' => $m->started_at?->toIso8601String(),
+            'completed_at' => $m->finished_at?->toIso8601String(),
+            'at' => $m->started_at?->format('YmdHis'),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function priceRow(ListingVariant $m): array
+    {
+        return [
+            'status' => match ($m->price_push_status) {
+                'pending' => self::PENDING,
+                'ok' => self::SUCCESS,
+                default => self::FAILED,
+            },
+            'raw_status' => $m->price_push_status,
+            'object' => trim(($m->seller_sku ?? $m->external_sku_id).' · '.$m->name, ' ·'),
+            'action' => 'Đẩy giá = '.number_format((float) $m->target_price, 0, ',', '.').' đ',
+            'attempts' => null,
+            'next_retry_at' => null,
+            'message' => $m->price_push_error,
+            'error_code' => null,
+            'correlation_id' => null,
+            'created_at' => $m->updated_at?->toIso8601String(),
+            'started_at' => null,
+            'completed_at' => $m->price_pushed_at?->toIso8601String(),
+            'at' => ($m->price_push_status === 'ok' ? $m->price_pushed_at : $m->updated_at)?->format('YmdHis'),
+        ];
     }
 
     /** @var Collection<int, MarketplaceAccount>|null */

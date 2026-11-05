@@ -84,7 +84,7 @@ class SyncCenterController extends Controller
         if (! $row['can_retry']) {
             throw ValidationException::withMessages(['task' => 'Chỉ thử lại được tác vụ thất bại.']);
         }
-        $account = MarketplaceAccount::query()->findOrFail($model->marketplace_account_id);
+        $account = MarketplaceAccount::query()->findOrFail($model->getAttribute('marketplace_account_id'));
         if (! $account->isActive()) {
             throw ValidationException::withMessages(['task' => 'Shop đang mất kết nối. Kết nối lại ở trang Kết nối sàn trước khi thử lại.']);
         }
@@ -94,6 +94,7 @@ class SyncCenterController extends Controller
             'stock_push' => $this->retryStock($model, $account, $planner),
             'order_poll' => ReconcileShopJob::dispatch($account->id, 'user'),
             'price_push' => $this->retryPrice($model, $account),
+            default => abort(404),
         };
         $this->audit->record('sync.task_retried', $account, ['task' => $row['id'], 'object' => $row['object']]);
 
@@ -110,12 +111,13 @@ class SyncCenterController extends Controller
         }
 
         match ($type) {
-            'webhook' => WebhookEvent::query()->whereKey($model->id)->where('status', WebhookEvent::RECEIVED)
+            'webhook' => WebhookEvent::query()->whereKey($model->getKey())->where('status', WebhookEvent::RECEIVED)
                 ->update(['status' => WebhookEvent::CANCELLED, 'result' => 'Đã hủy từ Trung tâm đồng bộ', 'processed_at' => now()]),
-            'stock_push' => InventorySyncOutbox::query()->whereKey($model->id)->where('status', InventorySyncOutbox::PENDING)
+            'stock_push' => InventorySyncOutbox::query()->whereKey($model->getKey())->where('status', InventorySyncOutbox::PENDING)
                 ->update(['status' => InventorySyncOutbox::CANCELLED, 'last_error' => 'Đã hủy từ Trung tâm đồng bộ']),
+            default => abort(404),
         };
-        $this->audit->record('sync.task_cancelled', MarketplaceAccount::query()->find($model->marketplace_account_id), ['task' => $row['id'], 'object' => $row['object']]);
+        $this->audit->record('sync.task_cancelled', MarketplaceAccount::query()->find($model->getAttribute('marketplace_account_id')), ['task' => $row['id'], 'object' => $row['object']]);
 
         return response()->json(['data' => $this->activity->describe($type, $this->findTask($type, $id))]);
     }
