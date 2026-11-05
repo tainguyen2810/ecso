@@ -45,4 +45,10 @@ class MarketplacePolicy extends PermissionPolicy
     {
         return $this->allows('sync.logs.export');
     }
+
+    /** Sync Center: stock allocation per shop and SKU (Phân bổ tồn). */
+    public function configureSync(User $user): bool
+    {
+        return $this->allows('sync.configure');
+    }
 }

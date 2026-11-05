@@ -11,18 +11,19 @@ import { api } from '@/shared/lib/api';
 import { formatDateTime } from '@/shared/lib/utils';
 import type { SyncOverviewData } from '@/shared/types';
 import SyncLog from './SyncLog.vue';
+import Allocation from './sync-center/Allocation.vue';
 import Overview from './sync-center/Overview.vue';
 import Problems from './sync-center/Problems.vue';
 import Queue from './sync-center/Queue.vue';
 
 /**
  * Trung tâm đồng bộ (docs/SYNC_CENTER_AUDIT.md §15): one page under Kết nối sàn to watch and operate the sync that
- * already runs. Shops and API keys stay on Kết nối sàn; nothing here connects or configures a shop.
+ * already runs, and to set how much stock each shop publishes (Phân bổ tồn). Shops and API keys stay on Kết nối sàn.
  */
-type Tab = 'overview' | 'queue' | 'log' | 'problems';
+type Tab = 'overview' | 'queue' | 'log' | 'problems' | 'allocation';
 const route = useRoute();
 const router = useRouter();
-const tabs: Tab[] = ['overview', 'queue', 'log', 'problems'];
+const tabs: Tab[] = ['overview', 'queue', 'log', 'problems', 'allocation'];
 const tab = ref<Tab>(tabs.includes(route.query.tab as Tab) ? (route.query.tab as Tab) : 'overview');
 const overview = ref<SyncOverviewData | null>(null);
 const failed = ref(false);
@@ -72,6 +73,7 @@ const problemCount = computed(() => Object.values(overview.value?.problems.faile
                 { value: 'queue', label: 'Hàng đợi' },
                 { value: 'log', label: 'Nhật ký đơn' },
                 { value: 'problems', label: 'Lỗi cần xử lý', count: overview ? problemCount : null },
+                { value: 'allocation', label: 'Phân bổ tồn' },
             ]"
             data-testid="sync-center-tabs"
         />
@@ -83,6 +85,7 @@ const problemCount = computed(() => Object.values(overview.value?.problems.faile
         <Overview v-if="tab === 'overview'" :data="overview" @changed="load" />
         <Queue v-else-if="tab === 'queue'" :overview="overview" @changed="load" />
         <SyncLog v-else-if="tab === 'log'" embedded />
-        <Problems v-else :overview="overview" @changed="load" />
+        <Problems v-else-if="tab === 'problems'" :overview="overview" @changed="load" />
+        <Allocation v-else />
     </template>
 </template>

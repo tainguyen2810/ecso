@@ -33,3 +33,24 @@ test('sync center: overview, queue with task detail, problems, order log', async
     await page.getByTestId('sync-center-tabs').getByRole('button', { name: 'Nhật ký đơn' }).click();
     await expect(page.getByTestId('sync-account')).toBeVisible();
 });
+
+test('sync center: stock allocation per shop with a preview before saving', async ({ page }) => {
+    await login(page, 'owner@demo.test');
+    await page.goto('/marketplaces/sync?tab=allocation');
+    await expect(page.getByTestId('allocation-shops')).toContainText('Toàn bộ');
+    await shot(page, '04-phan-bo-ton');
+
+    await page.getByTestId('allocation-edit-shop').first().click();
+    await page.getByTestId('allocation-mode').getByRole('button', { name: 'Theo %' }).click();
+    await page.getByTestId('allocation-value').fill('50');
+    await page.getByTestId('allocation-buffer').fill('1');
+    await expect(page.getByTestId('allocation-preview')).toBeVisible();
+    await shot(page, '05-phan-bo-xem-truoc');
+    await page.getByTestId('allocation-save').click();
+    await expect(page.getByTestId('allocation-shops')).toContainText('50%');
+
+    // Back to publishing everything, so other specs see the usual numbers.
+    await page.getByTestId('allocation-edit-shop').first().click();
+    await page.getByTestId('allocation-reset').click();
+    await expect(page.getByTestId('allocation-shops')).toContainText('Toàn bộ');
+});

@@ -58,3 +58,29 @@ export function timeOnly(iso: string | null | undefined): string {
 
 /** Keys of an order poll's counts (sync_runs.counts). */
 export const countLabels: Record<string, string> = { created: 'mới', updated: 'cập nhật', unchanged: 'không đổi', skipped: 'bỏ qua', stale: 'cũ', failed: 'lỗi', ignored_transition: 'xung đột', deleted_on_channel: 'đã xóa' };
+
+export type AllocationMode = 'all' | 'percent' | 'fixed' | 'none';
+export interface AllocationRule {
+    mode: AllocationMode;
+    value: number | null;
+    buffer_qty: number;
+    max_qty: number | null;
+}
+
+export const allocationModes: { value: AllocationMode; label: string }[] = [
+    { value: 'all', label: 'Toàn bộ' },
+    { value: 'percent', label: 'Theo %' },
+    { value: 'fixed', label: 'Số cố định' },
+    { value: 'none', label: 'Không bán' },
+];
+
+export function ruleLabel(r: AllocationRule): string {
+    return { all: 'Toàn bộ', percent: `${r.value ?? 0}%`, fixed: `Cố định ${r.value ?? 0}`, none: 'Không bán' }[r.mode];
+}
+
+/** Same rule as AllocationCalculator::publish(): buffer first, then the mode, then the cap. */
+export function publish(sellable: number, r: AllocationRule): number {
+    const left = Math.max(0, sellable - Math.max(0, r.buffer_qty || 0));
+    const p = { all: left, percent: Math.floor((left * (r.value ?? 0)) / 100), fixed: Math.min(r.value ?? 0, left), none: 0 }[r.mode];
+    return r.max_qty === null || r.max_qty === undefined ? p : Math.min(p, Math.max(0, r.max_qty));
+}
