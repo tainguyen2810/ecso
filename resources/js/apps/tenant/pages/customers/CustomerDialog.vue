@@ -3,6 +3,8 @@ import { reactive, ref, watch } from 'vue';
 import { X } from 'lucide-vue-next';
 import Button from '@/shared/ui/Button.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
+import AddressPicker from '../../components/AddressPicker.vue';
+import { emptyAddress, type AddressParts } from '@/shared/lib/geo';
 import { customerSources, customerTypes } from './labels';
 import FormField from '@/shared/ui/FormField.vue';
 import Input from '@/shared/ui/Input.vue';
@@ -18,6 +20,9 @@ const toast = useToast();
 
 const empty = { name: '', code: '', phone: '', email: '', address: '', group_id: '', assigned_user_id: '', birthday: '', gender: '', tax_code: '', status: 'active', note: '', payment_terms_days: '', credit_limit: '', type: 'individual', source: '', invoice_name: '', invoice_address: '', invoice_email: '' };
 const form = reactive({ ...empty });
+// Standard address (province → ward → street); an old free-text address stays until one is picked.
+const addr = ref<AddressParts>(emptyAddress());
+const legacy = ref<string | null>(null);
 const tags = ref<string[]>([]);
 const tagInput = ref('');
 const groups = ref<CustomerGroup[]>([]);
@@ -43,6 +48,8 @@ watch(open, async (v) => {
               }
             : {},
     );
+    addr.value = c?.province_code ? { street: c.street ?? '', province_code: c.province_code, ward_code: c.ward_code ?? '' } : emptyAddress();
+    legacy.value = c && !c.province_code ? c.address || null : null;
     tags.value = [...(c?.tags ?? [])];
     tagInput.value = '';
     if (!loaded.value) {
@@ -67,6 +74,10 @@ async function save() {
     error.value = null;
     const body: Record<string, unknown> = { ...Object.fromEntries(Object.entries(form).map(([k, v]) => [k, v === '' ? null : v])), tags: tags.value };
     if (!props.customer) delete body.status;
+    if (addr.value.province_code) {
+        delete body.address;
+        Object.assign(body, { street: addr.value.street || null, province_code: addr.value.province_code, ward_code: addr.value.ward_code || null });
+    }
     try {
         const { data } = props.customer ? await api.put(`/customers/${props.customer.id}`, body) : await api.post('/customers', body);
         toast.success(props.customer ? 'Đã lưu khách hàng.' : `Đã thêm khách ${data.data.code}.`);
@@ -93,7 +104,16 @@ async function save() {
             <FormField label="Mã khách" for="c-code" :error="error?.field('code')" :hint="customer ? undefined : 'Để trống để hệ thống tự đánh mã KH-…'"><Input id="c-code" v-model="form.code" data-testid="c-code" /></FormField>
             <FormField label="Số điện thoại" for="c-phone" :error="error?.field('phone')"><Input id="c-phone" v-model="form.phone" inputmode="tel" data-testid="c-phone" /></FormField>
             <FormField label="Email" for="c-email" :error="error?.field('email')"><Input id="c-email" v-model="form.email" type="email" /></FormField>
-            <FormField label="Địa chỉ" for="c-address" class="sm:col-span-2" :error="error?.field('address')"><Input id="c-address" v-model="form.address" placeholder="Số nhà, đường, phường/xã, tỉnh/thành phố" /></FormField>
+            <div class="sm:col-span-2">
+                <AddressPicker
+                    v-model="addr"
+                    id-prefix="c-addr"
+                    :quick="!customer || !addr.ward_code"
+                    :legacy="legacy"
+                    :errors="{ street: error?.field('street'), province_code: error?.field('province_code'), ward_code: error?.field('ward_code') }"
+                />
+                <p v-if="error?.field('address')" class="mt-1 text-xs text-destructive">{{ error.field('address') }}</p>
+            </div>
             <FormField label="Nhóm khách hàng" for="c-group" :error="error?.field('group_id')">
                 <Select id="c-group" v-model="form.group_id" data-testid="c-group" :options="[{ value: '', label: 'Chưa xếp nhóm' }, ...groups.filter((g) => g.is_active !== false || g.id === props.customer?.group?.id).map((g) => ({ value: g.id, label: g.is_active === false ? `${g.name} (ngừng sử dụng)` : g.name }))]" />
             </FormField>

@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Địa chỉ chuẩn theo đơn vị hành chính mới, tạo đơn kiểu Sapo (2026-11-05)
+- **Danh mục 34 tỉnh/thành và 3.321 phường/xã** từ 1/7/2025 (NQ 202/2025/QH15, mã Tổng cục Thống kê), bảng `geo_provinces`, `geo_wards`, nạp từ `database/data/vn-admin-units.json` (dựng bằng `scripts/build-vn-admin-units.py`). Mỗi phường kèm tên phường/quận cũ đã sáp nhập, chỉ để tìm và đọc địa chỉ cũ; địa chỉ luôn lưu theo đơn vị mới.
+- **Địa chỉ có cấu trúc** (số nhà đường + phường + tỉnh) trên đơn (`shipping_street`, `shipping_province_code`, `shipping_ward_code`), khách, sổ địa chỉ, kho (địa chỉ lấy hàng) và cấu hình cửa hàng. Cột địa chỉ dạng chữ vẫn giữ và được ghép tự động. Địa chỉ cũ gõ tay vẫn dùng được, hiện cảnh báo "chưa chuẩn hóa" kèm gợi ý.
+- **Bộ chọn địa chỉ** dùng chung: chọn tỉnh, phường (gõ không dấu, gõ tên phường/quận cũ vẫn ra phường mới), "gõ nhanh" dán cả dòng để tự tách (API `GET /geo/suggest`).
+- **Tạo đơn**: bấm ô tìm khách (F4) hiện ngay khách mua gần đây, ↑↓ Enter để chọn; thẻ "Địa chỉ giao hàng" với "Thay đổi" từ sổ địa chỉ; chọn hãng GHN, Viettel Post, SPX, J&T hoặc tự giao. Đơn giao qua 4 hãng này (chưa có mã vận đơn) bắt buộc phường/xã, số nhà đường, tên và SĐT người nhận.
+- Sửa: danh sách đơn có thể hiện kết quả cũ khi đổi bộ lọc nhanh liên tiếp; thẻ khách ở màn tạo đơn không còn hiện ô tìm khách khi đã chọn khách; lỗi "khách ngừng giao dịch" khi tạo đơn giờ hiện ra.
+
 ### Khách hàng: lọc theo ngày đúng giờ Việt Nam, không xóa khách còn chứng từ (2026-11-05)
 - **Lọc "Mua lần cuối" và "Ngày thêm"** tính theo ngày của cửa hàng (giờ Việt Nam). Trước đây máy chủ tính theo giờ UTC nên đơn mua từ 00:00 đến 06:59 bị xếp vào ngày hôm trước. Số ngày "Chưa mua lại" ở trang khách cũng tính theo giờ cửa hàng.
 - **Không xóa được khách còn chứng từ**: ngoài đơn hàng, khách có nợ đầu kỳ hoặc phiếu điều chỉnh công nợ, thanh toán, phiếu thu chi hay lịch sử gộp đều không xóa được (xóa một khách và xóa hàng loạt). Trước đây khách có nợ đầu kỳ gây lỗi máy chủ khi xóa, còn khách có phiếu thu chi bị xóa và phiếu mất liên kết với khách. Hãy chuyển khách sang "Ngừng giao dịch".

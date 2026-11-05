@@ -3,6 +3,7 @@
 namespace App\Modules\Sales\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Geo\Services\VnAddress;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Http\Resources\OrderResource;
 use App\Modules\Orders\Models\Order;
@@ -296,6 +297,7 @@ class CustomerController extends Controller
             'phone' => ['nullable', 'string', 'max:20'],
             'email' => ['nullable', 'email', 'max:150'],
             'address' => ['nullable', 'string', 'max:500'],
+            ...VnAddress::rules(),
             'group_id' => ['nullable', 'string', 'max:40'],
             'assigned_user_id' => ['nullable', 'string', 'max:40'],
             'birthday' => ['nullable', 'date', 'before:today', 'after:1900-01-01'],

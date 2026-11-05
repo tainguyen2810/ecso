@@ -66,6 +66,7 @@ class Order extends Model
         return [
             'buyer_name' => 'encrypted',
             'shipping_address' => 'encrypted',
+            'shipping_street' => 'encrypted',
             'buyer_phone' => 'encrypted',
             'buyer_email' => 'encrypted',
             'addresses' => 'encrypted:array',

@@ -4,6 +4,7 @@ namespace App\Modules\Sales\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Catalog\Models\ProductVariant;
+use App\Modules\Geo\Services\VnAddress;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Services\ReservationLedger;
 use App\Modules\Inventory\Support\DocumentNumber;
@@ -59,6 +60,7 @@ class ManualOrderService
         private readonly PaymentService $payments,
         private readonly AuditLogger $audit,
         private readonly ExchangeService $exchanges,
+        private readonly VnAddress $addresses,
     ) {}
 
     /**
@@ -297,7 +299,6 @@ class ManualOrderService
     {
         $phone = array_key_exists('buyer_phone', $data) ? $data['buyer_phone'] : ($order->exists ? $order->buyer_phone : $customer?->phone);
         $name = array_key_exists('buyer_name', $data) ? $data['buyer_name'] : ($order->exists ? $order->buyer_name : $customer?->name);
-        $address = array_key_exists('shipping_address', $data) ? $data['shipping_address'] : ($order->exists ? $order->shipping_address : $customer?->address);
 
         $order->forceFill([
             'customer_id' => $customer?->id,
@@ -305,8 +306,13 @@ class ManualOrderService
             'buyer_phone' => $phone,
             'buyer_phone_masked' => OrderIngestor::maskPhone($phone),
             'buyer_phone_hash' => PhoneNumber::hash(PhoneNumber::normalize($phone)),
-            'shipping_address' => $address,
         ]);
+        // Delivery address: the standard parts (province, ward, street) or a free text; a new order without one
+        // takes the customer's address.
+        $addressSent = $this->addresses->apply($order, $data, 'shipping_', 'shipping_address', 'shipping_');
+        if (! $addressSent && ! $order->exists && $customer !== null) {
+            $order->forceFill(['shipping_address' => $customer->address] + array_combine(['shipping_street', 'shipping_province_code', 'shipping_ward_code'], VnAddress::partsOf($customer)));
+        }
 
         foreach (['shipping_fee', 'discount'] as $field) {
             if (array_key_exists($field, $data)) {
@@ -324,6 +330,20 @@ class ManualOrderService
         if (array_key_exists('is_cod', $data)) {
             $order->is_cod = (bool) $data['is_cod'];
             $order->payment_method = $data['is_cod'] ? 'cod' : $order->payment_method;
+        }
+
+        // A carrier can only take an order with a standard address and a recipient to call. An order that already has
+        // its tracking number was booked with the carrier elsewhere: nothing left to send.
+        if (($addressSent || array_key_exists('carrier', $data)) && in_array($order->shipping_carrier, VnAddress::CARRIERS, true) && blank($order->tracking_number)) {
+            $missing = array_filter([
+                'shipping_ward_code' => blank($order->shipping_ward_code) ? "Đơn giao qua {$order->shipping_carrier} cần chọn Tỉnh/Thành phố và Phường/Xã." : null,
+                'shipping_street' => blank($order->shipping_street) ? 'Nhập số nhà, tên đường để hãng vận chuyển giao được.' : null,
+                'buyer_name' => blank($order->buyer_name) ? 'Nhập tên người nhận.' : null,
+                'buyer_phone' => blank($order->buyer_phone) ? 'Nhập số điện thoại người nhận.' : null,
+            ]);
+            if ($missing !== []) {
+                throw ValidationException::withMessages($missing);
+            }
         }
     }
 

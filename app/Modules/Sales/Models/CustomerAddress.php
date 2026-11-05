@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * An extra delivery address of a customer (the main one stays on the customer). Phone and address are encrypted.
+ * street/province_code/ward_code hold the standard parts when the address was picked from the province/ward lists.
  */
 class CustomerAddress extends Model
 {
@@ -19,6 +20,6 @@ class CustomerAddress extends Model
 
     protected function casts(): array
     {
-        return ['phone' => 'encrypted', 'address' => 'encrypted'];
+        return ['phone' => 'encrypted', 'address' => 'encrypted', 'street' => 'encrypted'];
     }
 }

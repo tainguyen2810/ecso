@@ -74,7 +74,7 @@ class Customer extends Model
 
     protected function casts(): array
     {
-        return ['phone' => 'encrypted', 'address' => 'encrypted', 'invoice_address' => 'encrypted', 'birthday' => 'date', 'tags' => 'array', 'credit_limit' => 'decimal:2'];
+        return ['phone' => 'encrypted', 'address' => 'encrypted', 'street' => 'encrypted', 'invoice_address' => 'encrypted', 'birthday' => 'date', 'tags' => 'array', 'credit_limit' => 'decimal:2'];
     }
 
     public function setPhone(?string $phone): void

@@ -4,6 +4,7 @@ namespace App\Modules\Sales\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Catalog\Models\ProductVariant;
+use App\Modules\Geo\Services\VnAddress;
 use App\Modules\Orders\Http\Resources\OrderResource;
 use App\Modules\Orders\Http\Resources\ReturnResource;
 use App\Modules\Orders\Models\Order;
@@ -177,9 +178,11 @@ class SalesOrderController extends Controller
             'customer.name' => ['required_with:customer', 'string', 'max:150'],
             'customer.phone' => ['nullable', 'string', 'max:20'],
             'customer.address' => ['nullable', 'string', 'max:500'],
+            ...VnAddress::rules('customer.'),
             'buyer_name' => ['nullable', 'string', 'max:150'],
             'buyer_phone' => ['nullable', 'string', 'max:20'],
             'shipping_address' => ['nullable', 'string', 'max:500'],
+            ...VnAddress::rules('shipping_'),
             'shipping_fee' => ['nullable', 'numeric', 'min:0', 'max:999999999'],
             'discount' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             'is_cod' => ['boolean'],

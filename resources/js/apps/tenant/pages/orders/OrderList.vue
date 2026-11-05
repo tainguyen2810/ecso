@@ -141,7 +141,10 @@ function query() {
     };
 }
 
+// Filters change quickly (a flag on and off): only the answer to the latest request may fill the table.
+let loadSeq = 0;
 async function load() {
+    const seq = ++loadSeq;
     loading.value = true;
     loadError.value = null;
     router.replace({
@@ -154,14 +157,15 @@ async function load() {
     });
     try {
         const { data } = await api.get('/orders', { params: query() });
+        if (seq !== loadSeq) return;
         orders.value = data.data;
         meta.value = data.meta;
         counts.value = data.meta.counts ?? {};
         selected.value = new Set([...selected.value].filter((id) => orders.value.some((o) => o.id === id)));
     } catch (e) {
-        loadError.value = (e as ApiError).message;
+        if (seq === loadSeq) loadError.value = (e as ApiError).message;
     } finally {
-        loading.value = false;
+        if (seq === loadSeq) loading.value = false;
     }
 }
 
