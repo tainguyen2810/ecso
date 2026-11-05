@@ -12,6 +12,7 @@ use App\Modules\Cashbook\Support\PeriodLock;
 use App\Modules\Inventory\Support\DocumentNumber;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Sales\Services\PaymentService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -198,6 +199,33 @@ class CodReconciliationService
                 'fee_voucher_id' => $fee?->id,
             ])->save();
             $this->audit->record('cash.cod_reconciled', $rec, ['number' => $rec->number, 'carrier' => $rec->carrier, 'lines' => count($rows), 'booked' => $totals['booked'], 'fee' => $totals['fee']]);
+
+            return $rec;
+        });
+    }
+
+    /**
+     * Voids a booked statement typed or imported by mistake: every order payment it booked and its fee voucher are
+     * voided with it, so the fund and the orders go back to before. The order payments' days must still be open.
+     */
+    public function void(CodReconciliation $rec, string $reason): CodReconciliation
+    {
+        return DB::transaction(function () use ($rec, $reason) {
+            $rec = CodReconciliation::query()->whereKey($rec->id)->lockForUpdate()->firstOrFail();
+            if ($rec->voided_at !== null) {
+                throw ValidationException::withMessages(['reconciliation' => 'Phiên đối soát đã hủy.']);
+            }
+            $note = "Hủy đối soát {$rec->number}: {$reason}";
+            $paymentIds = CodReconciliationLine::query()->where('cod_reconciliation_id', $rec->id)->whereNotNull('order_payment_id')->pluck('order_payment_id');
+            foreach (OrderPayment::query()->whereIn('id', $paymentIds)->whereNull('voided_at')->get() as $payment) {
+                $this->payments->void($payment, mb_substr($note, 0, 255));
+            }
+            $fee = $rec->fee_voucher_id ? CashVoucher::query()->find($rec->fee_voucher_id) : null;
+            if ($fee !== null && $fee->voided_at === null) {
+                $this->vouchers->void($fee, mb_substr($note, 0, 255));
+            }
+            $rec->forceFill(['voided_at' => now(), 'voided_by' => Auth::id(), 'void_reason' => $reason])->save();
+            $this->audit->record('cash.cod_reconciliation_voided', $rec, ['number' => $rec->number, 'reason' => $reason]);
 
             return $rec;
         });

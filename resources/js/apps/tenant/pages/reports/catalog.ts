@@ -225,6 +225,36 @@ export const reports: Record<string, DetailReport> = {
             { key: 'net', label: 'Thực thu', type: 'money', total: true, tone: negative('net') },
         ],
     },
+    'cash-by-type': {
+        key: 'cash-by-type',
+        title: 'Thu chi theo loại',
+        description: 'Tiền vào và tiền ra của cửa hàng theo loại phiếu, tiền khách trả, tiền trả nhà cung cấp, từng tháng.',
+        endpoint: '/reports/cash-by-type',
+        permission: 'finance.view',
+        period: 'range',
+        tabs: { type: 'Theo loại, từng tháng', month: 'Theo tháng' },
+        empty: 'Không có khoản thu chi nào trong kỳ.',
+        note: 'Đọc từ sổ quỹ nên luôn khớp sổ quỹ. Chuyển tiền giữa các quỹ không tính. Khoản chi ghi số âm. Phiếu chờ duyệt và phiếu đã hủy không tính.',
+        kpis: (d) => [
+            { label: 'Tổng thu', value: d.totals.in, type: 'money' },
+            { label: 'Tổng chi', value: d.totals.out, type: 'money' },
+            { label: 'Chênh lệch', value: d.totals.in - d.totals.out, type: 'money' },
+        ],
+        columns: (d, by) =>
+            by === 'month'
+                ? [
+                      { key: 'label', label: 'Tháng', value: (r) => `${r.label.slice(5, 7)}/${r.label.slice(0, 4)}` },
+                      { key: 'entries', label: 'Số khoản', type: 'number', total: true },
+                      { key: 'in', label: 'Thu', type: 'money', total: true },
+                      { key: 'out', label: 'Chi', type: 'money', total: true },
+                      { key: 'net', label: 'Chênh lệch', type: 'money', total: true, tone: negative('net') },
+                  ]
+                : [
+                      { key: 'label', label: 'Loại', sub: (r) => (r.direction === 'in' ? 'Thu' : 'Chi') },
+                      ...((d?.months ?? []) as string[]).map((m) => ({ key: `m${m}`, label: `T${m.slice(5, 7)}/${m.slice(2, 4)}`, type: 'money' as const, total: true, tone: negative(`m${m}`) })),
+                      { key: 'total', label: 'Cả kỳ', type: 'money', total: true, tone: negative('total') },
+                  ],
+    },
     purchases: {
         key: 'purchases',
         title: 'Nhập hàng',
@@ -440,6 +470,7 @@ export const reports: Record<string, DetailReport> = {
         kpis: (d) => [
             { label: 'Nhà cung cấp còn nợ', value: d.totals.suppliers, type: 'number' },
             { label: 'Tổng phải trả', value: d.totals.debt, type: 'money' },
+            { label: 'Nợ quá hạn', value: d.totals.overdue ?? 0, type: 'money' },
         ],
         columns: () => [
             { key: 'supplier', label: 'Nhà cung cấp', value: (r) => r.supplier.name, sub: (r) => r.supplier.code, link: (r) => `/purchasing/suppliers/${r.supplier.id}` },
@@ -447,6 +478,8 @@ export const reports: Record<string, DetailReport> = {
             { key: 'purchased', label: 'Tiền hàng đã nhận', type: 'money' },
             { key: 'paid', label: 'Đã trả', type: 'money' },
             { key: 'debt', label: 'Còn nợ', type: 'money', total: true, tone: (r) => (r.debt > 0 ? 'danger' : 'success') },
+            { key: 'overdue', label: 'Quá hạn', type: 'money', total: true, tone: (r) => (r.overdue > 0 ? 'danger' : undefined) },
+            { key: 'terms_days', label: 'Hạn trả', value: (r) => (r.terms_days == null ? '—' : `${r.terms_days} ngày`) },
         ],
     },
 };

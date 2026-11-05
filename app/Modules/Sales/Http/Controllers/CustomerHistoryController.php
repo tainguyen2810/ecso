@@ -12,10 +12,10 @@ use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\CustomerMerge;
 use App\Modules\Sales\Services\CustomerLedger;
 use App\Modules\Tenancy\Support\TenantContext;
+use App\Shared\Support\SafeRow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use OpenSpout\Common\Entity\Row;
 use OpenSpout\Writer\XLSX\Writer as XlsxWriter;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -81,11 +81,11 @@ class CustomerHistoryController extends Controller
         return response()->streamDownload(function () use ($customer, $lines, $labels) {
             $writer = new XlsxWriter;
             $writer->openToFile('php://output');
-            $writer->addRow(Row::fromValues(["Sổ công nợ {$customer->code} · {$customer->name}", 'Xuất lúc '.now()->format('d/m/Y H:i')]));
-            $writer->addRow(Row::fromValues(['Ngày', 'Loại', 'Chứng từ', 'Diễn giải', 'Phát sinh tăng', 'Phát sinh giảm', 'Còn nợ']));
+            $writer->addRow(SafeRow::fromValues(["Sổ công nợ {$customer->code} · {$customer->name}", 'Xuất lúc '.now()->format('d/m/Y H:i')]));
+            $writer->addRow(SafeRow::fromValues(['Ngày', 'Loại', 'Chứng từ', 'Diễn giải', 'Phát sinh tăng', 'Phát sinh giảm', 'Còn nợ']));
             foreach ($lines as $l) {
                 $change = (float) $l['change'];
-                $writer->addRow(Row::fromValues([
+                $writer->addRow(SafeRow::fromValues([
                     $l['at'] ? date('d/m/Y H:i', (int) strtotime($l['at'])) : '', $labels[$l['type']] ?? $l['type'], (string) $l['ref'], (string) $l['note'],
                     $change > 0 ? $change : '', $change < 0 ? -$change : '', (float) $l['balance'],
                 ]));

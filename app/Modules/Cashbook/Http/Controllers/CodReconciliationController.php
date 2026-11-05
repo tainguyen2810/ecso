@@ -17,7 +17,7 @@ class CodReconciliationController extends Controller
     public function index(): JsonResponse
     {
         $this->authorize('viewAny', CashVoucher::class);
-        $page = CodReconciliation::query()->with(['account:id,ulid,name', 'creator:id,name'])->latest('remitted_at')->latest('id')->paginate(20);
+        $page = CodReconciliation::query()->with(['account:id,ulid,name', 'creator:id,name', 'voider:id,name'])->latest('remitted_at')->latest('id')->paginate(20);
 
         return response()->json([
             'data' => collect($page->items())->map(fn (CodReconciliation $r) => $this->row($r))->values(),
@@ -29,7 +29,7 @@ class CodReconciliationController extends Controller
     public function show(CodReconciliation $codReconciliation): JsonResponse
     {
         $this->authorize('view', CashVoucher::class);
-        $r = $codReconciliation->load(['account:id,ulid,name', 'creator:id,name', 'feeVoucher:id,ulid,number', 'lines.order:id,ulid,external_order_id']);
+        $r = $codReconciliation->load(['account:id,ulid,name', 'creator:id,name', 'voider:id,name', 'feeVoucher:id,ulid,number', 'lines.order:id,ulid,external_order_id']);
 
         return response()->json(['data' => [
             ...$this->row($r),
@@ -89,6 +89,15 @@ class CodReconciliationController extends Controller
         ];
     }
 
+    public function void(Request $request, CodReconciliation $codReconciliation, CodReconciliationService $service): JsonResponse
+    {
+        $this->authorize('void', CashVoucher::class);
+        $data = $request->validate(['reason' => ['required', 'string', 'max:255']]);
+        $rec = $service->void($codReconciliation, $data['reason']);
+
+        return response()->json(['data' => $this->row($rec->load(['account', 'creator', 'voider']))]);
+    }
+
     /** @return array<string, mixed> */
     private function row(CodReconciliation $r): array
     {
@@ -110,6 +119,9 @@ class CodReconciliationController extends Controller
             'note' => $r->note,
             'created_by' => $r->creator?->name,
             'created_at' => $r->created_at?->toIso8601String(),
+            'voided_at' => $r->voided_at?->toIso8601String(),
+            'voided_by' => $r->voided_at ? $r->voider?->name : null,
+            'void_reason' => $r->void_reason,
         ];
     }
 }

@@ -13,7 +13,7 @@ const props = defineProps<{ supplier?: Supplier | null }>();
 const emit = defineEmits<{ saved: [supplier: Supplier] }>();
 const toast = useToast();
 
-const form = reactive({ name: '', contact_name: '', phone: '', email: '', address: '', tax_code: '', note: '', is_active: true });
+const form = reactive({ name: '', contact_name: '', phone: '', email: '', address: '', tax_code: '', payment_terms_days: '' as string | number, note: '', is_active: true });
 const saving = ref(false);
 const error = ref<ApiError | null>(null);
 
@@ -28,6 +28,7 @@ watch(open, (v) => {
         email: s?.email ?? '',
         address: s?.address ?? '',
         tax_code: s?.tax_code ?? '',
+        payment_terms_days: s?.payment_terms_days ?? '',
         note: s?.note ?? '',
         is_active: s?.is_active ?? true,
     });
@@ -58,6 +59,7 @@ async function save() {
             <FormField label="Số điện thoại" for="s-phone" :error="error?.field('phone')"><Input id="s-phone" v-model="form.phone" inputmode="tel" data-testid="s-phone" /></FormField>
             <FormField label="Email" for="s-email" :error="error?.field('email')"><Input id="s-email" v-model="form.email" type="email" /></FormField>
             <FormField label="Mã số thuế" for="s-tax"><Input id="s-tax" v-model="form.tax_code" /></FormField>
+            <FormField label="Hạn thanh toán (ngày sau khi nhận hàng)" for="s-terms" :error="error?.field('payment_terms_days')"><Input id="s-terms" v-model="form.payment_terms_days" type="number" min="0" max="365" placeholder="Để trống: không tính quá hạn" data-testid="s-terms" /></FormField>
             <FormField label="Địa chỉ" for="s-address" class="sm:col-span-2"><Input id="s-address" v-model="form.address" /></FormField>
             <FormField label="Ghi chú" for="s-note" class="sm:col-span-2"><Input id="s-note" v-model="form.note" /></FormField>
             <label v-if="supplier" class="flex items-center gap-2 text-sm sm:col-span-2"><input v-model="form.is_active" type="checkbox" class="size-4" /> Đang giao dịch</label>

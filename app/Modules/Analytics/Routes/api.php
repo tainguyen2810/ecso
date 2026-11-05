@@ -12,6 +12,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::get('reports/sales', [AnalyticsController::class, 'sales']);
     Route::get('reports/stock-ledger', [AnalyticsController::class, 'stockLedger']);
     Route::get('reports/cashbook', [AnalyticsController::class, 'cashbook']);
+    Route::get('reports/cashbook/export', [AnalyticsController::class, 'cashbookExport'])->middleware('throttle:10,1,reports.cashbook.export');
 
     Route::get('reports/overview', [ReportsController::class, 'overview']);
     Route::get('reports/product-sales', [ReportsController::class, 'productSales']);
@@ -20,6 +21,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::get('reports/stock-detail', [ReportsController::class, 'stockDetail']);
     Route::get('reports/returns', [ReportsController::class, 'returns']);
     Route::get('reports/payments', [ReportsController::class, 'payments']);
+    Route::get('reports/cash-by-type', [ReportsController::class, 'cashByType']);
     Route::get('reports/purchases', [ReportsController::class, 'purchases']);
     Route::get('reports/customers', [ReportsController::class, 'customers']);
     Route::get('reports/supplier-payments', [ReportsController::class, 'supplierPayments']);

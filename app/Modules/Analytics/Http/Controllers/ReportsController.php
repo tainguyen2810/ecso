@@ -10,6 +10,7 @@ use App\Modules\Analytics\Services\StockReports;
 use App\Modules\Analytics\Services\TradeReports;
 use App\Modules\Analytics\Support\ProfitFields;
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Cashbook\Services\CashTypeReport;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Tenancy\Support\TenantContext;
@@ -101,6 +102,15 @@ class ReportsController extends Controller
         [$from, $to] = $this->range($request);
 
         return response()->json(['data' => $trade->payments($from, $to, $this->by($request, ['method', 'staff', 'day', 'warehouse']))]);
+    }
+
+    /** Money in and out by kind (voucher type, customer and supplier payments), month by month. */
+    public function cashByType(Request $request, CashTypeReport $report): JsonResponse
+    {
+        $this->allow('finance.view');
+        [$from, $to] = $this->range($request);
+
+        return response()->json(['data' => $report->build($from, $to, $this->by($request, ['type', 'month']))]);
     }
 
     public function purchases(Request $request, TradeReports $trade): JsonResponse

@@ -10,6 +10,7 @@ use App\Modules\Analytics\Services\SalesReport;
 use App\Modules\Analytics\Support\ProfitFields;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Cashbook\Models\CashAccount;
+use App\Modules\Cashbook\Services\CashbookExporter;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Sales\Models\SalesChannel;
@@ -19,6 +20,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AnalyticsController extends Controller
 {
@@ -143,6 +145,20 @@ class AnalyticsController extends Controller
             ...$book,
             'account' => $account ? ['id' => $account->ulid, 'name' => $account->name, 'kind' => $account->kind] : null,
         ]]);
+    }
+
+    /** The cash book of the period as an Excel file, every row (the screen lists the newest rows only). */
+    public function cashbookExport(Request $request, TenantContext $context, CashbookExporter $exporter): StreamedResponse
+    {
+        abort_unless($context->can('finance.view'), 403);
+        [$from, $to] = $this->range($request);
+        $data = $request->validate([
+            'method' => ['nullable', Rule::in(['cash', 'bank_transfer', 'card', 'ewallet', 'cod', 'other'])],
+            'account' => ['nullable', 'string', 'max:40'],
+        ]);
+        $account = isset($data['account']) ? (CashAccount::query()->where('ulid', $data['account'])->first() ?? abort(404)) : null;
+
+        return $exporter->stream($from, $to, $data['method'] ?? null, $account);
     }
 
     /** @return array{0: CarbonImmutable, 1: CarbonImmutable} */

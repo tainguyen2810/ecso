@@ -14,10 +14,10 @@ use App\Modules\Marketplace\Services\FeeAnalyzer;
 use App\Modules\Marketplace\Services\MarketplacePriceBoard;
 use App\Modules\Marketplace\Services\MarketplacePricing;
 use App\Modules\Marketplace\Services\SettlementImporter;
+use App\Shared\Support\SafeRow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use OpenSpout\Common\Entity\Row;
 use OpenSpout\Writer\XLSX\Writer as XlsxWriter;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -226,9 +226,9 @@ class MarketplacePricingController extends Controller
         return response()->streamDownload(function () use ($rows) {
             $writer = new XlsxWriter;
             $writer->openToFile('php://output');
-            $writer->addRow(Row::fromValues(['Mã sản phẩm sàn', 'Mã phân loại sàn', 'SKU người bán', 'Tên sản phẩm', 'Giá hiện tại', 'Giá mới']));
+            $writer->addRow(SafeRow::fromValues(['Mã sản phẩm sàn', 'Mã phân loại sàn', 'SKU người bán', 'Tên sản phẩm', 'Giá hiện tại', 'Giá mới']));
             foreach ($rows as $r) {
-                $writer->addRow(Row::fromValues([$r['external_product_id'], $r['external_sku_id'], $r['seller_sku'], $r['name'], $r['current'], $r['new']]));
+                $writer->addRow(SafeRow::fromValues([$r['external_product_id'], $r['external_sku_id'], $r['seller_sku'], $r['name'], $r['current'], $r['new']]));
             }
             $writer->close();
         }, $filename, ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
@@ -293,8 +293,8 @@ class MarketplacePricingController extends Controller
         return response()->streamDownload(function () {
             $writer = new XlsxWriter;
             $writer->openToFile('php://output');
-            $writer->addRow(Row::fromValues(['Mã đơn hàng', 'Ngày đối soát', 'Giá trị hàng', 'Phí hoa hồng', 'Phí thanh toán', 'Phí dịch vụ', 'Phí cố định mỗi đơn', 'Phí vận chuyển sàn trừ', 'Thực nhận']));
-            $writer->addRow(Row::fromValues(['2511040001ABC', '04/11/2026', 570600, 51354, 27959, 34236, 3000, 0, 454051]));
+            $writer->addRow(SafeRow::fromValues(['Mã đơn hàng', 'Ngày đối soát', 'Giá trị hàng', 'Phí hoa hồng', 'Phí thanh toán', 'Phí dịch vụ', 'Phí cố định mỗi đơn', 'Phí vận chuyển sàn trừ', 'Thực nhận']));
+            $writer->addRow(SafeRow::fromValues(['2511040001ABC', '04/11/2026', 570600, 51354, 27959, 34236, 3000, 0, 454051]));
             $writer->close();
         }, 'mau-doi-soat-san.xlsx', ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
     }

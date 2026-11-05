@@ -9,10 +9,13 @@ import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
+import FormField from '@/shared/ui/FormField.vue';
+import Input from '@/shared/ui/Input.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { formatDateTime, formatMoney } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
+import { useToast } from '@/shared/composables/useToast';
 import { codStatuses, type CodReconciliation } from './cod';
 
 /** Đối soát COD: statements imported from carriers' files, each booking COD collections and the carrier's fees. */
@@ -39,6 +42,32 @@ onMounted(load);
 
 async function open(r: CodReconciliation) {
     detail.value = (await api.get(`/cod-reconciliations/${r.id}`)).data.data;
+}
+// Void the whole statement: its order payments and fee voucher are voided with it.
+const toast = useToast();
+const voiding = ref(false);
+const voidReason = ref('');
+const voidError = ref<ApiError | null>(null);
+const busy = ref(false);
+function startVoid() {
+    voidReason.value = '';
+    voidError.value = null;
+    voiding.value = true;
+}
+async function confirmVoid() {
+    busy.value = true;
+    voidError.value = null;
+    try {
+        await api.post(`/cod-reconciliations/${detail.value!.id}/void`, { reason: voidReason.value });
+        toast.success(`Đã hủy phiên đối soát ${detail.value!.number}.`);
+        voiding.value = false;
+        detail.value = (await api.get(`/cod-reconciliations/${detail.value!.id}`)).data.data;
+        load();
+    } catch (e) {
+        voidError.value = e as ApiError;
+    } finally {
+        busy.value = false;
+    }
 }
 function saved(r: CodReconciliation) {
     load();
@@ -75,8 +104,8 @@ function saved(r: CodReconciliation) {
                     </tr>
                 </thead>
                 <tbody class="divide-y">
-                    <tr v-for="r in rows" :key="r.id" class="cursor-pointer hover:bg-muted/30" @click="open(r)">
-                        <td class="px-4 py-2.5"><div class="font-mono text-xs font-medium">{{ r.number }}</div><div class="max-w-48 truncate text-xs text-muted-foreground">{{ r.file_name }}</div></td>
+                    <tr v-for="r in rows" :key="r.id" :class="['cursor-pointer hover:bg-muted/30', r.voided_at && 'opacity-60']" @click="open(r)">
+                        <td class="px-4 py-2.5"><div class="font-mono text-xs font-medium">{{ r.number }} <Badge v-if="r.voided_at" tone="danger">Đã hủy</Badge></div><div class="max-w-48 truncate text-xs text-muted-foreground">{{ r.file_name }}</div></td>
                         <td class="px-4 py-2.5">{{ r.carrier_name }}</td>
                         <td class="px-4 py-2.5">{{ formatDateTime(r.remitted_at) }}<div class="text-xs text-muted-foreground">{{ r.created_by }}</div></td>
                         <td class="px-4 py-2.5">{{ r.account?.name ?? '—' }}</td>
@@ -94,6 +123,9 @@ function saved(r: CodReconciliation) {
 
     <Dialog v-model:open="detailOpen" :title="detail ? `Đối soát ${detail.number} · ${detail.carrier_name}` : ''" size="xl">
         <div v-if="detail" class="space-y-3 text-sm" data-testid="cod-detail">
+            <p v-if="detail.voided_at" class="rounded-md bg-rose-50 px-3 py-2 text-rose-700" data-testid="cod-voided">
+                Đã hủy {{ formatDateTime(detail.voided_at) }}<template v-if="detail.voided_by"> bởi {{ detail.voided_by }}</template>: {{ detail.void_reason }}. Các khoản thu trên đơn và phiếu phí đã được hủy theo.
+            </p>
             <p class="text-muted-foreground">
                 Tiền về {{ formatDateTime(detail.remitted_at) }}, vào quỹ {{ detail.account?.name ?? '—' }}. Đã ghi {{ formatMoney(detail.total_booked) }} vào đơn,
                 phí {{ formatMoney(detail.total_fee) }}<template v-if="detail.fee_voucher"> (phiếu {{ detail.fee_voucher.number }})</template>.
@@ -116,5 +148,17 @@ function saved(r: CodReconciliation) {
                 </table>
             </div>
         </div>
+        <template v-if="detail && !detail.voided_at && tenant.can('finance.vouchers.void')" #footer>
+            <Button variant="outline" class="text-destructive" data-testid="cod-void" @click="startVoid">Hủy phiên đối soát</Button>
+        </template>
+    </Dialog>
+
+    <Dialog v-model:open="voiding" title="Hủy phiên đối soát" description="Mọi khoản thu COD đã ghi vào đơn và phiếu phí của phiên này sẽ bị hủy theo. Quỹ và đơn trở về như trước khi đối soát.">
+        <FormField label="Lý do" :error="voidError?.field('reason')"><Input v-model="voidReason" data-testid="cod-void-reason" placeholder="Ví dụ: nhập nhầm file" /></FormField>
+        <p v-if="voidError && !voidError.field('reason')" class="mt-2 text-sm text-destructive">{{ voidError.message }}</p>
+        <template #footer>
+            <Button variant="outline" @click="voiding = false">Đóng</Button>
+            <Button variant="destructive" :loading="busy" :disabled="!voidReason.trim()" data-testid="cod-void-confirm" @click="confirmVoid">Hủy phiên</Button>
+        </template>
     </Dialog>
 </template>

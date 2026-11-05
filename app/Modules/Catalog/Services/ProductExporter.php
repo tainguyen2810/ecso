@@ -5,8 +5,8 @@ namespace App\Modules\Catalog\Services;
 use App\Modules\Access\Support\DataAccess;
 use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Tenancy\Support\TenantContext;
+use App\Shared\Support\SafeRow;
 use Illuminate\Support\Facades\DB;
-use OpenSpout\Common\Entity\Row;
 use OpenSpout\Writer\CSV\Writer as CsvWriter;
 use OpenSpout\Writer\XLSX\Writer as XlsxWriter;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -37,7 +37,8 @@ class ProductExporter
     {
         $writer = $format === 'xlsx' ? new XlsxWriter : new CsvWriter;
         $writer->openToFile('php://output');
-        $writer->addRow(Row::fromValues(self::COLUMNS));
+        $csv = $format === 'csv';
+        $writer->addRow(SafeRow::fromValues(self::COLUMNS, $csv));
 
         $stock = DB::table('stock_balances')
             ->where('tenant_id', app(TenantContext::class)->id())
@@ -51,15 +52,15 @@ class ProductExporter
             ->whereHas('product')
             ->select('product_variants.*', 's.on_hand', 's.reserved')
             ->orderBy('product_variants.product_id')->orderBy('product_variants.id')
-            ->chunk(1000, function ($variants) use ($writer, $seesCost) {
+            ->chunk(1000, function ($variants) use ($writer, $seesCost, $csv) {
                 foreach ($variants as $v) {
-                    $writer->addRow(Row::fromValues([
+                    $writer->addRow(SafeRow::fromValues([
                         $v->product->ulid, $v->product->name, $v->sku, (string) $v->name, (string) $v->barcode,
                         (string) $v->product->category?->name, (string) $v->product->brand?->name,
                         (string) $v->ref_price, (string) $v->weight_gram, $v->status, $seesCost ? (string) $v->cost_price : '',
                         (int) $v->on_hand, (int) $v->reserved, (int) $v->on_hand - (int) $v->reserved,
                         (string) $v->wholesale_price, (string) $v->product->unit,
-                    ]));
+                    ], $csv));
                 }
             });
 

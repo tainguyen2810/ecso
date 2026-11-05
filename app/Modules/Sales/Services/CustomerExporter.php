@@ -5,8 +5,8 @@ namespace App\Modules\Sales\Services;
 use App\Modules\Sales\Http\Controllers\CustomerController;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Tenancy\Support\TenantContext;
+use App\Shared\Support\SafeRow;
 use Illuminate\Support\Carbon;
-use OpenSpout\Common\Entity\Row;
 use OpenSpout\Writer\CSV\Writer as CsvWriter;
 use OpenSpout\Writer\XLSX\Writer as XlsxWriter;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -49,22 +49,23 @@ class CustomerExporter
     {
         $writer = $format === 'xlsx' ? new XlsxWriter : new CsvWriter;
         $writer->openToFile('php://output');
-        $writer->addRow(Row::fromValues([...array_values(CustomerImporter::COLUMNS), ...self::EXTRA]));
+        $csv = $format === 'csv';
+        $writer->addRow(SafeRow::fromValues([...array_values(CustomerImporter::COLUMNS), ...self::EXTRA], $csv));
         $genders = ['male' => 'Nam', 'female' => 'Nữ', 'other' => 'Khác'];
         $statuses = ['active' => 'Đang giao dịch', 'inactive' => 'Ngừng giao dịch'];
 
         $query = Customer::query()->withStats()->with(['customerGroup:id,code,name', 'assignee:id,name'])
             ->when($ids !== null, fn ($q) => $q->whereIn('customers.ulid', $ids));
         CustomerController::sorted(CustomerController::filtered($query, $filters), $filters)
-            ->chunk(500, function ($customers) use ($writer, $genders, $statuses) {
+            ->chunk(500, function ($customers) use ($writer, $genders, $statuses, $csv) {
                 foreach ($customers as $c) {
-                    $writer->addRow(Row::fromValues([
+                    $writer->addRow(SafeRow::fromValues([
                         $c->code, $c->name, (string) $c->phone, (string) $c->email, (string) $c->address, (string) $c->customerGroup?->code,
                         (string) $c->birthday?->format('d/m/Y'), $genders[$c->gender] ?? '', (string) $c->tax_code,
                         implode(', ', $c->tags ?? []), $statuses[$c->status] ?? '', (string) $c->note,
                         (string) $c->assignee?->name, (int) $c->orders_count, (string) $c->total_spent, (string) $c->debt,
                         $c->last_order_at ? Carbon::parse($c->last_order_at)->format('d/m/Y') : '', (string) $c->created_at?->format('d/m/Y'),
-                    ]));
+                    ], $csv));
                 }
             });
 

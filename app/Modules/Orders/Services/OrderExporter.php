@@ -5,7 +5,7 @@ namespace App\Modules\Orders\Services;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
 use App\Modules\Tenancy\Support\TenantContext;
-use OpenSpout\Common\Entity\Row;
+use App\Shared\Support\SafeRow;
 use OpenSpout\Writer\XLSX\Writer as XlsxWriter;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -57,7 +57,7 @@ class OrderExporter
     {
         $writer = new XlsxWriter;
         $writer->openToFile('php://output');
-        $writer->addRow(Row::fromValues(self::HEADINGS));
+        $writer->addRow(SafeRow::fromValues(self::HEADINGS));
         $written = 0;
 
         $this->orders->build($filters, $userId)
@@ -69,7 +69,7 @@ class OrderExporter
                         return false;
                     }
                     /** @var Order $o */
-                    $writer->addRow(Row::fromValues([
+                    $writer->addRow(SafeRow::fromValues([
                         $o->external_order_id,
                         $o->placed_at?->format('d/m/Y H:i') ?? '',
                         $o->isManual() ? 'Kênh riêng' : ucfirst($o->marketplace),

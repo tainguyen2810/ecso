@@ -122,6 +122,7 @@ export const reportGroups: Record<ReportGroupKey, { title: string; permission: s
         links: [
             { title: 'Báo cáo lãi lỗ', description: 'Doanh thu, chi phí và lợi nhuận của cửa hàng.', icon: TrendingUp, permission: 'finance.profit', to: { name: 'report-profit-loss' }, ranged: true },
             { title: 'Sổ quỹ', description: 'Các khoản thu chi theo ngày, tồn quỹ đầu và cuối kỳ.', icon: Receipt, permission: 'finance.view', to: { name: 'report-cashbook' }, ranged: true },
+            { title: 'Thu chi theo loại', description: 'Tiền vào, tiền ra theo loại phiếu, từng tháng.', icon: Receipt, permission: 'finance.view', to: { report: 'cash-by-type' }, ranged: true },
             { title: 'Công nợ khách hàng', description: 'Khách còn nợ bao nhiêu, nợ từ bao giờ.', icon: Users, permission: 'finance.view', to: { report: 'receivables' } },
             { title: 'Công nợ nhà cung cấp', description: 'Còn phải trả nhà cung cấp.', icon: Landmark, permission: 'purchasing.view', to: { report: 'payables' } },
         ],
