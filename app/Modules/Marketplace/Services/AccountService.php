@@ -10,6 +10,7 @@ use App\Modules\Marketplace\Connectors\Fake\FakeConnector;
 use App\Modules\Marketplace\Connectors\Fake\FakeMarketplace;
 use App\Modules\Marketplace\Connectors\WooCommerce\WooCommerceConnector;
 use App\Modules\Marketplace\Jobs\SyncListingsJob;
+use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Support\Facades\DB;
@@ -66,8 +67,11 @@ class AccountService
     {
         $pricesWereOn = $account->syncs('sync_prices');
         $ordersWereOn = $account->syncs('sync_orders');
+        $stockWasOn = $account->sync_enabled && $account->syncs('sync_stock');
+        $changedSettings = [];
         if (isset($data['settings'])) {
-            $data['settings'] = array_merge((array) $account->settings, array_intersect_key($data['settings'], MarketplaceAccount::SYNC_DEFAULTS + ['order_sync_interval' => 15]));
+            $changedSettings = array_intersect_key($data['settings'], MarketplaceAccount::SYNC_DEFAULTS + ['order_sync_interval' => 15]);
+            $data['settings'] = array_merge((array) $account->settings, $changedSettings);
             $account->forceFill(['settings' => $data['settings']]);
             unset($data['settings']);
         }
@@ -76,7 +80,15 @@ class AccountService
             $account->orders_since = now();
         }
         $account->fill($data)->save();
-        $this->audit->record('marketplace.updated', $account, $data);
+        $this->audit->record('marketplace.updated', $account, $data + ($changedSettings !== [] ? ['settings' => $changedSettings] : []));
+
+        // Stock sync turned back on: publish the current stock of every linked SKU (nothing was pushed while off).
+        if (! $stockWasOn && $account->sync_enabled && $account->syncs('sync_stock') && $account->isActive()) {
+            $variantIds = $account->listingVariants()->where('mapping_status', ListingVariant::MAPPED)->pluck('product_variant_id')->unique()->values()->all();
+            if ($variantIds !== []) {
+                app(InventorySyncPlanner::class)->plan($variantIds, force: true);
+            }
+        }
 
         // Turning price sync on re-reads the store: each linked SKU then follows its price source.
         if (! $pricesWereOn && $account->syncs('sync_prices') && $account->isActive()) {

@@ -7,6 +7,7 @@ use App\Modules\Marketplace\Connectors\ConnectorRegistry;
 use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Models\SyncRun;
+use App\Modules\Orders\Jobs\ReconcileShopJob;
 use App\Modules\Orders\Services\OrderSync;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Support\TenantContext;
@@ -37,6 +38,15 @@ class ReconcileOrdersCommand extends Command
                 continue;
             }
 
+            // Each shop is polled in its own queued job; one slow store never delays the others.
+            if (! $this->option('account')) {
+                ReconcileShopJob::dispatch($account->id);
+                $this->line("{$account->shop_name}: đã xếp hàng");
+
+                continue;
+            }
+
+            // One shop asked for by hand: run it here and show the counts.
             $tenant = Tenant::query()->find($account->tenant_id);
             try {
                 $counts = TenantContext::run($tenant, fn () => $sync->syncRecent(MarketplaceAccount::query()->findOrFail($account->id)));

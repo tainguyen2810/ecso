@@ -7,6 +7,7 @@ use App\Modules\Sales\Models\CustomerImport;
 use App\Modules\Sales\Services\CustomerImporter;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Support\TenantContext;
+use App\Shared\Concerns\RunsOnLongQueue;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -24,7 +25,7 @@ use Illuminate\Support\Facades\Storage;
  */
 class ImportCustomersJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable;
+    use Dispatchable, InteractsWithQueue, Queueable, RunsOnLongQueue;
 
     public const CHECK = 'check';
 
@@ -40,7 +41,7 @@ class ImportCustomersJob implements ShouldQueue
 
     public function __construct(public readonly int $importId, public readonly string $mode)
     {
-        $this->onQueue('default');
+        $this->onLongQueue();
     }
 
     public function handle(CustomerImporter $importer, AuditLogger $audit): void

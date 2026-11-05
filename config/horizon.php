@@ -211,6 +211,19 @@ return [
             'timeout' => 60,
             'nice' => 0,
         ],
+        // Long jobs (see queue.connections.redis-long): their own workers, so they never hold up webhooks.
+        'supervisor-long' => [
+            'connection' => 'redis-long',
+            'queue' => ['sync-long'],
+            'balance' => 'simple',
+            'maxProcesses' => 1,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 256,
+            'tries' => 1,
+            'timeout' => 1800,
+            'nice' => 0,
+        ],
     ],
 
     'environments' => [
@@ -219,6 +232,9 @@ return [
                 'maxProcesses' => 10,
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
+            ],
+            'supervisor-long' => [
+                'maxProcesses' => 3,
             ],
         ],
 

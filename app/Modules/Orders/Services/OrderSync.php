@@ -11,6 +11,7 @@ use App\Modules\Marketplace\Models\SyncRun;
 use App\Modules\Marketplace\Services\SyncErrorLog;
 use App\Modules\Orders\Models\Order;
 use Carbon\CarbonImmutable;
+use Throwable;
 
 /**
  * Fetches orders from the marketplace API and ingests them: one order (after a webhook or a user action) or every
@@ -96,8 +97,10 @@ class OrderSync
                 }
                 $page = $result->nextCursor;
             } while ($page !== null);
-        } catch (ConnectorException $e) {
-            $run->forceFill(['status' => SyncRun::FAILED, 'pages' => $pages, 'counts' => $counts, 'error' => mb_substr($e->getMessage(), 0, 500), 'finished_at' => now()])->save();
+        } catch (Throwable $e) {
+            // Any failure (not only the API's) closes the pass, so it is never left "running".
+            $message = $e instanceof ConnectorException ? $e->getMessage() : 'Lỗi hệ thống khi đồng bộ ('.class_basename($e).')';
+            $run->forceFill(['status' => SyncRun::FAILED, 'pages' => $pages, 'counts' => $counts, 'error' => mb_substr($message, 0, 500), 'finished_at' => now()])->save();
 
             throw $e;
         }
