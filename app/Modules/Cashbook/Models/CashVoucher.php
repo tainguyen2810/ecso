@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
  *
  * @property string $number
  * @property string $direction
+ * @property string|null $type_name
  * @property string $party_kind
  * @property string $amount
  * @property bool $counts_in_pnl
