@@ -49,7 +49,7 @@ class CashbookExporter
 
         $writer = new XlsxWriter;
         $writer->openToFile('php://output');
-        $writer->addRow(SafeRow::fromValues(['Sổ quỹ '.($account?->name ?? 'tất cả quỹ').($method ? ' · '.(self::METHODS[$method] ?? $method) : '').' từ '.$from->format('d/m/Y').' đến '.$to->format('d/m/Y')]));
+        $writer->addRow(SafeRow::fromValues(['Sổ quỹ '.($account !== null ? $account->name : 'tất cả quỹ').($method ? ' · '.(self::METHODS[$method] ?? $method) : '').' từ '.$from->format('d/m/Y').' đến '.$to->format('d/m/Y')]));
         $writer->addRow(SafeRow::fromValues(['Ngày', 'Chứng từ', 'Nội dung', 'Quỹ', 'Đối tượng', 'Hình thức', 'Thu', 'Chi', ...($balances ? ['Tồn quỹ'] : []), 'Tham chiếu', 'Người lập']));
         if ($balances) {
             $writer->addRow(SafeRow::fromValues(['', '', 'Tồn đầu kỳ', '', '', '', '', '', round($opening, 2), '', '']));
