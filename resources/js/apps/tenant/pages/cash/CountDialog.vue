@@ -46,7 +46,7 @@ watch(open, async (v) => {
     }
 });
 
-const difference = computed(() => (counted.value === '' || !props.fund ? null : Number(counted.value) - props.fund.balance));
+const difference = computed(() => (counted.value === '' || !props.fund ? null : Number(counted.value) - (props.fund.balance ?? 0)));
 
 async function save() {
     if (!props.fund) return;
@@ -71,7 +71,7 @@ async function save() {
         <form v-if="fund" id="count-form" class="grid gap-4 sm:grid-cols-2" data-testid="count-form" @submit.prevent="save">
             <div class="rounded-md bg-muted/50 p-3">
                 <p class="text-xs text-muted-foreground">Số dư trên phần mềm</p>
-                <p class="mt-1 text-xl font-semibold tabular-nums">{{ formatMoney(fund.balance) }}</p>
+                <p class="mt-1 text-xl font-semibold tabular-nums">{{ fund.balance === null ? '•••' : formatMoney(fund.balance) }}</p>
             </div>
             <FormField label="Số tiền thực có" for="c-amount" :error="error?.field('counted_amount')">
                 <Input id="c-amount" :model-value="counted ? formatNumber(counted) : ''" inputmode="numeric" required class="text-right text-base font-semibold tabular-nums" placeholder="0" data-testid="c-amount" @input="counted = ($event.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, 13)" />

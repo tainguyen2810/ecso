@@ -152,6 +152,7 @@ class CashShiftService
                     'amount' => $amount,
                     'reference' => $shift->number,
                     'note' => $data['reason'],
+                    'no_approval' => true, // already out of the drawer: the shift's count includes it
                 ]);
             }
 

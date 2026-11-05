@@ -22,7 +22,10 @@ use Illuminate\Support\Carbon;
  * @property string $amount
  * @property bool $counts_in_pnl
  * @property Carbon $paid_at
+ * @property string $status
+ * @property Carbon|null $approved_at
  * @property Carbon|null $voided_at
+ * @property bool $void_reversed
  */
 class CashVoucher extends Model
 {
@@ -34,17 +37,34 @@ class CashVoucher extends Model
 
     public const DIRECTIONS = [self::RECEIPT, self::PAYMENT];
 
+    /** Counts in funds and reports. */
+    public const COMPLETED = 'completed';
+
+    /** A large payment waiting for approval: listed, but counted nowhere until approved. */
+    public const PENDING = 'pending';
+
+    /** Approval refused: kept, voided. */
+    public const REJECTED = 'rejected';
+
+    /**
+     * SQL (alias cv): the voucher counts on its own day. A voucher voided after its day was closed still does; its
+     * void is booked the other way on the day of the void (REVERSAL_SQL).
+     */
+    public const COUNTS_SQL = "cv.status = 'completed' AND (cv.voided_at IS NULL OR cv.void_reversed = 1)";
+
+    public const REVERSAL_SQL = "cv.status = 'completed' AND cv.void_reversed = 1";
+
     public const PARTY_KINDS = ['customer', 'supplier', 'staff', 'carrier', 'other'];
 
     public const METHODS = ['cash', 'bank_transfer', 'card', 'ewallet', 'cod', 'other'];
 
     protected $guarded = ['id', 'ulid', 'tenant_id'];
 
-    protected $hidden = ['id', 'tenant_id', 'cash_account_id', 'cash_transfer_id', 'cash_voucher_type_id', 'customer_id', 'supplier_id', 'staff_id', 'created_by', 'voided_by'];
+    protected $hidden = ['id', 'tenant_id', 'cash_account_id', 'cash_transfer_id', 'cash_voucher_type_id', 'customer_id', 'supplier_id', 'staff_id', 'created_by', 'voided_by', 'approved_by'];
 
     protected function casts(): array
     {
-        return ['amount' => 'decimal:2', 'counts_in_pnl' => 'boolean', 'paid_at' => 'datetime', 'voided_at' => 'datetime'];
+        return ['amount' => 'decimal:2', 'counts_in_pnl' => 'boolean', 'paid_at' => 'datetime', 'voided_at' => 'datetime', 'approved_at' => 'datetime', 'void_reversed' => 'boolean'];
     }
 
     /** @return BelongsTo<CashVoucherType, $this> */
@@ -69,6 +89,12 @@ class CashVoucher extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function approver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
     }
 
     /** @return BelongsTo<User, $this> */

@@ -30,7 +30,7 @@ class CashAccountController extends Controller
         CashAccountResource::$balances = $flows->balances($at ? ReportRange::date($at)->endOfDay() : null);
 
         return CashAccountResource::collection($accounts)->additional(['meta' => [
-            'total' => (float) collect(CashAccountResource::$balances)->only($accounts->where('is_active', true)->pluck('id')->all())->sum(),
+            'total' => $request->user()?->can('balances', CashAccount::class) ? (float) collect(CashAccountResource::$balances)->only($accounts->where('is_active', true)->pluck('id')->all())->sum() : null,
             'closed_until' => PeriodLock::current()?->closed_until->toDateString(),
         ]]);
     }

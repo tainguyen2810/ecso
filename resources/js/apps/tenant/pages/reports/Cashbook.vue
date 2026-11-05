@@ -22,21 +22,22 @@ import type { Fund } from '../cash/voucher';
 
 interface Entry {
     paid_at: string;
-    type: 'payment' | 'refund' | 'supplier' | 'supplier_refund' | 'voucher' | 'transfer_in' | 'transfer_out';
+    type: 'payment' | 'refund' | 'supplier' | 'supplier_refund' | 'voucher' | 'voucher_reversal' | 'transfer_in' | 'transfer_out';
     label: string | null;
     method: string;
     amount: number;
-    balance: number;
+    /** Null without finance.balances. */
+    balance: number | null;
     document: { id: string; number: string; kind: 'order' | 'purchase' | 'voucher' | 'transfer' } | null;
     party: string | null;
     reference: string | null;
     created_by: string | null;
 }
 interface Book {
-    opening: number;
+    opening: number | null;
     in: number;
     out: number;
-    closing: number;
+    closing: number | null;
     by_method: { method: string; in: number; out: number }[];
     count: number;
     truncated: boolean;
@@ -44,8 +45,8 @@ interface Book {
     rows: Entry[];
 }
 
-const types: Record<Entry['type'], string> = { payment: 'Thu tiền bán hàng', refund: 'Hoàn tiền khách', supplier: 'Chi trả nhà cung cấp', supplier_refund: 'Nhà cung cấp hoàn tiền', voucher: 'Phiếu thu chi', transfer_in: 'Chuyển quỹ đến', transfer_out: 'Chuyển quỹ đi' };
-const label = (e: Entry) => (e.type === 'voucher' && e.label ? e.label : types[e.type]);
+const types: Record<Entry['type'], string> = { payment: 'Thu tiền bán hàng', refund: 'Hoàn tiền khách', supplier: 'Chi trả nhà cung cấp', supplier_refund: 'Nhà cung cấp hoàn tiền', voucher: 'Phiếu thu chi', voucher_reversal: 'Hủy phiếu kỳ đã khóa (ghi đảo)', transfer_in: 'Chuyển quỹ đến', transfer_out: 'Chuyển quỹ đi' };
+const label = (e: Entry) => ((e.type === 'voucher' || e.type === 'voucher_reversal') && e.label ? e.label : types[e.type]);
 const methodName = (m: string) => (m === 'transfer' ? 'Chuyển quỹ' : (paymentMethods[m] ?? m));
 const link = (d: NonNullable<Entry['document']>) => (d.kind === 'order' ? `/orders/${d.id}` : d.kind === 'purchase' ? `/purchasing/${d.id}` : `/cash?open=${d.kind}:${d.id}`);
 const range = ref(presetRange('month'));
@@ -125,10 +126,10 @@ function exportCsv() {
     <div v-else-if="!data" class="grid gap-4 md:grid-cols-4"><Skeleton v-for="i in 4" :key="i" class="h-24" /></div>
     <template v-else>
         <div class="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="cashbook-kpis">
-            <KpiCard label="Tồn đầu kỳ" :value="formatMoney(data.opening)" />
+            <KpiCard label="Tồn đầu kỳ" :value="data.opening === null ? '•••' : formatMoney(data.opening)" />
             <KpiCard label="Tổng thu" tone="green" :value="'+' + formatMoney(data.in)" />
             <KpiCard label="Tổng chi" tone="red" :value="'−' + formatMoney(data.out)" />
-            <KpiCard label="Tồn cuối kỳ" tone="blue" :value="formatMoney(data.closing)"><template #value><span data-testid="cashbook-closing">{{ formatMoney(data.closing) }}</span></template></KpiCard>
+            <KpiCard label="Tồn cuối kỳ" tone="blue" :value="data.closing === null ? '•••' : formatMoney(data.closing)"><template #value><span data-testid="cashbook-closing">{{ data.closing === null ? '•••' : formatMoney(data.closing) }}</span></template></KpiCard>
         </div>
         <Card>
             <div class="flex gap-1 border-b px-3 pt-2" role="tablist">
@@ -182,7 +183,7 @@ function exportCsv() {
                             <td class="px-4 py-2"><RouterLink v-if="e.document" :to="link(e.document)" class="font-mono text-xs hover:underline">{{ e.document.number }}</RouterLink><span v-else class="text-xs text-muted-foreground">Thanh toán chung</span></td>
                             <td class="px-4 py-2 text-right tabular-nums text-success">{{ e.amount > 0 ? formatMoney(e.amount) : '' }}</td>
                             <td class="px-4 py-2 text-right tabular-nums text-destructive">{{ e.amount < 0 ? formatMoney(-e.amount) : '' }}</td>
-                            <td class="px-4 py-2 text-right tabular-nums">{{ formatMoney(e.balance) }}</td>
+                            <td class="px-4 py-2 text-right tabular-nums">{{ e.balance === null ? '' : formatMoney(e.balance) }}</td>
                         </tr>
                     </tbody>
                 </table>

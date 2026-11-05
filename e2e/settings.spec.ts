@@ -29,6 +29,9 @@ test('Cấu hình like Sapo: store details, bank account, print template, sales 
     await page.getByTestId('add-bank').click();
     await page.getByTestId('bank-number-0').fill('0909123456');
     await page.getByTestId('bank-holder-0').fill('CONG TY DEMO');
+    // Large payment vouchers wait for approval from 5 000 000 (owners approve their own).
+    await page.getByTestId('approval-on').getByRole('switch').click();
+    await expect(page.getByTestId('approval-threshold')).toHaveValue('5.000.000');
     await page.getByTestId('settings-save').click();
     await expect(page.getByText('Đã lưu cấu hình.')).toBeVisible();
     await shot(page, '03-payments', DIR);

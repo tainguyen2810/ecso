@@ -2,6 +2,7 @@
 
 namespace App\Modules\Cashbook\Services;
 
+use App\Modules\Cashbook\Models\CashVoucher;
 use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Database\Query\Builder;
@@ -56,13 +57,22 @@ class CashFlows
         $vouchers = DB::table('cash_vouchers as cv')
             ->join('cash_voucher_types as t', 't.id', '=', 'cv.cash_voucher_type_id')
             ->leftJoin('users as u', 'u.id', '=', 'cv.created_by')
-            ->where('cv.tenant_id', $tenant)->whereNull('cv.voided_at')
+            ->where('cv.tenant_id', $tenant)->whereRaw(CashVoucher::COUNTS_SQL)
             ->when($method, fn ($q) => $q->where('cv.method', $method))
-            ->selectRaw("cv.cash_account_id as account_id, cv.paid_at, 'voucher' as type, t.name as label, cv.method, CASE WHEN cv.direction = 'payment' THEN -cv.amount ELSE cv.amount END as amount, "
+            ->selectRaw("cv.cash_account_id as account_id, cv.paid_at, 'voucher' as type, COALESCE(cv.type_name, t.name) as label, cv.method, CASE WHEN cv.direction = 'payment' THEN -cv.amount ELSE cv.amount END as amount, "
                 ."cv.number as document, cv.ulid as document_id, 'voucher' as document_kind, cv.party_name as party, cv.reference, u.name as created_by");
         $scoped($vouchers, 'cv.cash_account_id');
 
-        $all = $customer->unionAll($supplier)->unionAll($vouchers);
+        // A voucher voided after its day was closed: the void moves the money back on the day it was made.
+        $reversals = DB::table('cash_vouchers as cv')
+            ->leftJoin('users as u', 'u.id', '=', 'cv.voided_by')
+            ->where('cv.tenant_id', $tenant)->whereRaw(CashVoucher::REVERSAL_SQL)
+            ->when($method, fn ($q) => $q->where('cv.method', $method))
+            ->selectRaw("cv.cash_account_id as account_id, cv.voided_at as paid_at, 'voucher_reversal' as type, CONCAT('Hủy phiếu ', cv.number) as label, cv.method, CASE WHEN cv.direction = 'payment' THEN cv.amount ELSE -cv.amount END as amount, "
+                ."cv.number as document, cv.ulid as document_id, 'voucher' as document_kind, cv.party_name as party, cv.void_reason as reference, u.name as created_by");
+        $scoped($reversals, 'cv.cash_account_id');
+
+        $all = $customer->unionAll($supplier)->unionAll($vouchers)->unionAll($reversals);
 
         // A transfer has no payment method of its own; a book filtered by method leaves it out.
         if ($accountId && ! $method) {

@@ -16,6 +16,7 @@ use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Sales\Services\CustomerDebt;
 use App\Modules\Sales\Services\PaymentService;
 use App\Modules\Tenancy\Support\TenantContext;
+use App\Modules\Tenancy\Support\TenantSettings;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -122,7 +123,11 @@ class CashVoucherService
     }
 
     /**
-     * @param  array{direction: string, type: string, party_kind: string, party_id?: string|null, party_name?: string|null, method: string, amount: string|int|float, counts_in_pnl?: bool|null, reference?: string|null, note?: string|null, paid_at?: string|null, account?: string|null}  $data
+     * A payment of at least the approval threshold (setting payments.approval_threshold) made by someone without
+     * finance.approve waits for approval (status pending) and counts nowhere until then. Vouchers the system books
+     * itself, and ones already counted elsewhere (a drawer expense in a POS shift: `no_approval`), never wait.
+     *
+     * @param  array{direction: string, type: string, party_kind: string, party_id?: string|null, party_name?: string|null, method: string, amount: string|int|float, counts_in_pnl?: bool|null, reference?: string|null, note?: string|null, paid_at?: string|null, account?: string|null, no_approval?: bool}  $data
      */
     public function record(array $data, bool $system = false): CashVoucher
     {
@@ -142,11 +147,13 @@ class CashVoucherService
 
             $paidAt = isset($data['paid_at']) ? Carbon::parse($data['paid_at']) : now();
             PeriodLock::assertOpen($paidAt);
+            $pending = ! $system && ! ($data['no_approval'] ?? false) && $this->needsApproval($data['direction'], $amount);
 
             $voucher = new CashVoucher;
             $voucher->forceFill([
                 'number' => DocumentNumber::next($data['direction'] === CashVoucher::RECEIPT ? 'PT' : 'PC'),
                 'direction' => $data['direction'],
+                'status' => $pending ? CashVoucher::PENDING : CashVoucher::COMPLETED,
                 'cash_voucher_type_id' => $type->id,
                 'type_name' => $type->name,
                 'party_kind' => $data['party_kind'],
@@ -160,7 +167,54 @@ class CashVoucherService
                 'paid_at' => $paidAt,
                 'created_by' => Auth::id(),
             ])->save();
-            $this->audit->record("cash.{$voucher->direction}", $voucher, ['number' => $voucher->number, 'amount' => $amount, 'type' => $type->name]);
+            $this->audit->record("cash.{$voucher->direction}", $voucher, ['number' => $voucher->number, 'amount' => $amount, 'type' => $type->name, 'status' => $voucher->status]);
+
+            return $voucher;
+        });
+    }
+
+    /** The approval threshold, or null when approval is off. */
+    public static function approvalThreshold(): ?string
+    {
+        $threshold = (int) TenantSettings::current()->get('payments.approval_threshold');
+
+        return $threshold > 0 ? (string) $threshold : null;
+    }
+
+    private function needsApproval(string $direction, string $amount): bool
+    {
+        $threshold = self::approvalThreshold();
+
+        return $direction === CashVoucher::PAYMENT && $threshold !== null && bccomp($amount, $threshold, 2) >= 0
+            && ! $this->context->can('finance.approve');
+    }
+
+    /** Approves a payment waiting for approval: from now on it counts, on the day it was entered for. */
+    public function approve(CashVoucher $voucher): CashVoucher
+    {
+        return DB::transaction(function () use ($voucher) {
+            $voucher = CashVoucher::query()->whereKey($voucher->id)->lockForUpdate()->firstOrFail();
+            if ($voucher->status !== CashVoucher::PENDING) {
+                throw ValidationException::withMessages(['voucher' => 'Phiếu không ở trạng thái chờ duyệt.']);
+            }
+            PeriodLock::assertOpen($voucher->paid_at, 'voucher', 'duyệt');
+            $voucher->forceFill(['status' => CashVoucher::COMPLETED, 'approved_by' => Auth::id(), 'approved_at' => now()])->save();
+            $this->audit->record('cash.approved', $voucher, ['number' => $voucher->number, 'amount' => $voucher->amount]);
+
+            return $voucher;
+        });
+    }
+
+    /** Refuses a payment waiting for approval. It is kept, voided, with the reason. */
+    public function reject(CashVoucher $voucher, string $reason): CashVoucher
+    {
+        return DB::transaction(function () use ($voucher, $reason) {
+            $voucher = CashVoucher::query()->whereKey($voucher->id)->lockForUpdate()->firstOrFail();
+            if ($voucher->status !== CashVoucher::PENDING) {
+                throw ValidationException::withMessages(['voucher' => 'Phiếu không ở trạng thái chờ duyệt.']);
+            }
+            $voucher->forceFill(['status' => CashVoucher::REJECTED, 'voided_at' => now(), 'voided_by' => Auth::id(), 'void_reason' => $reason])->save();
+            $this->audit->record('cash.rejected', $voucher, ['number' => $voucher->number, 'amount' => $voucher->amount, 'reason' => $reason]);
 
             return $voucher;
         });
@@ -173,13 +227,19 @@ class CashVoucherService
             if ($voucher->voided_at !== null) {
                 throw ValidationException::withMessages(['voucher' => 'Phiếu đã hủy.']);
             }
-            PeriodLock::assertOpen($voucher->paid_at, 'voucher', 'hủy');
+            if ($voucher->status === CashVoucher::PENDING) {
+                throw ValidationException::withMessages(['voucher' => 'Phiếu đang chờ duyệt: dùng "Từ chối" thay vì hủy.']);
+            }
             // The drawer count of the shift already includes this money: voiding only the voucher would split them.
             if (DB::table('cash_shift_movements')->where('cash_voucher_id', $voucher->id)->exists()) {
                 throw ValidationException::withMessages(['voucher' => 'Phiếu này ghi từ thu chi trong ca POS, đã tính vào két của ca. Không hủy riêng được; lập phiếu ngược lại nếu ghi nhầm.']);
             }
-            $voucher->forceFill(['voided_at' => now(), 'voided_by' => Auth::id(), 'void_reason' => $reason])->save();
-            $this->audit->record('cash.voided', $voucher, ['number' => $voucher->number, 'amount' => $voucher->amount, 'reason' => $reason]);
+            // Its day is closed: the voucher stays in that period and the void is booked the other way today, so the
+            // closed figures do not move. Today must be open.
+            $reversed = PeriodLock::isClosed($voucher->paid_at);
+            PeriodLock::assertOpen(now(), 'voucher', 'hủy');
+            $voucher->forceFill(['voided_at' => now(), 'voided_by' => Auth::id(), 'void_reason' => $reason, 'void_reversed' => $reversed])->save();
+            $this->audit->record('cash.voided', $voucher, ['number' => $voucher->number, 'amount' => $voucher->amount, 'reason' => $reason, 'reversed' => $reversed]);
 
             return $voucher;
         });

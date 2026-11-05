@@ -15,7 +15,7 @@ function receiptAt($user, $tenant, int $amount, string $at): string
 
 beforeEach(fn () => $this->travelTo(now()->setTime(5, 0))); // midday in Vietnam
 
-it('closes the books: nothing on or before the closed day can be recorded, voided or backdated, until reopened', function () {
+it('closes the books: nothing on or before the closed day can be recorded or backdated, until reopened', function () {
     [$tenant, $owner] = tenantWithOwner();
     $threeDaysAgo = ReportRange::now()->subDays(3)->format('Y-m-d');
     $yesterday = ReportRange::now()->subDay()->format('Y-m-d');
@@ -28,13 +28,11 @@ it('closes the books: nothing on or before the closed day can be recorded, voide
         ->assertCreated()->assertJsonPath('data.total', 100000)->json('data');
     actingInTenant($owner, $tenant)->getJson('/api/v1/cash-accounts')->assertJsonPath('meta.closed_until', $yesterday);
 
-    // Inside the closed period: no new voucher, no void, no transfer, no payment, no opening balance change.
+    // Inside the closed period: no new voucher, no transfer, no payment, no opening balance change.
     actingInTenant($owner, $tenant)->postJson('/api/v1/cash-vouchers', [
         'direction' => 'receipt', 'type' => cashType($owner, $tenant, 'receipt', 'Thu nhập khác'), 'party_kind' => 'other', 'party_name' => 'X',
         'method' => 'cash', 'amount' => 5000, 'paid_at' => ReportRange::date($yesterday)->setTime(20, 0)->toIso8601String(),
     ])->assertUnprocessable()->assertJsonValidationErrors('paid_at');
-    $voucher = CashVoucher::withoutGlobalScopes()->where('ulid', $old)->firstOrFail();
-    actingInTenant($owner, $tenant)->postJson("/api/v1/cash-vouchers/{$old}/void", ['reason' => 'Nhầm'])->assertUnprocessable()->assertJsonValidationErrors('voucher');
     $bank = fund($owner, $tenant, 'Tài khoản ngân hàng')['id'];
     actingInTenant($owner, $tenant)->postJson('/api/v1/cash-transfers', ['from' => $cash, 'to' => $bank, 'amount' => 1000, 'transferred_at' => ReportRange::date($yesterday)->setTime(10, 0)->toIso8601String()])
         ->assertUnprocessable()->assertJsonValidationErrors('transferred_at');
@@ -42,12 +40,11 @@ it('closes the books: nothing on or before the closed day can be recorded, voide
 
     // Today is open, and a voucher made today with the closed day's mistake is the way to fix it.
     receiptAt($owner, $tenant, 7000, ReportRange::now()->format('Y-m-d').' 08:00');
-    expect($voucher->fresh()->voided_at)->toBeNull();
 
     // Closing again must move forward; reopening opens the period again.
     actingInTenant($owner, $tenant)->postJson('/api/v1/cash-closings', ['closed_until' => $threeDaysAgo])->assertUnprocessable();
     actingInTenant($owner, $tenant)->postJson("/api/v1/cash-closings/{$closing['id']}/reopen", ['reason' => 'Sửa phiếu nhập nhầm'])->assertOk()->assertJsonPath('data.reopen_reason', 'Sửa phiếu nhập nhầm');
-    actingInTenant($owner, $tenant)->postJson("/api/v1/cash-vouchers/{$old}/void", ['reason' => 'Nhầm'])->assertOk();
+    actingInTenant($owner, $tenant)->postJson("/api/v1/cash-vouchers/{$old}/void", ['reason' => 'Nhầm'])->assertOk()->assertJsonPath('data.status', 'voided');
     actingInTenant($owner, $tenant)->getJson('/api/v1/cash-closings')->assertOk()->assertJsonPath('meta.closed_until', null)->assertJsonPath('data.0.reopened_by', $owner->name);
 });
 

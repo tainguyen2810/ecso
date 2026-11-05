@@ -25,7 +25,7 @@ class CashVoucherController extends Controller
         $this->authorize('viewAny', CashVoucher::class);
         $filters = $request->validate([
             'direction' => ['nullable', Rule::in(CashVoucher::DIRECTIONS)],
-            'status' => ['nullable', Rule::in(['active', 'voided'])],
+            'status' => ['nullable', Rule::in(['active', 'voided', 'pending'])],
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date', 'after_or_equal:from'],
             'method' => ['nullable', Rule::in(CashVoucher::METHODS)],
@@ -41,6 +41,9 @@ class CashVoucherController extends Controller
             'data' => VoucherRowResource::collection($page->getCollection())->resolve($request),
             'meta' => ['current_page' => $page->currentPage(), 'last_page' => $page->lastPage(), 'per_page' => $page->perPage(), 'total' => $page->total()],
             'totals' => $totals,
+            // Payments waiting for approval, whatever the filters: the list shows a reminder to whoever can approve.
+            'pending' => CashVoucher::query()->where('status', CashVoucher::PENDING)->count(),
+            'approval_threshold' => CashVoucherService::approvalThreshold(),
         ]);
     }
 
@@ -79,6 +82,23 @@ class CashVoucherController extends Controller
         $this->authorize('void', CashVoucher::class);
         $data = $request->validate(['reason' => ['required', 'string', 'max:255']]);
         $service->void($cashVoucher, $data['reason']);
+
+        return new VoucherRowResource($ledger->find('voucher', $cashVoucher->ulid));
+    }
+
+    public function approve(CashVoucher $cashVoucher, CashVoucherService $service, VoucherLedger $ledger): VoucherRowResource
+    {
+        $this->authorize('approve', CashVoucher::class);
+        $service->approve($cashVoucher);
+
+        return new VoucherRowResource($ledger->find('voucher', $cashVoucher->ulid));
+    }
+
+    public function reject(Request $request, CashVoucher $cashVoucher, CashVoucherService $service, VoucherLedger $ledger): VoucherRowResource
+    {
+        $this->authorize('approve', CashVoucher::class);
+        $data = $request->validate(['reason' => ['required', 'string', 'max:255']]);
+        $service->reject($cashVoucher, $data['reason']);
 
         return new VoucherRowResource($ledger->find('voucher', $cashVoucher->ulid));
     }

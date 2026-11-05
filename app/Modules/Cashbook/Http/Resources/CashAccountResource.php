@@ -21,6 +21,7 @@ class CashAccountResource extends JsonResource
     {
         $number = $this->account_number;
         $full = $request->user()?->can('manage', CashAccount::class) ?? false;
+        $balances = $request->user()?->can('balances', CashAccount::class) ?? false;
 
         return [
             'id' => $this->ulid,
@@ -30,11 +31,12 @@ class CashAccountResource extends JsonResource
             'account_number' => $number && ! $full ? '••••'.substr($number, -4) : $number,
             'holder' => $this->holder,
             'methods' => $this->methods ?? [],
-            'opening_balance' => (float) $this->opening_balance,
+            // Members without finance.balances see the funds, not how much is in them.
+            'opening_balance' => $balances ? (float) $this->opening_balance : null,
             'opening_at' => $this->opening_at?->toIso8601String(),
             'note' => $this->note,
             'is_active' => $this->is_active,
-            'balance' => isset(self::$balances[$this->id]) ? (float) self::$balances[$this->id] : (float) $this->opening_balance,
+            'balance' => ! $balances ? null : (isset(self::$balances[$this->id]) ? (float) self::$balances[$this->id] : (float) $this->opening_balance),
         ];
     }
 }
