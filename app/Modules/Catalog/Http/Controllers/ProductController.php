@@ -16,6 +16,7 @@ use App\Modules\Inventory\Models\StockReceipt;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Services\StockReader;
 use App\Modules\Tenancy\Support\TenantContext;
+use App\Shared\Support\ReportRange;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -98,8 +99,8 @@ class ProductController extends Controller
             ->when($filters['brand'] ?? null, fn (Builder $q, string $b) => $q->whereIn('brand_id', Brand::query()->where('ulid', $b)->select('id')))
             ->when($filters['tag'] ?? null, fn (Builder $q, string $t) => $q->whereJsonContains('products.tags', $t))
             ->when($filters['type'] ?? null, fn (Builder $q, string $t) => $q->where('products.type', $t))
-            ->when($filters['created_from'] ?? null, fn (Builder $q, string $d) => $q->where('products.created_at', '>=', $d))
-            ->when($filters['created_to'] ?? null, fn (Builder $q, string $d) => $q->where('products.created_at', '<', now()->parse($d)->addDay()))
+            ->when($filters['created_from'] ?? null, fn (Builder $q, string $d) => $q->where('products.created_at', '>=', ReportRange::date($d)))
+            ->when($filters['created_to'] ?? null, fn (Builder $q, string $d) => $q->where('products.created_at', '<', ReportRange::date($d)->addDay()))
             ->tap(fn (Builder $q) => match ($filters['sort'] ?? 'newest') {
                 'oldest' => $q->orderBy('products.id'),
                 'name' => $q->orderBy('products.name'),

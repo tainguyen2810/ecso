@@ -21,6 +21,7 @@ use App\Modules\Inventory\Services\LowStockQuery;
 use App\Modules\Inventory\Services\StockReader;
 use App\Modules\Purchasing\Services\OnOrderQuery;
 use App\Modules\Tenancy\Support\TenantContext;
+use App\Shared\Support\ReportRange;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
@@ -156,8 +157,9 @@ class StockController extends Controller
             ->where('type', '!=', 'MARKER')
             ->when($warehouse, fn ($q) => $q->where('warehouse_id', $warehouse->id))
             ->when($filters['type'] ?? null, fn ($q, $t) => $q->where('type', $t))
-            ->when($filters['from'] ?? null, fn ($q, $d) => $q->where('created_at', '>=', $d))
-            ->when($filters['to'] ?? null, fn ($q, $d) => $q->where('created_at', '<', now()->parse($d)->addDay()))
+            // Dates are days on the shop's clock; created_at is UTC.
+            ->when($filters['from'] ?? null, fn ($q, $d) => $q->where('created_at', '>=', ReportRange::date($d)))
+            ->when($filters['to'] ?? null, fn ($q, $d) => $q->where('created_at', '<', ReportRange::date($d)->addDay()))
             ->orderByDesc('id')
             ->paginate(50);
 
