@@ -184,6 +184,7 @@ class CashAccountService
                     'number' => DocumentNumber::next('PC'),
                     'direction' => CashVoucher::PAYMENT,
                     'cash_voucher_type_id' => $type->id,
+                    'type_name' => $type->name,
                     'cash_account_id' => $from->id,
                     'cash_transfer_id' => $transfer->id,
                     'party_kind' => 'other',

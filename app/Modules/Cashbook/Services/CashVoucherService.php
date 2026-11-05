@@ -148,6 +148,7 @@ class CashVoucherService
                 'number' => DocumentNumber::next($data['direction'] === CashVoucher::RECEIPT ? 'PT' : 'PC'),
                 'direction' => $data['direction'],
                 'cash_voucher_type_id' => $type->id,
+                'type_name' => $type->name,
                 'party_kind' => $data['party_kind'],
                 ...$this->party($data['party_kind'], $data['party_id'] ?? null, $data['party_name'] ?? null),
                 'method' => $data['method'],

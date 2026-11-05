@@ -79,7 +79,7 @@ class VoucherLedger
             ->leftJoin('users as u', 'u.id', '=', 'cv.created_by')
             ->leftJoin('cash_accounts as acc', 'acc.id', '=', 'cv.cash_account_id')
             ->where('cv.tenant_id', $tenant)
-            ->selectRaw("'voucher' as source, cv.ulid as id, cv.number, cv.direction, t.ulid as type_id, t.name as type_name, cv.counts_in_pnl, cv.party_kind, "
+            ->selectRaw("'voucher' as source, cv.ulid as id, cv.number, cv.direction, t.ulid as type_id, COALESCE(cv.type_name, t.name) as type_name, cv.counts_in_pnl, cv.party_kind, "
                 .'COALESCE(c.ulid, s.ulid) as party_id, cv.party_name, cv.method, cv.amount, cv.paid_at, NULL as document_kind, NULL as document_id, '
                 .'NULL as document_number, cv.reference, cv.note, u.name as created_by, cv.voided_at, cv.void_reason, cv.created_at, '
                 .'acc.id as account_key, acc.ulid as account_id, acc.name as account_name, NULL as counter_account_name');

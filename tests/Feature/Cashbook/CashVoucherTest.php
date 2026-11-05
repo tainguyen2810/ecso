@@ -150,3 +150,19 @@ it('lets finance staff read vouchers and only finance.vouchers write them, per b
         'direction' => 'receipt', 'type' => $income, 'party_kind' => 'other', 'party_name' => 'X', 'method' => 'cash', 'amount' => 1,
     ])->assertUnprocessable();
 });
+
+it('keeps the type name a voucher was made with when the type is renamed later', function () {
+    [$tenant, $owner] = tenantWithOwner();
+    $type = cashType($owner, $tenant, 'payment', 'Thuê mặt bằng');
+    $old = actingInTenant($owner, $tenant)->postJson('/api/v1/cash-vouchers', ['direction' => 'payment', 'type' => $type, 'party_kind' => 'other', 'party_name' => 'Chủ nhà', 'method' => 'cash', 'amount' => 1000000])
+        ->assertCreated()->json('data.id');
+
+    actingInTenant($owner, $tenant)->patchJson("/api/v1/cash-voucher-types/{$type}", ['name' => 'Thuê kho'])->assertOk();
+    $new = actingInTenant($owner, $tenant)->postJson('/api/v1/cash-vouchers', ['direction' => 'payment', 'type' => $type, 'party_kind' => 'other', 'party_name' => 'Chủ kho', 'method' => 'cash', 'amount' => 2000000])
+        ->assertCreated()->json('data.id');
+
+    $rows = collect(actingInTenant($owner, $tenant)->getJson('/api/v1/cash-vouchers?type='.$type)->assertOk()->json('data'))->keyBy('id');
+    expect($rows[$old]['type']['name'])->toBe('Thuê mặt bằng')
+        ->and($rows[$new]['type']['name'])->toBe('Thuê kho')
+        ->and($rows[$old]['type']['id'])->toBe($type);
+});
