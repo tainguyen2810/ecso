@@ -255,6 +255,9 @@ class CodReconciliationService
     /**
      * @param  array{tracking: string, cod: string|int|float, fee?: string|int|float|null}  $line
      * @param  array<int, string>  $owed  order id => still owed, updated as lines are matched
+     *
+     * @param-out array<int, string>  $owed
+     *
      * @return array{tracking: string, cod: string, fee: string, status: string, booked: string, note: string|null, order: array{id: string, number: string, total: string, due: string, status: string}|null, order_key: int|null, deliverable: bool}
      */
     private function match(array $line, array &$owed, bool $lock = false, ?string $carrier = null): array
@@ -289,8 +292,9 @@ class CodReconciliationService
 
             return $result;
         }
-        $owed[$order->id] ??= $order->isManual() ? $order->balanceDue() : $this->payments->unconfirmed($order);
-        $due = $owed[$order->id];
+        $key = (int) $order->id;
+        $owed[$key] ??= $order->isManual() ? $order->balanceDue() : $this->payments->unconfirmed($order);
+        $due = $owed[$key];
         $result['order'] = ['id' => $order->ulid, 'number' => $order->external_order_id, 'total' => (string) $order->total, 'due' => $due, 'status' => $order->status];
         $result['order_key'] = $order->id;
 
@@ -305,7 +309,7 @@ class CodReconciliationService
         } else {
             $booked = bccomp($cod, $due, 2) <= 0 ? $cod : $due;
             $result['booked'] = $booked;
-            $owed[$order->id] = bcsub($due, $booked, 2);
+            $owed[$key] = bcsub($due, $booked, 2);
             if (bccomp($cod, $due, 2) === 0) {
                 $result['status'] = CodReconciliationLine::MATCHED;
             } else {
