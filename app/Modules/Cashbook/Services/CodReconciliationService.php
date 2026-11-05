@@ -110,6 +110,7 @@ class CodReconciliationService
      */
     public function preview(array $lines, ?string $carrier = null): array
     {
+        /** @var array<int, string> $owed */
         $owed = []; // what each order still owes after the lines above it
         $out = [];
         foreach ($lines as $line) {
@@ -122,7 +123,7 @@ class CodReconciliationService
     /**
      * Books the statement.
      *
-     * @param  array{carrier: string, account?: string|null, remitted_at?: string|null, file_name?: string|null, reference?: string|null, note?: string|null, lines: list<array{tracking: string, cod: string|int|float, fee?: string|int|float|null}>}  $data
+     * @param  array{carrier: string, account?: string|null, remitted_at?: string|null, file_name?: string|null, reference?: string|null, note?: string|null, mark_delivered?: bool, lines: list<array{tracking: string, cod: string|int|float, fee?: string|int|float|null}>}  $data
      */
     public function confirm(array $data): CodReconciliation
     {
@@ -144,12 +145,14 @@ class CodReconciliationService
                 'created_by' => Auth::id(),
             ])->save();
 
+            /** @var array<int, string> $owed */
             $owed = [];
             $rows = [];
+            /** @var array<int, true> $deliver */
             $deliver = [];
             foreach ($data['lines'] as $line) {
                 $m = $this->match($line, $owed, lock: true, carrier: $data['carrier']);
-                if (($data['mark_delivered'] ?? false) && $m['deliverable']) {
+                if (($data['mark_delivered'] ?? false) && $m['deliverable'] && $m['order_key'] !== null) {
                     $deliver[$m['order_key']] = true;
                 }
                 $payment = null;
@@ -211,7 +214,7 @@ class CodReconciliationService
             // The carrier collected the money, so the parcel reached the buyer: on the user's word (never by itself),
             // orders still shown as on their way are marked delivered, which is when their revenue counts.
             foreach (array_keys($deliver) as $orderId) {
-                $order = Order::query()->find($orderId);
+                $order = Order::query()->whereKey($orderId)->first();
                 if ($order !== null && in_array($order->status, self::DELIVERABLE, true)) {
                     $this->orders->transition($order, 'deliver', ['reason' => "Hãng đã thu COD (đối soát {$rec->number})"]);
                 }
