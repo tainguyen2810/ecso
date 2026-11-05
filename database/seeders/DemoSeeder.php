@@ -9,6 +9,7 @@ use App\Modules\Catalog\Models\Brand;
 use App\Modules\Catalog\Models\Category;
 use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Catalog\Services\ProductService;
+use App\Modules\Geo\Services\VnAddress;
 use App\Modules\Identity\Models\User;
 use App\Modules\Inventory\Models\StockReceipt;
 use App\Modules\Inventory\Models\Warehouse;
@@ -173,13 +174,14 @@ class DemoSeeder extends Seeder
         CustomerGroup::query()->create(['code' => 'LE', 'name' => 'Khách lẻ', 'price_tier' => 'retail', 'discount_percent' => 0]);
 
         $people = collect([
-            ['name' => 'Lê Thị Hoa', 'phone' => '0912345678', 'address' => '12 Nguyễn Trãi, Quận 1, TP.HCM', 'group_id' => $vip->ulid, 'birthday' => now()->subYears(32)->format('Y-m-').'14', 'gender' => 'female', 'tags' => ['Zalo', 'Khách quen']],
-            ['name' => 'Phạm Minh Tuấn', 'phone' => '0987654321', 'address' => '45 Lý Thường Kiệt, Hà Nội', 'group_id' => $wholesale->ulid, 'gender' => 'male', 'tax_code' => '0109876543', 'tags' => ['Đại lý']],
-            ['name' => 'Đỗ Thu Trang', 'phone' => '0909111222', 'address' => '8 Trần Phú, Đà Nẵng', 'birthday' => '1995-02-20', 'gender' => 'female'],
-            ['name' => 'Võ Quốc Bảo', 'phone' => '0933444555', 'address' => '102 Hai Bà Trưng, Quận 3, TP.HCM', 'group_id' => $vip->ulid, 'gender' => 'male', 'tags' => ['Khách quen']],
+            ['name' => 'Lê Thị Hoa', 'phone' => '0912345678', 'street' => '12 Nguyễn Trãi', 'ward_code' => '26740', 'group_id' => $vip->ulid, 'birthday' => now()->subYears(32)->format('Y-m-').'14', 'gender' => 'female', 'tags' => ['Zalo', 'Khách quen']],
+            ['name' => 'Phạm Minh Tuấn', 'phone' => '0987654321', 'street' => '45 Lý Thường Kiệt', 'ward_code' => '00082', 'group_id' => $wholesale->ulid, 'gender' => 'male', 'tax_code' => '0109876543', 'tags' => ['Đại lý']],
+            ['name' => 'Đỗ Thu Trang', 'phone' => '0909111222', 'street' => '8 Trần Phú', 'ward_code' => '20242', 'birthday' => '1995-02-20', 'gender' => 'female'],
+            ['name' => 'Võ Quốc Bảo', 'phone' => '0933444555', 'street' => '102 Hai Bà Trưng', 'ward_code' => '27154', 'group_id' => $vip->ulid, 'gender' => 'male', 'tags' => ['Khách quen']],
             ['name' => 'Ngô Thanh Hà', 'phone' => '0977888999', 'address' => '5 Lê Duẩn, Huế'],
         ])->map(fn ($p) => $customers->create($p));
-        $people[1]->addresses()->create(['label' => 'Kho Long Biên', 'recipient' => 'Anh Tuấn', 'phone' => '0987654321', 'address' => '22 Ngọc Lâm, Long Biên, Hà Nội']);
+        $people[1]->addresses()->make(['label' => 'Kho Long Biên', 'recipient' => 'Anh Tuấn', 'phone' => '0987654321'])
+            ->forceFill(app(VnAddress::class)->resolve('22 Ngọc Lâm', null, '00118'))->save();
         // A second card of the same business (same tax code), to show the duplicate check and the merge.
         $customers->create(['name' => 'Công ty TNHH Thương mại PMT', 'type' => 'company', 'tax_code' => '0109876543', 'source' => 'zalo', 'invoice_name' => 'CÔNG TY TNHH THƯƠNG MẠI PMT', 'invoice_email' => 'ketoan@pmt.example']);
         (new CustomerNote(['body' => 'Hẹn thanh toán phần còn lại vào cuối tháng.']))->forceFill(['customer_id' => $people[1]->id, 'created_by' => Auth::id()])->save();
@@ -340,7 +342,7 @@ class DemoSeeder extends Seeder
         }
 
         $main = Warehouse::query()->where('is_default', true)->firstOrFail();
-        $hanoi = app(WarehouseService::class)->create(['code' => 'HN', 'name' => 'Kho Hà Nội', 'address' => 'Cầu Giấy, Hà Nội']);
+        $hanoi = app(WarehouseService::class)->create(['code' => 'HN', 'name' => 'Kho Hà Nội', 'street' => '120 Xuân Thủy', 'ward_code' => '00166']);
 
         mt_srand(2810);
         $opening = array_map(fn ($v) => [

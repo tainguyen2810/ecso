@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router';
 import { ArrowLeft, Ban, Banknote, CalendarClock, Download, HandCoins, Link2, MapPin, Merge, Pencil, Plus, ShoppingCart, Trash2 } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Tabs from '../../components/Tabs.vue';
+import AddressPicker from '../../components/AddressPicker.vue';
+import { emptyAddress, type AddressParts } from '@/shared/lib/geo';
 import CustomerDialog from './CustomerDialog.vue';
 import DebtEntryDialog from './DebtEntryDialog.vue';
 import DebtReceiptDialog from './DebtReceiptDialog.vue';
@@ -268,18 +270,26 @@ function activityDetail(a: CustomerActivity): string {
 const addressDialog = ref(false);
 const editingAddress = ref<CustomerAddress | null>(null);
 const addressForm = reactive({ label: '', recipient: '', phone: '', address: '' });
+const addressParts = ref<AddressParts>(emptyAddress());
+const addressLegacy = ref<string | null>(null);
 const addressError = ref<ApiError | null>(null);
 const addressSaving = ref(false);
 function editAddress(a: CustomerAddress | null) {
     editingAddress.value = a;
     addressError.value = null;
     Object.assign(addressForm, { label: a?.label ?? '', recipient: a?.recipient ?? '', phone: a?.phone ?? '', address: a?.address ?? '' });
+    addressParts.value = a?.province_code ? { street: a.street ?? '', province_code: a.province_code, ward_code: a.ward_code ?? '' } : emptyAddress();
+    addressLegacy.value = a && !a.province_code ? a.address : null;
     addressDialog.value = true;
 }
 async function saveAddress() {
     addressSaving.value = true;
     addressError.value = null;
-    const body = Object.fromEntries(Object.entries(addressForm).map(([k, v]) => [k, v === '' ? null : v]));
+    const body: Record<string, unknown> = Object.fromEntries(Object.entries(addressForm).map(([k, v]) => [k, v === '' ? null : v]));
+    if (addressParts.value.province_code) {
+        delete body.address;
+        Object.assign(body, { street: addressParts.value.street || null, province_code: addressParts.value.province_code, ward_code: addressParts.value.ward_code || null });
+    }
     const base = `/customers/${customer.value!.id}/addresses`;
     try {
         const { data } = editingAddress.value ? await api.put(`${base}/${editingAddress.value.id}`, body) : await api.post(base, body);
@@ -504,13 +514,13 @@ const thead = 'border-b bg-slate-50 text-left text-[11px] uppercase tracking-wid
                     <ul class="divide-y text-sm">
                         <li v-if="customer.address" class="flex items-start gap-3 px-5 py-3">
                             <MapPin class="mt-0.5 size-4 text-muted-foreground" />
-                            <div class="flex-1"><div class="font-medium">Địa chỉ chính <Badge class="ml-1">Mặc định</Badge></div><div class="text-muted-foreground">{{ customer.address }}</div></div>
+                            <div class="flex-1"><div class="font-medium">Địa chỉ chính <Badge class="ml-1">Mặc định</Badge><Badge v-if="!customer.ward_code" tone="warning" class="ml-1">Chưa chuẩn hóa</Badge></div><div class="text-muted-foreground">{{ customer.address }}</div></div>
                         </li>
                         <li v-for="a in customer.addresses" :key="a.id" class="flex items-start gap-3 px-5 py-3">
                             <MapPin class="mt-0.5 size-4 text-muted-foreground" />
                             <div class="flex-1">
                                 <div class="font-medium">{{ a.label || 'Địa chỉ giao hàng' }}<span v-if="a.recipient || a.phone" class="font-normal text-muted-foreground"> · {{ [a.recipient, a.phone].filter(Boolean).join(' · ') }}</span></div>
-                                <div class="text-muted-foreground">{{ a.address }}</div>
+                                <div class="text-muted-foreground">{{ a.address }} <Badge v-if="!a.ward_code" tone="warning" class="ml-1">Chưa chuẩn hóa</Badge></div>
                             </div>
                             <template v-if="canManage">
                                 <Button variant="ghost" size="sm" aria-label="Sửa địa chỉ" @click="editAddress(a)"><Pencil /></Button>
@@ -647,7 +657,14 @@ const thead = 'border-b bg-slate-50 text-left text-[11px] uppercase tracking-wid
                 <FormField label="Tên gợi nhớ" for="a-label"><Input id="a-label" v-model="addressForm.label" placeholder="Nhà riêng, Công ty…" /></FormField>
                 <FormField label="Người nhận" for="a-recipient"><Input id="a-recipient" v-model="addressForm.recipient" /></FormField>
                 <FormField label="Số điện thoại nhận" for="a-phone" class="sm:col-span-2" :error="addressError?.field('phone')"><Input id="a-phone" v-model="addressForm.phone" inputmode="tel" /></FormField>
-                <FormField label="Địa chỉ" for="a-address" class="sm:col-span-2" :error="addressError?.field('address')"><Input id="a-address" v-model="addressForm.address" required data-testid="a-address" /></FormField>
+                <div class="sm:col-span-2">
+                    <AddressPicker
+                        v-model="addressParts"
+                        id-prefix="a-addr"
+                        :legacy="addressLegacy"
+                        :errors="{ street: addressError?.field('street'), province_code: addressError?.field('province_code'), ward_code: addressError?.field('ward_code') ?? addressError?.field('address') }"
+                    />
+                </div>
             </form>
             <template #footer>
                 <Button variant="outline" @click="addressDialog = false">Hủy</Button>

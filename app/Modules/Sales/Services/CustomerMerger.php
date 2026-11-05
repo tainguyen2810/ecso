@@ -3,6 +3,7 @@
 namespace App\Modules\Sales\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Geo\Services\VnAddress;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\CustomerAddress;
 use App\Modules\Sales\Models\CustomerMerge;
@@ -69,12 +70,15 @@ class CustomerMerger
             // The kept card's own contact is about to change: keep the one that is replaced as a delivery address.
             $replaced = array_intersect($takeFromMerged, ['phone', 'address']);
             if ($replaced !== [] && (filled($keep->address) || filled($keep->phone))) {
-                $this->keepAsAddress($keep, $keep->name, $keep->phone, $keep->address, 'Địa chỉ trước khi gộp');
+                $this->keepAsAddress($keep, $keep->name, $keep->phone, $keep, 'Địa chỉ trước khi gộp');
             }
             foreach ($takeFromMerged as $field) {
                 if ($field !== 'phone') {
                     $keep->{$field} = $merge->{$field};
                 }
+            }
+            if (in_array('address', $takeFromMerged, true)) {
+                $keep->forceFill(VnAddress::partsOf($merge)); // the standard parts go with the address
             }
             $phone = in_array('phone', $takeFromMerged, true) ? $merge->phone : $keep->phone;
             $mergedPhone = $merge->phone;
@@ -86,7 +90,7 @@ class CustomerMerger
             }
             // What is not taken over stays reachable as a delivery address of the kept card.
             if (! in_array('address', $takeFromMerged, true) && (filled($merge->address) || ($mergedPhone && $mergedPhone !== $keep->phone))) {
-                $this->keepAsAddress($keep, $merge->name, $mergedPhone, $merge->address, "Từ khách {$merge->code}");
+                $this->keepAsAddress($keep, $merge->name, $mergedPhone, $merge, "Từ khách {$merge->code}");
             }
             $keep->tags = array_values(array_unique([...($keep->tags ?? []), ...($merge->tags ?? [])])) ?: null;
             foreach (['email', 'birthday', 'gender', 'tax_code', 'invoice_name', 'invoice_address', 'invoice_email', 'customer_group_id', 'assigned_user_id', 'source'] as $field) {
@@ -148,14 +152,16 @@ class CustomerMerger
         return $value instanceof \DateTimeInterface ? $value->format('Y-m-d') : $value;
     }
 
-    private function keepAsAddress(Customer $keep, string $name, ?string $phone, ?string $address, string $label): void
+    private function keepAsAddress(Customer $keep, string $name, ?string $phone, Customer $from, string $label): void
     {
+        $address = $from->address;
+        $parts = VnAddress::partsOf($from);
         if (blank($address)) {
             return;
         }
         $exists = $keep->addresses()->get()->contains(fn (CustomerAddress $a) => mb_strtolower(trim($a->address)) === mb_strtolower(trim((string) $address)) && $a->phone === $phone);
         if (! $exists) {
-            $keep->addresses()->create(['label' => $label, 'recipient' => $name, 'phone' => $phone, 'address' => $address]);
+            $keep->addresses()->make(['label' => $label, 'recipient' => $name, 'phone' => $phone, 'address' => $address])->forceFill($parts)->save();
         }
     }
 }

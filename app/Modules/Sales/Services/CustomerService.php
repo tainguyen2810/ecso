@@ -4,6 +4,7 @@ namespace App\Modules\Sales\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Cashbook\Models\CashVoucher;
+use App\Modules\Geo\Services\VnAddress;
 use App\Modules\Identity\Models\User;
 use App\Modules\Inventory\Support\DocumentNumber;
 use App\Modules\Sales\Models\Customer;
@@ -57,7 +58,7 @@ class CustomerService
     }
 
     /** Personal data is logged as changed, never with its values. */
-    public const PRIVATE_FIELDS = ['phone', 'phone_hash', 'phone_last4', 'address', 'email', 'birthday', 'tax_code'];
+    public const PRIVATE_FIELDS = ['phone', 'phone_hash', 'phone_last4', 'address', 'street', 'email', 'birthday', 'tax_code'];
 
     /**
      * Fields about to change, each with its old and new value (personal data only flagged as changed).
@@ -262,6 +263,8 @@ class CustomerService
     private function fill(Customer $customer, array $data): void
     {
         $customer->fill(array_intersect_key($data, array_flip(['name', 'type', 'source', 'email', 'address', 'note', 'birthday', 'gender', 'tax_code', 'invoice_name', 'invoice_address', 'invoice_email', 'status', 'payment_terms_days', 'credit_limit'])));
+
+        app(VnAddress::class)->apply($customer, $data);
 
         if (array_key_exists('tags', $data)) {
             $customer->tags = $this->tags((array) $data['tags']) ?: null;

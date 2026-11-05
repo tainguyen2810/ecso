@@ -122,6 +122,10 @@ export interface Warehouse {
     code: string;
     name: string;
     address: string | null;
+    /** Standard parts (units since 1 July 2025); empty ward = address not standardised. */
+    street?: string | null;
+    province_code?: string | null;
+    ward_code?: string | null;
     is_default: boolean;
     status: 'active' | 'inactive';
     /** 'defective' holds damaged returns and never sells. */
@@ -240,6 +244,9 @@ export interface OrderSummary {
     buyer_name: string | null;
     buyer_phone: string | null;
     shipping_address: string | null;
+    shipping_street?: string | null;
+    shipping_province_code?: string | null;
+    shipping_ward_code?: string | null;
     carrier: string | null;
     tracking_number: string | null;
     buyer_note: string | null;
@@ -365,6 +372,9 @@ export interface CustomerAddress {
     recipient: string | null;
     phone: string | null;
     address: string;
+    street?: string | null;
+    province_code?: string | null;
+    ward_code?: string | null;
 }
 
 export interface CustomerNote {
@@ -397,6 +407,10 @@ export interface Customer {
     phone: string | null;
     email: string | null;
     address: string | null;
+    /** Standard parts (units since 1 July 2025); empty ward = address not standardised. */
+    street?: string | null;
+    province_code?: string | null;
+    ward_code?: string | null;
     group: {
         id: string;
         code: string;

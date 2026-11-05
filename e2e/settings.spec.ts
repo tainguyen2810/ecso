@@ -12,7 +12,7 @@ test('Cấu hình like Sapo: store details, bank account, print template, sales 
     await page.getByRole('link', { name: /Thông tin cửa hàng/ }).click();
     await page.getByTestId('store-phone').fill('0909123456');
     await page.getByTestId('store-tax-code').fill('0312345678');
-    await page.getByTestId('store-address').fill('106 Đình Nghi Xuân');
+    await page.locator('#st-addr-street').fill('106 Đình Nghi Xuân');
     await page.getByTestId('logo-input').setInputFiles({
         name: 'logo.png',
         mimeType: 'image/png',

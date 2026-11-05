@@ -23,7 +23,7 @@ export interface TenantSettingsData {
     name: string;
     timezone: string;
     logo_url: string | null;
-    store: { phone: string | null; email: string | null; website: string | null; tax_code: string | null; business_type: string | null; address: string | null; province: string | null; ward: string | null };
+    store: { phone: string | null; email: string | null; website: string | null; tax_code: string | null; business_type: string | null; address: string | null; province: string | null; ward: string | null; province_code?: string | null; ward_code?: string | null };
     tax: { sale_rate: number; purchase_rate: number; prices_include_tax: boolean };
     pricing: { sale_price: 'retail' | 'wholesale'; staff_edit_price: boolean };
     payments: { methods: Record<PaymentMethodKey, boolean>; default_pos: PaymentMethodKey; default_online: PaymentMethodKey; bank_accounts: BankAccount[]; approval_threshold?: number };

@@ -3,6 +3,7 @@
 namespace App\Modules\Inventory\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Geo\Services\VnAddress;
 use App\Modules\Inventory\Exceptions\InvalidStockOperation;
 use App\Modules\Inventory\Models\InventoryAdjustment;
 use App\Modules\Inventory\Models\StockBalance;
@@ -54,7 +55,7 @@ class WarehouseService
     }
 
     /**
-     * @param  array{code: string, name: string, address?: string|null}  $data
+     * @param  array{code: string, name: string, address?: string|null, street?: string|null, province_code?: string|null, ward_code?: string|null}  $data
      */
     public function create(array $data): Warehouse
     {
@@ -63,7 +64,9 @@ class WarehouseService
             DB::table('tenants')->where('id', $this->context->id())->lockForUpdate()->value('id');
             $this->context->entitlements()->assertWithin('limit.warehouses', Warehouse::query()->where('purpose', Warehouse::PURPOSE_SALE)->count());
 
-            $warehouse = Warehouse::create($data + ['status' => Warehouse::STATUS_ACTIVE]);
+            $warehouse = new Warehouse(array_intersect_key($data, array_flip(['code', 'name', 'address'])) + ['status' => Warehouse::STATUS_ACTIVE]);
+            app(VnAddress::class)->apply($warehouse, $data); // pickup address for carriers: province, ward, street
+            $warehouse->save();
             if (! Warehouse::query()->where('is_default', true)->exists()) {
                 $warehouse->forceFill(['is_default' => true])->save();
             }
@@ -75,7 +78,7 @@ class WarehouseService
     }
 
     /**
-     * @param  array{name?: string, address?: string|null, status?: string, is_default?: bool}  $data
+     * @param  array{name?: string, address?: string|null, street?: string|null, province_code?: string|null, ward_code?: string|null, status?: string, is_default?: bool}  $data
      */
     public function update(Warehouse $warehouse, array $data): Warehouse
     {
@@ -102,7 +105,9 @@ class WarehouseService
             }
 
             $original = $warehouse->only(['name', 'address', 'status']);
-            $warehouse->fill(array_intersect_key($data, array_flip(['name', 'address', 'status'])))->save();
+            $warehouse->fill(array_intersect_key($data, array_flip(['name', 'address', 'status'])));
+            app(VnAddress::class)->apply($warehouse, $data);
+            $warehouse->save();
             $this->audit->record('warehouse.updated', $warehouse, ['from' => $original, 'to' => $warehouse->only(['name', 'address', 'status', 'is_default'])]);
 
             return $warehouse;

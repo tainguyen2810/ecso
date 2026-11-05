@@ -83,9 +83,11 @@ test('customer detail: profile, group terms, debt book, addresses and notes', as
     await page.getByTestId('customer-tabs').getByRole('button', { name: /Địa chỉ/ }).click();
     await expect(page.getByText('Kho Long Biên')).toBeVisible();
     await page.getByTestId('add-address').click();
-    await page.getByTestId('a-address').fill('99 Phố Huế, Hai Bà Trưng, Hà Nội');
+    await page.locator('#a-addr-quick').fill('99 Phố Huế, Phường Hai Bà Trưng, Hà Nội');
+    await page.locator('#a-addr-quick').press('Enter');
+    await expect(page.locator('#a-addr-ward')).toHaveValue('Phường Hai Bà Trưng');
     await page.getByTestId('a-save').click();
-    await expect(page.getByText('99 Phố Huế, Hai Bà Trưng, Hà Nội')).toBeVisible();
+    await expect(page.getByText('99 Phố Huế, Phường Hai Bà Trưng, Thành phố Hà Nội')).toBeVisible();
 
     await page.getByTestId('customer-tabs').getByRole('button', { name: /Ghi chú/ }).click();
     await page.getByTestId('note-kind').selectOption('call');

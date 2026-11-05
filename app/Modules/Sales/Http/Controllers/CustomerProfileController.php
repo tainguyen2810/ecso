@@ -3,6 +3,7 @@
 namespace App\Modules\Sales\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Geo\Services\VnAddress;
 use App\Modules\Sales\Http\Resources\CustomerAddressResource;
 use App\Modules\Sales\Http\Resources\CustomerNoteResource;
 use App\Modules\Sales\Models\Customer;
@@ -27,7 +28,9 @@ class CustomerProfileController extends Controller
         if ($customer->addresses()->count() >= self::MAX_ADDRESSES) {
             throw ValidationException::withMessages(['address' => 'Mỗi khách tối đa '.self::MAX_ADDRESSES.' địa chỉ.']);
         }
-        $address = new CustomerAddress($this->address($request));
+        $data = $this->address($request);
+        $address = new CustomerAddress(array_intersect_key($data, array_flip(['label', 'recipient', 'phone'])));
+        app(VnAddress::class)->apply($address, $data);
         $address->customer_id = $customer->id;
         $address->save();
 
@@ -38,7 +41,10 @@ class CustomerProfileController extends Controller
     {
         $this->authorize('update', $customer);
         abort_unless($address->customer_id === $customer->id, 404);
-        $address->update($this->address($request));
+        $data = $this->address($request);
+        $address->fill(array_intersect_key($data, array_flip(['label', 'recipient', 'phone'])));
+        app(VnAddress::class)->apply($address, $data);
+        $address->save();
 
         return new CustomerAddressResource($address);
     }
@@ -82,7 +88,8 @@ class CustomerProfileController extends Controller
             'label' => ['nullable', 'string', 'max:50'],
             'recipient' => ['nullable', 'string', 'max:150'],
             'phone' => ['nullable', 'string', 'max:20'],
-            'address' => ['required', 'string', 'max:500'],
+            'address' => ['required_without:ward_code', 'nullable', 'string', 'max:500'],
+            ...VnAddress::rules(),
         ]);
         $phone = PhoneNumber::normalize($data['phone'] ?? null);
         if ($phone !== null && ! PhoneNumber::isValid($phone)) {
