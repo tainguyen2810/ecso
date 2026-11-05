@@ -1,6 +1,7 @@
 declare module 'pdfmake/build/pdfmake' {
     const pdfMake: {
         addVirtualFileSystem(vfs: Record<string, string>): void;
+        addFonts(fonts: Record<string, Record<string, string>>): void;
         createPdf(definition: Record<string, unknown>): { download(name?: string): Promise<void>; open(): void };
     };
     export default pdfMake;

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { barcodeSvg, code128Values, ean13Pattern, encodeBarcode, isEan13 } from './barcode';
-import { expandLabels, labelCode, labelDocument, type LabelItem } from './labels';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { parseFontMetrics } from './fontMetrics';
+import { codeWarning, defaultOptions, expandLabels, labelCode, labelDocument, labelParts, MM, papers, priceText, wrapText, type LabelItem } from './labels';
 
 describe('barcode', () => {
     it('checks the EAN-13 check digit', () => {
@@ -53,18 +56,75 @@ describe('labels', () => {
         expect(expandLabels([item, { ...item, sku: 'B', quantity: 0 }])).toHaveLength(3);
     });
 
-    it('roll layout puts one label per page at the label size', () => {
-        const doc = labelDocument([item], { layout: '50x30', showName: true, showPrice: true, heading: '' }) as { pageSize: { width: number; height: number }; content: unknown[] };
-        expect(doc.content).toHaveLength(3);
-        expect(Math.round(doc.pageSize.width)).toBe(142);
-        expect(JSON.stringify(doc.content[0])).toContain('159.000');
+    const opts = { ...defaultOptions };
+    type Doc = { pageSize: { width: number; height: number }; content: Record<string, unknown>[] };
+    type Pos = { absolutePosition: { x: number; y: number } };
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    const font = readFileSync(resolve(__dirname, '../../../../../fonts/LiberationSans-Regular.ttf'));
+    const metrics = parseFontMetrics(font.buffer.slice(font.byteOffset, font.byteOffset + font.byteLength) as ArrayBuffer);
+    // The product and settings of the Sapo sample PDF (khổ 74x22, Khổ rộng, name only).
+    const sapo: LabelItem = { sku: 'ITS325', barcode: null, productName: 'Card WIFI Intel WIFI-6E AX210 khe PCI tích hợp Bluetooth 5.4 có tản nhiệt', variantName: null, price: 700000, quantity: 10 };
+
+    it('74x22 matches the Sapo PDF: page, name lines, baselines, bars, code', () => {
+        const doc = labelDocument([sapo], { ...opts, paper: 'r74' }, metrics) as Doc;
+        expect(r2(doc.pageSize.width)).toBe(212.6);
+        expect(r2(doc.pageSize.height)).toBe(62.36);
+        // 10 labels, 2 per row: 5 pages.
+        expect(doc.content.filter((c) => c.pageBreak)).toHaveLength(4);
+        const texts = doc.content.filter((c) => c.text) as (Pos & { text: string; fontSize: number })[];
+        expect(texts.slice(0, 3).map((t) => t.text)).toEqual(['Card WIFI Intel WIFI-6E AX210', 'khe PCI tích hợp Bluetooth 5.4', 'ITS325']);
+        // Baselines from the top, as in Sapo's PDF: 10.5, 18.33, 50.61 pt.
+        const baselines = texts.slice(0, 3).map((t) => r2(t.absolutePosition.y + metrics.ascent * t.fontSize));
+        expect(baselines).toEqual([10.5, 18.33, 50.61]);
+        // Code centred like Sapo (x 38.33 pt), second label 105.16 pt to the right.
+        expect(Math.abs(texts[2]!.absolutePosition.x - 38.33)).toBeLessThan(0.1);
+        expect(r2(texts[5]!.absolutePosition.x - texts[2]!.absolutePosition.x)).toBe(105.16);
+        const bars = doc.content.find((c) => c.canvas) as Pos & { canvas: { w: number; h: number }[] };
+        expect(Math.abs(bars.absolutePosition.x - 6.61)).toBeLessThan(0.05);
+        expect(bars.absolutePosition.y).toBe(21.5);
+        expect(bars.canvas[0]!.h).toBe(22);
+        expect(r2(Math.min(...bars.canvas.map((b) => b.w)))).toBe(0.85);
     });
 
-    it('A4 sheet layout fills 5 columns and starts a new page after 65 labels', () => {
-        const doc = labelDocument([{ ...item, quantity: 70 }], { layout: 'a4-65', showName: false, showPrice: false, heading: 'Shop' }) as { content: { table: { body: unknown[][] } }[] };
-        expect(doc.content).toHaveLength(2);
-        expect(doc.content[0]!.table.body).toHaveLength(13);
-        expect(doc.content[1]!.table.body).toHaveLength(1);
-        expect(doc.content[1]!.table.body[0]).toHaveLength(5);
+    it('wraps with the font widths and drops lines past the limit', () => {
+        expect(wrapText(sapo.productName, 95.2, 6.5, metrics, 2)).toEqual(['Card WIFI Intel WIFI-6E AX210', 'khe PCI tích hợp Bluetooth 5.4']);
+        expect(wrapText('ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJ', 40, 6.5, metrics, 3).length).toBeGreaterThan(1);
+    });
+
+    it('A4 Tomy 145 starts a new page after 65 labels', () => {
+        const doc = labelDocument([{ ...item, quantity: 70 }], { ...opts, paper: 't145' }) as Doc;
+        expect(doc.content.filter((c) => c.pageBreak)).toHaveLength(1);
+        expect(doc.content.filter((c) => c.canvas)).toHaveLength(70);
+        expect(r2(doc.pageSize.height / MM)).toBe(297);
+    });
+
+    it('calibration shifts every label', () => {
+        const a = labelDocument([item], { ...opts, paper: 't138' }) as Doc;
+        const b = labelDocument([item], { ...opts, paper: 't138', offsetTop: 1.5, offsetLeft: -1 }) as Doc;
+        const pos = (d: Doc) => (d.content.find((c) => c.canvas) as Pos).absolutePosition;
+        expect(r2((pos(b).x - pos(a).x) / MM)).toBe(-1);
+        expect(r2((pos(b).y - pos(a).y) / MM)).toBe(1.5);
+    });
+
+    it('price with currency and unit', () => {
+        expect(priceText({ ...item, unit: 'Cái' }, { priceCurrency: true, priceUnit: true })).toBe('159.000 VND/Cái');
+        expect(priceText({ ...item, price: 0 }, { priceCurrency: false, priceUnit: false })).toBeNull();
+    });
+
+    it('warns about codes that scan badly', () => {
+        expect(codeWarning('79P-05929')).toBeNull();
+        expect(codeWarning('A/B')).not.toBeNull();
+        expect(codeWarning('ABCDEFGHIJKLMNOP')).not.toBeNull();
+    });
+
+    it('everything stays inside the label, long codes get narrower bars', () => {
+        for (const key of Object.keys(papers) as (keyof typeof papers)[]) {
+            const p = papers[key];
+            const parts = labelParts({ ...item, sku: 'ABCDEFGHIJKLMNO', productName: 'Tên sản phẩm rất dài '.repeat(5) }, { ...opts, paper: key, showPrice: true, storeName: 'Cửa hàng' }, p, metrics);
+            const last = parts[parts.length - 1]!;
+            expect(last.y).toBeLessThanOrEqual(p.height * MM);
+            const bars = parts.find((x) => x.kind === 'bars')!;
+            expect(bars.kind === 'bars' && bars.width).toBeLessThanOrEqual(p.width * MM);
+        }
     });
 });
