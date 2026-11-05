@@ -48,10 +48,11 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
         items: [
             { name: 'dashboard', label: 'Tổng quan', path: '/', icon: LayoutDashboard, permission: 'dashboard.view', shortcut: 'd' },
             { name: 'orders', label: 'Đơn hàng', path: '/orders', icon: ShoppingCart, permission: 'orders.view', shortcut: 'o', description: 'Quản lý đơn tập trung từ mọi sàn: lọc, xử lý hàng loạt, in phiếu, theo dõi trạng thái.',
-                alsoActive: ['returns', 'pos'],
+                alsoActive: ['returns', 'pos', 'shipments'],
                 children: [
                     { label: 'Tạo đơn và giao hàng', path: '/orders/new', permission: 'orders.create' },
                     { label: 'Danh sách đơn hàng', path: '/orders' },
+                    { label: 'Vận chuyển & giao hàng', path: '/shipments' },
                     { label: 'Bán tại quầy', path: '/pos', permission: 'orders.create' },
                     { label: 'Ca bán hàng', path: '/pos/shifts', permission: 'orders.create' },
                     { label: 'Khách trả hàng', path: '/returns', permission: 'returns.view' },

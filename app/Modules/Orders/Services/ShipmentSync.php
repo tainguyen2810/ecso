@@ -132,8 +132,11 @@ class ShipmentSync
             ShipmentStatus::CANCELLED => $shipment->cancelled_at = $at,
             default => null,
         };
+        // The reason typed with the order's step (Giao thất bại: "Khách hẹn hôm khác") goes with the shipment's step.
+        $note = $this->stepNote($order);
         if ($target === ShipmentStatus::FAILED) {
             $shipment->attempts++;
+            $shipment->failure_reason = $note !== null ? mb_substr($note, 0, 255) : null;
         }
         if ($shipment->picked_up_at === null && ! in_array($target, [ShipmentStatus::AWAITING_PICKUP, ShipmentStatus::CANCELLED], true)) {
             // Handed to the carrier now, or earlier without the shipment knowing (an older order being filled in).
@@ -144,7 +147,15 @@ class ShipmentSync
 
         $shipment->save();
         // The attempt number keeps each failure / redelivery distinct, so a second failure is its own step.
-        $this->event($shipment, $target, $at, null, "order:{$target}:{$shipment->attempts}");
+        $this->event($shipment, $target, $at, $note, "order:{$target}:{$shipment->attempts}");
+    }
+
+    /** The note of the order's latest status step, when that step is the one the order is in now. */
+    private function stepNote(Order $order): ?string
+    {
+        $last = $order->history()->reorder()->latest('id')->first(['to_status', 'note']);
+
+        return $last !== null && $last->to_status === $order->status && filled($last->note) ? (string) $last->note : null;
     }
 
     private function codStatus(Shipment $shipment): string
@@ -188,11 +199,11 @@ class ShipmentSync
         return $at ? Carbon::instance($at) : now();
     }
 
-    private function event(Shipment $shipment, string $status, Carbon $at, ?string $description, string $key): void
+    public function event(Shipment $shipment, string $status, Carbon $at, ?string $description, string $key, string $source = ShipmentEvent::SOURCE_ORDER): void
     {
         ShipmentEvent::query()->firstOrCreate(
             ['shipment_id' => $shipment->id, 'dedupe_key' => mb_substr($key, 0, 120)],
-            ['status' => $status, 'occurred_at' => $at, 'source' => ShipmentEvent::SOURCE_ORDER, 'description' => $description, 'actor_id' => Auth::id()],
+            ['status' => $status, 'occurred_at' => $at, 'source' => $source, 'description' => $description !== null ? mb_substr($description, 0, 255) : null, 'actor_id' => Auth::id()],
         );
     }
 }

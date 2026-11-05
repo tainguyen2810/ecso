@@ -9,6 +9,9 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::get('shipments', [ShipmentController::class, 'index']);
     Route::get('shipments/summary', [ShipmentController::class, 'summary']);
     Route::get('shipments/{shipment}', [ShipmentController::class, 'show']);
+    Route::put('shipments/{shipment}', [ShipmentController::class, 'update']);
+    Route::post('shipments/{shipment}/actions/{action}', [ShipmentController::class, 'action'])->whereIn('action', ['pick_up', 'deliver', 'fail', 'redeliver', 'return', 'cancel']);
+    Route::post('orders/{order}/shipments', [ShipmentController::class, 'store'])->middleware('idempotent');
     Route::get('orders', [OrderController::class, 'index']);
     Route::get('orders/summary', [OrderController::class, 'summary']);
     Route::get('orders/pipeline', [OrderController::class, 'pipeline']);

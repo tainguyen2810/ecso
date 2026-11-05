@@ -131,7 +131,7 @@ class OrderController extends Controller
                 'id' => $n->id, 'body' => $n->body, 'user' => $n->user?->name, 'created_at' => $n->created_at?->toIso8601String(),
             ]),
             'returns' => ReturnResource::collection($order->returns()->with('exchangeOrder')->get()),
-            'shipments' => ShipmentResource::collection(Shipment::query()->where('order_id', $order->id)->with('events')->orderBy('id')->get()),
+            'shipments' => ShipmentResource::collection(Shipment::query()->where('order_id', $order->id)->with(['events', 'order'])->orderBy('id')->get()),
             'refunds' => OrderRefund::query()->with('orderReturn:id,ulid,number,status')->where('order_id', $order->id)->orderBy('refunded_at')->get()
                 ->map(fn (OrderRefund $r) => [
                     'id' => $r->ulid, 'external_refund_id' => $r->external_refund_id, 'amount' => $r->amount, 'reason' => $r->reason,

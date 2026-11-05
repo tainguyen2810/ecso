@@ -301,6 +301,8 @@ export interface OrderDetail extends OrderSummary {
     edits?: { at: string | null; actor: string | null; changes: string[] }[];
     notes: { id: number; body: string; user: string | null; created_at: string | null }[];
     returns: OrderReturnData[];
+    /** Shipments (vận đơn) of the order, oldest first. */
+    shipments?: ShipmentData[];
     actions: Record<string, { allowed: boolean; capability: string }>;
     capabilities: Record<string, string>;
     editable: boolean;
@@ -957,4 +959,70 @@ export interface PriceBoardRow {
     cost: number | null;
     flags: { pending: boolean; loss: boolean; locked: boolean };
     cells: Record<string, PriceBoardCell>;
+}
+
+/** Shipments (vận đơn), see app/Modules/Orders/Http/Resources/ShipmentResource.php. */
+export interface ShipmentAction {
+    label: string;
+    allowed: boolean;
+    reason: string | null;
+}
+
+export interface ShipmentEventData {
+    status: string;
+    status_label: string;
+    description: string | null;
+    source: string;
+    actor: string | null;
+    occurred_at: string;
+}
+
+export interface ShipmentData {
+    id: string;
+    carrier: string | null;
+    carrier_name: string | null;
+    source: 'manual' | 'self' | 'api' | 'marketplace' | 'import';
+    tracking_number: string | null;
+    status: string;
+    status_label: string;
+    packages: number;
+    weight_g: number | null;
+    cod_amount: string;
+    cod_collected: string | null;
+    cod_status: string;
+    fee_estimated: string | null;
+    fee_actual: string | null;
+    fee_status: 'unknown' | 'estimated' | 'confirmed';
+    payer: string;
+    attempts: number;
+    failure_reason: string | null;
+    picked_up_at: string | null;
+    delivered_at: string | null;
+    failed_at: string | null;
+    returned_at: string | null;
+    cancelled_at: string | null;
+    last_event_at: string | null;
+    created_at: string | null;
+    order?: {
+        id: string;
+        external_order_id: string;
+        marketplace: string;
+        channel: string | null;
+        status: string;
+        is_cod: boolean;
+        recipient: string | null;
+        phone: string | null;
+        address: string | null;
+        area: string | null;
+    };
+    actions?: Record<string, ShipmentAction>;
+    warehouse?: { id: string; code: string; name: string } | null;
+    events?: ShipmentEventData[];
+}
+
+export interface ShipmentSummary {
+    tabs: Record<string, number>;
+    late: number;
+    late_days: number;
+    cod_held: { carrier: string | null; carrier_name: string | null; amount: string; count: number }[];
 }
