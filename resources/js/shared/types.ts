@@ -692,12 +692,15 @@ export interface Supplier {
     email: string | null;
     address: string | null;
     tax_code: string | null;
+    /** Days to pay after receiving the goods; null = no terms. */
+    payment_terms_days?: number | null;
     note: string | null;
     is_active: boolean;
     orders_count?: number;
     purchased?: string;
     paid?: string;
     debt?: string;
+    overdue?: string;
     created_at: string | null;
 }
 

@@ -8,9 +8,9 @@ use App\Modules\Catalog\Services\ProductExporter;
 use App\Modules\Catalog\Services\ProductImporter;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Tenancy\Support\TenantContext;
+use App\Shared\Support\SafeRow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use OpenSpout\Common\Entity\Row;
 use OpenSpout\Writer\XLSX\Writer as XlsxWriter;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -67,9 +67,9 @@ class ProductTransferController extends Controller
         return response()->streamDownload(function () {
             $writer = new XlsxWriter;
             $writer->openToFile('php://output');
-            $writer->addRow(Row::fromValues(ProductImporter::COLUMNS));
-            $writer->addRow(Row::fromValues(['AO-THUN', 'Áo thun cotton', 'AT-TRANG-M', 'Trắng / M', '8930000000011', 'Áo', 'ECSO', '159000', '200', 'active', '10', '85000']));
-            $writer->addRow(Row::fromValues(['AO-THUN', 'Áo thun cotton', 'AT-TRANG-L', 'Trắng / L', '', 'Áo', 'ECSO', '159000', '220', 'active', '5', '85000']));
+            $writer->addRow(SafeRow::fromValues(ProductImporter::COLUMNS));
+            $writer->addRow(SafeRow::fromValues(['AO-THUN', 'Áo thun cotton', 'AT-TRANG-M', 'Trắng / M', '8930000000011', 'Áo', 'ECSO', '159000', '200', 'active', '10', '85000']));
+            $writer->addRow(SafeRow::fromValues(['AO-THUN', 'Áo thun cotton', 'AT-TRANG-L', 'Trắng / L', '', 'Áo', 'ECSO', '159000', '220', 'active', '5', '85000']));
             $writer->close();
         }, 'mau-import-san-pham.xlsx', ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
     }

@@ -4,7 +4,7 @@ namespace App\Modules\Purchasing\Services;
 
 use App\Modules\Purchasing\Models\Supplier;
 use App\Modules\Tenancy\Support\TenantContext;
-use OpenSpout\Common\Entity\Row;
+use App\Shared\Support\SafeRow;
 use OpenSpout\Writer\XLSX\Writer as XlsxWriter;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -31,10 +31,10 @@ class SupplierExporter
     {
         $writer = new XlsxWriter;
         $writer->openToFile('php://output');
-        $writer->addRow(Row::fromValues(self::COLUMNS));
+        $writer->addRow(SafeRow::fromValues(self::COLUMNS));
         Supplier::query()->withBalance()->orderBy('suppliers.name')->chunk(500, function ($suppliers) use ($writer) {
             foreach ($suppliers as $s) {
-                $writer->addRow(Row::fromValues([
+                $writer->addRow(SafeRow::fromValues([
                     $s->code, $s->name, (string) $s->contact_name, (string) $s->phone, (string) $s->email, (string) $s->address, (string) $s->tax_code,
                     $s->is_active ? 'Đang giao dịch' : 'Ngừng giao dịch', (int) $s->orders_count, (string) $s->purchased, (string) $s->paid, (string) $s->debt, (string) $s->note,
                 ]));

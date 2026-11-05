@@ -71,3 +71,30 @@ it('reads Vietnamese money formats', function () {
         ->and(CodReconciliationService::number('25.000 đ'))->toBe('25000.00')
         ->and(CodReconciliationService::number(''))->toBe('0.00');
 });
+
+it('voids a whole statement: its order payments and fee voucher go with it', function () {
+    [$tenant, $owner] = tenantWithOwner();
+    $variant = makeVariant($tenant);
+    stockIn($tenant, $variant, 5);
+    $order = codOrder($owner, $tenant, $variant, 300000, 'VT01');
+    $bank = fund($owner, $tenant, 'Tài khoản ngân hàng');
+    $rec = postOnce($owner, $tenant, '/api/v1/cod-reconciliations', ['carrier' => 'viettelpost', 'lines' => [['tracking' => 'VT01', 'cod' => 300000, 'fee' => 30000]]], 'cod-v')
+        ->assertCreated()->json('data');
+    expect(fund($owner, $tenant, 'Tài khoản ngân hàng')['balance'])->toEqual($bank['balance'] + 270000);
+
+    // Voiding needs the void permission and a reason.
+    $cashier = addMember($tenant, Role::ORDER_STAFF);
+    actingInTenant($cashier, $tenant)->postJson("/api/v1/cod-reconciliations/{$rec['id']}/void", ['reason' => 'x'])->assertForbidden();
+    actingInTenant($owner, $tenant)->postJson("/api/v1/cod-reconciliations/{$rec['id']}/void", [])->assertUnprocessable();
+
+    actingInTenant($owner, $tenant)->postJson("/api/v1/cod-reconciliations/{$rec['id']}/void", ['reason' => 'Nhầm file'])->assertOk()
+        ->assertJsonPath('data.void_reason', 'Nhầm file');
+    expect(fund($owner, $tenant, 'Tài khoản ngân hàng')['balance'])->toEqual($bank['balance']);
+    actingInTenant($owner, $tenant)->getJson("/api/v1/orders/{$order}")->assertJsonPath('data.payment_status', 'unpaid');
+    actingInTenant($owner, $tenant)->getJson("/api/v1/cash-vouchers/voucher/{$rec['fee_voucher']['id']}")->assertJsonPath('data.status', 'voided');
+
+    // Once only; the statement can then be imported again.
+    actingInTenant($owner, $tenant)->postJson("/api/v1/cod-reconciliations/{$rec['id']}/void", ['reason' => 'Lại'])->assertUnprocessable();
+    $again = actingInTenant($owner, $tenant)->postJson('/api/v1/cod-reconciliations/preview', ['lines' => [['tracking' => 'VT01', 'cod' => 300000]]])->json('data');
+    expect($again['lines'][0]['status'])->toBe('matched');
+});

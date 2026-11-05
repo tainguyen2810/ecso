@@ -101,6 +101,7 @@ class SupplierController extends Controller
             'email' => ['nullable', 'email', 'max:150'],
             'address' => ['nullable', 'string', 'max:500'],
             'tax_code' => ['nullable', 'string', 'max:20'],
+            'payment_terms_days' => ['nullable', 'integer', 'min:0', 'max:365'],
             'note' => ['nullable', 'string', 'max:1000'],
             'is_active' => ['boolean'],
         ]);

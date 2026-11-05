@@ -13,7 +13,7 @@ import ErrorState from '@/shared/ui/ErrorState.vue';
 import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
-import { api, ApiError } from '@/shared/lib/api';
+import { api, ApiError, downloadFile } from '@/shared/lib/api';
 import { formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { paymentMethods } from '../orders/labels';
 import { downloadCsv, presetRange, toCsv } from './range';
@@ -103,6 +103,18 @@ onMounted(() => {
 });
 watch([range, method, account], load, { deep: true });
 
+// Every row of the period, written by the server (the screen lists the newest rows only).
+const exporting = ref(false);
+async function exportExcel() {
+    exporting.value = true;
+    try {
+        const params = new URLSearchParams({ ...range.value, ...(method.value ? { method: method.value } : {}), ...(account.value ? { account: account.value } : {}) });
+        await downloadFile(`/reports/cashbook/export?${params.toString()}`, `so-quy-${range.value.from}-${range.value.to}.xlsx`);
+    } finally {
+        exporting.value = false;
+    }
+}
+
 function exportCsv() {
     if (!data.value) return;
     downloadCsv(
@@ -158,6 +170,7 @@ function exportCsv() {
                     <span v-for="m in data.by_method" :key="m.method">{{ methodName(m.method) }}: <span class="text-success">+{{ formatMoney(m.in) }}</span> / <span class="text-destructive">−{{ formatMoney(m.out) }}</span></span>
                 </div>
                 <Button variant="outline" size="sm" class="ml-auto" @click="exportCsv"><Download /> Xuất CSV</Button>
+                <Button variant="outline" size="sm" :loading="exporting" data-testid="cashbook-excel" @click="exportExcel"><Download /> Xuất Excel</Button>
             </div>
             <p v-if="data.truncated" class="border-b bg-amber-50 px-4 py-2 text-xs text-amber-800" data-testid="cashbook-truncated">
                 Kỳ này có {{ formatNumber(data.count) }} dòng, chỉ hiện {{ formatNumber(data.rows.length) }} dòng mới nhất. Tồn đầu kỳ, tổng thu chi và tồn cuối kỳ vẫn tính đủ cả kỳ. Chọn khoảng ngày ngắn hơn để xem hết.

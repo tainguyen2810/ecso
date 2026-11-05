@@ -70,7 +70,10 @@ async function remove() {
         <div class="mb-4 grid gap-4 sm:grid-cols-3">
             <KpiCard label="Đã nhập (trừ hàng trả)" :icon="PackageCheck" :value="formatMoney(supplier.purchased)" />
             <KpiCard label="Đã thanh toán" :icon="Wallet" tone="green" :value="formatMoney(supplier.paid)" />
-            <KpiCard :label="Number(supplier.debt) < 0 ? 'Đã trả trước' : 'Còn nợ'" :icon="HandCoins" :tone="Number(supplier.debt) > 0 ? 'red' : 'slate'" :value="formatMoney(Math.abs(Number(supplier.debt)))"><template #value><span data-testid="supplier-debt">{{ formatMoney(Math.abs(Number(supplier.debt))) }}</span></template></KpiCard>
+            <KpiCard :label="Number(supplier.debt) < 0 ? 'Đã trả trước' : 'Còn nợ'" :icon="HandCoins" :tone="Number(supplier.debt) > 0 ? 'red' : 'slate'" :value="formatMoney(Math.abs(Number(supplier.debt)))"><template #value><span data-testid="supplier-debt">{{ formatMoney(Math.abs(Number(supplier.debt))) }}</span></template>
+                <span v-if="Number(supplier.overdue ?? 0) > 0" class="font-medium text-destructive" data-testid="supplier-overdue">Quá hạn {{ formatMoney(supplier.overdue ?? 0) }} (hạn {{ supplier.payment_terms_days }} ngày)</span>
+                <span v-else-if="supplier.payment_terms_days != null">Hạn trả {{ supplier.payment_terms_days }} ngày sau khi nhận hàng</span>
+            </KpiCard>
         </div>
 
         <div class="grid gap-4 lg:grid-cols-3">

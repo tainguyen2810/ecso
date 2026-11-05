@@ -23,4 +23,13 @@ test('COD reconciliation: import a carrier file, preview line by line, book it',
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('cod-table')).toContainText('DS-000001');
     await shot(page, '02-danh-sach', DIR);
+
+    // Imported by mistake: void the whole statement, its fee voucher goes with it.
+    await page.getByTestId('cod-table').getByText('DS-000001').click();
+    await page.getByTestId('cod-void').click();
+    await page.getByTestId('cod-void-reason').fill('Nhập nhầm file');
+    await shot(page, '03-huy-phien', DIR);
+    await page.getByTestId('cod-void-confirm').click();
+    await expect(page.getByTestId('cod-voided')).toContainText('Nhập nhầm file');
+    await shot(page, '04-phien-da-huy', DIR);
 });

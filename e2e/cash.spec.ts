@@ -49,6 +49,10 @@ test('payment voucher, customer debt receipt, void and print, cashbook', async (
     await rent.click();
     await expect(page.getByTestId('voucher-detail')).toContainText('Năm triệu đồng');
     await expect(page.getByTestId('print-voucher')).toBeVisible();
+    // Keep the transfer slip with the voucher.
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAIAAAAt/+nTAAAAKklEQVR42u3OMQEAAAQAMPJJIqgaxDBugwV2ZzKqnkwQEBAQEBAQEBAQEPgcLWABTwOAgPMAAAAASUVORK5CYII=', 'base64');
+    await page.getByTestId('attachment-input').setInputFiles({ name: 'uy-nhiem-chi.png', mimeType: 'image/png', buffer: png });
+    await expect(page.getByTestId('attachment-item')).toContainText('uy-nhiem-chi.png');
     await shot(page, '04-voucher-detail');
     await page.getByTestId('void-voucher').click();
     await page.getByTestId('void-reason').fill('Nhập nhầm số tiền');
@@ -69,4 +73,15 @@ test('payment voucher, customer debt receipt, void and print, cashbook', async (
     await page.getByTestId('cashbook-glossary').click();
     await expect(page.getByRole('dialog')).toContainText('Tồn cuối kỳ');
     await shot(page, '07-cashbook-glossary');
+    await page.keyboard.press('Escape');
+
+    // Every row of the period as an Excel file written by the server.
+    const download = page.waitForEvent('download');
+    await page.getByTestId('cashbook-excel').click();
+    expect((await download).suggestedFilename()).toMatch(/^so-quy-.*\.xlsx$/);
+
+    // Money in and out by kind, month by month.
+    await page.goto('/reports/view/cash-by-type');
+    await expect(page.getByText('Khách trả tiền đơn hàng')).toBeVisible();
+    await shot(page, '08-cash-by-type');
 });

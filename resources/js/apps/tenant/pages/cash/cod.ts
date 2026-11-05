@@ -28,6 +28,9 @@ export interface CodReconciliation {
     note: string | null;
     created_by: string | null;
     created_at: string | null;
+    voided_at: string | null;
+    voided_by: string | null;
+    void_reason: string | null;
     fee_voucher?: { id: string; number: string } | null;
     lines?: CodLine[];
 }

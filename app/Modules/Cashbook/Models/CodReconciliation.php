@@ -24,6 +24,8 @@ use Illuminate\Support\Carbon;
  * @property int $matched_count
  * @property string|null $reference
  * @property string|null $note
+ * @property Carbon|null $voided_at
+ * @property string|null $void_reason
  */
 class CodReconciliation extends Model
 {
@@ -33,11 +35,11 @@ class CodReconciliation extends Model
 
     protected $guarded = ['id', 'ulid', 'tenant_id'];
 
-    protected $hidden = ['id', 'tenant_id', 'cash_account_id', 'fee_voucher_id', 'created_by'];
+    protected $hidden = ['id', 'tenant_id', 'cash_account_id', 'fee_voucher_id', 'created_by', 'voided_by'];
 
     protected function casts(): array
     {
-        return ['remitted_at' => 'datetime', 'total_cod' => 'decimal:2', 'total_fee' => 'decimal:2', 'total_booked' => 'decimal:2'];
+        return ['remitted_at' => 'datetime', 'voided_at' => 'datetime', 'total_cod' => 'decimal:2', 'total_fee' => 'decimal:2', 'total_booked' => 'decimal:2'];
     }
 
     /** @return HasMany<CodReconciliationLine, $this> */
@@ -56,6 +58,12 @@ class CodReconciliation extends Model
     public function feeVoucher(): BelongsTo
     {
         return $this->belongsTo(CashVoucher::class, 'fee_voucher_id');
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function voider(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'voided_by');
     }
 
     /** @return BelongsTo<User, $this> */

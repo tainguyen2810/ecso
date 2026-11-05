@@ -138,9 +138,11 @@ class LedgerReports
                 'purchased' => round((float) $s->purchased, 2),
                 'paid' => round((float) $s->paid, 2),
                 'debt' => round((float) $s->debt, 2),
+                'overdue' => round((float) $s->overdue, 2),
+                'terms_days' => $s->payment_terms_days,
             ])->all();
 
-        return ['rows' => $rows, 'totals' => ['suppliers' => count($rows), 'debt' => round(array_sum(array_column($rows, 'debt')), 2)]];
+        return ['rows' => $rows, 'totals' => ['suppliers' => count($rows), 'debt' => round(array_sum(array_column($rows, 'debt')), 2), 'overdue' => round(array_sum(array_column($rows, 'overdue')), 2)]];
     }
 
     /** @return array<string, float|int|null> */

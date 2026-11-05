@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import { CheckCircle2, ExternalLink, Printer, XCircle } from 'lucide-vue-next';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { CheckCircle2, ExternalLink, FileText, Paperclip, Printer, Trash2, XCircle } from 'lucide-vue-next';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
 import Input from '@/shared/ui/Input.vue';
-import { api, ApiError } from '@/shared/lib/api';
+import { api, ApiError, downloadFile } from '@/shared/lib/api';
 import { useToast } from '@/shared/composables/useToast';
 import { formatDateTime, formatMoney } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
@@ -80,6 +80,65 @@ async function doVoid() {
     }
 }
 
+/** Files kept with a voucher (invoice photo, transfer slip). Images are fetched with the tenant header and shown as thumbnails. */
+interface Attachment { id: string; name: string; mime: string; size: number; is_image: boolean; uploaded_by: string | null; created_at: string | null }
+const attachments = ref<Attachment[]>([]);
+const thumbs = ref<Record<string, string>>({});
+const uploading = ref(false);
+const attachError = ref<string | null>(null);
+const fileInput = ref<HTMLInputElement | null>(null);
+function clearThumbs() {
+    Object.values(thumbs.value).forEach((u) => URL.revokeObjectURL(u));
+    thumbs.value = {};
+}
+async function showAttachments(list: Attachment[]) {
+    attachments.value = list;
+    for (const a of list.filter((x) => x.is_image && !thumbs.value[x.id])) {
+        const blob = (await api.get(`/cash-voucher-attachments/${a.id}`, { responseType: 'blob' }).catch(() => null))?.data;
+        if (blob) thumbs.value = { ...thumbs.value, [a.id]: URL.createObjectURL(blob as Blob) };
+    }
+}
+watch(
+    () => [open.value, props.voucher?.id],
+    async () => {
+        clearThumbs();
+        attachments.value = [];
+        attachError.value = null;
+        if (open.value && props.voucher?.source === 'voucher') showAttachments((await api.get(`/cash-vouchers/${props.voucher.id}/attachments`).catch(() => null))?.data.data ?? []);
+    },
+    { immediate: true },
+);
+onBeforeUnmount(clearThumbs);
+async function upload(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
+    input.value = '';
+    if (!files.length || !v.value) return;
+    uploading.value = true;
+    attachError.value = null;
+    try {
+        for (const file of files) {
+            const body = new FormData();
+            body.append('file', file);
+            await showAttachments((await api.post(`/cash-vouchers/${v.value.id}/attachments`, body)).data.data);
+        }
+        toast.success('Đã đính kèm chứng từ.');
+    } catch (err) {
+        attachError.value = (err as ApiError).field?.('file') ?? (err as ApiError).message;
+    } finally {
+        uploading.value = false;
+    }
+}
+async function removeAttachment(a: Attachment) {
+    attachError.value = null;
+    try {
+        showAttachments((await api.delete(`/cash-voucher-attachments/${a.id}`)).data.data);
+    } catch (err) {
+        attachError.value = (err as ApiError).message;
+    }
+}
+const fileSize = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+
 async function approve() {
     if (!v.value) return;
     busy.value = true;
@@ -121,6 +180,28 @@ async function approve() {
                     <dd><RouterLink :to="documentLink(v)!" class="inline-flex items-center gap-1 font-mono text-primary hover:underline" @click="open = false">{{ v.document.number }} <ExternalLink class="size-3.5" /></RouterLink></dd>
                 </div>
             </dl>
+            <section v-if="v.source === 'voucher'" class="mt-4 rounded-lg border p-3" data-testid="voucher-attachments">
+                <div class="mb-2 flex items-center justify-between gap-2">
+                    <h3 class="flex items-center gap-1.5 text-sm font-medium"><Paperclip class="size-4 text-muted-foreground" /> Chứng từ đính kèm</h3>
+                    <template v-if="tenant.can('finance.vouchers')">
+                        <input ref="fileInput" type="file" class="hidden" accept="image/*,application/pdf" multiple data-testid="attachment-input" @change="upload" />
+                        <Button variant="outline" size="sm" :loading="uploading" data-testid="attachment-add" @click="fileInput?.click()">Thêm ảnh, PDF</Button>
+                    </template>
+                </div>
+                <p v-if="!attachments.length" class="text-xs text-muted-foreground">Chưa có. Đính kèm ảnh hóa đơn, ủy nhiệm chi (ảnh hoặc PDF, tối đa 5 MB mỗi file).</p>
+                <ul v-else class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    <li v-for="a in attachments" :key="a.id" class="group relative overflow-hidden rounded-md border bg-slate-50" data-testid="attachment-item">
+                        <button type="button" class="block w-full text-left" :title="a.name" @click="downloadFile(`/cash-voucher-attachments/${a.id}`, a.name)">
+                            <img v-if="thumbs[a.id]" :src="thumbs[a.id]" :alt="a.name" class="h-24 w-full object-cover" />
+                            <span v-else class="grid h-24 place-items-center text-muted-foreground"><FileText class="size-8" /></span>
+                            <span class="block truncate px-2 pt-1 text-xs">{{ a.name }}</span>
+                            <span class="block px-2 pb-1 text-[11px] text-muted-foreground">{{ fileSize(a.size) }}<template v-if="a.uploaded_by"> · {{ a.uploaded_by }}</template></span>
+                        </button>
+                        <button v-if="tenant.can('finance.vouchers')" type="button" class="absolute right-1 top-1 rounded bg-white/90 p-1 text-destructive opacity-0 shadow-sm transition group-hover:opacity-100" title="Gỡ file" @click="removeAttachment(a)"><Trash2 class="size-3.5" /></button>
+                    </li>
+                </ul>
+                <p v-if="attachError" class="mt-2 text-sm text-destructive">{{ attachError }}</p>
+            </section>
             <p v-if="isTransfer && !v.voided_at" class="mt-3 text-xs text-muted-foreground">Hủy phiếu chuyển quỹ sẽ hủy luôn phiếu chi phí chuyển đi kèm.</p>
             <p v-else-if="v.source === 'voucher_reversal'" class="mt-3 text-xs text-muted-foreground">Dòng ghi đảo khi hủy phiếu {{ v.document?.number }} của kỳ đã khóa sổ.</p>
             <p v-else-if="v.source !== 'voucher' && !v.voided_at" class="mt-3 text-xs text-muted-foreground">Phiếu tự động không sửa, hủy ở đây. Mở chứng từ gốc để hủy khoản thanh toán.</p>

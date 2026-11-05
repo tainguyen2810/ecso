@@ -10,10 +10,10 @@ use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\CustomerImport;
 use App\Modules\Sales\Services\CustomerExporter;
 use App\Modules\Sales\Services\CustomerImporter;
+use App\Shared\Support\SafeRow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
-use OpenSpout\Common\Entity\Row;
 use OpenSpout\Writer\XLSX\Writer as XlsxWriter;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -119,9 +119,9 @@ class CustomerTransferController extends Controller
         return response()->streamDownload(function () {
             $writer = new XlsxWriter;
             $writer->openToFile('php://output');
-            $writer->addRow(Row::fromValues(array_values(CustomerImporter::COLUMNS)));
-            $writer->addRow(Row::fromValues(['', 'Nguyễn Văn An', '0912345678', 'an@example.com', '12 Lê Lợi, Phường Bến Thành, TP. Hồ Chí Minh', '', '15/08/1990', 'Nam', '', 'Khách quen, Zalo', 'Đang giao dịch', 'Giao giờ hành chính']));
-            $writer->addRow(Row::fromValues(['', 'Công ty TNHH Minh Phát', '0283456789', '', '45 Nguyễn Trãi, Hà Nội', '', '', '', '0101234567', 'Sỉ', '', '']));
+            $writer->addRow(SafeRow::fromValues(array_values(CustomerImporter::COLUMNS)));
+            $writer->addRow(SafeRow::fromValues(['', 'Nguyễn Văn An', '0912345678', 'an@example.com', '12 Lê Lợi, Phường Bến Thành, TP. Hồ Chí Minh', '', '15/08/1990', 'Nam', '', 'Khách quen, Zalo', 'Đang giao dịch', 'Giao giờ hành chính']));
+            $writer->addRow(SafeRow::fromValues(['', 'Công ty TNHH Minh Phát', '0283456789', '', '45 Nguyễn Trãi, Hà Nội', '', '', '', '0101234567', 'Sỉ', '', '']));
             $writer->close();
         }, 'mau-nhap-khach-hang.xlsx', ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
     }
