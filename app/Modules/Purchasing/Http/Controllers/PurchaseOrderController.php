@@ -4,6 +4,7 @@ namespace App\Modules\Purchasing\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Access\Support\DataAccess;
+use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Inventory\Http\Controllers\Concerns\ResolvesLines;
 use App\Modules\Inventory\Http\Resources\DocumentResource;
 use App\Modules\Purchasing\Http\Resources\PurchaseOrderResource;
@@ -11,6 +12,7 @@ use App\Modules\Purchasing\Models\PurchaseOrder;
 use App\Modules\Purchasing\Models\Supplier;
 use App\Modules\Purchasing\Models\SupplierPayment;
 use App\Modules\Purchasing\Services\PurchaseService;
+use App\Modules\Purchasing\Services\SupplierAllocation;
 use App\Modules\Purchasing\Services\SupplierPaymentService;
 use App\Shared\Support\ReportRange;
 use Illuminate\Http\JsonResponse;
@@ -24,7 +26,7 @@ class PurchaseOrderController extends Controller
 {
     private const COST_FIELDS = ['discount', 'extra_cost', 'extra_cost_note', 'extra_cost_to_supplier', 'vat_in_cost'];
 
-    private const HEADER_FIELDS = ['expected_at', 'note', 'invoice_date', 'reference', 'tags'];
+    private const HEADER_FIELDS = ['expected_at', 'note', 'invoice_date', 'due_date', 'reference', 'tags'];
 
     use ResolvesLines;
 
@@ -76,11 +78,15 @@ class PurchaseOrderController extends Controller
         return PurchaseOrderResource::collection($query->paginate((int) ($filters['per_page'] ?? 20)));
     }
 
-    public function show(PurchaseOrder $purchaseOrder): PurchaseOrderResource
+    public function show(PurchaseOrder $purchaseOrder, SupplierAllocation $allocations): JsonResponse
     {
         $this->authorize('view', $purchaseOrder);
-
-        return new PurchaseOrderResource($purchaseOrder->load(self::DETAIL));
+        PurchaseOrderResource::$allocation = $allocations->forSuppliers([$purchaseOrder->supplier_id])[$purchaseOrder->supplier_id]['orders'];
+        try {
+            return (new PurchaseOrderResource($purchaseOrder->load(self::DETAIL)))->response();
+        } finally {
+            PurchaseOrderResource::$allocation = null;
+        }
     }
 
     /**
@@ -127,6 +133,17 @@ class PurchaseOrderController extends Controller
         });
 
         return (new PurchaseOrderResource($po->fresh(self::DETAIL)))->response()->setStatusCode(201);
+    }
+
+    /** The due date can be set at any time, also after the goods arrived (the rest of the order then stays as it is). */
+    public function dueDate(Request $request, PurchaseOrder $purchaseOrder, SupplierAllocation $allocations, AuditLogger $audit): JsonResponse
+    {
+        $this->authorize('pay', PurchaseOrder::class);
+        $data = $request->validate(['due_date' => ['present', 'nullable', 'date']]);
+        $purchaseOrder->forceFill(['due_date' => $data['due_date']])->save();
+        $audit->record('purchase.due_date', $purchaseOrder, ['number' => $purchaseOrder->number, 'due_date' => $data['due_date']]);
+
+        return $this->show($purchaseOrder, $allocations);
     }
 
     public function update(Request $request, PurchaseOrder $purchaseOrder, PurchaseService $purchases): PurchaseOrderResource
@@ -206,6 +223,7 @@ class PurchaseOrderController extends Controller
             'expected_at' => ['nullable', 'date'],
             'note' => ['nullable', 'string', 'max:1000'],
             'invoice_date' => ['nullable', 'date'],
+            'due_date' => ['nullable', 'date'],
             'reference' => ['nullable', 'string', 'max:100'],
             'tags' => ['nullable', 'array', 'max:10'],
             'tags.*' => ['string', 'max:40'],

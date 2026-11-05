@@ -44,6 +44,22 @@ async function load() {
 }
 onMounted(load);
 
+// The due date can be changed at any time (also after the goods arrived).
+const dueEditing = ref(false);
+const dueValue = ref('');
+async function saveDue() {
+    busy.value = true;
+    try {
+        po.value = (await api.patch(`/purchase-orders/${po.value!.id}/due-date`, { due_date: dueValue.value || null })).data.data;
+        dueEditing.value = false;
+        toast.success('Đã lưu hạn thanh toán.');
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    } finally {
+        busy.value = false;
+    }
+}
+
 const isOpen = computed(() => po.value && ['draft', 'ordered', 'partial'].includes(po.value.status));
 const due = computed(() => (po.value ? owed(po.value) : 0));
 // Like Sapo the supplier can be paid before the goods arrive (prepayment), up to the order total.
@@ -270,6 +286,21 @@ async function voidPayment(id: string) {
                         <dt class="text-muted-foreground">Nhân viên</dt><dd>{{ po.created_by ?? '—' }}</dd>
                         <dt class="text-muted-foreground">Ngày hẹn giao</dt><dd>{{ po.expected_at ? formatDate(po.expected_at) : '—' }}</dd>
                         <dt class="text-muted-foreground">Ngày hóa đơn</dt><dd>{{ po.invoice_date ? formatDate(po.invoice_date) : '—' }}</dd>
+                        <dt class="text-muted-foreground">Hạn thanh toán</dt>
+                        <dd data-testid="po-due-date-info">
+                            <form v-if="dueEditing" class="flex gap-1" @submit.prevent="saveDue">
+                                <input v-model="dueValue" type="date" class="h-7 rounded border px-1 text-xs" data-testid="po-due-input" />
+                                <button type="submit" class="text-xs text-primary" :disabled="busy" data-testid="po-due-save">Lưu</button>
+                            </form>
+                            <template v-else>
+                                <span :class="po.allocation?.overdue && 'font-medium text-destructive'">{{ po.allocation?.due_date ? formatDate(po.allocation.due_date) : '—' }}<template v-if="po.allocation?.overdue"> (quá hạn)</template></span>
+                                <span v-if="po.allocation?.due_date && !po.due_date" class="text-xs text-muted-foreground"> theo hạn của NCC</span>
+                                <button v-if="tenant.can('purchasing.payment')" type="button" class="ml-1 text-xs text-primary hover:underline" data-testid="po-due-edit" @click="(dueValue = po.due_date ?? ''), (dueEditing = true)">Sửa</button>
+                            </template>
+                        </dd>
+                        <template v-if="po.allocation && po.allocation.credit > 0">
+                            <dt class="text-muted-foreground">Trừ tiền trả trước</dt><dd class="tabular-nums" data-testid="po-credit">{{ formatMoney(po.allocation.credit) }} · còn nợ {{ formatMoney(po.allocation.open) }}</dd>
+                        </template>
                         <dt class="text-muted-foreground">Tham chiếu</dt><dd>{{ po.reference || '—' }}</dd>
                         <template v-if="po.tags?.length"><dt class="text-muted-foreground">Tags</dt><dd class="flex flex-wrap gap-1"><Badge v-for="t in po.tags" :key="t">{{ t }}</Badge></dd></template>
                     </dl>

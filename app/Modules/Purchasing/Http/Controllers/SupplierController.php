@@ -8,6 +8,7 @@ use App\Modules\Purchasing\Http\Resources\SupplierPaymentResource;
 use App\Modules\Purchasing\Http\Resources\SupplierResource;
 use App\Modules\Purchasing\Http\Resources\SupplierReturnResource;
 use App\Modules\Purchasing\Models\Supplier;
+use App\Modules\Purchasing\Services\SupplierAllocation;
 use App\Modules\Purchasing\Services\SupplierExporter;
 use App\Modules\Purchasing\Services\SupplierService;
 use Illuminate\Http\JsonResponse;
@@ -57,16 +58,24 @@ class SupplierController extends Controller
         return $exporter->stream();
     }
 
-    public function show(Supplier $supplier): JsonResponse
+    public function show(Supplier $supplier, SupplierAllocation $allocations): JsonResponse
     {
         $this->authorize('view', $supplier);
         $withBalance = Supplier::query()->withBalance()->whereKey($supplier->id)->firstOrFail();
+        $allocation = $allocations->forSuppliers([$supplier->id])[$supplier->id];
+        $withBalance->setAttribute('overdue', $allocation['overdue']);
+        PurchaseOrderResource::$allocation = $allocation['orders'];
 
-        return (new SupplierResource($withBalance))->additional(['data' => [
-            'orders' => PurchaseOrderResource::collection($supplier->orders()->with('warehouse')->orderByDesc('id')->limit(30)->get()),
-            'payments' => SupplierPaymentResource::collection($supplier->payments()->with(['order', 'creator'])->orderByDesc('paid_at')->limit(30)->get()),
-            'returns' => SupplierReturnResource::collection($supplier->returns()->with(['order'])->orderByDesc('id')->limit(30)->get()),
-        ]])->response();
+        try {
+            return (new SupplierResource($withBalance))->additional(['data' => [
+                'credit_left' => $allocation['credit_left'],
+                'orders' => PurchaseOrderResource::collection($supplier->orders()->with('warehouse')->orderByDesc('id')->limit(30)->get()),
+                'payments' => SupplierPaymentResource::collection($supplier->payments()->with(['order', 'creator'])->orderByDesc('paid_at')->limit(30)->get()),
+                'returns' => SupplierReturnResource::collection($supplier->returns()->with(['order'])->orderByDesc('id')->limit(30)->get()),
+            ]])->response();
+        } finally {
+            PurchaseOrderResource::$allocation = null;
+        }
     }
 
     public function store(Request $request, SupplierService $suppliers): JsonResponse

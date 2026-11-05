@@ -52,6 +52,7 @@ class PurchaseOrder extends Model
         return [
             'expected_at' => 'date',
             'invoice_date' => 'date',
+            'due_date' => 'date',
             'tags' => 'array',
             'discount' => 'decimal:2',
             'ordered_at' => 'datetime',

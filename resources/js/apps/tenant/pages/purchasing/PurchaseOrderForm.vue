@@ -54,6 +54,7 @@ const form = reactive({
     warehouse_id: '',
     expected_at: '',
     invoice_date: '',
+    due_date: '',
     reference: '',
     note: '',
     tags: '',
@@ -94,6 +95,7 @@ onMounted(async () => {
             warehouse_id: po.warehouse?.id ?? '',
             expected_at: po.expected_at ?? '',
             invoice_date: po.invoice_date ?? '',
+            due_date: po.due_date ?? '',
             reference: po.reference ?? '',
             note: po.note ?? '',
             tags: (po.tags ?? []).join(', '),
@@ -151,6 +153,7 @@ async function submit(action: 'draft' | 'place' | 'receive') {
         warehouse_id: form.warehouse_id,
         expected_at: form.expected_at || null,
         invoice_date: form.invoice_date || null,
+        due_date: form.due_date || null,
         reference: form.reference || null,
         note: form.note || null,
         tags: form.tags.split(',').map((t) => t.trim()).filter(Boolean),
@@ -246,6 +249,7 @@ function onKey(e: KeyboardEvent) {
                 </FormField>
                 <FormField label="Ngày hẹn giao" for="po-expected"><Input id="po-expected" v-model="form.expected_at" type="date" /></FormField>
                 <FormField label="Ngày hóa đơn" for="po-invoice-date" :error="error?.field('invoice_date')"><Input id="po-invoice-date" v-model="form.invoice_date" type="date" data-testid="po-invoice-date" /></FormField>
+                <FormField label="Hạn thanh toán" for="po-due-date" :error="error?.field('due_date')"><Input id="po-due-date" v-model="form.due_date" type="date" data-testid="po-due-date" /></FormField>
                 <FormField label="Tham chiếu" for="po-reference" :error="error?.field('reference')">
                     <Input id="po-reference" v-model="form.reference" placeholder="Số hóa đơn, mã đơn của NCC" data-testid="po-reference" />
                 </FormField>

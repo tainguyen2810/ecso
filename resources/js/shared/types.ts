@@ -752,6 +752,10 @@ export interface PurchaseOrderData {
     warehouse?: { id: string; code: string; name: string };
     expected_at: string | null;
     invoice_date?: string | null;
+    /** Set by hand; else received date + the supplier's payment terms (allocation.due_date). */
+    due_date?: string | null;
+    /** Still owed once money paid on account is spread over the orders, oldest first. */
+    allocation?: { open: number; credit: number; due_date: string | null; overdue: boolean } | null;
     reference?: string | null;
     tags?: string[];
     discount?: string;

@@ -39,6 +39,7 @@ class PurchaseService
                 'expected_at' => $data['expected_at'] ?? null,
                 'note' => $data['note'] ?? null,
                 'invoice_date' => $data['invoice_date'] ?? null,
+                'due_date' => $data['due_date'] ?? null,
                 'reference' => $data['reference'] ?? null,
                 'tags' => $data['tags'] ?? null,
                 ...$this->costHeader($data),
@@ -74,7 +75,7 @@ class PurchaseService
             if (isset($data['warehouse'])) {
                 $po->warehouse_id = $data['warehouse']->id;
             }
-            $po->fill(array_intersect_key($data, array_flip(['expected_at', 'note', 'invoice_date', 'reference', 'tags'])));
+            $po->fill(array_intersect_key($data, array_flip(['expected_at', 'note', 'invoice_date', 'due_date', 'reference', 'tags'])));
             $po->fill(array_intersect_key($this->costHeader($data), $data));
             $po->save();
             if (isset($data['lines'])) {
