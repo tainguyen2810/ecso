@@ -1,9 +1,8 @@
 <?php
 
-use App\Modules\Orders\Console\BackfillShipmentsCommand;
+use App\Modules\Orders\Services\ShipmentBackfill;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -81,7 +80,8 @@ return new class extends Migration
             $table->index(['tenant_id', 'occurred_at']);
         });
 
-        Artisan::call(BackfillShipmentsCommand::class);
+        // Direct call, not Artisan: the web installer runs migrations where console commands are not registered.
+        app(ShipmentBackfill::class)->run();
     }
 
     public function down(): void
