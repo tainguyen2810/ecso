@@ -35,6 +35,8 @@ class SyncCenterController extends Controller
 {
     private const EXPORT_LIMIT = 5000;
 
+    private const BULK_LIMIT = 100;
+
     public function __construct(
         private readonly SyncActivityQuery $activity,
         private readonly AuditLogger $audit,
@@ -61,7 +63,11 @@ class SyncCenterController extends Controller
 
         return response()->json([
             'data' => $result['data'],
-            'meta' => ['current_page' => $page, 'last_page' => max(1, (int) ceil($result['total'] / 30)), 'total' => $result['total']],
+            'meta' => [
+                'current_page' => $page, 'last_page' => max(1, (int) ceil($result['total'] / 30)), 'total' => $result['total'],
+                // Counts per status within the other filters, for the status chips.
+                'by_status' => $this->activity->counts(array_diff_key($this->filters($request), ['status' => 1]))['by_status'],
+            ],
         ]);
     }
 
@@ -81,24 +87,57 @@ class SyncCenterController extends Controller
         $this->authorize('operateSync', MarketplaceAccount::class);
         $model = $this->findTask($type, $id);
         $row = $this->activity->describe($type, $model);
-        if (! $row['can_retry']) {
-            throw ValidationException::withMessages(['task' => 'Chỉ thử lại được tác vụ thất bại.']);
-        }
-        $account = MarketplaceAccount::query()->findOrFail($model->getAttribute('marketplace_account_id'));
-        if (! $account->isActive()) {
-            throw ValidationException::withMessages(['task' => 'Shop đang mất kết nối. Kết nối lại ở trang Kết nối sàn trước khi thử lại.']);
-        }
-
-        match ($type) {
-            'webhook' => $this->retryWebhook($model),
-            'stock_push' => $this->retryStock($model, $account, $planner),
-            'order_poll' => ReconcileShopJob::dispatch($account->id, 'user'),
-            'price_push' => $this->retryPrice($model, $account),
-            default => abort(404),
-        };
+        $account = $this->retryTask($type, $model, $row, $planner);
         $this->audit->record('sync.task_retried', $account, ['task' => $row['id'], 'object' => $row['object']]);
 
         return response()->json(['data' => $this->activity->describe($type, $this->findTask($type, $id))]);
+    }
+
+    /**
+     * "Thử lại tất cả" in Lỗi cần xử lý: retries the failed tasks matching the filters (usually one error code), at
+     * most BULK_LIMIT per call. A task that cannot be retried now (shop disconnected, sync off, unlinked) is skipped
+     * and counted, never forced. An order poll runs once per shop however many failed passes it has.
+     */
+    public function retryFailed(Request $request, InventorySyncPlanner $planner): JsonResponse
+    {
+        $this->authorize('operateSync', MarketplaceAccount::class);
+        $filters = array_diff_key($this->filters($request), ['status' => 1]);
+        $rows = collect([SyncActivityQuery::FAILED, SyncActivityQuery::DEAD_LETTER])
+            ->flatMap(fn ($status) => $this->activity->list(['status' => $status] + $filters, 1, self::BULK_LIMIT)['data'])
+            ->take(self::BULK_LIMIT);
+
+        $retried = 0;
+        $skipped = [];
+        $polled = [];
+        foreach ($rows as $row) {
+            $model = $this->activity->find($row['type'], (int) $row['key']);
+            if (! $model) {
+                continue;
+            }
+            $accountId = (int) $model->getAttribute('marketplace_account_id');
+            if ($row['type'] === 'order_poll' && isset($polled[$accountId])) {
+                $retried++;
+
+                continue;
+            }
+            try {
+                $this->retryTask($row['type'], $model, $this->activity->describe($row['type'], $model), $planner);
+                if ($row['type'] === 'order_poll') {
+                    $polled[$accountId] = true;
+                }
+                $retried++;
+            } catch (ValidationException $e) {
+                $reason = (string) collect($e->errors())->flatten()->first();
+                $skipped[$reason] = ($skipped[$reason] ?? 0) + 1;
+            }
+        }
+        $this->audit->record('sync.tasks_retried', null, ['filters' => $filters, 'retried' => $retried, 'skipped' => array_sum($skipped)]);
+
+        return response()->json(['data' => [
+            'retried' => $retried,
+            'skipped' => collect($skipped)->map(fn ($n, $reason) => ['reason' => $reason, 'count' => $n])->values(),
+            'limited' => $rows->count() >= self::BULK_LIMIT,
+        ]]);
     }
 
     public function cancel(string $type, int $id): JsonResponse
@@ -153,7 +192,7 @@ class SyncCenterController extends Controller
             $writer->addRow(SafeRow::fromValues(['Thời gian', 'Shop', 'Kênh', 'Loại', 'Đối tượng', 'Hành động', 'Trạng thái', 'Mã lỗi', 'Thông báo', 'Số lần thử', 'Thời gian xử lý (ms)', 'Correlation ID']));
             foreach ($rows->take(self::EXPORT_LIMIT) as $r) {
                 $writer->addRow(SafeRow::fromValues([
-                    $r['created_at'], $r['account']['name'] ?? '', $r['account']['marketplace'] ?? '', $r['type'], $r['object'], $r['action'],
+                    $r['time'], $r['account']['name'] ?? '', $r['account']['marketplace'] ?? '', $r['type'], $r['object'], $r['action'],
                     $r['status'], $r['error_code'], $r['message'], $r['attempts'], $r['duration_ms'], $r['correlation_id'],
                 ]));
             }
@@ -183,6 +222,32 @@ class SyncCenterController extends Controller
         abort_unless(in_array($type, SyncActivityQuery::TYPES, true), 404);
 
         return $this->activity->find($type, $id) ?? abort(404);
+    }
+
+    /**
+     * Re-queues one failed task. Throws ValidationException when it cannot be retried now.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    private function retryTask(string $type, Model $model, array $row, InventorySyncPlanner $planner): MarketplaceAccount
+    {
+        if (! $row['can_retry']) {
+            throw ValidationException::withMessages(['task' => 'Chỉ thử lại được tác vụ thất bại.']);
+        }
+        $account = MarketplaceAccount::query()->findOrFail($model->getAttribute('marketplace_account_id'));
+        if (! $account->isActive()) {
+            throw ValidationException::withMessages(['task' => 'Shop đang mất kết nối. Kết nối lại ở trang Kết nối sàn trước khi thử lại.']);
+        }
+
+        match ($type) {
+            'webhook' => $this->retryWebhook($model),
+            'stock_push' => $this->retryStock($model, $account, $planner),
+            'order_poll' => ReconcileShopJob::dispatch($account->id, 'user'),
+            'price_push' => $this->retryPrice($model, $account),
+            default => abort(404),
+        };
+
+        return $account;
     }
 
     private function retryWebhook(Model $event): void

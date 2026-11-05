@@ -186,7 +186,7 @@ const accountLabel = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 
 
 <template>
     <PageHeader title="Kết nối sàn" description="Chỉ dùng API chính thức của sàn. Thao tác nào chưa được xác minh với tài liệu và credentials thật được đánh dấu UNKNOWN và không được giả lập.">
-        <RouterLink to="/marketplaces/sync"><Button variant="outline" data-testid="sync-log-link"><History /> Lịch sử đồng bộ</Button></RouterLink>
+        <RouterLink v-if="tenant.can('sync.view')" to="/marketplaces/sync"><Button variant="outline" data-testid="sync-log-link"><History /> Trung tâm đồng bộ</Button></RouterLink>
         <RouterLink to="/marketplaces/prices"><Button variant="outline" data-testid="price-board-link"><BadgePercent /> Bảng giá sàn</Button></RouterLink>
         <Button variant="outline" :loading="loading" @click="load"><RefreshCw /> Làm mới</Button>
     </PageHeader>

@@ -8,7 +8,8 @@ test.describe.configure({ mode: 'serial' });
 
 test('marketplaces: capability matrix, fake shop simulator, webhook monitor', async ({ page }) => {
     await login(page, 'owner@demo.test');
-    await page.getByRole('link', { name: 'Kết nối sàn' }).first().click();
+    await page.getByRole('button', { name: 'Kết nối sàn' }).first().click();
+    await page.getByRole('link', { name: 'Shop & tài khoản' }).click();
     await expect(page.getByTestId('account-list')).toContainText('Shop Demo');
     await expect(page.getByTestId('capability-matrix')).toContainText('UNKNOWN');
     await shot(page, '01-marketplaces');

@@ -143,3 +143,35 @@ it('never shows or touches another business\'s sync tasks', function () {
     $api->postJson("/api/v1/sync-center/tasks/webhook/{$event->id}/retry")->assertNotFound();
     $api->getJson('/api/v1/sync-center/tasks/stock_push/'.($this->outbox)()->id)->assertNotFound();
 });
+
+it('groups failed tasks by error code and counts statuses for the queue chips', function () {
+    $order = fakeOrder($this->shop, [[$this->shirt, 1]]);
+    WebhookEvent::query()->where('external_order_id', $order->external_order_id)->update(['status' => WebhookEvent::FAILED, 'error_code' => SyncErrorCode::RATE_LIMITED]);
+    InventorySyncOutbox::withoutGlobalScopes()->whereKey(($this->outbox)()->id)->update(['status' => InventorySyncOutbox::REJECTED, 'error_code' => SyncErrorCode::INVALID_DATA]);
+
+    $this->api->getJson('/api/v1/sync-center/overview')->assertOk()
+        ->assertJsonPath('data.problems.failed_by_code.rate_limited', 1)->assertJsonPath('data.problems.failed_by_code.invalid_data', 1);
+    $this->api->getJson('/api/v1/sync-center/tasks?status=failed')->assertOk()
+        ->assertJsonPath('meta.by_status.failed', 1)->assertJsonPath('meta.by_status.dead_letter', 1);
+});
+
+it('retries every failed task of one error code and skips what cannot run now', function () {
+    $order = fakeOrder($this->shop, [[$this->shirt, 2]]);
+    $event = WebhookEvent::query()->where('external_order_id', $order->external_order_id)->firstOrFail();
+    $event->forceFill(['status' => WebhookEvent::FAILED, 'error_code' => SyncErrorCode::NETWORK_TIMEOUT])->save();
+    InventorySyncOutbox::withoutGlobalScopes()->whereKey(($this->outbox)()->id)->update(['status' => InventorySyncOutbox::FAILED, 'error_code' => SyncErrorCode::INVALID_DATA]);
+
+    $this->api->postJson('/api/v1/sync-center/tasks/retry-failed', ['error_code' => 'network_timeout'])->assertOk()
+        ->assertJsonPath('data.retried', 1)->assertJsonPath('data.skipped', []);
+    expect($event->refresh()->status)->toBe(WebhookEvent::PROCESSED)
+        ->and(($this->outbox)()->status)->toBe(InventorySyncOutbox::FAILED) // other error code: untouched
+        ->and(DB::table('audit_logs')->where('action', 'sync.tasks_retried')->exists())->toBeTrue();
+
+    // Stock sync switched off for the shop: the push is skipped with the reason, not forced.
+    $this->shop->forceFill(['settings' => array_merge($this->shop->settings ?? [], ['sync_stock' => false])])->save();
+    $this->api->postJson('/api/v1/sync-center/tasks/retry-failed', ['error_code' => 'invalid_data'])->assertOk()
+        ->assertJsonPath('data.retried', 0)->assertJsonPath('data.skipped.0.count', 1);
+    expect(($this->outbox)()->status)->toBe(InventorySyncOutbox::FAILED);
+
+    actingInTenant(addMember($this->tenant, Role::VIEWER), $this->tenant)->postJson('/api/v1/sync-center/tasks/retry-failed')->assertForbidden();
+});

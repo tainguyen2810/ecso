@@ -584,6 +584,64 @@ export interface SyncErrorData {
     resolution: string | null;
 }
 
+export type SyncTaskType = 'webhook' | 'stock_push' | 'order_poll' | 'price_push';
+export type SyncTaskStatus = 'pending' | 'processing' | 'success' | 'failed' | 'retry_scheduled' | 'cancelled' | 'dead_letter';
+
+/** One row of the Sync Center queue (SyncActivityQuery): a webhook, stock push, order poll or price push. */
+export interface SyncTaskData {
+    id: string;
+    key: number;
+    type: SyncTaskType;
+    account: { id: string; name: string; marketplace: string } | null;
+    status: SyncTaskStatus;
+    raw_status: string;
+    object: string | null;
+    action: string | null;
+    attempts: number | null;
+    next_retry_at: string | null;
+    message: string | null;
+    error_code: string | null;
+    error_label: string | null;
+    correlation_id: string | null;
+    counts?: Record<string, number>;
+    /** When the queue sorts and shows it: received (webhook), last pushed (stock/price), started (order poll). */
+    time: string | null;
+    created_at: string | null;
+    started_at: string | null;
+    completed_at: string | null;
+    duration_ms: number | null;
+    can_retry: boolean;
+    can_cancel: boolean;
+    related?: SyncTaskData[];
+}
+
+export interface SyncShopData {
+    id: string;
+    name: string;
+    marketplace: string;
+    status: string;
+    sync_enabled: boolean;
+    circuit_open: boolean;
+    last_error: string | null;
+    last_synced_at: string | null;
+    last_order_poll_at: string | null;
+    last_webhook_at: string | null;
+    token_expires_at: string | null;
+    open_errors: number;
+    pending_push: number;
+    stock_drift: number;
+}
+
+export interface SyncOverviewData {
+    accounts: { total: number; active: number; disconnected: number; circuit_open: number; token_expiring: number; reconcile_overdue: number };
+    tasks: { by_status: Record<SyncTaskStatus, number>; by_type: Record<SyncTaskType, Record<SyncTaskStatus, number>> };
+    problems: { open_errors: number; errors_by_code: Record<string, number>; dead_letters: number; stock_drift: number; failed_by_code: Record<string, number> };
+    last_synced_at: string | null;
+    shops: SyncShopData[];
+    error_codes: Record<string, { label: string; hint: string; auto_retry: boolean }>;
+    permissions: { operate: boolean; export: boolean };
+}
+
 export interface StatusMapData {
     defaults: Record<string, string>;
     custom: Record<string, string>;

@@ -245,7 +245,9 @@ class SyncActivityQuery
             ? max(0, (int) CarbonImmutable::parse($row['started_at'])->diffInMilliseconds(CarbonImmutable::parse($row['completed_at']))) : null;
         $row['can_retry'] = in_array($row['status'], [self::FAILED, self::DEAD_LETTER], true);
         $row['can_cancel'] = in_array($type, ['webhook', 'stock_push'], true) && in_array($row['status'], [self::PENDING, self::RETRY_SCHEDULED], true);
-        $row['at'] = (string) $row['at'];
+        // The moment the queue sorts by (and shows): received, last pushed, started.
+        $row['time'] = $row['at']?->toIso8601String();
+        $row['at'] = (string) $row['at']?->format('YmdHis');
 
         return $base + $row;
     }
@@ -272,7 +274,7 @@ class SyncActivityQuery
             'created_at' => $m->received_at->toIso8601String(),
             'started_at' => null,
             'completed_at' => $m->processed_at?->toIso8601String(),
-            'at' => $m->received_at->format('YmdHis'),
+            'at' => $m->received_at,
         ];
     }
 
@@ -298,7 +300,7 @@ class SyncActivityQuery
             'created_at' => $m->created_at?->toIso8601String(),
             'started_at' => $m->last_attempt_at?->toIso8601String(),
             'completed_at' => in_array($m->status, [InventorySyncOutbox::PENDING], true) ? null : $m->updated_at?->toIso8601String(),
-            'at' => $m->updated_at?->format('YmdHis'),
+            'at' => $m->updated_at,
         ];
     }
 
@@ -323,7 +325,7 @@ class SyncActivityQuery
             'created_at' => $m->started_at->toIso8601String(),
             'started_at' => $m->started_at->toIso8601String(),
             'completed_at' => $m->finished_at?->toIso8601String(),
-            'at' => $m->started_at->format('YmdHis'),
+            'at' => $m->started_at,
         ];
     }
 
@@ -347,7 +349,7 @@ class SyncActivityQuery
             'created_at' => $m->updated_at?->toIso8601String(),
             'started_at' => null,
             'completed_at' => $m->price_pushed_at?->toIso8601String(),
-            'at' => ($m->price_push_status === 'ok' ? $m->price_pushed_at : $m->updated_at)?->format('YmdHis'),
+            'at' => $m->price_push_status === 'ok' ? $m->price_pushed_at : $m->updated_at,
         ];
     }
 

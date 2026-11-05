@@ -92,7 +92,8 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
     {
         label: 'Thiết lập',
         items: [
-            { name: 'marketplaces', label: 'Kết nối sàn', path: '/marketplaces', icon: PlugZap, permission: 'marketplace.view', description: 'Kết nối Shopee, TikTok Shop, Lazada, Tiki bằng API chính thức.' },
+            { name: 'marketplaces', label: 'Kết nối sàn', path: '/marketplaces', icon: PlugZap, permission: 'marketplace.view', description: 'Kết nối Shopee, TikTok Shop, Lazada, Tiki bằng API chính thức.',
+                children: [{ label: 'Shop & tài khoản', path: '/marketplaces' }, { label: 'Trung tâm đồng bộ', path: '/marketplaces/sync', permission: 'sync.view' }] },
             { name: 'settings', label: 'Cấu hình', path: '/settings', icon: Settings, permission: 'settings.manage', anyPermission: ['members.view', 'billing.view', 'audit.view'], shortcut: 's', alsoActive: ['members', 'subscription', 'audit', 'sales-channels'] },
             // Reached from Cấu hình like Sapo; kept here for their shortcuts and access checks.
             { name: 'sales-channels', label: 'Kênh bán riêng', path: '/sales-channels', icon: Store, permission: 'orders.view', hidden: true, description: 'Quầy, cửa hàng, Facebook, Zalo, website.' },

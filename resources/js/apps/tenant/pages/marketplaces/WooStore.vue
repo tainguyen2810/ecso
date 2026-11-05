@@ -224,7 +224,7 @@ const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].
                 <StatTile :icon="Link2" label="Sản phẩm đã liên kết" :value="`${formatNumber(account.stats?.mapped ?? 0)} / ${formatNumber(account.stats?.listings ?? 0)}`" :to="`/marketplaces/${account.id}/listings`" />
                 <StatTile :icon="PackagePlus" label="Chờ duyệt (SP mới)" :value="formatNumber(overview.new_products)" :tone="overview.new_products ? 'amber' : 'slate'" />
                 <StatTile :icon="ShoppingCart" label="Đơn tuần này" :value="formatNumber(overview.orders_this_week)" tone="green" />
-                <StatTile :icon="AlertTriangle" label="Lỗi đồng bộ" :value="formatNumber(overview.sync_errors)" :tone="overview.sync_errors ? 'red' : 'slate'" :to="`/marketplaces/sync?account=${account.id}`" />
+                <StatTile :icon="AlertTriangle" label="Lỗi đồng bộ" :value="formatNumber(overview.sync_errors)" :tone="overview.sync_errors ? 'red' : 'slate'" :to="`/marketplaces/sync?tab=log&account=${account.id}`" />
             </div>
         </Card>
 
@@ -308,7 +308,7 @@ const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].
                     <p class="text-xs text-muted-foreground">Dù webhook lỗi, ECSO vẫn đối soát đơn theo chu kỳ ở trên nên không mất đơn.</p>
                 </div>
                 <div class="flex gap-2 border-t px-5 py-3 text-sm">
-                    <RouterLink :to="`/marketplaces/sync?account=${account.id}`" class="inline-flex items-center gap-1 text-primary hover:underline"><History class="size-4" /> Lịch sử và lỗi đồng bộ</RouterLink>
+                    <RouterLink :to="`/marketplaces/sync?tab=log&account=${account.id}`" class="inline-flex items-center gap-1 text-primary hover:underline"><History class="size-4" /> Lịch sử và lỗi đồng bộ</RouterLink>
                 </div>
             </Card>
 
