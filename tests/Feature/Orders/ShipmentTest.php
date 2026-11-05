@@ -39,10 +39,10 @@ it('opens a shipment at handover and follows the order to delivery, with the COD
     expect($this->api->getJson('/api/v1/shipments?q=GHN1002')->assertOk()->json('data.0.order.id'))->toBe($id);
     expect($this->api->getJson('/api/v1/shipments?status=failed')->json('data'))->toBe([]);
     $detail = $this->api->getJson("/api/v1/shipments/{$shipment->ulid}")->assertOk()->json('data');
-    expect(array_column($detail['events'], 'status'))->toBe(['picked_up', 'picked_up', 'delivered'])->and($detail['status_label'])->toBe('Giao thành công');
+    expect(array_column($detail['events'], 'status'))->toBe(['delivered', 'picked_up', 'picked_up'])->and($detail['status_label'])->toBe('Giao thành công');
     expect($this->api->getJson("/api/v1/orders/{$id}")->json('data.shipments.0.id'))->toBe($shipment->ulid);
     $summary = $this->api->getJson('/api/v1/shipments/summary')->assertOk()->json('data');
-    expect($summary['by_status'])->toBe(['delivered' => 1])->and($summary['cod_held'])->toBe([['carrier' => 'ghn', 'amount' => '300000.00', 'count' => 1]]);
+    expect($summary['by_status'])->toBe(['delivered' => 1])->and($summary['tabs']['delivered'])->toBe(1)->and($summary['cod_held'])->toBe([['carrier' => 'ghn', 'carrier_name' => 'Giao Hàng Nhanh', 'amount' => '300000.00', 'count' => 1]]);
 });
 
 it('counts every failed attempt, marks redelivery, and ends returned when the parcel is back', function () {
@@ -112,4 +112,69 @@ it('fills in shipments for older orders without touching them, and only once', f
 
     $this->artisan('ecso:backfill-shipments')->expectsOutputToContain('Đã tạo 0 vận đơn')->assertSuccessful();
     expect(Shipment::withoutGlobalScopes()->count())->toBe(1);
+});
+
+it('opens a shipment by hand, records the carrier steps through the order, and refuses it on marketplace orders', function () {
+    $id = createSalesOrder($this->owner, $this->tenant, [[$this->variant, 1, 250000]], ['stage' => 'confirmed', 'is_cod' => true])->json('data.id');
+    $this->api->postJson("/api/v1/orders/{$id}/shipments", ['mode' => 'manual', 'carrier' => 'GHN'])->assertUnprocessable()->assertJsonValidationErrors('tracking_number');
+
+    $created = $this->api->postJson("/api/v1/orders/{$id}/shipments", ['mode' => 'manual', 'carrier' => 'GHN', 'tracking_number' => ' GHN77 ', 'weight_g' => 800, 'packages' => 1, 'fee_estimated' => 32000])
+        ->assertCreated()->json('data');
+    expect($created['status'])->toBe('awaiting_pickup')->and($created['tracking_number'])->toBe('GHN77')->and($created['fee_status'])->toBe('estimated')
+        ->and($created['cod_amount'])->toBe('250000.00')->and(array_keys($created['actions']))->toBe(['pick_up', 'cancel']);
+    $order = Order::withoutGlobalScopes()->where('ulid', $id)->first();
+    expect($order->tracking_number)->toBe('GHN77')->and($order->shipping_carrier)->toBe('GHN');
+    // One live shipment per order.
+    $this->api->postJson("/api/v1/orders/{$id}/shipments", ['mode' => 'self'])->assertUnprocessable()->assertJsonValidationErrors('order');
+
+    $sid = $created['id'];
+    $this->api->postJson("/api/v1/shipments/{$sid}/actions/pick_up")->assertOk()->assertJsonPath('data.status', 'picked_up');
+    expect($order->refresh()->status)->toBe('HANDED_OVER');
+    $this->api->postJson("/api/v1/shipments/{$sid}/actions/fail", ['reason' => 'Không liên lạc được'])->assertOk()
+        ->assertJsonPath('data.status', 'failed')->assertJsonPath('data.failure_reason', 'Không liên lạc được');
+    expect($order->refresh()->status)->toBe('FAILED_DELIVERY');
+    $this->api->postJson("/api/v1/shipments/{$sid}/actions/return", ['reason' => 'Khách từ chối'])->assertOk()->assertJsonPath('data.status', 'returning');
+    expect($order->refresh()->status)->toBe('FAILED_DELIVERY'); // the return on its way closes the order once inspected
+    $this->api->postJson("/api/v1/shipments/{$sid}/actions/deliver")->assertUnprocessable();
+
+    $detail = $this->api->getJson("/api/v1/shipments/{$sid}")->assertOk()->json('data');
+    expect($detail['events'][0]['status'])->toBe('returning')->and($detail['events'][0]['description'])->toBe('Khách từ chối')
+        ->and($detail['events'][1]['description'])->toBe('Không liên lạc được')->and($detail['returns'])->toHaveCount(1);
+
+    // Marketplace orders: the marketplace makes the shipment and reports its steps.
+    $mk = fakeOrder(fakeShop($this->tenant), [[$this->variant, 1]], 'fake_shipped', ['tracking_number' => 'SPX1', 'carrier' => 'SPX Express']);
+    $this->api->postJson("/api/v1/orders/{$mk->ulid}/shipments", ['mode' => 'self'])->assertUnprocessable();
+    $mks = Shipment::withoutGlobalScopes()->where('order_id', $mk->id)->sole();
+    $actions = $this->api->getJson("/api/v1/shipments/{$mks->ulid}")->json('data.actions');
+    expect($actions['deliver']['allowed'])->toBeFalse()->and($actions['deliver']['reason'])->toContain('Đơn sàn');
+    $this->api->postJson("/api/v1/shipments/{$mks->ulid}/actions/deliver")->assertUnprocessable();
+    $this->api->putJson("/api/v1/shipments/{$mks->ulid}", ['tracking_number' => 'X'])->assertUnprocessable();
+    $this->api->putJson("/api/v1/shipments/{$mks->ulid}", ['weight_g' => 500])->assertOk()->assertJsonPath('data.weight_g', 500);
+});
+
+it('cancels a shipment not picked up yet so a new one can be made, and edits the tracking number', function () {
+    $id = createSalesOrder($this->owner, $this->tenant, [[$this->variant, 1]], ['stage' => 'confirmed'])->json('data.id');
+    $sid = $this->api->postJson("/api/v1/orders/{$id}/shipments", ['mode' => 'manual', 'carrier' => 'GHN', 'tracking_number' => 'G1'])->json('data.id');
+    $this->api->putJson("/api/v1/shipments/{$sid}", ['tracking_number' => 'G2', 'carrier' => 'J&T Express'])->assertOk()
+        ->assertJsonPath('data.tracking_number', 'G2')->assertJsonPath('data.carrier', 'jt');
+    expect(Order::withoutGlobalScopes()->where('ulid', $id)->value('tracking_number'))->toBe('G2');
+
+    $this->api->postJson("/api/v1/shipments/{$sid}/actions/cancel", ['reason' => 'Tạo nhầm hãng'])->assertOk()->assertJsonPath('data.status', 'cancelled');
+    expect(Order::withoutGlobalScopes()->where('ulid', $id)->value('tracking_number'))->toBeNull();
+
+    // Own shipper: no tracking number needed.
+    $self = $this->api->postJson("/api/v1/orders/{$id}/shipments", ['mode' => 'self'])->assertCreated()->json('data');
+    expect($self['source'])->toBe('self')->and($self['carrier_name'])->toBe('Tự giao')->and($self['tracking_number'])->toBeNull();
+    $order = $this->api->getJson("/api/v1/orders/{$id}")->json('data');
+    expect(array_column($order['shipments'], 'status'))->toBe(['cancelled', 'awaiting_pickup']);
+
+    // Page data: tabs, late parcels, filters.
+    $this->travel(6)->days();
+    $this->api->postJson("/api/v1/shipments/{$self['id']}/actions/pick_up")->assertOk();
+    $this->travel(6)->days();
+    $summary = $this->api->getJson('/api/v1/shipments/summary')->assertOk()->json('data');
+    expect($summary['tabs']['delivering'])->toBe(1)->and($summary['tabs']['cancelled'])->toBe(1)->and($summary['tabs']['all'])->toBe(2)->and($summary['late'])->toBe(1);
+    expect($this->api->getJson('/api/v1/shipments?late=1')->json('data.0.id'))->toBe($self['id']);
+    expect($this->api->getJson('/api/v1/shipments?tab=cancelled')->json('data.0.id'))->toBe($sid);
+    expect($this->api->getJson('/api/v1/shipments?carrier=other&tab=delivering')->json('data'))->toHaveCount(1);
 });

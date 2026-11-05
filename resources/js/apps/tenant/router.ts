@@ -67,6 +67,7 @@ const routes: RouteRecordRaw[] = [
             { path: 'purchasing/reorder', name: 'reorder', component: () => import('./pages/purchasing/Reorder.vue'), meta: { permission: 'purchasing.view', nav: 'purchasing' } },
             { path: 'purchasing/:id/edit', name: 'purchase-edit', component: () => import('./pages/purchasing/PurchaseOrderForm.vue'), meta: { permission: 'purchasing.manage', nav: 'purchasing' } },
             { path: 'purchasing/:id', name: 'purchase-show', component: () => import('./pages/purchasing/PurchaseOrderDetail.vue'), meta: { permission: 'purchasing.view', nav: 'purchasing' } },
+            { path: 'shipments', name: 'shipments', component: () => import('./pages/shipments/ShipmentList.vue'), meta: { permission: 'orders.view', nav: 'shipments' } },
             { path: 'returns', name: 'returns', component: () => import('./pages/returns/ReturnList.vue'), meta: { permission: 'returns.view', nav: 'returns' } },
             { path: 'returns/:id', name: 'return-show', component: () => import('./pages/returns/ReturnDetail.vue'), meta: { permission: 'returns.view', nav: 'returns' } },
             { path: 'marketplaces', name: 'marketplaces', component: () => import('./pages/marketplaces/Marketplaces.vue'), meta: { permission: 'marketplace.view', nav: 'marketplaces' } },
