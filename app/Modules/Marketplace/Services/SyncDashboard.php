@@ -114,10 +114,10 @@ class SyncDashboard
         ];
         $counts = [];
         foreach ($sources as $query) {
-            $rows = $query->whereIn('marketplace_account_id', $accountIds)->selectRaw('error_code, COUNT(*) as n')->groupBy('error_code')->pluck('n', 'error_code');
-            foreach ($rows as $code => $n) {
-                $key = $code === '' ? 'other' : (string) $code; // a NULL code groups under the '' key
-                $counts[$key] = ($counts[$key] ?? 0) + (int) $n;
+            $rows = $query->whereIn('marketplace_account_id', $accountIds)->toBase()->selectRaw('error_code, COUNT(*) as n')->groupBy('error_code')->get();
+            foreach ($rows as $row) {
+                $key = (string) ($row->error_code ?? '') !== '' ? (string) $row->error_code : 'other';
+                $counts[$key] = ($counts[$key] ?? 0) + (int) $row->n;
             }
         }
         $prices = ListingVariant::query()->whereIn('marketplace_account_id', $accountIds)->where('price_push_status', 'failed')->count();
