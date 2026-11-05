@@ -300,6 +300,8 @@ export interface OrderDetail extends OrderSummary {
     /** How much of what was shipped has come back on returns. */
     return_state?: 'none' | 'partial' | 'full';
     payments: OrderPaymentData[];
+    /** Website order: what the store reports paid that nobody has confirmed in a fund yet (null otherwise). */
+    unconfirmed_amount?: string | null;
     created_by: string | null;
     exchanged_from?: { id: string; number: string; credit: string; order: { id: string; external_order_id: string } }[];
     customer_stats: { orders_count: number; total_spent: string; debt: string; returns_count: number; failed_deliveries: number } | null;

@@ -150,6 +150,8 @@ class OrderController extends Controller
             // none | partial | full: how much of what was shipped has come back on returns.
             'return_state' => $returnService->returnState($order),
             'payments' => PaymentResource::collection($order->payments),
+            // Website order: what the store reports paid but nobody has confirmed in a fund yet.
+            'unconfirmed_amount' => $order->marketplace === PaymentService::WEBSITE ? app(PaymentService::class)->unconfirmed($order) : null,
             'created_by' => $order->creator?->name,
             'customer_stats' => $order->customer_id ? $this->customerStats($order) : null,
             'capabilities' => $capabilities,

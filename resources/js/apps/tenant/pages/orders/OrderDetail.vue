@@ -24,6 +24,7 @@ import { downloadPackingSlips } from './packingSlip';
 import { orderWorkflow } from './workflow';
 import { useSettingsStore } from '@/shared/stores/settings';
 import type { OrderDetail, Ref } from '@/shared/types';
+import type { Fund } from '../cash/voucher';
 
 const route = useRoute();
 const tenant = useTenantStore();
@@ -127,7 +128,10 @@ const actionList = computed(() => {
 const handoverOpen = ref(false);
 const handover = ref({ carrier: '', tracking_number: '' });
 const payOpen = ref(false);
-const payForm = ref({ kind: 'payment', method: 'cash', amount: '' as string | number, reference: '', note: '' });
+const payForm = ref({ kind: 'payment', method: 'cash', amount: '' as string | number, reference: '', note: '', account: '' });
+// Funds for the website "money received" confirmation; empty when the member cannot see funds (the server then uses the bank fund).
+const funds = ref<Fund[]>([]);
+const confirmedAmount = computed(() => (order.value?.payments ?? []).filter((p) => !p.voided_at && p.kind === 'payment').reduce((sum, p) => sum + Number(p.amount), 0));
 const payError = ref<ApiError | null>(null);
 
 function startAction(action: string) {
@@ -144,7 +148,17 @@ function openPay(kind: 'payment' | 'refund') {
     const o = order.value!;
     const refundable = Number(o.paid_amount ?? 0) - Number(o.refunded_amount ?? 0);
     payError.value = null;
-    payForm.value = { kind, method: o.is_cod && kind === 'payment' ? 'cod' : 'cash', amount: kind === 'payment' ? Number(o.balance_due ?? 0) : refundable, reference: '', note: '' };
+    payForm.value = { kind, method: o.is_cod && kind === 'payment' ? 'cod' : 'cash', amount: kind === 'payment' ? Number(o.balance_due ?? 0) : refundable, reference: '', note: '', account: '' };
+    payKey = newIdempotencyKey();
+    payOpen.value = true;
+}
+
+async function openConfirm() {
+    const o = order.value!;
+    payError.value = null;
+    if (!funds.value.length) funds.value = ((await api.get('/cash-accounts').catch(() => null))?.data.data ?? []).filter((f: Fund) => f.is_active);
+    const bank = funds.value.find((f) => f.kind === 'bank');
+    payForm.value = { kind: 'payment', method: o.is_cod ? 'cod' : 'bank_transfer', amount: Number(o.unconfirmed_amount ?? 0), reference: o.transaction_id ?? '', note: '', account: bank?.id ?? funds.value[0]?.id ?? '' };
     payKey = newIdempotencyKey();
     payOpen.value = true;
 }
@@ -154,8 +168,8 @@ async function pay() {
     payError.value = null;
     try {
         const f = payForm.value;
-        await api.post(`/orders/${order.value!.id}/payments`, { ...f, amount: Number(f.amount), reference: f.reference || null, note: f.note || null }, idempotent(payKey));
-        toast.success(f.kind === 'refund' ? 'Đã ghi nhận hoàn tiền.' : 'Đã ghi nhận thanh toán.');
+        await api.post(`/orders/${order.value!.id}/payments`, { ...f, amount: Number(f.amount), reference: f.reference || null, note: f.note || null, account: f.account || null }, idempotent(payKey));
+        toast.success(f.kind === 'refund' ? 'Đã ghi nhận hoàn tiền.' : isWebsite.value ? 'Đã xác nhận tiền về quỹ.' : 'Đã ghi nhận thanh toán.');
         payOpen.value = false;
         await load();
     } catch (e) {
@@ -540,6 +554,35 @@ async function createReturn() {
                     </ul>
                 </Card>
 
+                <Card v-if="isWebsite" caps title="Tiền về quỹ" data-testid="receipts-card">
+                    <template v-if="tenant.can('orders.payment')" #actions>
+                        <Button v-if="Number(order.unconfirmed_amount ?? 0) > 0" size="sm" data-testid="confirm-receipt" @click="openConfirm"><Banknote /> Xác nhận đã nhận tiền</Button>
+                    </template>
+                    <div class="grid grid-cols-2 gap-3 p-4">
+                        <div class="rounded-lg bg-emerald-50/70 px-3 py-2.5">
+                            <p class="text-xs text-muted-foreground">Đã vào quỹ</p>
+                            <p class="font-semibold tabular-nums text-emerald-600" data-testid="confirmed-amount">{{ formatMoney(confirmedAmount) }}</p>
+                        </div>
+                        <div :class="cn('rounded-lg px-3 py-2.5', Number(order.unconfirmed_amount ?? 0) > 0 ? 'bg-amber-50/70' : 'bg-slate-50')">
+                            <p class="text-xs text-muted-foreground">Chưa xác nhận</p>
+                            <p :class="cn('font-semibold tabular-nums', Number(order.unconfirmed_amount ?? 0) > 0 && 'text-amber-600')" data-testid="unconfirmed-amount">{{ formatMoney(order.unconfirmed_amount ?? 0) }}</p>
+                        </div>
+                    </div>
+                    <ul v-if="order.payments.length" class="divide-y border-t text-sm">
+                        <li v-for="p in order.payments" :key="p.id" class="flex items-center justify-between gap-2 px-5 py-2.5">
+                            <div :class="p.voided_at && 'opacity-50 line-through'">
+                                <div>Nhận · {{ paymentMethodNames[p.method] ?? p.method }}<span v-if="p.reference" class="ml-1 font-mono text-xs">{{ p.reference }}</span></div>
+                                <div class="text-xs text-muted-foreground">{{ formatDateTime(p.paid_at) }}<span v-if="p.created_by"> · {{ p.created_by }}</span><span v-if="p.void_reason"> · hủy: {{ p.void_reason }}</span></div>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <span class="whitespace-nowrap tabular-nums">{{ formatMoney(p.amount) }}</span>
+                                <Button v-if="!p.voided_at && tenant.can('orders.payment.void')" variant="ghost" size="icon" class="size-7" title="Hủy xác nhận (nhập nhầm)" @click="voidPayment(p.id)"><Ban class="size-3.5" /></Button>
+                            </div>
+                        </li>
+                    </ul>
+                    <p class="border-t px-5 py-2 text-xs text-muted-foreground">Tiền website chỉ tính vào quỹ sau khi có người xác nhận đã nhận. Trạng thái thanh toán của đơn vẫn theo website.</p>
+                </Card>
+
                 <Card caps title="Khách hàng & giao hàng">
                     <div v-if="order.customer" class="flex items-center gap-3 border-b px-5 py-3">
                         <span class="grid size-9 shrink-0 place-items-center rounded-full bg-blue-50 text-xs font-semibold text-blue-600">{{ initials(order.customer.name) }}</span>
@@ -666,8 +709,9 @@ async function createReturn() {
             </template>
         </Dialog>
 
-        <Dialog v-model:open="payOpen" :title="payForm.kind === 'refund' ? 'Hoàn tiền cho khách' : 'Thu tiền'">
+        <Dialog v-model:open="payOpen" :title="payForm.kind === 'refund' ? 'Hoàn tiền cho khách' : isWebsite ? 'Xác nhận đã nhận tiền' : 'Thu tiền'">
             <div class="space-y-3">
+                <FormField v-if="isWebsite && funds.length" label="Tiền vào quỹ"><Select v-model="payForm.account" data-testid="pay-account" :options="funds.map((f) => ({ value: f.id, label: f.name }))" /></FormField>
                 <FormField label="Hình thức"><Select v-model="payForm.method" :options="Object.entries(paymentMethods).map(([value, label]) => ({ value, label }))" /></FormField>
                 <FormField label="Số tiền" :error="payError?.field('amount')"><Input v-model="payForm.amount" type="number" min="1" data-testid="pay-amount-input" /></FormField>
                 <FormField label="Mã giao dịch (nếu có)"><Input v-model="payForm.reference" /></FormField>
