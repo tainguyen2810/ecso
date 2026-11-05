@@ -176,7 +176,6 @@ class SyncActivityQuery
                 'stock_push' => $query->where(fn ($w) => $w->where('correlation_id', $q)->orWhereHas('listingVariant', fn ($l) => $l->where('seller_sku', $q)->orWhere('external_sku_id', $q))),
                 'order_poll' => $query->where('correlation_id', $q),
                 'price_push' => $query->where(fn ($w) => $w->where('seller_sku', $q)->orWhere('external_sku_id', $q)),
-                default => null,
             };
         }
 
@@ -270,10 +269,10 @@ class SyncActivityQuery
             'message' => $m->result,
             'error_code' => $m->error_code,
             'correlation_id' => $m->correlation_id,
-            'created_at' => $m->received_at?->toIso8601String(),
+            'created_at' => $m->received_at->toIso8601String(),
             'started_at' => null,
             'completed_at' => $m->processed_at?->toIso8601String(),
-            'at' => $m->received_at?->format('YmdHis'),
+            'at' => $m->received_at->format('YmdHis'),
         ];
     }
 
@@ -321,10 +320,10 @@ class SyncActivityQuery
             'error_code' => $m->error_code,
             'correlation_id' => $m->correlation_id,
             'counts' => (object) ($m->counts ?? []),
-            'created_at' => $m->started_at?->toIso8601String(),
-            'started_at' => $m->started_at?->toIso8601String(),
+            'created_at' => $m->started_at->toIso8601String(),
+            'started_at' => $m->started_at->toIso8601String(),
             'completed_at' => $m->finished_at?->toIso8601String(),
-            'at' => $m->started_at?->format('YmdHis'),
+            'at' => $m->started_at->format('YmdHis'),
         ];
     }
 
