@@ -36,6 +36,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $weight_g
  * @property string|null $fee_estimated
  * @property string|null $fee_actual
+ * @property string|null $cod_collected
  * @property string|null $failure_reason
  */
 class Shipment extends Model

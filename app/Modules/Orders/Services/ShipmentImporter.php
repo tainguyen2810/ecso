@@ -142,8 +142,8 @@ class ShipmentImporter
      */
     private function plan(array $row, int $line, array &$seen): array
     {
-        $tracking = Tracking::normalize($row['tracking'] ?? null);
-        $base = ['line' => $line, 'order' => trim($row['order'] ?? ''), 'tracking' => $tracking, 'carrier' => $row['carrier'] ?? null, 'order_id' => null];
+        $tracking = Tracking::normalize($row['tracking']);
+        $base = ['line' => $line, 'order' => trim($row['order']), 'tracking' => $tracking, 'carrier' => $row['carrier'] ?? null, 'order_id' => null];
         $error = fn (string $note) => ['action' => self::ERROR, 'note' => $note] + $base;
 
         if ($base['order'] === '') {

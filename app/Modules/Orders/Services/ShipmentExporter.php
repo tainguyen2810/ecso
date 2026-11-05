@@ -64,7 +64,7 @@ class ShipmentExporter
                         (string) $s->tracking_number,
                         (string) ($s->carrier_name ?? $s->carrier),
                         (string) $o?->external_order_id,
-                        (string) ($o?->channel?->name ?? ($o?->isManual() ? 'Kênh riêng' : ucfirst((string) $o?->marketplace))),
+                        (string) ($o?->channel->name ?? ($o?->isManual() ? 'Kênh riêng' : ucfirst((string) $o?->marketplace))),
                         (string) $o?->buyer_name,
                         (string) ($o === null ? '' : ($o->ownsCustomerData() ? ($o->buyer_phone ?? $o->buyer_phone_masked) : $o->buyer_phone_masked)),
                         (string) $o?->shipping_address,
