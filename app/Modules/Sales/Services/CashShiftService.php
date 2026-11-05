@@ -3,6 +3,9 @@
 namespace App\Modules\Sales\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Cashbook\Models\CashAccount;
+use App\Modules\Cashbook\Services\CashAccountService;
+use App\Modules\Cashbook\Services\CashClosingService;
 use App\Modules\Identity\Models\User;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Support\DocumentNumber;
@@ -176,6 +179,11 @@ class CashShiftService
                 'closing_note' => $data['closing_note'] ?? null,
                 'open_user_id' => null,
             ])->save();
+            // The drawer is part of the cash fund: a shortage or surplus found at closing is booked there too.
+            $fund = CashAccount::query()->find(app(CashAccountService::class)->resolve(null, 'cash'));
+            if ($fund) {
+                app(CashClosingService::class)->bookDifference($fund, $difference, "két ca {$shift->number}: ".trim((string) ($data['closing_note'] ?? '')), $shift->number);
+            }
             $this->audit->record('shift.closed', $shift, ['number' => $shift->number, 'expected' => $totals['expected_cash'], 'counted' => $counted, 'difference' => $difference]);
 
             return $shift;

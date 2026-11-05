@@ -12,6 +12,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant', 'idempotent'])->group(f
     Route::get('suppliers/export', [SupplierController::class, 'export'])->middleware('throttle:10,1,purchasing.suppliers.export');
     Route::apiResource('suppliers', SupplierController::class);
     Route::post('suppliers/{supplier}/payments', [SupplierPaymentController::class, 'store'])->middleware('idempotent');
+    Route::post('suppliers/{supplier}/refunds', [SupplierPaymentController::class, 'refund'])->middleware('idempotent');
     Route::post('supplier-payments/{supplierPayment}/void', [SupplierPaymentController::class, 'void']);
 
     Route::get('purchase-orders/reorder', [ReorderController::class, 'index']);

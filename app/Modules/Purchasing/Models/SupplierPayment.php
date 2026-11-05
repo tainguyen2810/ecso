@@ -10,8 +10,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 /**
- * Money paid to a supplier, for one purchase order or on account. Voided instead of edited.
+ * Money paid to a supplier, for one purchase order or on account, or (kind "refund") money the supplier paid back.
+ * Voided instead of edited.
  *
+ * @property string $kind
  * @property Carbon $paid_at
  * @property Carbon|null $voided_at
  */
@@ -20,6 +22,13 @@ class SupplierPayment extends Model
     use BelongsToTenant, HasPublicUlid;
 
     public const METHODS = ['cash', 'bank_transfer', 'card', 'other'];
+
+    public const PAYMENT = 'payment';
+
+    public const REFUND = 'refund';
+
+    /** SQL of a row's amount as paid to the supplier: a refund counts negative. */
+    public const SIGNED_SQL = "CASE WHEN kind = 'refund' THEN -amount ELSE amount END";
 
     protected $guarded = ['id', 'ulid', 'tenant_id'];
 

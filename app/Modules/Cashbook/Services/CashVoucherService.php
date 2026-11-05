@@ -121,14 +121,15 @@ class CashVoucherService
     /**
      * @param  array{direction: string, type: string, party_kind: string, party_id?: string|null, party_name?: string|null, method: string, amount: string|int|float, counts_in_pnl?: bool|null, reference?: string|null, note?: string|null, paid_at?: string|null, account?: string|null}  $data
      */
-    public function record(array $data): CashVoucher
+    public function record(array $data, bool $system = false): CashVoucher
     {
-        return DB::transaction(function () use ($data) {
+        return DB::transaction(function () use ($data, $system) {
             $type = CashVoucherType::query()->where('ulid', $data['type'])->first();
             if (! $type || $type->direction !== $data['direction']) {
                 throw ValidationException::withMessages(['type' => 'Loại phiếu không hợp lệ.']);
             }
-            if (! $type->is_active) {
+            // A voucher the system books itself (a count difference) still goes through when its type was turned off.
+            if (! $type->is_active && ! $system) {
                 throw ValidationException::withMessages(['type' => 'Loại phiếu này đã ngừng dùng.']);
             }
             $amount = bcadd((string) $data['amount'], '0', 2);

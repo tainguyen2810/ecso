@@ -49,7 +49,7 @@ class CashFlows
             ->leftJoin('users as u', 'u.id', '=', 'sp.created_by')
             ->where('sp.tenant_id', $tenant)->whereNull('sp.voided_at')
             ->when($method, fn ($q) => $q->where('sp.method', $method))
-            ->selectRaw("sp.cash_account_id as account_id, sp.paid_at, 'supplier' as type, NULL as label, sp.method, -sp.amount as amount, po.number as document, po.ulid as document_id, "
+            ->selectRaw("sp.cash_account_id as account_id, sp.paid_at, CASE WHEN sp.kind = 'refund' THEN 'supplier_refund' ELSE 'supplier' END as type, NULL as label, sp.method, CASE WHEN sp.kind = 'refund' THEN sp.amount ELSE -sp.amount END as amount, po.number as document, po.ulid as document_id, "
                 ."'purchase' as document_kind, s.name as party, sp.reference, u.name as created_by");
         $scoped($supplier, 'sp.cash_account_id');
 

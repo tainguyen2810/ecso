@@ -104,7 +104,8 @@ class VoucherLedger
             ->leftJoin('users as u', 'u.id', '=', 'sp.created_by')
             ->leftJoin('cash_accounts as acc', 'acc.id', '=', 'sp.cash_account_id')
             ->where('sp.tenant_id', $tenant)
-            ->selectRaw("'supplier_payment' as source, sp.ulid as id, NULL as number, 'payment' as direction, NULL as type_id, 'Trả tiền nhà cung cấp' as type_name, "
+            ->selectRaw("'supplier_payment' as source, sp.ulid as id, NULL as number, CASE WHEN sp.kind = 'refund' THEN 'receipt' ELSE 'payment' END as direction, "
+                ."NULL as type_id, CASE WHEN sp.kind = 'refund' THEN 'Nhà cung cấp hoàn tiền' ELSE 'Trả tiền nhà cung cấp' END as type_name, "
                 ."0 as counts_in_pnl, 'supplier' as party_kind, s.ulid as party_id, s.name as party_name, sp.method, sp.amount, sp.paid_at, "
                 ."CASE WHEN po.id IS NULL THEN NULL ELSE 'purchase' END as document_kind, po.ulid as document_id, po.number as document_number, "
                 .'sp.reference, sp.note, u.name as created_by, sp.voided_at, sp.void_reason, sp.created_at, '

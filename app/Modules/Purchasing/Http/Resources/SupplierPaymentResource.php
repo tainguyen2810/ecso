@@ -13,6 +13,7 @@ class SupplierPaymentResource extends JsonResource
     {
         return [
             'id' => $this->ulid,
+            'kind' => $this->kind ?? SupplierPayment::PAYMENT,
             'method' => $this->method,
             'amount' => $this->amount,
             'reference' => $this->reference,

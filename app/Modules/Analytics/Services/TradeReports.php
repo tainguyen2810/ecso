@@ -187,6 +187,7 @@ class TradeReports
         $base = DB::table('supplier_payments as sp')
             ->where('sp.tenant_id', $this->tenant())
             ->whereNull('sp.voided_at')
+            ->where('sp.kind', 'payment') // money suppliers paid back is not a payment to them
             ->whereBetween('sp.paid_at', [$from, $to]);
         $metrics = 'COUNT(*) as entries, SUM(sp.amount) as paid, COUNT(DISTINCT sp.supplier_id) as suppliers';
 

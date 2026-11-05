@@ -57,6 +57,12 @@ it('counts the drawer of a shift: float, cash sales, refunds, cash in and out', 
         ->assertJsonPath('data.difference', '-10000.00')
         ->assertJsonPath('data.kept_in_drawer', '70000.00');
 
+    // The shortage is booked in the cash fund as a "Chênh lệch kiểm quỹ" payment, so the fund matches the drawer.
+    $diff = collect(actingInTenant($owner, $tenant)->getJson('/api/v1/cash-vouchers?q=CA-000001')->assertOk()->json('data'))->firstWhere('source', 'voucher');
+    expect($diff)->not->toBeNull()
+        ->and($diff['direction'])->toBe('payment')->and($diff['amount'])->toEqual(10000)
+        ->and($diff['type']['name'])->toBe('Chênh lệch kiểm quỹ')->and($diff['account']['name'])->toBe('Tiền mặt');
+
     // Closed: figures are frozen and the drawer takes no more movements.
     $closed = CashShift::withoutGlobalScopes()->where('ulid', $shift)->sole();
     expect($closed->open_user_id)->toBeNull();

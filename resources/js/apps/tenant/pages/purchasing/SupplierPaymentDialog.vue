@@ -11,7 +11,8 @@ import { useToast } from '@/shared/composables/useToast';
 import { supplierPaymentMethods } from './labels';
 
 const open = defineModel<boolean>('open', { required: true });
-const props = defineProps<{ supplierId: string; order?: { id: string; number: string } | null; suggested?: number }>();
+/** With `refund`, records money the supplier pays back (up to what they owe) instead of a payment to them. */
+const props = defineProps<{ supplierId: string; order?: { id: string; number: string } | null; suggested?: number; refund?: boolean }>();
 const emit = defineEmits<{ saved: [] }>();
 const toast = useToast();
 
@@ -31,14 +32,14 @@ async function save() {
     saving.value = true;
     error.value = null;
     try {
-        await api.post(`/suppliers/${props.supplierId}/payments`, {
-            purchase_order_id: props.order?.id ?? null,
+        await api.post(`/suppliers/${props.supplierId}/${props.refund ? 'refunds' : 'payments'}`, {
+            ...(props.refund ? {} : { purchase_order_id: props.order?.id ?? null }),
             method: form.method,
             amount: Number(form.amount),
             reference: form.reference || null,
             note: form.note || null,
         }, idempotent(key));
-        toast.success(`Đã ghi chi ${formatMoney(form.amount)}.`);
+        toast.success(props.refund ? `Đã ghi nhận nhà cung cấp hoàn ${formatMoney(form.amount)}.` : `Đã ghi chi ${formatMoney(form.amount)}.`);
         open.value = false;
         emit('saved');
     } catch (e) {
@@ -50,7 +51,11 @@ async function save() {
 </script>
 
 <template>
-    <Dialog v-model:open="open" title="Chi tiền nhà cung cấp" :description="order ? `Thanh toán cho đơn ${order.number}. Còn nợ ${formatMoney(suggested ?? 0)}.` : 'Thanh toán chung (trả nợ cũ hoặc trả trước), không gắn với đơn nhập nào.'">
+    <Dialog
+        v-model:open="open"
+        :title="refund ? 'Nhà cung cấp hoàn tiền' : 'Chi tiền nhà cung cấp'"
+        :description="refund ? `Tiền nhà cung cấp trả lại (sau khi trả hàng hoặc trả dư). Họ đang nợ lại ${formatMoney(suggested ?? 0)}.` : order ? `Thanh toán cho đơn ${order.number}. Còn nợ ${formatMoney(suggested ?? 0)}.` : 'Thanh toán chung (trả nợ cũ hoặc trả trước), không gắn với đơn nhập nào.'"
+    >
         <form id="sp-form" class="grid gap-3 sm:grid-cols-2" @submit.prevent="save">
             <FormField label="Hình thức">
                 <Select v-model="form.method" :options="Object.entries(supplierPaymentMethods).map(([value, label]) => ({ value, label }))" />
@@ -62,7 +67,7 @@ async function save() {
         </form>
         <template #footer>
             <Button variant="outline" @click="open = false">Hủy</Button>
-            <Button type="submit" form="sp-form" :loading="saving" data-testid="sp-save">Ghi phiếu chi</Button>
+            <Button type="submit" form="sp-form" :loading="saving" data-testid="sp-save">{{ refund ? 'Ghi nhận tiền về' : 'Ghi phiếu chi' }}</Button>
         </template>
     </Dialog>
 </template>

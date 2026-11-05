@@ -701,6 +701,8 @@ export interface Supplier {
 
 export interface SupplierPaymentData {
     id: string;
+    /** "refund": money the supplier paid back. */
+    kind?: 'payment' | 'refund';
     method: string;
     amount: string;
     reference: string | null;

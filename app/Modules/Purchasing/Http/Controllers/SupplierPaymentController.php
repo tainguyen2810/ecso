@@ -39,6 +39,22 @@ class SupplierPaymentController extends Controller
         return (new SupplierPaymentResource($payment->load(['creator', 'order'])))->response()->setStatusCode(201);
     }
 
+    /** Money the supplier paid back, up to what they owe the business. */
+    public function refund(Request $request, Supplier $supplier, SupplierPaymentService $payments): JsonResponse
+    {
+        $this->authorize('pay', Supplier::class);
+        $data = $request->validate([
+            'method' => ['required', Rule::in(SupplierPayment::METHODS)],
+            'account' => ['nullable', 'string', 'max:40'],
+            'amount' => ['required', 'numeric', 'min:1', 'max:9999999999'],
+            'reference' => ['nullable', 'string', 'max:100'],
+            'note' => ['nullable', 'string', 'max:500'],
+            'paid_at' => ['nullable', 'date', 'before_or_equal:now'],
+        ]);
+
+        return (new SupplierPaymentResource($payments->refund($supplier, $data)->load(['creator', 'order'])))->response()->setStatusCode(201);
+    }
+
     public function void(Request $request, SupplierPayment $supplierPayment, SupplierPaymentService $payments): SupplierPaymentResource
     {
         $this->authorize('pay', Supplier::class);

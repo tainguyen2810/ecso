@@ -38,7 +38,7 @@ class Supplier extends Model
     public function scopeWithBalance(Builder $query): Builder
     {
         $purchased = PurchaseOrder::query()->selectRaw('COALESCE(SUM(received_value - returned_value), 0)')->whereColumn('purchase_orders.supplier_id', 'suppliers.id');
-        $paid = SupplierPayment::query()->selectRaw('COALESCE(SUM(amount), 0)')->whereColumn('supplier_payments.supplier_id', 'suppliers.id')->whereNull('voided_at');
+        $paid = SupplierPayment::query()->selectRaw('COALESCE(SUM('.SupplierPayment::SIGNED_SQL.'), 0)')->whereColumn('supplier_payments.supplier_id', 'suppliers.id')->whereNull('voided_at');
 
         return $query->select('suppliers.*')
             ->selectSub(PurchaseOrder::query()->selectRaw('COUNT(*)')->whereColumn('purchase_orders.supplier_id', 'suppliers.id')->where('status', '!=', PurchaseOrder::CANCELLED), 'orders_count')
