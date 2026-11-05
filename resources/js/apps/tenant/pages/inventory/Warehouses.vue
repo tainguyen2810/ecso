@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AddressPicker from '../../components/AddressPicker.vue';
+import { emptyAddress, type AddressParts } from '@/shared/lib/geo';
 import { computed, onMounted, reactive, ref } from 'vue';
 import { Pencil, Plus, Star, Warehouse as WarehouseIcon } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
@@ -44,18 +46,25 @@ onMounted(load);
 const open = ref(false);
 const editing = ref<Warehouse | null>(null);
 const form = reactive({ code: '', name: '', address: '' });
+// Pickup address for carriers: province → ward → street (an old free-text address stays until one is picked).
+const addr = ref<AddressParts>(emptyAddress());
+const addrLegacy = ref<string | null>(null);
 const saving = ref(false);
 const error = ref<ApiError | null>(null);
 
 function openCreate() {
     editing.value = null;
     Object.assign(form, { code: '', name: '', address: '' });
+    addr.value = emptyAddress();
+    addrLegacy.value = null;
     error.value = null;
     open.value = true;
 }
 function openEdit(w: Warehouse) {
     editing.value = w;
     Object.assign(form, { code: w.code, name: w.name, address: w.address ?? '' });
+    addr.value = w.province_code ? { street: w.street ?? '', province_code: w.province_code, ward_code: w.ward_code ?? '' } : emptyAddress();
+    addrLegacy.value = w.province_code ? null : w.address;
     error.value = null;
     open.value = true;
 }
@@ -64,8 +73,9 @@ async function save() {
     saving.value = true;
     error.value = null;
     try {
-        if (editing.value) await api.patch(`/warehouses/${editing.value.id}`, { name: form.name, address: form.address || null });
-        else await api.post('/warehouses', { code: form.code, name: form.name, address: form.address || null });
+        const address = addr.value.province_code ? { street: addr.value.street || null, province_code: addr.value.province_code, ward_code: addr.value.ward_code || null } : { address: form.address || null };
+        if (editing.value) await api.patch(`/warehouses/${editing.value.id}`, { name: form.name, ...address });
+        else await api.post('/warehouses', { code: form.code, name: form.name, ...address });
         toast.success(editing.value ? 'Đã cập nhật kho' : `Đã tạo kho ${form.code.toUpperCase()}`);
         open.value = false;
         await load();
@@ -135,7 +145,14 @@ async function update(w: Warehouse, payload: Record<string, unknown>, message: s
                 <Input id="wh-code" v-model="form.code" :disabled="!!editing" required maxlength="32" class="uppercase" />
             </FormField>
             <FormField label="Tên kho" for="wh-name" :error="error?.field('name')"><Input id="wh-name" v-model="form.name" required maxlength="255" /></FormField>
-            <FormField label="Địa chỉ" for="wh-address" :error="error?.field('address')"><Input id="wh-address" v-model="form.address" maxlength="255" /></FormField>
+            <AddressPicker
+                v-model="addr"
+                id-prefix="wh-addr"
+                :quick="false"
+                :legacy="addrLegacy"
+                :columns="1"
+                :errors="{ street: error?.field('street') ?? error?.field('address'), province_code: error?.field('province_code'), ward_code: error?.field('ward_code') }"
+            />
             <p v-if="error && !error.body.errors" class="text-sm text-destructive">{{ error.message }}</p>
         </form>
         <template #footer>

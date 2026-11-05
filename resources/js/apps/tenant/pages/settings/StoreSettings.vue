@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { ImagePlus, Trash2 } from 'lucide-vue-next';
 import SettingsPage from './SettingsPage.vue';
 import SettingsSection from './SettingsSection.vue';
@@ -8,12 +8,21 @@ import Button from '@/shared/ui/Button.vue';
 import FormField from '@/shared/ui/FormField.vue';
 import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
+import AddressPicker from '../../components/AddressPicker.vue';
+import type { AddressParts } from '@/shared/lib/geo';
 import { api, ApiError } from '@/shared/lib/api';
 import { useToast } from '@/shared/composables/useToast';
 
 /** Thông tin cửa hàng: printed at the top of invoices and on delivery notes. */
 const { form, dirty, saving, error, canSave, save, cancel, store } = useSettingsForm('store', (s) => ({ name: s.name, timezone: s.timezone, ...(Object.fromEntries(Object.entries(s.store).map(([k, v]) => [k, v ?? ''])) as Record<keyof typeof s.store, string>) }));
 const toast = useToast();
+// Store address = pickup address for carriers: province → ward → street ("address" holds the street part).
+const addr = computed<AddressParts>({
+    get: () => ({ street: form.value?.address ?? '', province_code: form.value?.province_code ?? '', ward_code: form.value?.ward_code ?? '' }),
+    set: (v) => form.value && Object.assign(form.value, { address: v.street, province_code: v.province_code, ward_code: v.ward_code }),
+});
+// Typed before standard addresses: shown with a suggestion until a province and ward are picked.
+const legacy = computed(() => (form.value && !form.value.province_code && (form.value.ward || form.value.province) ? [form.value.address, form.value.ward, form.value.province].filter(Boolean).join(', ') : null));
 const uploading = ref(false);
 const timezones = ['Asia/Ho_Chi_Minh', 'Asia/Bangkok', 'Asia/Singapore', 'Asia/Jakarta', 'Asia/Manila', 'UTC'].map((z) => ({ value: z, label: z === 'Asia/Ho_Chi_Minh' ? '(GMT+7) Hà Nội, TP Hồ Chí Minh' : z }));
 
@@ -64,11 +73,13 @@ async function removeLogo() {
                 </div>
             </SettingsSection>
             <SettingsSection title="Địa chỉ cửa hàng" description="In trên hóa đơn và phiếu giao hàng.">
-                <div class="grid gap-4 sm:grid-cols-2">
-                    <FormField label="Địa chỉ" for="st-address" class="sm:col-span-2"><Input id="st-address" v-model="form.address" placeholder="Số nhà, đường" data-testid="store-address" /></FormField>
-                    <FormField label="Phường / Xã" for="st-ward"><Input id="st-ward" v-model="form.ward" /></FormField>
-                    <FormField label="Tỉnh / Thành phố" for="st-province"><Input id="st-province" v-model="form.province" /></FormField>
-                </div>
+                <AddressPicker
+                    v-model="addr"
+                    id-prefix="st-addr"
+                    :quick="false"
+                    :legacy="legacy"
+                    :errors="{ street: error?.field('address'), province_code: error?.field('province_code'), ward_code: error?.field('ward_code') }"
+                />
             </SettingsSection>
             <SettingsSection title="Khu vực" description="Múi giờ dùng cho báo cáo theo ngày.">
                 <FormField label="Múi giờ"><Select v-model="form.timezone" :options="timezones" /></FormField>

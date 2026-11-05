@@ -35,9 +35,14 @@ test('create a manual order for a new customer, then confirm, pack, hand over an
     await page.getByTestId('new-customer').click();
     await page.getByTestId('nc-name').fill('Hoàng Anh Thư');
     await page.getByTestId('nc-phone').fill('0938 123 456');
-    await page.getByLabel('Địa chỉ', { exact: true }).fill('20 Pasteur, Quận 1, TP.HCM');
+    // Pasted old-style address: split into the new units (P. Bến Nghé, Q.1 is now Phường Sài Gòn).
+    await page.locator('#nc-addr-quick').fill('20 Pasteur, P. Bến Nghé, Quận 1, TP.HCM');
+    await page.locator('#nc-addr-quick').press('Enter');
+    await expect(page.locator('#nc-addr-ward')).toHaveValue('Phường Sài Gòn');
+    await expect(page.locator('#nc-addr-street')).toHaveValue('20 Pasteur');
     await page.getByTestId('nc-save').click();
-    await page.getByLabel('Đơn vị vận chuyển').fill('GHN');
+    await expect(page.getByTestId('customer-delivery')).toContainText('20 Pasteur, Phường Sài Gòn, Thành phố Hồ Chí Minh');
+    await page.getByTestId('carrier-GHN').click();
     await page.getByTestId('shipping-fee').fill('30000');
     await page.getByTestId('order-discount').fill('10000');
     await shot(page, '02-order-form');

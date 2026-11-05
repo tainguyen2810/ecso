@@ -17,6 +17,9 @@ class CustomerAddressResource extends JsonResource
             'recipient' => $this->recipient,
             'phone' => $this->phone,
             'address' => $this->address,
+            'street' => $this->street,
+            'province_code' => $this->province_code,
+            'ward_code' => $this->ward_code,
         ];
     }
 }

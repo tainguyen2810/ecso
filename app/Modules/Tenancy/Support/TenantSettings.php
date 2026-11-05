@@ -17,7 +17,7 @@ class TenantSettings
     public const PRINT_SIZES = ['a4', 'a5', 'k80', 'k57'];
 
     public const DEFAULTS = [
-        'store' => ['phone' => null, 'email' => null, 'website' => null, 'tax_code' => null, 'business_type' => null, 'address' => null, 'province' => null, 'ward' => null],
+        'store' => ['phone' => null, 'email' => null, 'website' => null, 'tax_code' => null, 'business_type' => null, 'address' => null, 'province' => null, 'ward' => null, 'province_code' => null, 'ward_code' => null],
         'tax' => ['sale_rate' => 0, 'purchase_rate' => 0, 'prices_include_tax' => true],
         'pricing' => ['sale_price' => 'retail', 'staff_edit_price' => true],
         'payments' => [

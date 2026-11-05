@@ -4,6 +4,8 @@ namespace App\Modules\Tenancy\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Geo\Models\Ward;
+use App\Modules\Geo\Services\VnAddress;
 use App\Modules\Tenancy\Support\TenantContext;
 use App\Modules\Tenancy\Support\TenantSettings;
 use Illuminate\Http\JsonResponse;
@@ -24,7 +26,7 @@ class SettingsController extends Controller
         return $this->respond($context);
     }
 
-    public function update(Request $request, string $section, TenantContext $context, AuditLogger $audit): JsonResponse
+    public function update(Request $request, string $section, TenantContext $context, AuditLogger $audit, VnAddress $addresses): JsonResponse
     {
         $tenant = $context->tenant();
         $this->authorize('update', $tenant);
@@ -37,6 +39,15 @@ class SettingsController extends Controller
         if ($section === 'store' && isset($data['name'])) {
             $tenant->name = $data['name'];
             unset($data['name']);
+        }
+        if ($section === 'store' && (array_key_exists('ward_code', $data) || array_key_exists('province_code', $data))) {
+            // Store address (pickup address for carriers): the names follow the chosen province and ward; "address"
+            // stays the street part.
+            $parts = $addresses->resolve($data['address'] ?? null, $data['province_code'] ?? null, $data['ward_code'] ?? null);
+            $data['province_code'] = $parts['province_code'];
+            $data['ward_code'] = $parts['ward_code'];
+            $data['province'] = $parts['province_code'] ? $addresses->province($parts['province_code'])?->name : ($data['province'] ?? null);
+            $data['ward'] = $parts['ward_code'] ? Ward::query()->find($parts['ward_code'])?->name : ($data['ward'] ?? null);
         }
         if ($section === 'store' && isset($data['timezone'])) {
             $tenant->timezone = $data['timezone'];
@@ -132,6 +143,8 @@ class SettingsController extends Controller
                 'address' => ['nullable', 'string', 'max:255'],
                 'province' => ['nullable', 'string', 'max:100'],
                 'ward' => ['nullable', 'string', 'max:100'],
+                'province_code' => ['nullable', 'string', 'max:3'],
+                'ward_code' => ['nullable', 'string', 'max:6'],
             ],
             'tax' => [
                 'sale_rate' => ['sometimes', 'numeric', Rule::in([0, 5, 8, 10])],

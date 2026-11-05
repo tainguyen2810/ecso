@@ -3,6 +3,7 @@
 namespace App\Modules\Inventory\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Geo\Services\VnAddress;
 use App\Modules\Inventory\Http\Resources\WarehouseResource;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Services\WarehouseService;
@@ -41,6 +42,8 @@ class WarehouseController extends Controller
                 Rule::unique('warehouses', 'code')->where('tenant_id', $context->id())],
             'name' => ['required', 'string', 'max:255'],
             'address' => ['nullable', 'string', 'max:255'],
+            ...VnAddress::rules(),
+            'street' => ['nullable', 'string', 'max:150'],
         ]);
         $data['code'] = strtoupper($data['code']);
 
@@ -53,6 +56,8 @@ class WarehouseController extends Controller
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:255'],
             'address' => ['nullable', 'string', 'max:255'],
+            ...VnAddress::rules(),
+            'street' => ['nullable', 'string', 'max:150'],
             'status' => ['sometimes', Rule::in([Warehouse::STATUS_ACTIVE, Warehouse::STATUS_INACTIVE])],
             'is_default' => ['sometimes', 'boolean'],
         ]);

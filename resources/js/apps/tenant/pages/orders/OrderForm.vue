@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { AlertTriangle, ArrowDown, ArrowUp, Check, CirclePlus, Contact, ImageIcon, PackageCheck, PackageOpen, Pencil, Repeat, Search, Settings2, Store, Truck, UserPlus, UserRound, Wrench, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
+import AddressPicker from '../../components/AddressPicker.vue';
 import TagInput from '../../components/TagInput.vue';
 import Alert from '@/shared/ui/Alert.vue';
 import Button from '@/shared/ui/Button.vue';
@@ -21,6 +22,7 @@ import { useAuthStore } from '@/shared/stores/auth';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useSettingsStore } from '@/shared/stores/settings';
 import { enabledMethods } from '@/shared/lib/paymentMethods';
+import { CARRIERS, emptyAddress, type AddressParts } from '@/shared/lib/geo';
 import { channelTypes, paymentMethods } from './labels';
 import type { Customer, CustomerSummary, OrderDetail, OrderReturnData, SalesChannel, Variant, Warehouse } from '@/shared/types';
 
@@ -62,7 +64,7 @@ const channels = ref<SalesChannel[]>([]);
 const warehouses = ref<Warehouse[]>([]);
 const lines = ref<Line[]>([]);
 const customer = ref<(Pick<Customer, 'id' | 'code' | 'name' | 'phone' | 'address'> & { group?: Customer['group'] }) | null>(null);
-const newCustomer = reactive({ enabled: false, name: '', phone: '', address: '' });
+const newCustomer = reactive({ enabled: false, name: '', phone: '', address: '', addr: emptyAddress() });
 // Group terms of the chosen customer (loaded with its detail).
 const customerTerms = ref<{ group: Customer['group']; debt: number; summary: CustomerSummary | null } | null>(null);
 const groupDiscountAuto = ref(false);
@@ -76,6 +78,8 @@ const form = reactive({
     buyer_name: '',
     buyer_phone: '',
     shipping_address: '',
+    // Standard parts of the delivery address (province → ward → street); shipping_address is the text composed from them.
+    address: emptyAddress(),
     carrier: '',
     is_cod: false,
     shipping_fee: 0 as number | string,
@@ -163,7 +167,7 @@ async function loadOrder(id: string, asCopy = false) {
     o.items = o.items.filter((i) => i.variant || i.mapping_status === 'service');
     form.buyer_name = o.buyer_name ?? '';
     form.buyer_phone = o.buyer_phone ?? '';
-    form.shipping_address = o.shipping_address ?? '';
+    setAddress({ street: o.shipping_street, province_code: o.shipping_province_code, ward_code: o.shipping_ward_code, address: o.shipping_address });
     form.carrier = o.carrier ?? '';
     form.is_cod = o.is_cod;
     form.shipping_fee = Number(o.shipping_fee);
@@ -326,18 +330,40 @@ const stockWarehouses = computed(() => {
     return [...seen].map(([id, name]) => ({ id, name }));
 });
 
+// Customer search (F4): on focus the customers who bought last show at once, like Sapo; typing searches.
 let customerTimer: ReturnType<typeof setTimeout> | undefined;
+const customerFocus = ref(false);
+const customerActive = ref(0);
+async function searchCustomers(q: string) {
+    const { data } = await api.get('/customers', { params: q ? { q, per_page: 8 } : { sort: 'recent', per_page: 8, status: 'active' } });
+    if (customerQuery.value.trim() === q) {
+        customerResults.value = data.data;
+        customerActive.value = 0;
+    }
+}
 watch(customerQuery, (q) => {
     clearTimeout(customerTimer);
-    if (!q.trim()) {
-        customerResults.value = [];
-        return;
-    }
-    customerTimer = setTimeout(async () => {
-        const { data } = await api.get('/customers', { params: { q, per_page: 8 } });
-        customerResults.value = data.data;
-    }, 250);
+    customerTimer = setTimeout(() => searchCustomers(q.trim()).catch(() => {}), q.trim() ? 250 : 0);
 });
+function onCustomerFocus() {
+    customerFocus.value = true;
+    if (!customerQuery.value.trim()) searchCustomers('').catch(() => {});
+}
+function onCustomerBlur() {
+    setTimeout(() => (customerFocus.value = false), 150);
+}
+function onCustomerKey(e: KeyboardEvent) {
+    const n = customerResults.value.length;
+    if (e.key === 'ArrowDown') customerActive.value = Math.min(n - 1, customerActive.value + 1);
+    else if (e.key === 'ArrowUp') customerActive.value = Math.max(0, customerActive.value - 1);
+    else if (e.key === 'Enter') {
+        const c = customerResults.value[customerActive.value];
+        if (c) chooseCustomer(c);
+        else if (customerQuery.value.trim() && tenant.can('customers.manage')) startNewCustomer();
+    } else if (e.key === 'Escape') customerFocus.value = false;
+    else return;
+    e.preventDefault();
+}
 
 let phoneTimer: ReturnType<typeof setTimeout> | undefined;
 watch(
@@ -354,12 +380,47 @@ watch(
 );
 
 // Saved delivery addresses of the chosen customer (Khách hàng › Sổ địa chỉ), offered under "Địa chỉ giao".
-interface SavedAddress { id: string; label: string | null; recipient: string | null; phone: string | null; address: string }
+interface SavedAddress { id: string; label: string | null; recipient: string | null; phone: string | null; address: string; street?: string | null; province_code?: string | null; ward_code?: string | null }
 const savedAddresses = ref<SavedAddress[]>([]);
 function useAddress(a: SavedAddress) {
-    form.shipping_address = a.address;
+    setAddress(a);
     if (a.recipient) form.buyer_name = a.recipient;
     if (a.phone) form.buyer_phone = a.phone;
+    addressMenu.value = false;
+}
+
+/**
+ * The delivery address from a customer, a saved address or an order: its standard parts when it has them,
+ * otherwise the old free text, kept as is and shown with a suggestion to standardise it.
+ */
+const legacyAddress = ref<string | null>(null);
+const customerMain = ref<SavedAddress | null>(null);
+function focusAddress() {
+    const el = document.getElementById('o-addr-province');
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el?.focus();
+}
+const addressMenu = ref(false);
+function setAddress(a: { street?: string | null; province_code?: string | null; ward_code?: string | null; address?: string | null }) {
+    form.shipping_address = a.address ?? '';
+    if (a.province_code) {
+        form.address = { street: a.street ?? '', province_code: a.province_code, ward_code: a.ward_code ?? '' };
+        legacyAddress.value = null;
+    } else {
+        form.address = emptyAddress();
+        legacyAddress.value = a.address || null;
+    }
+}
+/** The picker's composed text replaces the old text once a province is chosen. */
+function onAddressText(text: string) {
+    if (form.address.province_code) form.shipping_address = text;
+}
+const addressStandard = computed(() => !!form.address.ward_code);
+const isCarrier = computed(() => (CARRIERS as readonly string[]).includes(form.carrier));
+const otherCarrier = ref(false);
+function pickCarrier(c: string) {
+    otherCarrier.value = false;
+    form.carrier = form.carrier === c ? '' : c;
 }
 watch(
     () => customer.value?.id,
@@ -371,9 +432,10 @@ function chooseCustomer(c: Customer) {
     newCustomer.enabled = false;
     customerQuery.value = '';
     customerResults.value = [];
+    customerFocus.value = false;
     form.buyer_name = c.name;
     form.buyer_phone = c.phone ?? '';
-    form.shipping_address = c.address ?? form.shipping_address;
+    if (c.address || c.province_code) setAddress(c);
     // The customer's group decides the starting price policy (retail / wholesale), discount and payment method.
     if (c.group?.price_tier) priceTier.value = c.group.price_tier;
     applyGroup(c.group);
@@ -393,11 +455,14 @@ watch(groupDiscount, (d) => groupDiscountAuto.value && (form.discount = d));
 async function loadTerms(id: string) {
     customerTerms.value = null;
     savedAddresses.value = [];
+    customerMain.value = null;
     try {
         const { data } = await api.get(`/customers/${id}`);
         if (customer.value?.id !== id) return;
         customerTerms.value = { group: data.data.group, debt: Number(data.data.debt ?? 0), summary: data.data.summary ?? null };
         savedAddresses.value = data.data.addresses ?? [];
+        const c = data.data as Customer;
+        customerMain.value = c.address ? { id: 'main', label: 'Địa chỉ chính', recipient: c.name, phone: c.phone, address: c.address, street: c.street, province_code: c.province_code, ward_code: c.ward_code } : null;
     } catch {
         // No access to customer details: the order can still be made, the address stays a plain input.
     }
@@ -418,13 +483,14 @@ function clearCustomer() {
 }
 
 watch(
-    () => [newCustomer.name, newCustomer.phone, newCustomer.address],
+    () => [newCustomer.name, newCustomer.phone, newCustomer.address, newCustomer.addr],
     () => {
         if (!newCustomer.enabled) return;
         form.buyer_name = newCustomer.name;
         form.buyer_phone = newCustomer.phone;
-        form.shipping_address = newCustomer.address;
+        if (newCustomer.addr.province_code) setAddress({ ...newCustomer.addr, address: newCustomer.address });
     },
+    { deep: true },
 );
 
 /** What the buyer still owes after the exchange credit and the payment typed in now. */
@@ -449,7 +515,7 @@ watch(customerDialog, (isOpen) => {
     if (!isOpen && !newCustomer.name.trim()) cancelNewCustomer();
 });
 function cancelNewCustomer() {
-    Object.assign(newCustomer, { enabled: false, name: '', phone: '', address: '' });
+    Object.assign(newCustomer, { enabled: false, name: '', phone: '', address: '', addr: emptyAddress() });
     customerDialog.value = false;
 }
 /** The new customer is created together with the order; the dialog only collects the details. */
@@ -477,7 +543,11 @@ async function loadExchange(returnId: string) {
     customer.value = original.customer ? { ...original.customer, phone: null, address: null } : null;
     form.buyer_name = original.buyer_name ?? '';
     form.buyer_phone = original.buyer_phone ?? '';
-    form.shipping_address = original.shipping_address ?? '';
+    setAddress({ street: original.shipping_street, province_code: original.shipping_province_code, ward_code: original.shipping_ward_code, address: original.shipping_address });
+}
+
+function addressBody(a: AddressParts, text: string) {
+    return a.province_code ? { street: a.street || null, province_code: a.province_code, ward_code: a.ward_code || null } : { address: text || null };
 }
 
 async function submit() {
@@ -486,10 +556,13 @@ async function submit() {
     const body: Record<string, unknown> = {
         warehouse_id: form.warehouse_id || null,
         customer_id: customer.value?.id ?? null,
-        ...(newCustomer.enabled && newCustomer.name ? { customer: { name: newCustomer.name, phone: newCustomer.phone || null, address: newCustomer.address || null } } : {}),
+        ...(newCustomer.enabled && newCustomer.name ? { customer: { name: newCustomer.name, phone: newCustomer.phone || null, ...addressBody(newCustomer.addr, newCustomer.address) } } : {}),
         buyer_name: form.buyer_name || null,
         buyer_phone: form.buyer_phone || null,
-        shipping_address: form.shipping_address || null,
+        // Standard parts when a province is chosen (the server composes the text), else the old text as it was.
+        ...(form.address.province_code
+            ? { shipping_street: form.address.street || null, shipping_province_code: form.address.province_code, shipping_ward_code: form.address.ward_code || null }
+            : { shipping_address: form.shipping_address || null }),
         carrier: form.carrier || null,
         is_cod: form.is_cod,
         shipping_fee: num(form.shipping_fee),
@@ -519,7 +592,8 @@ async function submit() {
         }
     } catch (e) {
         error.value = e as ApiError;
-        if (!error.value.body.errors || error.value.field('stock') || error.value.field('order') || error.value.field('version')) toast.error(error.value.field('stock') ?? error.value.field('version') ?? error.value.message);
+        if (!error.value.body.errors || error.value.field('stock') || error.value.field('order') || error.value.field('version') || error.value.field('customer_id')) toast.error(error.value.field('stock') ?? error.value.field('version') ?? error.value.message);
+        else if (error.value.field('shipping_ward_code') || error.value.field('shipping_street')) focusAddress();
     } finally {
         saving.value = false;
     }
@@ -558,6 +632,11 @@ async function loadDraft(id: string) {
         const { data } = await api.get(`/order-drafts/${id}`);
         const p = data.data.payload as { form?: Partial<typeof form>; lines?: Line[]; customer?: typeof customer.value; priceTier?: 'retail' | 'wholesale' };
         Object.assign(form, p.form ?? {});
+        // Drafts saved before standard addresses: keep their text as the old address.
+        if (!form.address?.province_code) {
+            form.address = emptyAddress();
+            legacyAddress.value = form.shipping_address || null;
+        }
         lines.value = (p.lines ?? []).map((l) => ({ ...l, uid: nextUid++ }));
         customer.value = p.customer ?? null;
         if (p.priceTier) priceTier.value = p.priceTier;
@@ -625,20 +704,38 @@ async function saveDraft() {
                         <Button variant="ghost" size="icon" class="size-7" title="Bỏ chọn" @click="clearCustomer"><X /></Button>
                     </div>
                     <p v-if="customer && creditWarning" class="flex items-start gap-1.5 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800" data-testid="credit-warning"><AlertTriangle class="mt-px size-3.5 shrink-0" /> {{ creditWarning }}</p>
-                    <template v-else-if="!newCustomer.enabled">
+                    <template v-if="!customer && !newCustomer.enabled">
                         <div class="relative">
                             <Search class="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground" />
-                            <Input v-model="customerQuery" class="pl-9" placeholder="Tìm theo tên, SĐT, mã khách hàng… (F4)" data-testid="customer-search" />
-                            <ul v-if="customerQuery.trim()" class="absolute z-20 mt-1 max-h-80 w-full overflow-y-auto rounded-md border bg-card shadow-lg">
+                            <Input
+                                v-model="customerQuery"
+                                class="pl-9"
+                                placeholder="Tìm theo tên, SĐT, mã khách hàng… (F4)"
+                                autocomplete="off"
+                                data-testid="customer-search"
+                                @focus="onCustomerFocus"
+                                @blur="onCustomerBlur"
+                                @keydown="onCustomerKey"
+                            />
+                            <ul v-if="customerFocus || customerQuery.trim()" class="absolute z-20 mt-1 max-h-96 w-full overflow-y-auto rounded-md border bg-card shadow-lg" data-testid="customer-results">
                                 <li v-if="tenant.can('customers.manage')">
-                                    <button type="button" class="flex w-full items-center gap-2 border-b px-4 py-2.5 text-left text-sm font-medium text-primary hover:bg-muted" @click="startNewCustomer"><CirclePlus class="size-4" /> Thêm mới khách hàng</button>
+                                    <button type="button" class="flex w-full items-center gap-2 border-b px-4 py-2.5 text-left text-sm font-medium text-primary hover:bg-muted" @mousedown.prevent="startNewCustomer"><CirclePlus class="size-4" /> Thêm mới khách hàng</button>
                                 </li>
-                                <li v-for="c in customerResults" :key="c.id">
-                                    <button type="button" class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-muted" @click="chooseCustomer(c)">
+                                <li v-if="!customerQuery.trim() && customerResults.length" class="px-4 pt-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Khách mua gần đây</li>
+                                <li v-for="(c, i) in customerResults" :key="c.id">
+                                    <button
+                                        type="button"
+                                        :class="cn('flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm', i === customerActive ? 'bg-blue-50/70' : 'hover:bg-muted')"
+                                        @mousedown.prevent="chooseCustomer(c)"
+                                        @mousemove="customerActive = i"
+                                    >
                                         <span class="grid size-8 shrink-0 place-items-center rounded-full bg-blue-50 text-blue-500"><UserRound class="size-4" /></span>
-                                        <span class="min-w-0"><span class="block truncate">{{ c.name }} <span class="text-xs text-muted-foreground">{{ c.code }}</span></span><span v-if="c.phone" class="block text-xs font-medium">{{ c.phone }}</span></span>
+                                        <span class="min-w-0 flex-1"><span class="block truncate">{{ c.name }} <span class="text-xs text-muted-foreground">{{ c.code }}</span></span><span v-if="c.phone" class="block text-xs font-medium">{{ c.phone }}</span></span>
+                                        <span v-if="c.ward_code" class="hidden max-w-[45%] truncate text-xs text-muted-foreground sm:block" :title="c.address ?? ''">{{ c.address }}</span>
+                                        <span v-else-if="c.address" class="hidden shrink-0 items-center gap-1 text-xs text-amber-700 sm:flex" :title="c.address"><span class="size-1.5 rounded-full bg-amber-500" />Địa chỉ chưa chuẩn hóa</span>
                                     </button>
                                 </li>
+                                <li v-if="customerQuery.trim() && !customerResults.length" class="px-4 py-2.5 text-sm text-muted-foreground">Không tìm thấy khách. Enter để thêm khách mới.</li>
                             </ul>
                         </div>
                         <div class="flex flex-col items-center py-6 text-center text-sm text-muted-foreground">
@@ -650,7 +747,7 @@ async function saveDraft() {
                             </div>
                         </div>
                     </template>
-                    <div v-else class="flex items-center justify-between rounded-lg border border-emerald-100 bg-emerald-50/70 px-3 py-2.5" data-testid="pending-customer">
+                    <div v-else-if="newCustomer.enabled" class="flex items-center justify-between rounded-lg border border-emerald-100 bg-emerald-50/70 px-3 py-2.5" data-testid="pending-customer">
                         <div class="flex items-center gap-3 text-sm">
                             <span class="grid size-9 place-items-center rounded-full bg-white text-emerald-500"><UserPlus class="size-5" /></span>
                             <div>
@@ -662,6 +759,32 @@ async function saveDraft() {
                             <Button variant="ghost" size="icon" class="size-7" title="Sửa" @click="customerDialog = true"><Pencil /></Button>
                             <Button variant="ghost" size="icon" class="size-7" title="Bỏ" @click="cancelNewCustomer"><X /></Button>
                         </div>
+                    </div>
+                    <div v-if="(customer || newCustomer.enabled) && form.stage !== 'completed'" class="relative rounded-lg border px-3 py-2.5 text-sm" data-testid="customer-delivery">
+                        <div class="flex items-center justify-between">
+                            <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Địa chỉ giao hàng</p>
+                            <button type="button" class="text-xs font-medium text-primary hover:underline" data-testid="change-address" @click="addressMenu = !addressMenu">Thay đổi</button>
+                        </div>
+                        <p class="mt-1 font-medium">{{ [form.buyer_name, form.buyer_phone].filter(Boolean).join(' · ') || 'Chưa có người nhận' }}</p>
+                        <p :class="form.shipping_address ? '' : 'text-muted-foreground'">{{ form.shipping_address || 'Chưa có địa chỉ' }}</p>
+                        <span v-if="addressStandard" class="mt-1.5 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700"><Check class="size-3" /> Đã chuẩn hóa</span>
+                        <span v-else-if="form.shipping_address" class="mt-1.5 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700"><AlertTriangle class="size-3" /> Chưa chuẩn hóa</span>
+                        <ul v-if="addressMenu" class="absolute inset-x-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-md border bg-card py-1 shadow-lg" data-testid="address-menu">
+                            <li v-if="customerMain">
+                                <button type="button" class="block w-full px-3 py-2 text-left text-sm hover:bg-muted" @click="useAddress(customerMain)">
+                                    <span class="font-medium">Địa chỉ chính</span> <span class="block text-xs text-muted-foreground">{{ customerMain.address }}</span>
+                                </button>
+                            </li>
+                            <li v-for="a in savedAddresses" :key="a.id">
+                                <button type="button" class="block w-full px-3 py-2 text-left text-sm hover:bg-muted" @click="useAddress(a)">
+                                    <span class="font-medium">{{ a.label || a.recipient || 'Địa chỉ' }}</span><template v-if="a.phone"> · {{ a.phone }}</template>
+                                    <span class="block text-xs text-muted-foreground">{{ a.address }}</span>
+                                </button>
+                            </li>
+                            <li>
+                                <button type="button" class="block w-full px-3 py-2 text-left text-sm font-medium text-primary hover:bg-muted" @click="((addressMenu = false), focusAddress())">+ Nhập địa chỉ khác</button>
+                            </li>
+                        </ul>
                     </div>
                 </div>
             </Card>
@@ -848,12 +971,23 @@ async function saveDraft() {
                     </label>
                 </div>
                 <p class="text-xs text-muted-foreground">{{ editId ? 'Thông tin giao hàng của đơn.' : stages.find((s) => s.value === form.stage)?.hint }}</p>
-                <div v-if="editId || form.stage !== 'completed'" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <FormField label="Người nhận" for="o-name"><Input id="o-name" v-model="form.buyer_name" /></FormField>
-                    <FormField label="Điện thoại" for="o-phone"><Input id="o-phone" v-model="form.buyer_phone" inputmode="tel" /></FormField>
-                    <FormField label="Địa chỉ giao" for="o-address" class="sm:col-span-2">
-                        <Input id="o-address" v-model="form.shipping_address" />
-                        <div v-if="savedAddresses.length" class="mt-1.5 flex flex-wrap gap-1.5" data-testid="saved-addresses">
+                <div v-if="editId || form.stage !== 'completed'" class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+                    <div class="space-y-3">
+                        <p class="font-medium">Địa chỉ người nhận</p>
+                        <div class="grid gap-3 sm:grid-cols-2">
+                            <FormField :label="`Tên người nhận${isCarrier ? ' *' : ''}`" for="o-name" :error="error?.field('buyer_name')"><Input id="o-name" v-model="form.buyer_name" data-testid="buyer-name" /></FormField>
+                            <FormField :label="`Số điện thoại${isCarrier ? ' *' : ''}`" for="o-phone" :error="error?.field('buyer_phone')"><Input id="o-phone" v-model="form.buyer_phone" inputmode="tel" data-testid="buyer-phone" /></FormField>
+                        </div>
+                        <AddressPicker
+                            v-model="form.address"
+                            id-prefix="o-addr"
+                            :required="isCarrier"
+                            :legacy="legacyAddress"
+                            :errors="{ street: error?.field('shipping_street'), province_code: error?.field('shipping_province_code'), ward_code: error?.field('shipping_ward_code') }"
+                            @update:text="onAddressText"
+                        />
+                        <div v-if="savedAddresses.length" class="flex flex-wrap gap-1.5" data-testid="saved-addresses">
+                            <span class="self-center text-xs text-muted-foreground">Sổ địa chỉ:</span>
                             <button
                                 v-for="a in savedAddresses"
                                 :key="a.id"
@@ -865,9 +999,34 @@ async function saveDraft() {
                                 {{ a.label || a.recipient || 'Địa chỉ' }} · {{ a.address }}
                             </button>
                         </div>
-                    </FormField>
-                    <FormField label="Đơn vị vận chuyển" for="o-carrier"><Input id="o-carrier" v-model="form.carrier" placeholder="GHN, GHTK, tự giao…" /></FormField>
-                    <label class="flex items-center gap-2 self-end pb-2 text-sm"><input v-model="form.is_cod" type="checkbox" class="size-4" /> Thu hộ (COD) khi giao</label>
+                    </div>
+                    <div class="space-y-3 rounded-lg bg-slate-50 p-4">
+                        <p class="font-medium">Vận chuyển</p>
+                        <div class="grid grid-cols-2 gap-2" data-testid="carrier-options">
+                            <button
+                                v-for="c in CARRIERS"
+                                :key="c"
+                                type="button"
+                                :class="cn('rounded-md border bg-card px-2.5 py-2 text-left text-sm', form.carrier === c ? 'border-primary font-medium text-primary ring-1 ring-primary' : 'hover:border-slate-300')"
+                                :data-testid="`carrier-${c}`"
+                                @click="pickCarrier(c)"
+                            >
+                                {{ c }}
+                            </button>
+                            <button
+                                type="button"
+                                :class="cn('col-span-2 rounded-md border bg-card px-2.5 py-2 text-left text-sm', (otherCarrier || (form.carrier && !isCarrier)) ? 'border-primary font-medium text-primary ring-1 ring-primary' : 'hover:border-slate-300')"
+                                @click="((otherCarrier = true), isCarrier && (form.carrier = ''))"
+                            >
+                                Tự giao / đơn vị khác
+                            </button>
+                        </div>
+                        <Input v-if="otherCarrier || (form.carrier && !isCarrier)" id="o-carrier" v-model="form.carrier" placeholder="Shipper riêng, Ahamove, GHTK…" aria-label="Đơn vị vận chuyển khác" />
+                        <label class="flex items-center gap-2 text-sm"><input v-model="form.is_cod" type="checkbox" class="size-4" /> Thu hộ (COD) khi giao</label>
+                        <p class="rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                            Đơn lưu kèm mã tỉnh/phường chuẩn (đơn vị hành chính mới). Khi nối API GHN, Viettel Post, SPX, J&amp;T sẽ đẩy đơn sang không phải nhập lại.
+                        </p>
+                    </div>
                 </div>
                 <p v-if="error && error.field('stock')" class="text-sm text-destructive" data-testid="stock-error">{{ error.field('stock') }}</p>
             </div>
@@ -878,7 +1037,14 @@ async function saveDraft() {
         <form id="new-customer-form" class="grid gap-3 sm:grid-cols-2" @submit.prevent="saveNewCustomer">
             <FormField label="Tên khách hàng *" for="nc-name" :error="error?.field('customer.name')"><Input id="nc-name" v-model="newCustomer.name" required data-testid="nc-name" /></FormField>
             <FormField label="Số điện thoại" for="nc-phone" :error="error?.field('phone') ?? error?.field('customer.phone')"><Input id="nc-phone" v-model="newCustomer.phone" inputmode="tel" data-testid="nc-phone" /></FormField>
-            <FormField label="Địa chỉ" for="nc-address" class="sm:col-span-2"><Input id="nc-address" v-model="newCustomer.address" placeholder="Số nhà, tên đường, phường/xã, tỉnh/thành" /></FormField>
+            <div class="sm:col-span-2">
+                <AddressPicker
+                    v-model="newCustomer.addr"
+                    id-prefix="nc-addr"
+                    :errors="{ street: error?.field('customer.street'), province_code: error?.field('customer.province_code'), ward_code: error?.field('customer.ward_code') }"
+                    @update:text="(t: string) => (newCustomer.address = t)"
+                />
+            </div>
             <Alert v-if="phoneMatch" :icon="UserRound" tone="amber" class="sm:col-span-2">
                 <div class="flex flex-wrap items-center justify-between gap-2">
                     <span>Số này đã có: <b>{{ phoneMatch.name }}</b> ({{ phoneMatch.code }})</span>

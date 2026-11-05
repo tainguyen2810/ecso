@@ -26,6 +26,9 @@ use Illuminate\Support\Carbon;
  * @property-read string|null $last_order_at
  * @property list<string>|null $tags
  * @property Carbon|null $birthday
+ * @property string|null $street
+ * @property string|null $province_code
+ * @property string|null $ward_code
  */
 class Customer extends Model
 {
@@ -74,7 +77,7 @@ class Customer extends Model
 
     protected function casts(): array
     {
-        return ['phone' => 'encrypted', 'address' => 'encrypted', 'invoice_address' => 'encrypted', 'birthday' => 'date', 'tags' => 'array', 'credit_limit' => 'decimal:2'];
+        return ['phone' => 'encrypted', 'address' => 'encrypted', 'street' => 'encrypted', 'invoice_address' => 'encrypted', 'birthday' => 'date', 'tags' => 'array', 'credit_limit' => 'decimal:2'];
     }
 
     public function setPhone(?string $phone): void
