@@ -12,12 +12,14 @@ import KpiCard from '@/shared/ui/KpiCard.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
-import { formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
+import { formatDate, formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { owed, poStatus, supplierPaymentMethods } from './labels';
 import type { PurchaseOrderData, Supplier, SupplierPaymentData, SupplierReturnData } from '@/shared/types';
 
+/** Still owed on an order once money paid on account is counted (server allocation), else what the order itself shows. */
+const left = (o: PurchaseOrderData) => (o.allocation ? o.allocation.open : owed(o));
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
@@ -80,7 +82,7 @@ async function remove() {
             <Card title="Đơn nhập" class="lg:col-span-2">
                 <table v-if="supplier.orders.length" class="w-full text-sm">
                     <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                        <tr><th class="px-4 py-2 font-medium">Đơn nhập</th><th class="px-4 py-2 font-medium">Ngày tạo</th><th class="px-4 py-2 font-medium">Trạng thái</th><th class="px-4 py-2 text-right font-medium">Giá trị</th><th class="px-4 py-2 text-right font-medium">Còn nợ</th></tr>
+                        <tr><th class="px-4 py-2 font-medium">Đơn nhập</th><th class="px-4 py-2 font-medium">Ngày tạo</th><th class="px-4 py-2 font-medium">Trạng thái</th><th class="px-4 py-2 text-right font-medium">Giá trị</th><th class="px-4 py-2 text-right font-medium">Còn nợ</th><th class="px-4 py-2 font-medium">Hạn trả</th></tr>
                     </thead>
                     <tbody class="divide-y">
                         <tr v-for="o in supplier.orders" :key="o.id" class="cursor-pointer hover:bg-muted/30" @click="$router.push(`/purchasing/${o.id}`)">
@@ -88,7 +90,11 @@ async function remove() {
                             <td class="px-4 py-2.5 text-muted-foreground">{{ formatDateTime(o.created_at) }}</td>
                             <td class="px-4 py-2.5"><Badge :tone="poStatus[o.status]?.tone">{{ poStatus[o.status]?.label }}</Badge></td>
                             <td class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(o.total) }}</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums" :class="owed(o) > 0 && 'text-destructive'">{{ owed(o) > 0 ? formatMoney(owed(o)) : '—' }}</td>
+                            <td class="px-4 py-2.5 text-right tabular-nums" :class="left(o) > 0 && 'text-destructive'">
+                                {{ left(o) > 0 ? formatMoney(left(o)) : '—' }}
+                                <div v-if="o.allocation && o.allocation.credit > 0" class="text-[11px] text-muted-foreground">đã trừ trả trước {{ formatMoney(o.allocation.credit) }}</div>
+                            </td>
+                            <td class="px-4 py-2.5 text-xs" :class="o.allocation?.overdue ? 'font-medium text-destructive' : 'text-muted-foreground'">{{ o.allocation?.due_date && left(o) > 0 ? formatDate(o.allocation.due_date) + (o.allocation.overdue ? ' · quá hạn' : '') : '—' }}</td>
                         </tr>
                     </tbody>
                 </table>

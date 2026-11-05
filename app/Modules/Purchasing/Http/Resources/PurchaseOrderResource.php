@@ -11,6 +11,9 @@ use Illuminate\Http\Resources\Json\JsonResource;
 /** @mixin PurchaseOrder */
 class PurchaseOrderResource extends JsonResource
 {
+    /** @var array<int, array{open: float, credit: float, due_date: string|null, overdue: bool}>|null order id => allocation */
+    public static ?array $allocation = null;
+
     public function toArray(Request $request): array
     {
         $linesLoaded = $this->relationLoaded('lines');
@@ -32,6 +35,7 @@ class PurchaseOrderResource extends JsonResource
             'warehouse' => $this->whenLoaded('warehouse', fn () => ['id' => $this->warehouse->ulid, 'code' => $this->warehouse->code, 'name' => $this->warehouse->name]),
             'expected_at' => $this->expected_at?->toDateString(),
             'invoice_date' => $this->invoice_date?->toDateString(),
+            'due_date' => $this->due_date?->toDateString(),
             'reference' => $this->reference,
             'tags' => $this->tags ?? [],
             'discount' => $this->discount,
@@ -51,6 +55,8 @@ class PurchaseOrderResource extends JsonResource
             'returned_value' => $this->returned_value,
             'paid_amount' => $this->paid_amount,
             'balance_due' => $this->balanceDue(),
+            // Set by the caller from SupplierAllocation: still owed once money paid on account is counted.
+            'allocation' => $this->when(self::$allocation !== null, fn () => self::$allocation[$this->id] ?? null),
             'note' => $this->note,
             'editable' => app(PurchaseService::class)->editable($this->resource),
             'created_by' => $this->whenLoaded('creator', fn () => $this->creator?->name),

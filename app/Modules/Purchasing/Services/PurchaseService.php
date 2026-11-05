@@ -25,7 +25,7 @@ class PurchaseService
     public function __construct(private readonly InventoryDocumentService $documents, private readonly AuditLogger $audit) {}
 
     /**
-     * @param  array{supplier: Supplier, warehouse: Warehouse, lines: array<int, array{variant_id: int, quantity: int, unit_cost: string|int|float, tax_rate?: string|int|float|null}>, expected_at?: string|null, note?: string|null, invoice_date?: string|null, reference?: string|null, tags?: array<int, string>|null, place?: bool, discount?: string|int|float|null, extra_cost?: string|int|float|null, extra_cost_note?: string|null, extra_cost_to_supplier?: bool, vat_in_cost?: bool}  $data
+     * @param  array{supplier: Supplier, warehouse: Warehouse, lines: array<int, array{variant_id: int, quantity: int, unit_cost: string|int|float, tax_rate?: string|int|float|null}>, expected_at?: string|null, note?: string|null, invoice_date?: string|null, due_date?: string|null, reference?: string|null, tags?: array<int, string>|null, place?: bool, discount?: string|int|float|null, extra_cost?: string|int|float|null, extra_cost_note?: string|null, extra_cost_to_supplier?: bool, vat_in_cost?: bool}  $data
      */
     public function create(array $data): PurchaseOrder
     {
@@ -39,6 +39,7 @@ class PurchaseService
                 'expected_at' => $data['expected_at'] ?? null,
                 'note' => $data['note'] ?? null,
                 'invoice_date' => $data['invoice_date'] ?? null,
+                'due_date' => $data['due_date'] ?? null,
                 'reference' => $data['reference'] ?? null,
                 'tags' => $data['tags'] ?? null,
                 ...$this->costHeader($data),
@@ -58,7 +59,7 @@ class PurchaseService
     /**
      * Header and lines can change until the first goods arrive.
      *
-     * @param  array{supplier?: Supplier, warehouse?: Warehouse, lines?: array<int, array{variant_id: int, quantity: int, unit_cost: string|int|float, tax_rate?: string|int|float|null}>, expected_at?: string|null, note?: string|null, invoice_date?: string|null, reference?: string|null, tags?: array<int, string>|null, discount?: string|int|float|null, extra_cost?: string|int|float|null, extra_cost_note?: string|null, extra_cost_to_supplier?: bool, vat_in_cost?: bool}  $data
+     * @param  array{supplier?: Supplier, warehouse?: Warehouse, lines?: array<int, array{variant_id: int, quantity: int, unit_cost: string|int|float, tax_rate?: string|int|float|null}>, expected_at?: string|null, note?: string|null, invoice_date?: string|null, due_date?: string|null, reference?: string|null, tags?: array<int, string>|null, discount?: string|int|float|null, extra_cost?: string|int|float|null, extra_cost_note?: string|null, extra_cost_to_supplier?: bool, vat_in_cost?: bool}  $data
      */
     public function update(PurchaseOrder $po, array $data): PurchaseOrder
     {
@@ -74,7 +75,7 @@ class PurchaseService
             if (isset($data['warehouse'])) {
                 $po->warehouse_id = $data['warehouse']->id;
             }
-            $po->fill(array_intersect_key($data, array_flip(['expected_at', 'note', 'invoice_date', 'reference', 'tags'])));
+            $po->fill(array_intersect_key($data, array_flip(['expected_at', 'note', 'invoice_date', 'due_date', 'reference', 'tags'])));
             $po->fill(array_intersect_key($this->costHeader($data), $data));
             $po->save();
             if (isset($data['lines'])) {

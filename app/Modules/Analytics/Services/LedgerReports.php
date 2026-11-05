@@ -5,6 +5,7 @@ namespace App\Modules\Analytics\Services;
 use App\Modules\Analytics\Support\ProfitFigures;
 use App\Modules\Analytics\Support\RevenuePolicy;
 use App\Modules\Purchasing\Models\Supplier;
+use App\Modules\Purchasing\Services\SupplierAllocation;
 use App\Modules\Sales\Services\CustomerDebt;
 use App\Modules\Tenancy\Support\TenantContext;
 use Carbon\CarbonImmutable;
@@ -131,14 +132,16 @@ class LedgerReports
      */
     public function payables(): array
     {
-        $rows = Supplier::query()->withBalance()->having('debt', '!=', 0)->orderByDesc('debt')->limit(2000)->get()
+        $suppliers = Supplier::query()->withBalance()->having('debt', '!=', 0)->orderByDesc('debt')->limit(2000)->get();
+        $allocation = app(SupplierAllocation::class)->forSuppliers($suppliers->pluck('id')->all());
+        $rows = $suppliers
             ->map(fn (Supplier $s) => [
                 'supplier' => ['id' => $s->ulid, 'code' => $s->code, 'name' => $s->name, 'phone' => $s->phone],
                 'orders' => (int) $s->orders_count,
                 'purchased' => round((float) $s->purchased, 2),
                 'paid' => round((float) $s->paid, 2),
                 'debt' => round((float) $s->debt, 2),
-                'overdue' => round((float) $s->overdue, 2),
+                'overdue' => $allocation[$s->id]['overdue'] ?? 0.0,
                 'terms_days' => $s->payment_terms_days,
             ])->all();
 

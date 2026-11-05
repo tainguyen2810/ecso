@@ -17,6 +17,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant', 'idempotent'])->group(f
 
     Route::get('purchase-orders/reorder', [ReorderController::class, 'index']);
     Route::apiResource('purchase-orders', PurchaseOrderController::class)->except('destroy');
+    Route::patch('purchase-orders/{purchaseOrder}/due-date', [PurchaseOrderController::class, 'dueDate']);
     Route::post('purchase-orders/{purchaseOrder}/receive', [PurchaseOrderController::class, 'receive']);
     Route::post('purchase-orders/{purchaseOrder}/actions/{action}', [PurchaseOrderController::class, 'action'])
         ->whereIn('action', ['place', 'close', 'cancel']);
