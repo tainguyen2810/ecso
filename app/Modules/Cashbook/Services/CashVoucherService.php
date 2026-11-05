@@ -67,10 +67,13 @@ class CashVoucherService
         private readonly CashAccountService $accounts,
     ) {}
 
-    /** Creates the default types the first time a business opens its voucher types. */
+    /**
+     * Creates the default types the first time a business opens its voucher types. The count-difference type the
+     * system adds on its own does not count: a business whose first voucher was a shift or fund count still gets them.
+     */
     public function ensureDefaultTypes(): void
     {
-        if (CashVoucherType::query()->exists()) {
+        if (CashVoucherType::query()->where('name', '!=', CashClosingService::COUNT_TYPE)->exists()) {
             return;
         }
         DB::transaction(function () {

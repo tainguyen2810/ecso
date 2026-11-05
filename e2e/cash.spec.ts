@@ -27,7 +27,9 @@ test('payment voucher, customer debt receipt, void and print, cashbook', async (
     await page.getByTestId('v-note').fill('Tiền thuê tháng 11');
     await shot(page, '02-new-payment');
     await page.getByTestId('v-save').click();
-    await expect(page.getByTestId('voucher-table')).toContainText('PC-000001');
+    // The demo data may already hold a payment (a shift's drawer shortage), so find the rent voucher by its type.
+    const rent = page.getByTestId('voucher-table').locator('tr', { hasText: 'Thuê mặt bằng' });
+    await expect(rent).toContainText('PC-');
 
     // A receipt from a customer on credit shows how it would collect their unpaid orders, oldest first. Not saved:
     // later specs rely on the demo customer's debt (saving is covered by CashVoucherTest).
@@ -44,7 +46,7 @@ test('payment voucher, customer debt receipt, void and print, cashbook', async (
 
     // Detail, then void the rent voucher with a reason.
     await page.getByTestId('voucher-direction').getByRole('button', { name: 'Phiếu chi' }).click();
-    await page.getByTestId('voucher-table').getByText('PC-000001').click();
+    await rent.click();
     await expect(page.getByTestId('voucher-detail')).toContainText('Năm triệu đồng');
     await expect(page.getByTestId('print-voucher')).toBeVisible();
     await shot(page, '04-voucher-detail');

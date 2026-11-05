@@ -63,6 +63,15 @@ test('POS: open a shift, scan, change for cash, pay, count the drawer and close'
     await page.getByTestId('shift-move-reason').fill('Nộp két sắt');
     await page.getByTestId('shift-move-save').click();
     await expect(page.getByTestId('shift-panel')).toContainText('Nộp két sắt');
+    // A real expense paid from the drawer is booked as a payment voucher in the cash fund.
+    await page.getByTestId('shift-cash-out').click();
+    await page.getByTestId('shift-move-real').check();
+    await page.getByTestId('shift-move-type').selectOption({ label: 'Vật tư đóng gói' });
+    await page.getByTestId('shift-move-amount').fill('20000');
+    await page.getByTestId('shift-move-reason').fill('Mua băng keo');
+    await shot(page, '03-shift-real-expense', SHIFTS);
+    await page.getByTestId('shift-move-save').click();
+    await expect(page.getByTestId('shift-movement-voucher-1')).toContainText('PC-');
     await shot(page, '02-shift-running', SHIFTS);
 
     const expected = Number((await page.getByTestId('shift-expected').innerText()).replace(/\D/g, ''));

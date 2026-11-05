@@ -38,3 +38,12 @@ it('books a real payment from the drawer in the cash fund, and keeps a move to t
     // The voucher belongs to the shift: it cannot be voided on its own.
     actingInTenant($owner, $tenant)->postJson("/api/v1/cash-vouchers/{$voucher['id']}/void", ['reason' => 'nhầm'])->assertUnprocessable()->assertJsonValidationErrors('voucher');
 });
+
+it('still gives a business the default voucher types when its first voucher was a shift difference', function () {
+    [$tenant, $owner] = tenantWithOwner();
+    $shift = actingInTenant($owner, $tenant)->postJson('/api/v1/pos/shifts', ['opening_cash' => 100000, 'warehouse_id' => defaultWarehouse($tenant)->ulid])->json('data.id');
+    actingInTenant($owner, $tenant)->postJson("/api/v1/pos/shifts/{$shift}/close", ['counted_cash' => 90000, 'closing_note' => 'thiếu'])->assertOk();
+
+    $names = collect(actingInTenant($owner, $tenant)->getJson('/api/v1/cash-voucher-types?direction=payment')->assertOk()->json('data'))->pluck('name');
+    expect($names)->toContain('Thuê mặt bằng')->toContain('Chênh lệch kiểm quỹ');
+});

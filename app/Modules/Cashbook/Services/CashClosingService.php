@@ -116,6 +116,7 @@ class CashClosingService
             return null;
         }
         $direction = bccomp($difference, '0', 2) > 0 ? CashVoucher::RECEIPT : CashVoucher::PAYMENT;
+        $this->vouchers->ensureDefaultTypes();
         $type = CashVoucherType::query()->firstOrCreate(
             ['direction' => $direction, 'name' => self::COUNT_TYPE],
             ['counts_in_pnl' => false, 'pnl_group' => $direction === CashVoucher::PAYMENT ? 'operating' : null, 'description' => 'Thừa hoặc thiếu tiền khi kiểm quỹ, kiểm két cuối ca.'],
