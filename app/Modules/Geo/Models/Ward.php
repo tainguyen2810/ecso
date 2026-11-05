@@ -8,6 +8,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * A ward, commune or special zone, directly under its province (no district level since 1 July 2025). `former` lists
  * the pre-2025 wards it absorbed ([ward, district]) so an old name still finds it; addresses never store old units.
+ *
+ * @property string $code
+ * @property string $province_code
+ * @property string $name
+ * @property list<array{0: string, 1: string}>|null $former
+ * @property string|null $former_hint
+ * @property string|null $search
  */
 class Ward extends Model
 {

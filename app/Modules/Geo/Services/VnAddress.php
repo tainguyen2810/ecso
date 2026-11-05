@@ -166,6 +166,7 @@ class VnAddress
         }
 
         // Ward: the best scored candidate of the province (of all provinces when none was named).
+        /** @var array<string, array{ward: Ward, score: int, start: int, former: bool}> $best */
         $best = [];
         $candidates = $province ? $this->wardsOf($province->code) : $this->provinces()->flatMap(fn (Province $p) => $this->wardsOf($p->code));
         foreach ($candidates as $ward) {
@@ -188,7 +189,8 @@ class VnAddress
                 }
             }
         }
-        usort($best, fn ($a, $b) => $b['score'] <=> $a['score']);
+        $best = array_values($best);
+        usort($best, fn (array $a, array $b): int => $b['score'] <=> $a['score']);
         $top = $best[0] ?? null;
         // Two different wards equally likely (e.g. "Phường 1" of two old districts): do not guess.
         if ($top !== null && isset($best[1]) && $best[1]['score'] === $top['score']) {

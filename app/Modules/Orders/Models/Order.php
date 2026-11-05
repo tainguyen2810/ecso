@@ -30,6 +30,9 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $packing_slip_printed_at
  * @property Carbon|null $deliver_on
  * @property array<int, string>|null $tags
+ * @property string|null $shipping_street
+ * @property string|null $shipping_province_code
+ * @property string|null $shipping_ward_code
  */
 class Order extends Model
 {

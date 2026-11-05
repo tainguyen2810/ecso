@@ -26,6 +26,9 @@ use Illuminate\Support\Carbon;
  * @property-read string|null $last_order_at
  * @property list<string>|null $tags
  * @property Carbon|null $birthday
+ * @property string|null $street
+ * @property string|null $province_code
+ * @property string|null $ward_code
  */
 class Customer extends Model
 {
