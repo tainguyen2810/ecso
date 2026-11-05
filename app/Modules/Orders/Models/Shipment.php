@@ -25,6 +25,7 @@ use Illuminate\Support\Carbon;
  * @property string $cod_amount
  * @property string $cod_status
  * @property int $attempts
+ * @property Carbon|null $ship_by_at
  * @property Carbon|null $picked_up_at
  * @property Carbon|null $delivered_at
  * @property Carbon|null $failed_at
