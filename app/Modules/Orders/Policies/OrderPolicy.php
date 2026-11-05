@@ -64,4 +64,16 @@ class OrderPolicy extends PermissionPolicy
     {
         return $this->allows('orders.price');
     }
+
+    /** Create and correct shipments, record what the carrier reported. */
+    public function manageShipments(User $user): bool
+    {
+        return $this->allows('shipments.manage');
+    }
+
+    /** Tracking numbers from a file. */
+    public function importShipments(User $user): bool
+    {
+        return $this->allows('shipments.import');
+    }
 }

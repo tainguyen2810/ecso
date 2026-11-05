@@ -64,3 +64,33 @@ test('shipments: open one on the order, record pickup and a failed delivery, the
     await page.getByTestId('shipment-edit-save').click();
     await expect(drawer.getByTestId('drawer-tracking')).toHaveText(`GHN${run}T`);
 });
+
+test('shipments: tracking numbers made on the carrier site come in from a file', async ({ page }) => {
+    const run = Date.now().toString().slice(-6);
+    await login(page, 'owner@demo.test');
+    await page.goto('/orders/new');
+    await page.getByTestId('sku-picker').fill('ATC-TRANG-M');
+    await page.getByTestId('sku-picker').press('Enter');
+    await page.getByTestId('stage-confirmed').check();
+    await page.getByTestId('submit-order').click();
+    await expect(page.getByTestId('order-status')).toHaveText('Chờ đóng gói');
+    const number = ((await page.locator('h1').first().textContent()) ?? '').replace('Đơn', '').trim();
+
+    await page.goto('/shipments');
+    await page.getByTestId('shipment-import').click();
+    await page.getByTestId('shipment-import-file').setInputFiles({
+        name: 'van-don.csv',
+        mimeType: 'text/csv',
+        buffer: Buffer.from(`Mã đơn hàng,Mã vận đơn,Đơn vị vận chuyển\n${number},VTP${run}F,Viettel Post\nKHONGCO${run},X${run},GHN\n`),
+    });
+    const counts = page.getByTestId('shipment-import-counts');
+    await expect(counts).toContainText('1 tạo mới');
+    await expect(counts).toContainText('1 lỗi');
+    await shot(page, '04-nhap-ma-van-don');
+    await page.getByTestId('shipment-import-confirm').click();
+    // The bad row stays on screen; the good one is saved.
+    await expect(page.getByTestId('shipment-import-preview')).toContainText('Không tìm thấy đơn hàng');
+    await page.getByRole('button', { name: 'Đóng', exact: true }).first().click();
+    await page.getByTestId('shipment-search').fill(`VTP${run}F`);
+    await expect(page.getByTestId('shipment-table')).toContainText('Chờ lấy hàng');
+});

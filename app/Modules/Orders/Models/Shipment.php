@@ -32,6 +32,11 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $returned_at
  * @property Carbon|null $cancelled_at
  * @property Carbon|null $last_event_at
+ * @property int $packages
+ * @property int|null $weight_g
+ * @property string|null $fee_estimated
+ * @property string|null $fee_actual
+ * @property string|null $failure_reason
  */
 class Shipment extends Model
 {
