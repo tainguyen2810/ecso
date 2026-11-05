@@ -66,7 +66,7 @@ test('list filters, bulk actions and label printing', async ({ page }) => {
     await page.getByTestId('bulk-print').click();
     await expect(page).toHaveURL(/\/products\/labels\?products=/);
     await expect(page.getByTestId('label-table')).toBeVisible();
-    await expect(page.getByTestId('label-preview').locator('svg')).toBeVisible();
+    await expect(page.getByTestId('label-preview').locator('svg').first()).toBeVisible();
     await shot(page, '05-barcode-labels');
 
     const download = page.waitForEvent('download');

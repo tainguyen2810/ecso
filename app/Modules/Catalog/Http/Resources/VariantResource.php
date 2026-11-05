@@ -39,6 +39,7 @@ class VariantResource extends JsonResource
             'product' => $this->whenLoaded('product', fn () => [
                 'id' => $this->product->ulid,
                 'name' => $this->product->name,
+                'unit' => $this->product->unit,
                 // First photo, for the order form's picker (only when the caller loaded product.images).
                 'image' => $this->product->relationLoaded('images') ? $this->product->images->first()?->url() : null,
             ]),

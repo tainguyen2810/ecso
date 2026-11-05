@@ -88,7 +88,7 @@ export interface Variant {
     height_mm?: number | null;
     sellable?: boolean;
     status?: string;
-    product?: Ref & { image?: string | null };
+    product?: Ref & { image?: string | null; unit?: string | null };
     stock?: StockFigures;
 }
 
