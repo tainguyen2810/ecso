@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Khách hàng: lọc theo ngày đúng giờ Việt Nam, không xóa khách còn chứng từ (2026-11-05)
+- **Lọc "Mua lần cuối" và "Ngày thêm"** tính theo ngày của cửa hàng (giờ Việt Nam). Trước đây máy chủ tính theo giờ UTC nên đơn mua từ 00:00 đến 06:59 bị xếp vào ngày hôm trước. Số ngày "Chưa mua lại" ở trang khách cũng tính theo giờ cửa hàng.
+- **Không xóa được khách còn chứng từ**: ngoài đơn hàng, khách có nợ đầu kỳ hoặc phiếu điều chỉnh công nợ, thanh toán, phiếu thu chi hay lịch sử gộp đều không xóa được (xóa một khách và xóa hàng loạt). Trước đây khách có nợ đầu kỳ gây lỗi máy chủ khi xóa, còn khách có phiếu thu chi bị xóa và phiếu mất liên kết với khách. Hãy chuyển khách sang "Ngừng giao dịch".
+- Bổ sung test cho tìm khách theo 4 số cuối điện thoại, lọc theo ngày và chọn cột (nhớ lựa chọn, về mặc định).
+
 ### Khách hàng: nhập file lớn chạy ngầm, nhận khách quay lại trên sàn (2026-11-04)
 - **Nhập file khách lớn chạy ngầm**: file trên 5.000 dòng (tối đa 30.000 dòng, 20 MB) được kiểm tra rồi nhập ở nền (bảng `customer_imports`, job `ImportCustomersJob`). Vẫn kiểm tra toàn bộ trước, có lỗi thì không nhập dòng nào; lúc nhập kiểm tra lại (dữ liệu có thể đã đổi) và ghi trong một giao dịch, lỗi giữa chừng thì không có dòng nào được ghi. Có thanh tiến độ, đóng cửa sổ vẫn chạy, danh sách khách hiện tiến độ. Mỗi cửa hàng nhập một tệp một lúc; tệp xóa ngay khi xong, tệp đã kiểm tra mà không nhập bị xóa sau 24 giờ. Đo thử 30.000 dòng: kiểm tra khoảng 1 giây, nhập khoảng 2,5 phút.
 - **Nhận khách quay lại trên sàn**: đơn sàn có mã tài khoản người mua (Shopee `buyer_user_id`, TikTok `user_id`) được gắn vào một thẻ khách theo mã đó (`customer_identities`), đơn sau của cùng tài khoản về cùng thẻ dù số điện thoại bị che khác nhau. Thẻ chỉ có tên (tên người nhận hoặc tên tài khoản); số điện thoại và địa chỉ của sàn chỉ nằm trên đơn. Không bao giờ ghép theo tên. Đơn sàn tính vào số đơn và tổng mua của khách, không tính vào công nợ. Hai đơn của cùng người mua mới đến cùng lúc chỉ tạo một thẻ. Đã chạy trên sàn giả lập; Shopee/TikTok thật dùng được ngay khi kết nối điền hai trường này.

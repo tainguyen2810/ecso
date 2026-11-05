@@ -3,6 +3,7 @@
 use App\Modules\Access\Models\Role;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\SalesChannel;
+use App\Shared\Support\ReportRange;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Testing\TestResponse;
 
@@ -94,7 +95,7 @@ it('filters by status, birthday month, gender, tag, staff and purchases', functi
         ->and($ids('spent_min=200000'))->toBe([$a])
         ->and($ids('spent_max=200000'))->toBe([$b])
         ->and($ids('orders_min=1&debt=1'))->toBe([$a])
-        ->and($ids('last_order_from='.now()->toDateString()))->toBe([$a])
+        ->and($ids('last_order_from='.ReportRange::now()->toDateString()))->toBe([$a])
         ->and($ids('sort=orders'))->toBe([$a, $b]);
 });
 
