@@ -189,11 +189,17 @@ class VnAddress
                 }
             }
         }
-        $best = array_values($best);
-        usort($best, fn (array $a, array $b): int => $b['score'] <=> $a['score']);
-        $top = $best[0] ?? null;
+        $top = null;
+        $tie = false;
+        foreach ($best as $candidate) {
+            if ($top === null || $candidate['score'] > $top['score']) {
+                [$top, $tie] = [$candidate, false];
+            } elseif ($candidate['score'] === $top['score']) {
+                $tie = true;
+            }
+        }
         // Two different wards equally likely (e.g. "Phường 1" of two old districts): do not guess.
-        if ($top !== null && isset($best[1]) && $best[1]['score'] === $top['score']) {
+        if ($tie) {
             $top = null;
         }
 
