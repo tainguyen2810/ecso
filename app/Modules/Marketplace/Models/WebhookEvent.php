@@ -24,6 +24,9 @@ class WebhookEvent extends Model
 
     public const REJECTED = 'rejected';
 
+    /** Dropped by a user from the Sync Center before it was processed. */
+    public const CANCELLED = 'cancelled';
+
     public $timestamps = false;
 
     protected $guarded = ['id'];

@@ -11,6 +11,7 @@ use App\Modules\Marketplace\Jobs\PushInventoryJob;
 use App\Modules\Marketplace\Models\InventorySyncOutbox;
 use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
+use App\Modules\Marketplace\Support\SyncCorrelation;
 
 /**
  * Steps [8] of INVENTORY-ENGINE §7: recompute the published quantity of every mapped listing of the changed SKUs
@@ -32,6 +33,7 @@ class InventorySyncPlanner
             ->where('mapping_status', ListingVariant::MAPPED)->get()->groupBy('marketplace_account_id');
 
         $queued = 0;
+        $correlation = SyncCorrelation::current();
         foreach ($listings as $accountId => $rows) {
             $account = MarketplaceAccount::query()->find($accountId);
             if (! $account || ! $account->isActive() || ! $account->sync_enabled || ! $account->syncs('sync_stock')) {
@@ -69,14 +71,16 @@ class InventorySyncPlanner
                     'tenant_id' => $account->tenant_id,
                     'marketplace_account_id' => $account->id,
                     'listing_variant_id' => $listing->id,
+                    'correlation_id' => $correlation,
                     'desired_qty' => $desired,
                     'status' => InventorySyncOutbox::PENDING,
                     'attempts' => 0,
                     'next_attempt_at' => $nextAttempt,
                     'last_error' => null,
+                    'error_code' => null,
                     'created_at' => now(),
                     'updated_at' => now(),
-                ]], ['listing_variant_id'], ['desired_qty', 'status', 'attempts', 'next_attempt_at', 'last_error', 'updated_at']);
+                ]], ['listing_variant_id'], ['correlation_id', 'desired_qty', 'status', 'attempts', 'next_attempt_at', 'last_error', 'error_code', 'updated_at']);
                 $queued++;
                 $soonest = $soonest === null || $due->lt($soonest) ? $due : $soonest;
             }

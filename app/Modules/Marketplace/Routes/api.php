@@ -5,6 +5,7 @@ use App\Modules\Marketplace\Http\Controllers\ListingController;
 use App\Modules\Marketplace\Http\Controllers\MarketplaceAccountController;
 use App\Modules\Marketplace\Http\Controllers\MarketplacePricingController;
 use App\Modules\Marketplace\Http\Controllers\PriceController;
+use App\Modules\Marketplace\Http\Controllers\SyncCenterController;
 use App\Modules\Marketplace\Http\Controllers\SyncLogController;
 use App\Modules\Marketplace\Http\Controllers\WebhookController;
 use App\Modules\Marketplace\Http\Controllers\WooCommerceController;
@@ -68,6 +69,17 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
         Route::get('settlements/template', 'template');
         Route::post('alerts/{alert}/apply', 'applyAlert');
         Route::post('alerts/{alert}/dismiss', 'dismissAlert');
+    });
+
+    // Sync Center (docs/SYNC_CENTER_AUDIT.md): operates the sync; accounts and keys stay on the routes above.
+    Route::prefix('sync-center')->controller(SyncCenterController::class)->group(function () {
+        Route::get('overview', 'overview');
+        Route::get('tasks', 'tasks');
+        Route::get('tasks/export', 'export')->middleware('throttle:10,1,marketplace.sync-center.export');
+        Route::get('tasks/{type}/{id}', 'task')->whereNumber('id');
+        Route::post('tasks/{type}/{id}/retry', 'retry')->whereNumber('id')->middleware('throttle:60,1,marketplace.sync-center.retry');
+        Route::post('tasks/{type}/{id}/cancel', 'cancel')->whereNumber('id');
+        Route::post('accounts/{account}/sync-now', 'syncNow')->middleware('throttle:6,1,marketplace.sync-center.sync-now');
     });
 
     Route::get('marketplace-accounts/{account}/listings', [ListingController::class, 'index']);

@@ -11,6 +11,7 @@ use Illuminate\Support\Carbon;
  * Pending stock push for one listing variant. Coalesced: one row per listing variant, desired_qty is the latest.
  *
  * @property Carbon|null $next_attempt_at
+ * @property Carbon|null $last_attempt_at
  */
 class InventorySyncOutbox extends Model
 {
@@ -35,7 +36,7 @@ class InventorySyncOutbox extends Model
 
     protected function casts(): array
     {
-        return ['next_attempt_at' => 'datetime', 'desired_qty' => 'integer', 'attempts' => 'integer'];
+        return ['next_attempt_at' => 'datetime', 'last_attempt_at' => 'datetime', 'desired_qty' => 'integer', 'attempts' => 'integer'];
     }
 
     /** @return BelongsTo<ListingVariant, $this> */

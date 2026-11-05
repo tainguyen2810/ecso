@@ -188,11 +188,14 @@ class FakeConnector implements MarketplaceConnector
         $this->failIfRequested($account);
         $results = [];
         foreach ($updates as $update) {
-            $affected = DB::table('fake_marketplace_products')
-                ->where('shop_id', $account->external_shop_id)->where('sku_id', $update->externalSkuId)
-                ->update(['stock' => $update->quantity, 'stock_updated_at' => now(), 'updated_at' => now()]);
+            $sku = DB::table('fake_marketplace_products')->where('shop_id', $account->external_shop_id)->where('sku_id', $update->externalSkuId);
+            // Checked separately: MySQL reports 0 affected rows when the stock is already that value.
+            $exists = (clone $sku)->exists();
+            if ($exists) {
+                $sku->update(['stock' => $update->quantity, 'stock_updated_at' => now(), 'updated_at' => now()]);
+            }
 
-            $results[] = $affected > 0
+            $results[] = $exists
                 ? new StockUpdateResult($update->externalSkuId, StockUpdateResult::OK)
                 : new StockUpdateResult($update->externalSkuId, StockUpdateResult::REJECTED, 'SKU không tồn tại trên sàn giả lập.');
         }

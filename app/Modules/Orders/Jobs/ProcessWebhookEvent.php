@@ -2,11 +2,13 @@
 
 namespace App\Modules\Orders\Jobs;
 
+use App\Modules\Marketplace\Domain\SyncErrorCode;
 use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Exceptions\UnsupportedCapability;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Models\WebhookEvent;
 use App\Modules\Marketplace\Services\ListingService;
+use App\Modules\Marketplace\Support\SyncCorrelation;
 use App\Modules\Orders\Services\OrderSync;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Support\TenantContext;
@@ -41,9 +43,10 @@ class ProcessWebhookEvent implements ShouldQueue
     public function handle(OrderSync $sync, ListingService $listings): void
     {
         $event = WebhookEvent::query()->find($this->webhookEventId);
-        if (! $event || in_array($event->status, [WebhookEvent::PROCESSED, WebhookEvent::IGNORED], true)) {
+        if (! $event || in_array($event->status, [WebhookEvent::PROCESSED, WebhookEvent::IGNORED, WebhookEvent::CANCELLED], true)) {
             return;
         }
+        SyncCorrelation::continue($event->correlation_id);
 
         $account = MarketplaceAccount::query()->withoutGlobalScopes()
             ->where('marketplace', $event->marketplace)->where('external_shop_id', $event->external_shop_id)->first();
@@ -83,14 +86,14 @@ class ProcessWebhookEvent implements ShouldQueue
             });
             $this->finish($event, WebhookEvent::PROCESSED, $result['result']);
         } catch (UnsupportedCapability $e) {
-            $this->finish($event, WebhookEvent::FAILED, $e->getMessage());
+            $this->finish($event, WebhookEvent::FAILED, $e->getMessage(), SyncErrorCode::fromException($e));
         } catch (ConnectorException $e) {
             if (! $e->temporary || $this->attempts() >= $this->tries) {
-                $this->finish($event, WebhookEvent::FAILED, $e->getMessage());
+                $this->finish($event, WebhookEvent::FAILED, $e->getMessage(), SyncErrorCode::fromException($e));
 
                 return;
             }
-            $event->forceFill(['result' => mb_substr($e->getMessage(), 0, 500)])->save();
+            $event->forceFill(['result' => mb_substr($e->getMessage(), 0, 500), 'error_code' => SyncErrorCode::fromException($e)])->save();
             $this->release($this->backoff()[min($this->attempts() - 1, 4)]);
         }
     }
@@ -98,12 +101,12 @@ class ProcessWebhookEvent implements ShouldQueue
     public function failed(Throwable $e): void
     {
         if ($event = WebhookEvent::query()->find($this->webhookEventId)) {
-            $this->finish($event, WebhookEvent::FAILED, $e->getMessage());
+            $this->finish($event, WebhookEvent::FAILED, $e->getMessage(), SyncErrorCode::fromException($e));
         }
     }
 
-    private function finish(WebhookEvent $event, string $status, string $result): void
+    private function finish(WebhookEvent $event, string $status, string $result, ?string $errorCode = null): void
     {
-        $event->forceFill(['status' => $status, 'result' => mb_substr($result, 0, 500), 'processed_at' => now()])->save();
+        $event->forceFill(['status' => $status, 'result' => mb_substr($result, 0, 500), 'error_code' => $errorCode, 'processed_at' => now()])->save();
     }
 }
