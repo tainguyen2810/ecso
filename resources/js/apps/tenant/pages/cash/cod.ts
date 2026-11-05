@@ -7,7 +7,9 @@ export interface CodLine {
     status: CodLineStatus;
     booked: number | string;
     note: string | null;
-    order: { id: string; number: string; total?: string; due?: string } | null;
+    order: { id: string; number: string; total?: string; due?: string; status?: string } | null;
+    /** The carrier collected the COD of an own order still shown on its way: it can be marked delivered. */
+    deliverable?: boolean;
 }
 
 export interface CodReconciliation {

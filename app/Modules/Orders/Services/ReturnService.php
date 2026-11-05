@@ -14,6 +14,7 @@ use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
 use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Orders\Models\OrderReturnLine;
+use App\Modules\Orders\Models\OrderStatusHistory;
 use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Sales\Services\PaymentService;
 use Illuminate\Support\Collection;
@@ -45,6 +46,11 @@ class ReturnService
     {
         $existing = OrderReturn::query()->where('order_id', $order->id)->where('source_key', $sourceKey)->first();
         if ($existing) {
+            // Failed again after a redelivery: the parcel that was withdrawn is on its way back once more.
+            if ($existing->status === OrderReturn::REJECTED && $existing->received_at === null) {
+                $existing->forceFill(['status' => OrderReturn::IN_TRANSIT, 'closed_at' => null, 'reason' => $reason])->save();
+            }
+
             return $existing;
         }
 
@@ -64,6 +70,21 @@ class ReturnService
             'reason' => $reason,
             'warehouse_id' => $order->warehouse_id,
         ], $lines->all());
+    }
+
+    /**
+     * The parcel of a failed delivery went out again and was delivered (giao lại): the automatic return opened for it
+     * is withdrawn, as long as nothing was received. Runs inside the order transaction.
+     */
+    public function withdrawAutomatic(Order $order, string $sourceKey, string $note): void
+    {
+        $return = OrderReturn::query()->where('order_id', $order->id)->where('source_key', $sourceKey)
+            ->where('status', OrderReturn::IN_TRANSIT)->whereNull('received_at')->first();
+        if ($return === null) {
+            return;
+        }
+        $return->forceFill(['status' => OrderReturn::REJECTED, 'closed_at' => now(), 'note' => $note])->save();
+        $this->audit->record('return.withdrawn', $return, ['number' => $return->number, 'order' => $order->external_order_id]);
     }
 
     /**
@@ -329,9 +350,31 @@ class ReturnService
             ])->save();
 
             $this->audit->record('return.inspected', $return, ['number' => $return->number, 'restocked' => array_sum(array_column($restock, 'quantity')), 'damaged' => array_sum(array_column($damaged, 'quantity'))]);
+            $this->closeFailedDelivery($return);
 
             return $return;
         });
+    }
+
+    /**
+     * A failed delivery of the shop's own order ends when its parcel is back and inspected: the order becomes "Đã hoàn".
+     * Marketplace orders are left alone (the marketplace owns their status).
+     */
+    private function closeFailedDelivery(OrderReturn $return): void
+    {
+        if ($return->type !== OrderReturn::TYPE_FAILED_DELIVERY) {
+            return;
+        }
+        $order = Order::query()->whereKey($return->order_id)->lockForUpdate()->first();
+        if ($order === null || ! $order->isManual() || $order->status !== OrderStatus::FAILED_DELIVERY) {
+            return;
+        }
+        $order->forceFill(['status' => OrderStatus::RETURNED, 'raw_status' => OrderStatus::RETURNED, 'external_updated_at' => now(), 'version' => $order->version + 1])->save();
+        OrderStatusHistory::query()->create([
+            'order_id' => $order->id, 'from_status' => OrderStatus::FAILED_DELIVERY, 'to_status' => OrderStatus::RETURNED,
+            'raw_status' => OrderStatus::RETURNED, 'source' => 'user', 'actor_id' => Auth::id(), 'occurred_at' => now(),
+            'note' => "Đã nhận và kiểm hàng hoàn {$return->number}",
+        ]);
     }
 
     /**

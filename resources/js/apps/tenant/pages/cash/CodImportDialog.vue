@@ -27,6 +27,7 @@ const preview = ref<{ lines: CodLine[]; totals: { cod: string; fee: string; book
 const busy = ref(false);
 const error = ref<string | null>(null);
 let key = newIdempotencyKey();
+const markDelivered = ref(true);
 
 const today = () => new Date().toLocaleDateString('sv-SE'); // yyyy-mm-dd, local
 watch(open, async (v) => {
@@ -37,6 +38,7 @@ watch(open, async (v) => {
     file.value = null;
     preview.value = null;
     error.value = null;
+    markDelivered.value = true;
     key = newIdempotencyKey();
     funds.value = (await api.get('/cash-accounts')).data.data;
     // The carrier pays into the bank: the bank fund is picked unless there is none.
@@ -45,14 +47,25 @@ watch(open, async (v) => {
 
 const fundOptions = computed(() => funds.value.filter((f) => f.is_active).map((f) => ({ value: f.id, label: f.name })));
 
+// Orders of the shop still shown "Đang giao" whose COD the carrier collected: offered to be marked delivered.
+const deliverable = computed(() => new Set((preview.value?.lines ?? []).filter((l) => l.deliverable && l.order).map((l) => l.order!.id)).size);
+
 async function onFile(e: Event) {
     file.value = (e.target as HTMLInputElement).files?.[0] ?? null;
+    await runPreview();
+}
+
+// The carrier picked tells apart orders that share a tracking number: the preview is read again when it changes.
+watch(carrier, () => file.value && runPreview());
+
+async function runPreview() {
     preview.value = null;
     error.value = null;
     if (!file.value) return;
     busy.value = true;
     const body = new FormData();
     body.append('file', file.value);
+    body.append('carrier', carrier.value);
     try {
         preview.value = (await api.post('/cod-reconciliations/preview', body)).data.data;
     } catch (err) {
@@ -77,11 +90,12 @@ async function confirm() {
                 remitted_at: remittedOn.value && remittedOn.value !== today() ? new Date(`${remittedOn.value}T12:00:00`).toISOString() : null,
                 file_name: file.value?.name ?? null,
                 reference: reference.value || null,
+                mark_delivered: deliverable.value > 0 && markDelivered.value,
                 lines: preview.value.lines.map((l) => ({ tracking: l.tracking, cod: Number(l.cod), fee: Number(l.fee) })),
             },
             idempotent(key),
         );
-        toast.success(`Đã ghi đối soát ${data.data.number}: ${data.data.matched_count}/${data.data.lines_count} dòng khớp.`);
+        toast.success(`Đã ghi đối soát ${data.data.number}: ${data.data.matched_count}/${data.data.lines_count} dòng khớp.` + (deliverable.value > 0 && markDelivered.value ? ` ${deliverable.value} đơn chuyển sang Đã giao.` : ''));
         open.value = false;
         emit('saved', data.data);
     } catch (err) {
@@ -120,6 +134,10 @@ async function confirm() {
                 <p v-if="preview.totals.problems" class="rounded-md bg-warning/15 px-3 py-2 text-amber-700">
                     {{ preview.totals.problems }} dòng lệch tiền hoặc không tìm thấy đơn. Dòng lệch chỉ ghi phần đơn còn phải thu; dòng không thấy đơn không ghi gì. Kiểm tra lại với hãng.
                 </p>
+                <label v-if="deliverable" class="flex cursor-pointer items-start gap-2 rounded-md border border-blue-200 bg-blue-50/70 px-3 py-2 text-blue-800" data-testid="cod-mark-delivered">
+                    <input v-model="markDelivered" type="checkbox" class="mt-0.5 size-4" />
+                    <span>Hãng đã thu tiền của <b>{{ deliverable }} đơn</b> vẫn đang ở trạng thái Đang giao hoặc Giao thất bại. Chuyển các đơn này sang <b>Đã giao</b> khi ghi đối soát (doanh thu được ghi nhận từ lúc đã giao).</span>
+                </label>
                 <div class="max-h-[45vh] overflow-auto rounded-md border">
                     <table class="w-full text-sm" data-testid="cod-preview">
                         <thead class="sticky top-0 border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">

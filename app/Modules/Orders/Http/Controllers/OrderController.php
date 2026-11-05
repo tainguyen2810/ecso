@@ -25,6 +25,7 @@ use App\Modules\Orders\Services\OrderQuery;
 use App\Modules\Orders\Services\OrderSync;
 use App\Modules\Orders\Services\ReturnService;
 use App\Modules\Orders\Support\OrderTags;
+use App\Modules\Orders\Support\Tracking;
 use App\Modules\Sales\Http\Resources\PaymentResource;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\OrderPayment;
@@ -164,7 +165,12 @@ class OrderController extends Controller
         if ($action === 'cancel') {
             $this->authorize('cancel', $order);
         }
-        $params = $request->validate(['reason' => ['nullable', 'string', 'max:255']]);
+        $params = $request->validate([
+            'reason' => ['nullable', 'string', 'max:255'],
+            // Kept for orders the shop ships itself (own channels, website); a marketplace books its own carrier.
+            'carrier' => ['nullable', 'string', 'max:100'],
+            'tracking_number' => ['nullable', 'string', 'max:100'],
+        ]);
 
         return new OrderResource($actions->perform($order, $action, $params)->load(['account', 'channel', 'assignee']));
     }
@@ -221,7 +227,25 @@ class OrderController extends Controller
             'tags' => ['sometimes', 'nullable', 'array', 'max:'.OrderTags::MAX],
             'tags.*' => ['nullable', 'string', 'max:40'],
             'deliver_on' => ['sometimes', 'nullable', 'date'],
+            // Carrier and tracking number can be corrected after handover, on orders the shop ships itself.
+            'carrier' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'tracking_number' => ['sometimes', 'nullable', 'string', 'max:100'],
         ]);
+        $shipping = [];
+        if (array_key_exists('carrier', $data) || array_key_exists('tracking_number', $data)) {
+            if (! $order->isManual() && $order->marketplace !== PaymentService::WEBSITE) {
+                throw ValidationException::withMessages(['tracking_number' => 'Mã vận đơn của đơn sàn do sàn cấp, không sửa ở đây.']);
+            }
+            $before = ['carrier' => $order->shipping_carrier, 'tracking_number' => $order->tracking_number];
+            if (array_key_exists('carrier', $data)) {
+                $order->shipping_carrier = filled($data['carrier']) ? trim($data['carrier']) : null;
+            }
+            if (array_key_exists('tracking_number', $data)) {
+                $order->tracking_number = Tracking::normalize($data['tracking_number']);
+                Tracking::assertUnique($order, $order->tracking_number);
+            }
+            $shipping = ['before' => $before, 'after' => ['carrier' => $order->shipping_carrier, 'tracking_number' => $order->tracking_number]];
+        }
         if (array_key_exists('tags', $data)) {
             $order->tags = OrderTags::normalize($data['tags']);
         }
@@ -229,7 +253,7 @@ class OrderController extends Controller
             $order->deliver_on = $data['deliver_on'];
         }
         $order->save();
-        $audit->record('order.meta_updated', $order, ['order' => $order->external_order_id, 'tags' => $order->tags, 'deliver_on' => $order->deliver_on?->toDateString()]);
+        $audit->record('order.meta_updated', $order, ['order' => $order->external_order_id, 'tags' => $order->tags, 'deliver_on' => $order->deliver_on?->toDateString()] + ($shipping ? ['shipping' => $shipping] : []));
 
         return new OrderResource($order->load(['account', 'channel', 'customer', 'assignee']));
     }

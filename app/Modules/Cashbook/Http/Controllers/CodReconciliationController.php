@@ -58,7 +58,9 @@ class CodReconciliationController extends Controller
             $lines = $request->validate($this->lineRules())['lines'];
         }
 
-        return response()->json(['data' => $service->preview(array_values($lines))]);
+        $carrier = $request->validate(['carrier' => ['nullable', Rule::in(array_keys(CodReconciliation::CARRIERS))]])['carrier'] ?? null;
+
+        return response()->json(['data' => $service->preview(array_values($lines), $carrier)]);
     }
 
     public function store(Request $request, CodReconciliationService $service): JsonResponse
@@ -71,6 +73,7 @@ class CodReconciliationController extends Controller
             'file_name' => ['nullable', 'string', 'max:255'],
             'reference' => ['nullable', 'string', 'max:100'],
             'note' => ['nullable', 'string', 'max:500'],
+            'mark_delivered' => ['sometimes', 'boolean'], // orders still on their way whose COD was collected: mark delivered
             ...$this->lineRules(),
         ]);
         $rec = $service->confirm($data);
