@@ -43,7 +43,7 @@ class AllocationBoard
             'marketplace' => $a->marketplace,
             'status' => $a->status,
             'syncs_stock' => $a->sync_enabled && $a->syncs('sync_stock'),
-            'warehouse' => $a->warehouse?->name ?? $defaultWarehouse?->name,
+            'warehouse' => $a->warehouse->name ?? $defaultWarehouse?->name,
             'rule' => $rules->first(fn ($r) => $r->marketplace_account_id === $a->id && $r->product_variant_id === null)?->rule() ?? AllocationPolicy::DEFAULT_RULE,
             'is_default' => ! $rules->contains(fn ($r) => $r->marketplace_account_id === $a->id && $r->product_variant_id === null),
             'mapped_skus' => (int) ($mapped[$a->id] ?? 0),
@@ -114,7 +114,7 @@ class AllocationBoard
             $changed++;
             $toZero += $next === 0 ? 1 : 0;
             $v = $variants->get($listing->product_variant_id);
-            $rows[] = ['sku' => $v?->sku ?? $listing->seller_sku, 'name' => $v?->displayName(), 'sellable' => $sellable, 'current' => $current, 'next' => $next];
+            $rows[] = ['sku' => $v->sku ?? $listing->seller_sku, 'name' => $v?->displayName(), 'sellable' => $sellable, 'current' => $current, 'next' => $next];
         }
         usort($rows, fn ($a, $b) => (($b['current'] ?? 0) - $b['next']) <=> (($a['current'] ?? 0) - $a['next']));
 
