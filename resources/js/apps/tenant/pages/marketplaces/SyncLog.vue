@@ -17,14 +17,20 @@ import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import type { MarketplaceAccountData, SyncErrorData, SyncRunData } from '@/shared/types';
 
-/** Sync errors (one row per order that could not be synced, until it syncs or is dismissed) and sync history (one row per pass). */
+/**
+ * Sync errors (one row per order that could not be synced, until it syncs or is dismissed) and sync history (one row
+ * per pass). Shown as the "Nhật ký đơn" tab of Trung tâm đồng bộ (`embedded`).
+ */
+const props = defineProps<{ embedded?: boolean }>();
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
 const tenant = useTenantStore();
 const canEdit = computed(() => tenant.can('marketplace.connect'));
 
-const tab = ref<'errors' | 'resolved' | 'runs'>((route.query.tab as 'errors' | 'resolved' | 'runs') ?? 'errors');
+const logTabs = ['errors', 'resolved', 'runs'] as const;
+const initialTab = (props.embedded ? route.query.log : route.query.tab) as (typeof logTabs)[number];
+const tab = ref<(typeof logTabs)[number]>(logTabs.includes(initialTab) ? initialTab : 'errors');
 const account = ref<string>((route.query.account as string) ?? '');
 const category = ref('');
 const accounts = ref<MarketplaceAccountData[]>([]);
@@ -74,7 +80,7 @@ onMounted(() => {
     api.get('/marketplace-accounts').then(({ data }) => (accounts.value = data.data)).catch(() => {});
 });
 watch([tab, account, category], () => {
-    router.replace({ query: { ...route.query, tab: tab.value, account: account.value || undefined } });
+    router.replace({ query: { ...route.query, ...(props.embedded ? { log: tab.value } : { tab: tab.value }), account: account.value || undefined } });
     load();
 });
 
@@ -109,12 +115,13 @@ const duration = (ms: number | null) => (ms === null ? '—' : ms < 1000 ? `${ms
 </script>
 
 <template>
-    <RouterLink to="/marketplaces" class="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ChevronLeft class="size-4" /> Kết nối sàn</RouterLink>
-    <div class="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div>
+    <RouterLink v-if="!embedded" to="/marketplaces" class="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ChevronLeft class="size-4" /> Kết nối sàn</RouterLink>
+    <div :class="['flex flex-wrap items-end justify-between gap-4', embedded ? 'mb-4' : 'mb-5']">
+        <div v-if="!embedded">
             <h1 class="text-xl font-semibold tracking-tight">Lịch sử và lỗi đồng bộ</h1>
             <p class="text-sm text-muted-foreground">Đơn website chưa đồng bộ được, và từng lượt ECSO đối soát đơn với website.</p>
         </div>
+        <p v-else class="text-sm text-muted-foreground">Đơn sàn chưa đồng bộ được và từng lượt đối soát đơn.</p>
         <div class="w-64">
             <Select v-model="account" :options="[{ value: '', label: 'Mọi website và gian hàng' }, ...accounts.map((a) => ({ value: a.id, label: a.shop_name }))]" data-testid="sync-account" />
         </div>

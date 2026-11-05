@@ -19,6 +19,9 @@ class SyncDashboard
     /** Tokens expiring within this many days are flagged. */
     public const TOKEN_WARN_DAYS = 7;
 
+    /** "Lỗi cần xử lý" counts failed tasks of this many days. */
+    public const FAILED_DAYS = 7;
+
     public function __construct(
         private readonly TenantContext $context,
         private readonly SyncActivityQuery $activity,
@@ -72,6 +75,7 @@ class SyncDashboard
                 'errors_by_code' => (object) $errorsByCode->all(),
                 'dead_letters' => $deadLetters,
                 'stock_drift' => (int) $drift->sum(),
+                'failed_by_code' => (object) $this->failedByCode($ids->all()),
             ],
             'last_synced_at' => $accounts->max('last_synced_at')?->toIso8601String(),
             'shops' => $accounts->map(fn (MarketplaceAccount $a) => [
@@ -91,6 +95,38 @@ class SyncDashboard
                 'stock_drift' => (int) ($drift[$a->id] ?? 0),
             ])->values(),
         ];
+    }
+
+    /**
+     * Failed and dead-letter tasks of the last FAILED_DAYS days, per standard error code ("other" when the source keeps
+     * no code, e.g. price pushes). Feeds "Lỗi cần xử lý".
+     *
+     * @param  array<int, int>  $accountIds
+     * @return array<string, int>
+     */
+    public function failedByCode(array $accountIds): array
+    {
+        $since = now()->subDays(self::FAILED_DAYS);
+        $sources = [
+            WebhookEvent::query()->where('tenant_id', $this->context->id())->where('status', WebhookEvent::FAILED)->where('received_at', '>=', $since),
+            InventorySyncOutbox::query()->whereIn('status', [InventorySyncOutbox::FAILED, InventorySyncOutbox::REJECTED, InventorySyncOutbox::UNSUPPORTED])->where('updated_at', '>=', $since),
+            SyncRun::query()->whereIn('status', [SyncRun::FAILED, SyncRun::PARTIAL])->where('started_at', '>=', $since),
+        ];
+        $counts = [];
+        foreach ($sources as $query) {
+            $rows = $query->whereIn('marketplace_account_id', $accountIds)->selectRaw('error_code, COUNT(*) as n')->groupBy('error_code')->pluck('n', 'error_code');
+            foreach ($rows as $code => $n) {
+                $key = $code === '' || $code === null ? 'other' : (string) $code;
+                $counts[$key] = ($counts[$key] ?? 0) + (int) $n;
+            }
+        }
+        $prices = ListingVariant::query()->whereIn('marketplace_account_id', $accountIds)->where('price_push_status', 'failed')->count();
+        if ($prices > 0) {
+            $counts['other'] = ($counts['other'] ?? 0) + $prices;
+        }
+        arsort($counts);
+
+        return $counts;
     }
 
     /**

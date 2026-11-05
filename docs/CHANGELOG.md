@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Trung tâm đồng bộ, vòng 2: giao diện (2026-11-05)
+- Trang **Kết nối sàn → Trung tâm đồng bộ** (`/marketplaces/sync`, quyền `sync.view`) thay trang "Lịch sử và lỗi đồng bộ"; menu Kết nối sàn có 2 mục con "Shop & tài khoản" và "Trung tâm đồng bộ", không thêm menu mới.
+- **Tổng quan**: cảnh báo shop mất kết nối, số shop hoạt động / mất kết nối / token sắp hết hạn / quá hạn đối soát, tác vụ 24 giờ theo trạng thái (bấm để mở Hàng đợi đã lọc), bảng từng shop với "Đồng bộ ngay".
+- **Hàng đợi**: mọi tác vụ (webhook, đẩy tồn, đọc đơn, đẩy giá) lọc theo loại, shop, mã lỗi, thời gian, tìm theo mã đơn/SKU/correlation ID; chip đếm theo trạng thái; khung chi tiết có gợi ý xử lý, chuỗi tác vụ liên quan, Thử lại / Hủy; xuất Excel.
+- **Lỗi cần xử lý**: tác vụ thất bại 7 ngày gom theo mã lỗi, có gợi ý và "Thử lại tất cả" (API mới `POST /sync-center/tasks/retry-failed`, tối đa 100 tác vụ/lần, bỏ qua tác vụ của shop mất kết nối hoặc tắt đồng bộ, ghi nhật ký kiểm toán).
+- **Nhật ký đơn**: danh sách lỗi đơn và lịch sử đối soát cũ, giữ nguyên chức năng.
+
 ### Trung tâm đồng bộ, vòng 1: nền quan sát (2026-11-05)
 - **Mã lỗi chuẩn** cho mọi lỗi đồng bộ (`token_expired`, `permission_denied`, `rate_limited`, `api_unavailable`, `network_timeout`, `invalid_data`, `not_found`, `missing_mapping`, `conflict`, `duplicate_event`, `unsupported`, `internal_error`), lưu trên webhook, lượt đẩy tồn, lượt đối soát đơn và lỗi đồng bộ.
 - **Correlation ID** đi theo một việc đồng bộ: webhook → job xử lý → lượt đồng bộ → lượt đẩy tồn (Laravel Context, có trong log).

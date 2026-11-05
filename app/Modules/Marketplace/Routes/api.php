@@ -76,6 +76,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
         Route::get('overview', 'overview');
         Route::get('tasks', 'tasks');
         Route::get('tasks/export', 'export')->middleware('throttle:10,1,marketplace.sync-center.export');
+        Route::post('tasks/retry-failed', 'retryFailed')->middleware('throttle:10,1,marketplace.sync-center.retry-failed');
         Route::get('tasks/{type}/{id}', 'task')->whereNumber('id');
         Route::post('tasks/{type}/{id}/retry', 'retry')->whereNumber('id')->middleware('throttle:60,1,marketplace.sync-center.retry');
         Route::post('tasks/{type}/{id}/cancel', 'cancel')->whereNumber('id');
