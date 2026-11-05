@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Trung tâm đồng bộ, vòng 1: nền quan sát (2026-11-05)
+- **Mã lỗi chuẩn** cho mọi lỗi đồng bộ (`token_expired`, `permission_denied`, `rate_limited`, `api_unavailable`, `network_timeout`, `invalid_data`, `not_found`, `missing_mapping`, `conflict`, `duplicate_event`, `unsupported`, `internal_error`), lưu trên webhook, lượt đẩy tồn, lượt đối soát đơn và lỗi đồng bộ.
+- **Correlation ID** đi theo một việc đồng bộ: webhook → job xử lý → lượt đồng bộ → lượt đẩy tồn (Laravel Context, có trong log).
+- **API Trung tâm đồng bộ** (`/api/v1/sync-center/*`): tổng quan (shop, tác vụ theo trạng thái, lỗi mở, hàng chết, tồn lệch, token sắp hết hạn), hàng đợi hợp nhất đọc từ bảng sẵn có với 7 trạng thái chuẩn, chi tiết kèm tác vụ liên quan, thử lại an toàn (webhook đọc lại đơn, tồn tính lại từ kho), hủy tác vụ đang chờ, "Đồng bộ ngay" chạy nền, xuất nhật ký Excel. Không có hệ thống đồng bộ mới.
+- **Quyền mới**: `sync.view`, `sync.operate`, `sync.resolve`, `sync.configure`, `sync.logs.export` (vai trò đang có quyền Kết nối sàn được cấp tương ứng; Quản lý vận hành có thêm `sync.operate`).
+- Sửa: khóa API bị website từ chối khi đồng bộ đơn nay chuyển shop sang "mất kết nối" (trước chỉ khi đẩy tồn). Sàn giả lập không còn báo lỗi khi đẩy lại đúng số tồn cũ.
+
 ### Trung tâm đồng bộ, vòng 0: sửa lỗi nền đồng bộ (2026-11-05)
 - **Scheduler không còn bị "khóa" 24 giờ**: mọi lệnh định kỳ chống chạy chồng có thời hạn khóa (5–120 phút). Trước đây nếu scheduler bị dừng giữa chừng (khi deploy), đối soát đơn và đẩy tồn có thể ngưng cả ngày mà không báo.
 - **Job dài chạy trên hàng đợi riêng `sync-long`** (kết nối `redis-long`, retry_after 1900 s, supervisor Horizon riêng): lấy toàn bộ sản phẩm, đối soát đơn của một shop, nhập file khách hàng không còn bị chạy đôi khi quá 90 giây.

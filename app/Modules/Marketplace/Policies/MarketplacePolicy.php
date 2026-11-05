@@ -28,4 +28,21 @@ class MarketplacePolicy extends PermissionPolicy
     {
         return $this->allows('marketplace.connect');
     }
+
+    /** Sync Center: dashboard, queue, logs, errors. */
+    public function viewSync(User $user): bool
+    {
+        return $this->allows('sync.view');
+    }
+
+    /** Sync Center: sync now, retry and cancel tasks. */
+    public function operateSync(User $user): bool
+    {
+        return $this->allows('sync.operate');
+    }
+
+    public function exportSync(User $user): bool
+    {
+        return $this->allows('sync.logs.export');
+    }
 }

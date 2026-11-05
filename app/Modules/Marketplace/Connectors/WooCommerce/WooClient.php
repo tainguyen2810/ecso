@@ -2,6 +2,7 @@
 
 namespace App\Modules\Marketplace\Connectors\WooCommerce;
 
+use App\Modules\Marketplace\Domain\SyncErrorCode;
 use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Models\MarketplaceCredential;
@@ -61,7 +62,7 @@ class WooClient
         try {
             $response = $request->send($method, $url.($query !== [] ? '?'.http_build_query($query) : ''), $json !== null ? ['json' => $json] : []);
         } catch (ConnectionException $e) {
-            throw new ConnectorException('Không gọi được website: '.self::host($this->baseUrl).' không phản hồi.');
+            throw new ConnectorException('Không gọi được website: '.self::host($this->baseUrl).' không phản hồi.', errorCode: SyncErrorCode::NETWORK_TIMEOUT);
         }
 
         if ($response->successful()) {
@@ -74,11 +75,11 @@ class WooClient
         throw match (true) {
             in_array($response->status(), [401, 403], true) => new ConnectorException(
                 'Website từ chối khóa API'.($message !== '' ? ': '.strip_tags($message) : '').'. Kiểm tra khóa còn hiệu lực và có quyền Đọc/Ghi.',
-                temporary: false, authExpired: true,
+                temporary: false, authExpired: true, errorCode: $response->status() === 403 ? SyncErrorCode::PERMISSION_DENIED : SyncErrorCode::TOKEN_EXPIRED,
             ),
-            $response->status() === 404 && $code === 'rest_no_route' => new ConnectorException('Website chưa bật WooCommerce REST API (không tìm thấy /wp-json/wc/v3).', temporary: false),
+            $response->status() === 404 && $code === 'rest_no_route' => new ConnectorException('Website chưa bật WooCommerce REST API (không tìm thấy /wp-json/wc/v3).', temporary: false, errorCode: SyncErrorCode::PERMISSION_DENIED),
             $response->status() === 404 => new ConnectorException('Không tìm thấy trên website'.($message !== '' ? ': '.strip_tags($message) : '.'), temporary: false, notFound: true),
-            $response->status() === 429 || $response->serverError() => new ConnectorException("Website đang bận (HTTP {$response->status()}), sẽ thử lại."),
+            $response->status() === 429 || $response->serverError() => new ConnectorException("Website đang bận (HTTP {$response->status()}), sẽ thử lại.", errorCode: $response->status() === 429 ? SyncErrorCode::RATE_LIMITED : SyncErrorCode::API_UNAVAILABLE),
             default => new ConnectorException('Website trả lỗi'.($message !== '' ? ': '.strip_tags($message) : " HTTP {$response->status()}"), temporary: false),
         };
     }

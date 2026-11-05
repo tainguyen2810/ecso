@@ -7,6 +7,7 @@ use App\Modules\Marketplace\Events\WebhookReceived;
 use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Exceptions\UnsupportedCapability;
 use App\Modules\Marketplace\Models\WebhookEvent;
+use App\Modules\Marketplace\Support\SyncCorrelation;
 use Illuminate\Database\UniqueConstraintViolationException;
 
 /**
@@ -55,6 +56,7 @@ class WebhookReceiver
             $event = WebhookEvent::query()->create([
                 'marketplace' => $marketplace,
                 'dedupe_key' => $dedupe,
+                'correlation_id' => SyncCorrelation::fresh(),
                 'event_type' => $message->type,
                 'external_event_id' => $message->eventId,
                 'external_shop_id' => $message->shopId,

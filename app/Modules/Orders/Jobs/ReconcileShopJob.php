@@ -32,7 +32,8 @@ class ReconcileShopJob implements ShouldBeUnique, ShouldQueue
 
     public int $uniqueFor = 1800;
 
-    public function __construct(public readonly int $accountId)
+    /** @param  string  $trigger  'schedule' (ecso:orders:reconcile) or 'user' (Đồng bộ ngay) */
+    public function __construct(public readonly int $accountId, public readonly string $trigger = 'schedule')
     {
         $this->onLongQueue();
     }
@@ -54,7 +55,7 @@ class ReconcileShopJob implements ShouldBeUnique, ShouldQueue
         }
 
         try {
-            TenantContext::run($tenant, fn () => $sync->syncRecent(MarketplaceAccount::query()->findOrFail($account->id)));
+            TenantContext::run($tenant, fn () => $sync->syncRecent(MarketplaceAccount::query()->findOrFail($account->id), trigger: $this->trigger));
         } catch (ConnectorException) {
             // Logged on the sync run; the next pass tries again.
         }

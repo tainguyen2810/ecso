@@ -71,6 +71,13 @@ final class PermissionRegistry
             'marketplace.view' => 'Xem kết nối sàn',
             'marketplace.connect' => 'Kết nối, ngắt kết nối sàn',
         ],
+        'sync' => [
+            'sync.view' => 'Xem Trung tâm đồng bộ (trạng thái, hàng đợi, nhật ký, lỗi)',
+            'sync.operate' => 'Đồng bộ thủ công, thử lại và hủy tác vụ đồng bộ',
+            'sync.resolve' => 'Xử lý xung đột và chênh lệch đối soát',
+            'sync.configure' => 'Thay đổi cấu hình đồng bộ (chính sách tồn, quy tắc)',
+            'sync.logs.export' => 'Xuất nhật ký đồng bộ',
+        ],
         'members' => [
             'members.view' => 'Xem nhân viên',
             'members.manage' => 'Mời, phân quyền nhân viên',
@@ -85,7 +92,7 @@ final class PermissionRegistry
 
     private const READ_ALL = [
         'dashboard.view', 'orders.view', 'orders.view.all', 'products.view', 'inventory.view', 'purchasing.view',
-        'returns.view', 'reports.view', 'marketplace.view', 'customers.view', 'products.cost.view',
+        'returns.view', 'reports.view', 'marketplace.view', 'sync.view', 'customers.view', 'products.cost.view',
     ];
 
     /**
@@ -102,6 +109,7 @@ final class PermissionRegistry
                 ...self::READ_ALL, 'orders.update', 'orders.cancel', 'orders.assign', 'orders.print', 'orders.create', 'orders.payment', 'orders.payment.void', 'orders.price', 'orders.shifts', 'customers.manage', 'customers.import', 'customers.export', 'customers.delete', 'customers.debt_adjust', 'customers.merge', 'products.manage',
                 'inventory.receive', 'inventory.adjust', 'inventory.adjust.approve', 'inventory.transfer', 'purchasing.manage', 'purchasing.payment',
                 'returns.inspect', 'finance.view', 'finance.balances', 'finance.profit', 'finance.vouchers', 'finance.vouchers.void', 'members.view',
+                'sync.operate',
             ]],
             Role::WAREHOUSE_STAFF => ['name' => 'Nhân viên kho', 'rank' => 40, 'permissions' => [
                 'dashboard.view', 'orders.view', 'orders.view.all', 'orders.print', 'products.view', 'inventory.view',

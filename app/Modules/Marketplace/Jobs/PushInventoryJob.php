@@ -5,6 +5,7 @@ namespace App\Modules\Marketplace\Jobs;
 use App\Modules\Marketplace\Connectors\ConnectorRegistry;
 use App\Modules\Marketplace\Connectors\Data\StockUpdate;
 use App\Modules\Marketplace\Connectors\Data\StockUpdateResult;
+use App\Modules\Marketplace\Domain\SyncErrorCode;
 use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Exceptions\UnsupportedCapability;
 use App\Modules\Marketplace\Models\InventorySyncOutbox;
@@ -102,12 +103,15 @@ class PushInventoryJob implements ShouldQueue
             $row->desired_qty,
         ))->all();
 
+        // Base query: updated_at must not move, succeed() compares it to tell whether a newer value arrived meanwhile.
+        InventorySyncOutbox::query()->whereIn('id', $rows->pluck('id'))->toBase()->update(['last_attempt_at' => now()]);
+
         try {
             $results = collect($connectors->for($account->marketplace)->updateInventory($account, $updates))->keyBy('externalSkuId');
         } catch (UnsupportedCapability $e) {
             // e.g. a marketplace without a stock API: shown to the seller as "update manually".
             foreach ($rows as $row) {
-                $this->settle($row, InventorySyncOutbox::UNSUPPORTED, 'unsupported', $e->getMessage());
+                $this->settle($row, InventorySyncOutbox::UNSUPPORTED, 'unsupported', $e->getMessage(), SyncErrorCode::UNSUPPORTED);
             }
 
             return;
@@ -121,8 +125,8 @@ class PushInventoryJob implements ShouldQueue
             $result = $results->get($row->listingVariant->external_sku_id);
             match ($result?->status) {
                 StockUpdateResult::OK => $this->succeed($row),
-                StockUpdateResult::REJECTED => $this->settle($row, InventorySyncOutbox::REJECTED, 'rejected', $result->message),
-                default => $this->retry($row, $result->message ?? 'Sàn không trả kết quả cho SKU này'),
+                StockUpdateResult::REJECTED => $this->settle($row, InventorySyncOutbox::REJECTED, 'rejected', $result->message, SyncErrorCode::INVALID_DATA),
+                default => $this->retry($row, $result->message ?? 'Sàn không trả kết quả cho SKU này', SyncErrorCode::API_UNAVAILABLE),
             };
         }
 
@@ -141,22 +145,22 @@ class PushInventoryJob implements ShouldQueue
 
         // If a newer value arrived while we were pushing, the row stays pending for the next run.
         InventorySyncOutbox::query()->whereKey($row->id)->where('desired_qty', $row->desired_qty)
-            ->where('updated_at', $row->updated_at)->update(['status' => InventorySyncOutbox::SUCCEEDED, 'last_error' => null]);
+            ->where('updated_at', $row->updated_at)->update(['status' => InventorySyncOutbox::SUCCEEDED, 'last_error' => null, 'error_code' => null]);
     }
 
-    private function settle(InventorySyncOutbox $row, string $status, string $pushStatus, ?string $message): void
+    private function settle(InventorySyncOutbox $row, string $status, string $pushStatus, ?string $message, ?string $errorCode = null): void
     {
-        $row->forceFill(['status' => $status, 'last_error' => $message ? mb_substr($message, 0, 500) : null])->save();
+        $row->forceFill(['status' => $status, 'last_error' => $message ? mb_substr($message, 0, 500) : null, 'error_code' => $errorCode])->save();
         $row->listingVariant->forceFill(['push_status' => $pushStatus, 'push_error' => $message ? mb_substr($message, 0, 500) : null])->save();
     }
 
-    private function retry(InventorySyncOutbox $row, string $message): void
+    private function retry(InventorySyncOutbox $row, string $message, string $errorCode): void
     {
         $config = config('marketplaces.inventory_push');
         $attempts = $row->attempts + 1;
 
         if ($attempts >= $config['max_attempts']) {
-            $this->settle($row, InventorySyncOutbox::FAILED, 'failed', $message);
+            $this->settle($row, InventorySyncOutbox::FAILED, 'failed', $message, $errorCode);
 
             return;
         }
@@ -166,6 +170,7 @@ class PushInventoryJob implements ShouldQueue
             'attempts' => $attempts,
             'next_attempt_at' => now()->addSeconds($delay + random_int(0, (int) ceil($delay / 5))),
             'last_error' => mb_substr($message, 0, 500),
+            'error_code' => $errorCode,
         ])->save();
         $row->listingVariant->forceFill(['push_status' => 'retrying', 'push_error' => mb_substr($message, 0, 500)])->save();
     }
@@ -176,7 +181,8 @@ class PushInventoryJob implements ShouldQueue
     private function failBatch(MarketplaceAccount $account, Collection $rows, ConnectorException $e): void
     {
         foreach ($rows as $row) {
-            $e->temporary ? $this->retry($row, $e->getMessage()) : $this->settle($row, InventorySyncOutbox::REJECTED, 'rejected', $e->getMessage());
+            $code = SyncErrorCode::fromException($e);
+            $e->temporary ? $this->retry($row, $e->getMessage(), $code) : $this->settle($row, InventorySyncOutbox::REJECTED, 'rejected', $e->getMessage(), $code);
         }
 
         $failures = $account->consecutive_failures + 1;

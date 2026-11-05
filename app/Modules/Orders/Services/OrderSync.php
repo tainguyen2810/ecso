@@ -3,12 +3,14 @@
 namespace App\Modules\Orders\Services;
 
 use App\Modules\Marketplace\Connectors\ConnectorRegistry;
+use App\Modules\Marketplace\Domain\SyncErrorCode;
 use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Models\SyncCursor;
 use App\Modules\Marketplace\Models\SyncError;
 use App\Modules\Marketplace\Models\SyncRun;
 use App\Modules\Marketplace\Services\SyncErrorLog;
+use App\Modules\Marketplace\Support\SyncCorrelation;
 use App\Modules\Orders\Models\Order;
 use Carbon\CarbonImmutable;
 use Throwable;
@@ -43,6 +45,7 @@ class OrderSync
                     ?? ['result' => OrderIngestor::SKIPPED, 'order' => null];
             }
             $this->errors->fromException($account, 'order', $externalOrderId, $e);
+            $this->markExpired($account, $e);
 
             throw $e;
         }
@@ -72,7 +75,7 @@ class OrderSync
         $from = ($since ?? ($cursor->last_synced_at ? CarbonImmutable::parse($cursor->last_synced_at) : $to->subDays(3)))
             ->subMinutes(config('marketplaces.order_sync_overlap_minutes'));
         $run = SyncRun::query()->create([
-            'marketplace_account_id' => $account->id, 'resource' => 'orders', 'trigger' => $trigger, 'status' => SyncRun::RUNNING,
+            'marketplace_account_id' => $account->id, 'resource' => 'orders', 'correlation_id' => SyncCorrelation::fresh(), 'trigger' => $trigger, 'status' => SyncRun::RUNNING,
             'window_from' => $from, 'window_to' => $to, 'started_at' => now(),
         ]);
 
@@ -80,6 +83,7 @@ class OrderSync
         $page = null;
         $pages = 0;
         $lastError = null;
+        $lastCode = null;
         $retry = false;
         try {
             do {
@@ -91,6 +95,7 @@ class OrderSync
                     } catch (ConnectorException $e) {
                         $outcome = 'failed';
                         $lastError = "Đơn {$orderId}: {$e->getMessage()}";
+                        $lastCode = SyncErrorCode::fromException($e);
                         $retry = $retry || $e->temporary;
                     }
                     $counts[$outcome] = ($counts[$outcome] ?? 0) + 1;
@@ -100,7 +105,10 @@ class OrderSync
         } catch (Throwable $e) {
             // Any failure (not only the API's) closes the pass, so it is never left "running".
             $message = $e instanceof ConnectorException ? $e->getMessage() : 'Lỗi hệ thống khi đồng bộ ('.class_basename($e).')';
-            $run->forceFill(['status' => SyncRun::FAILED, 'pages' => $pages, 'counts' => $counts, 'error' => mb_substr($message, 0, 500), 'finished_at' => now()])->save();
+            if ($e instanceof ConnectorException) {
+                $this->markExpired($account, $e);
+            }
+            $run->forceFill(['status' => SyncRun::FAILED, 'pages' => $pages, 'counts' => $counts, 'error' => mb_substr($message, 0, 500), 'error_code' => SyncErrorCode::fromException($e), 'finished_at' => now()])->save();
 
             throw $e;
         }
@@ -114,9 +122,17 @@ class OrderSync
         $account->forceFill(['last_synced_at' => $to])->save();
         $run->forceFill([
             'status' => $failed ? SyncRun::PARTIAL : SyncRun::OK, 'pages' => $pages, 'counts' => $counts,
-            'error' => $lastError !== null ? mb_substr($lastError, 0, 500) : null, 'finished_at' => now(),
+            'error' => $lastError !== null ? mb_substr($lastError, 0, 500) : null, 'error_code' => $lastCode, 'finished_at' => now(),
         ])->save();
 
         return $counts;
+    }
+
+    /** The keys were refused: the shop shows as disconnected (stock pushes already do this) until it is reconnected. */
+    private function markExpired(MarketplaceAccount $account, ConnectorException $e): void
+    {
+        if ($e->authExpired && $account->status === MarketplaceAccount::CONNECTED) {
+            $account->forceFill(['status' => MarketplaceAccount::EXPIRED, 'last_error' => mb_substr($e->getMessage(), 0, 500)])->save();
+        }
     }
 }

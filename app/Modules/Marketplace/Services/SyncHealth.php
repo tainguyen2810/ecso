@@ -82,9 +82,9 @@ class SyncHealth
      * Shops whose scheduled order poll has not started for three of their intervals (at least 30 minutes): webhooks
      * lost in that time are not being recovered.
      */
-    public function overdueReconciles(): int
+    public function overdueReconciles(?int $tenantId = null): int
     {
-        $accounts = MarketplaceAccount::query()->withoutGlobalScopes()
+        $accounts = MarketplaceAccount::query()->withoutGlobalScopes()->when($tenantId, fn ($q) => $q->where('tenant_id', $tenantId))
             ->where('status', MarketplaceAccount::CONNECTED)->where('sync_enabled', true)->get();
 
         return $accounts->filter(function (MarketplaceAccount $account) {
