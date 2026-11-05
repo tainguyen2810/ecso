@@ -15,6 +15,7 @@ use Illuminate\Support\Carbon;
 /**
  * @property Carbon|null $expected_at
  * @property Carbon|null $invoice_date
+ * @property Carbon|null $due_date
  * @property array<int, string>|null $tags
  * @property Carbon|null $ordered_at
  * @property Carbon|null $received_at

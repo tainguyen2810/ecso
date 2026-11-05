@@ -25,7 +25,7 @@ class PurchaseService
     public function __construct(private readonly InventoryDocumentService $documents, private readonly AuditLogger $audit) {}
 
     /**
-     * @param  array{supplier: Supplier, warehouse: Warehouse, lines: array<int, array{variant_id: int, quantity: int, unit_cost: string|int|float, tax_rate?: string|int|float|null}>, expected_at?: string|null, note?: string|null, invoice_date?: string|null, reference?: string|null, tags?: array<int, string>|null, place?: bool, discount?: string|int|float|null, extra_cost?: string|int|float|null, extra_cost_note?: string|null, extra_cost_to_supplier?: bool, vat_in_cost?: bool}  $data
+     * @param  array{supplier: Supplier, warehouse: Warehouse, lines: array<int, array{variant_id: int, quantity: int, unit_cost: string|int|float, tax_rate?: string|int|float|null}>, expected_at?: string|null, note?: string|null, invoice_date?: string|null, due_date?: string|null, reference?: string|null, tags?: array<int, string>|null, place?: bool, discount?: string|int|float|null, extra_cost?: string|int|float|null, extra_cost_note?: string|null, extra_cost_to_supplier?: bool, vat_in_cost?: bool}  $data
      */
     public function create(array $data): PurchaseOrder
     {
@@ -59,7 +59,7 @@ class PurchaseService
     /**
      * Header and lines can change until the first goods arrive.
      *
-     * @param  array{supplier?: Supplier, warehouse?: Warehouse, lines?: array<int, array{variant_id: int, quantity: int, unit_cost: string|int|float, tax_rate?: string|int|float|null}>, expected_at?: string|null, note?: string|null, invoice_date?: string|null, reference?: string|null, tags?: array<int, string>|null, discount?: string|int|float|null, extra_cost?: string|int|float|null, extra_cost_note?: string|null, extra_cost_to_supplier?: bool, vat_in_cost?: bool}  $data
+     * @param  array{supplier?: Supplier, warehouse?: Warehouse, lines?: array<int, array{variant_id: int, quantity: int, unit_cost: string|int|float, tax_rate?: string|int|float|null}>, expected_at?: string|null, note?: string|null, invoice_date?: string|null, due_date?: string|null, reference?: string|null, tags?: array<int, string>|null, discount?: string|int|float|null, extra_cost?: string|int|float|null, extra_cost_note?: string|null, extra_cost_to_supplier?: bool, vat_in_cost?: bool}  $data
      */
     public function update(PurchaseOrder $po, array $data): PurchaseOrder
     {
