@@ -47,7 +47,7 @@ watch(open, async (v) => {
 
 const current = computed(() => catalog.value.find((c) => c.carrier === picked.value) ?? null);
 const help: Record<string, string> = {
-    ghn: 'Đăng nhập khachhang.ghn.vn → Chủ cửa hàng → Xem Token API. Mỗi tài khoản GHN dùng một token.',
+    ghn: 'Đăng nhập khachhang.ghn.vn (tài khoản thử: 5sao.ghn.dev, bật ô sandbox) → bấm vào tài khoản ở góc trên trái → tab Bảo mật → Token API & IP tin cậy → Quản lý → bấm hình con mắt rồi chép token.',
     fake: 'Hãng giả lập để thử quy trình (chỉ có ở bản thử). Nhập bất kỳ mã nào trừ "bad".',
 };
 
