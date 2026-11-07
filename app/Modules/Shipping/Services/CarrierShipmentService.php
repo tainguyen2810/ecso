@@ -65,6 +65,18 @@ class CarrierShipmentService
         return $this->confirm($order, $shipment, $created, $connector->label());
     }
 
+    /**
+     * The carrier reports a parcel for a push whose answer was lost (it carries our code): the parcel exists, so the
+     * shipment takes its number as if the push had answered.
+     */
+    public function adopt(Shipment $shipment, string $trackingNumber): Shipment
+    {
+        $account = $this->accountOf($shipment);
+        $order = Order::query()->findOrFail($shipment->order_id);
+
+        return $this->confirm($order, $shipment, new CreatedShipment($trackingNumber, null, null, $trackingNumber), $this->carriers->get($account->carrier)->label());
+    }
+
     /** "Hủy vận đơn": at the carrier first (when it was made there), then here. */
     public function cancel(Shipment $shipment): Shipment
     {
