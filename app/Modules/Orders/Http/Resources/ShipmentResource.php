@@ -37,6 +37,13 @@ class ShipmentResource extends JsonResource
             'carrier_name' => $this->carrier_name,
             'source' => $this->source,
             'tracking_number' => $this->tracking_number,
+            'carrier_account_id' => $this->carrierAccount?->ulid,
+            'service' => $this->service,
+            'service_name' => $this->service_name,
+            'expected_delivery_at' => $this->expected_delivery_at?->toIso8601String(),
+            // Why the carrier refused the parcel, or why the order could not follow it.
+            'api_error' => $this->api_error,
+            'raw_status' => $this->raw_status,
             'status' => $this->status,
             'status_label' => ShipmentStatus::label($this->status),
             'packages' => $this->packages,

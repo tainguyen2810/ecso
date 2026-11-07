@@ -152,6 +152,12 @@ class Order extends Model
         return $this->hasMany(OrderPayment::class)->orderBy('id');
     }
 
+    /** @return HasMany<Shipment, $this> */
+    public function shipments(): HasMany
+    {
+        return $this->hasMany(Shipment::class);
+    }
+
     /** @return BelongsTo<Warehouse, $this> */
     public function warehouse(): BelongsTo
     {

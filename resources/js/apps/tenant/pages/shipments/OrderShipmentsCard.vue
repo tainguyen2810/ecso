@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
-import { History, Plus } from 'lucide-vue-next';
+import { History, Plus, Truck } from 'lucide-vue-next';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -13,16 +13,25 @@ import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import ShipmentActionButtons from './ShipmentActionButtons.vue';
 import ShipmentDrawer from './ShipmentDrawer.vue';
+import CarrierPushDialog from './CarrierPushDialog.vue';
 import { carrierText, shipmentTone, statusText, type ShipmentData } from './shipments';
 
 /** "Vận đơn" card on the order: its shipments, the next step on the live one, and "Tạo vận đơn" for own parcels. */
-const props = defineProps<{ orderId: string; shipments: ShipmentData[]; shipsItself: boolean; orderStatus: string }>();
+const props = defineProps<{ orderId: string; orderCode?: string; shipments: ShipmentData[]; shipsItself: boolean; orderStatus: string }>();
 const emit = defineEmits<{ changed: [] }>();
 const tenant = useTenantStore();
 const toast = useToast();
 
 const live = computed(() => props.shipments.some((s) => s.status !== 'cancelled'));
 const canCreate = computed(() => props.shipsItself && !live.value && tenant.can('shipments.manage') && !['CANCELLED', 'RETURNED', 'UNPAID'].includes(props.orderStatus));
+// Pushing through a carrier connection works on confirmed orders not yet handed over (a refused push can be retried).
+const refused = computed(() => props.shipments.find((s) => s.status === 'pending' && s.source === 'api' && !s.tracking_number) ?? null);
+const canPush = computed(() => props.shipsItself && (!live.value || refused.value !== null) && tenant.can('shipments.manage') && ['PENDING_CONFIRMATION', 'READY_TO_PACK', 'PACKED'].includes(props.orderStatus));
+const pushOpen = ref(false);
+function startPush() {
+    createOpen.value = false;
+    pushOpen.value = true;
+}
 const ordered = computed(() => [...props.shipments].sort((a, b) => Number(a.status === 'cancelled') - Number(b.status === 'cancelled')));
 const openId = ref<string | null>(null);
 
@@ -66,6 +75,7 @@ async function create() {
 <template>
     <Card caps title="Vận đơn" data-testid="order-shipments">
         <template #actions>
+            <Button v-if="canPush" size="sm" data-testid="push-to-carrier" @click="startPush"><Truck /> Đẩy qua hãng</Button>
             <Button v-if="canCreate" size="sm" variant="outline" data-testid="new-shipment" @click="openCreate"><Plus /> Tạo vận đơn</Button>
         </template>
         <div class="space-y-3 px-5 py-4">
@@ -90,8 +100,10 @@ async function create() {
                             <template v-if="Number(s.cod_amount) > 0"> · COD {{ formatMoney(s.cod_amount) }}</template>
                             <template v-if="s.picked_up_at"> · lấy hàng {{ formatDateTime(s.picked_up_at) }}</template>
                             <template v-if="s.failure_reason && s.status === 'failed'"> · {{ s.failure_reason }}</template>
+                            <template v-if="s.service_name"> · {{ s.service_name }}</template>
                         </template>
                     </div>
+                    <div v-if="s.api_error && s.status !== 'cancelled'" class="text-xs text-destructive">{{ s.tracking_number ? 'Đơn chưa theo kịp hãng' : 'Hãng chưa nhận' }}: {{ s.api_error }}</div>
                 </div>
                 <ShipmentActionButtons v-if="s.status !== 'cancelled'" :shipment="s" :limit="1" @done="emit('changed')" />
                 <Button size="sm" variant="outline" data-testid="shipment-open" @click="openId = s.id"><History /> Xem lịch sử</Button>
@@ -99,9 +111,10 @@ async function create() {
         </div>
     </Card>
 
+    <CarrierPushDialog v-if="canPush || pushOpen" v-model:open="pushOpen" :order-id="orderId" :order-code="orderCode" @pushed="emit('changed')" />
     <ShipmentDrawer v-if="openId" :id="openId" :key="openId" @close="openId = null" @changed="emit('changed')" />
 
-    <Dialog v-model:open="createOpen" title="Tạo vận đơn" description="Hãng chưa kết nối API: tạo đơn trên app của hãng rồi dán mã vận đơn vào đây." size="lg">
+    <Dialog v-model:open="createOpen" title="Tạo vận đơn" description="Đẩy qua hãng đã kết nối, hoặc dán mã vận đơn tạo trên app của hãng, hoặc shop tự giao." size="lg">
         <div class="mb-3 grid gap-2 sm:grid-cols-3">
             <button :class="cn('rounded-lg border p-3 text-left text-sm', form.mode === 'manual' && 'border-blue-300 bg-blue-50/70')" data-testid="shipment-mode-manual" @click="form.mode = 'manual'">
                 <b>Nhập mã có sẵn</b><div class="text-xs text-muted-foreground">Đã tạo đơn trên app hãng, dán mã vận đơn</div>
@@ -109,8 +122,11 @@ async function create() {
             <button :class="cn('rounded-lg border p-3 text-left text-sm', form.mode === 'self' && 'border-blue-300 bg-blue-50/70')" data-testid="shipment-mode-self" @click="form.mode = 'self'">
                 <b>Tự giao</b><div class="text-xs text-muted-foreground">Shipper của shop, không cần mã</div>
             </button>
-            <div class="cursor-not-allowed rounded-lg border p-3 text-sm text-muted-foreground/70" title="Cần tài khoản API của hãng">
-                <b>Gửi qua API hãng</b><div class="text-xs">Chưa kết nối (cần tài khoản hãng)</div>
+            <button v-if="canPush" class="rounded-lg border p-3 text-left text-sm hover:bg-muted/50" data-testid="shipment-mode-api" @click="startPush">
+                <b>Đẩy qua hãng</b><div class="text-xs text-muted-foreground">So sánh giá, hãng cấp mã và đến lấy hàng</div>
+            </button>
+            <div v-else class="cursor-not-allowed rounded-lg border p-3 text-sm text-muted-foreground/70" title="Chỉ đơn đã xác nhận, chưa bàn giao">
+                <b>Đẩy qua hãng</b><div class="text-xs">Chỉ với đơn đã xác nhận, chưa giao cho hãng</div>
             </div>
         </div>
         <div class="grid gap-3 sm:grid-cols-2">

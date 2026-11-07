@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { AlertTriangle, ArrowDown, ArrowUp, Check, CirclePlus, Contact, ImageIcon, PackageCheck, PackageOpen, Pencil, Repeat, Search, Settings2, Store, Truck, UserPlus, UserRound, Wrench, X } from 'lucide-vue-next';
+import { AlertTriangle, ArrowDown, ArrowUp, Check, CirclePlus, Clock, Contact, ImageIcon, PackageOpen, Pencil, Repeat, Search, Send, Settings2, Store, Truck, UserPlus, UserRound, Wrench, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
 import AddressPicker from '../../components/AddressPicker.vue';
@@ -24,6 +24,9 @@ import { useSettingsStore } from '@/shared/stores/settings';
 import { enabledMethods } from '@/shared/lib/paymentMethods';
 import { CARRIERS, emptyAddress, type AddressParts } from '@/shared/lib/geo';
 import { channelTypes, paymentMethods } from './labels';
+import CarrierQuotePicker from '../shipments/CarrierQuotePicker.vue';
+import ParcelOptionsPanel from '../shipments/ParcelOptionsPanel.vue';
+import { choiceOf, loadCarrierAccounts, type CarrierAccountData, type CarrierChoice, type ParcelOptions, type QuoteResult } from '../shipments/carriers';
 import type { Customer, CustomerSummary, OrderDetail, OrderReturnData, SalesChannel, Variant, Warehouse } from '@/shared/types';
 
 /** A SKU line (stock is held) or a service line (own name and price, no stock). */
@@ -416,7 +419,7 @@ function onAddressText(text: string) {
     if (form.address.province_code) form.shipping_address = text;
 }
 const addressStandard = computed(() => !!form.address.ward_code);
-const isCarrier = computed(() => (CARRIERS as readonly string[]).includes(form.carrier));
+const isCarrier = computed(() => delivery.value === 'api' || (CARRIERS as readonly string[]).includes(form.carrier));
 const otherCarrier = ref(false);
 function pickCarrier(c: string) {
     otherCarrier.value = false;
@@ -550,7 +553,29 @@ function addressBody(a: AddressParts, text: string) {
     return a.province_code ? { street: a.street || null, province_code: a.province_code, ward_code: a.ward_code || null } : { address: text || null };
 }
 
+/** The order is saved; now the parcel goes to the chosen carrier. A refusal leaves the order to push again from its page. */
+async function pushNew(orderId: string) {
+    const c = carrierChoice.value!;
+    try {
+        const { data } = await api.post(`/orders/${orderId}/carrier-shipments`, {
+            account_id: c.account_id,
+            service: c.service,
+            service_name: c.service_name,
+            ...Object.fromEntries(Object.entries(parcel.value).filter(([, v]) => v !== null && v !== undefined && v !== '')),
+        }, idempotent(newIdempotencyKey()));
+        toast.success(`Đã đẩy qua ${c.carrier_label}: ${data.data.tracking_number}`);
+    } catch (e) {
+        const err = e as ApiError;
+        toast.error(`Đơn đã tạo nhưng ${c.carrier_label} chưa nhận: ${err.field('carrier') ?? err.field('order') ?? err.field('account_id') ?? err.message}. Bấm "Đẩy qua hãng" ở trang đơn để thử lại.`);
+    }
+}
+
 async function submit() {
+    if (!editId.value && delivery.value === 'api' && !carrierChoice.value) {
+        pushError.value = hasCarrierAccount.value ? 'Chọn hãng và dịch vụ trong bảng giá trước khi lưu.' : 'Chưa kết nối hãng vận chuyển nào. Chọn "Đẩy vận chuyển ngoài" hoặc kết nối hãng ở trang Đẩy qua vận chuyển.';
+        return;
+    }
+    pushError.value = null;
     saving.value = true;
     error.value = null;
     const body: Record<string, unknown> = {
@@ -588,6 +613,7 @@ async function submit() {
             const { data } = await api.post('/sales-orders', { ...body, channel_id: form.channel_id, stage: form.stage, payments, exchange_return_id: exchange.value?.id ?? null, ...(placedAt ? { placed_at: placedAt } : {}) }, idempotent(createKey));
             toast.success(`Đã tạo đơn ${data.data.external_order_id}`);
             if (draftId.value) await api.delete(`/order-drafts/${draftId.value}`).catch(() => {});
+            if (delivery.value === 'api' && carrierChoice.value) await pushNew(data.data.id);
             await router.push(`/orders/${data.data.id}`);
         }
     } catch (e) {
@@ -599,12 +625,80 @@ async function submit() {
     }
 }
 
-// How the goods leave: the choice is also the status the order is saved in.
-const stages = [
+// How the goods leave (Đóng gói và giao hàng). The choice also sets the status the order is saved in.
+const deliveries = [
+    { value: 'api', label: 'Đẩy qua hãng vận chuyển', icon: Truck, hint: 'So sánh giá các hãng đã kết nối; lưu đơn là đẩy sang hãng, hãng cấp mã và đến lấy hàng.' },
+    { value: 'ext', label: 'Đẩy vận chuyển ngoài', icon: Send, hint: 'Hãng chưa kết nối hoặc shipper riêng: chọn hãng, nhập mã vận đơn ở trang đơn sau.' },
     { value: 'completed', label: 'Khách nhận tại cửa hàng', icon: Store, hint: 'Khách lấy hàng ngay: trừ kho và hoàn tất đơn khi lưu.' },
-    { value: 'pending', label: 'Giao hàng sau', icon: Truck, hint: 'Đơn chờ xác nhận, hàng được giữ trong kho để giao sau.' },
-    { value: 'confirmed', label: 'Đã xác nhận, chờ đóng gói', icon: PackageCheck, hint: 'Bỏ qua bước xác nhận, đơn sang chờ đóng gói ngay.' },
-];
+    { value: 'later', label: 'Giao hàng sau', icon: Clock, hint: 'Đơn giữ hàng trong kho, chọn cách giao sau (ở trang đơn hoặc "Đẩy qua vận chuyển").' },
+] as const;
+type Delivery = (typeof deliveries)[number]['value'];
+const delivery = ref<Delivery>('later');
+// "Đã xác nhận, chờ đóng gói": skips the confirm step (pushing to a carrier confirms by itself).
+const confirmedNow = ref(false);
+watch([delivery, confirmedNow], () => {
+    form.stage = delivery.value === 'completed' ? 'completed' : confirmedNow.value && delivery.value !== 'api' ? 'confirmed' : 'pending';
+    if (delivery.value === 'api') form.carrier = '';
+});
+
+// Đẩy qua hãng: the shop's connected accounts, the parcel and the prices for this order as it is being typed.
+const carrierAccounts = ref<CarrierAccountData[]>([]);
+const parcel = ref<ParcelOptions>({ required_note: 'view_no_try', payer: 'shop' });
+const quote = ref<QuoteResult | null>(null);
+const quoteLoading = ref(false);
+const quoteError = ref<string | null>(null);
+const carrierChoice = ref<CarrierChoice | null>(null);
+const pushError = ref<string | null>(null);
+const codAmount = computed(() => (form.is_cod ? remaining.value : 0));
+const quoteMissing = computed(() => {
+    if (!form.address.province_code || !form.address.ward_code) return 'Chọn tỉnh/thành và phường/xã của người nhận để xem giá.';
+    if (!lines.value.some((l) => l.kind === 'sku' && l.variant_id)) return 'Thêm sản phẩm để tính khối lượng.';
+    return null;
+});
+let quoteSeq = 0;
+async function loadQuote() {
+    if (delivery.value !== 'api' || quoteMissing.value) return;
+    const mine = ++quoteSeq;
+    quoteLoading.value = true;
+    quoteError.value = null;
+    try {
+        const { data } = await api.post('/shipping/quotes', {
+            warehouse_id: form.warehouse_id || null,
+            province_code: form.address.province_code,
+            ward_code: form.address.ward_code,
+            items: lines.value.filter((l) => l.kind === 'sku' && l.variant_id).map((l) => ({ variant_id: l.variant_id, quantity: Math.max(1, num(l.quantity)) })),
+            cod_amount: codAmount.value,
+            ...Object.fromEntries(Object.entries(parcel.value).filter(([, v]) => v !== null && v !== undefined && v !== '')),
+        });
+        if (mine !== quoteSeq) return;
+        const res = data.data as QuoteResult;
+        quote.value = res;
+        const row = res.accounts.find((a) => a.account.id === carrierChoice.value?.account_id)?.services.find((x) => x.code === carrierChoice.value?.service);
+        carrierChoice.value = row ? { ...carrierChoice.value!, fee: row.fee } : res.cheapest ? choiceOf(res.cheapest) : null;
+    } catch (e) {
+        if (mine === quoteSeq) quoteError.value = (e as ApiError).message;
+    } finally {
+        if (mine === quoteSeq) quoteLoading.value = false;
+    }
+}
+let quoteTimer: ReturnType<typeof setTimeout> | undefined;
+watch(
+    () => [delivery.value, form.warehouse_id, form.address.province_code, form.address.ward_code, codAmount.value, JSON.stringify(parcel.value), lines.value.map((l) => `${l.variant_id}x${l.quantity}`).join()],
+    () => {
+        clearTimeout(quoteTimer);
+        quoteTimer = setTimeout(loadQuote, 500);
+    },
+);
+watch(delivery, async (d) => {
+    if (d === 'api' && !carrierAccounts.value.length) {
+        try {
+            carrierAccounts.value = await loadCarrierAccounts();
+        } catch {
+            // Shown as "no connection" below.
+        }
+    }
+});
+const hasCarrierAccount = computed(() => carrierAccounts.value.some((a) => a.status === 'connected'));
 
 // Counter shortcuts: F1 save, F3 product search, F4 customer search, F6 order discount, F7 shipping fee.
 // F9 adds a service line.
@@ -957,21 +1051,26 @@ async function saveDraft() {
 
         <Card title="Đóng gói và giao hàng" :caps="false">
             <div class="space-y-4 p-4">
-                <div v-if="!editId" class="flex flex-wrap gap-3">
+                <div v-if="!editId" class="flex flex-wrap gap-3" data-testid="delivery-options">
                     <label
-                        v-for="s in stages"
+                        v-for="s in deliveries"
                         :key="s.value"
-                        :class="cn('relative flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium hover:bg-muted/40', form.stage === s.value && 'border-primary bg-blue-50/70 text-primary hover:bg-blue-50/70')"
+                        :class="cn('relative flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium hover:bg-muted/40', delivery === s.value && 'border-primary bg-blue-50/70 text-primary hover:bg-blue-50/70')"
                         :title="s.hint"
                     >
-                        <input v-model="form.stage" type="radio" :value="s.value" class="absolute inset-0 cursor-pointer opacity-0" :data-testid="`stage-${s.value}`" />
+                        <input v-model="delivery" type="radio" :value="s.value" class="absolute inset-0 cursor-pointer opacity-0" :data-testid="s.value === 'completed' ? 'stage-completed' : `delivery-${s.value}`" />
                         <component :is="s.icon" class="size-4" />
                         {{ s.label }}
-                        <Check v-if="form.stage === s.value" class="absolute -bottom-px -right-px size-4 rounded-tl-md rounded-br-lg bg-primary p-0.5 text-white" />
+                        <Check v-if="delivery === s.value" class="absolute -bottom-px -right-px size-4 rounded-tl-md rounded-br-lg bg-primary p-0.5 text-white" />
                     </label>
                 </div>
-                <p class="text-xs text-muted-foreground">{{ editId ? 'Thông tin giao hàng của đơn.' : stages.find((s) => s.value === form.stage)?.hint }}</p>
-                <div v-if="editId || form.stage !== 'completed'" class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+                <div class="flex flex-wrap items-center gap-x-5 gap-y-1">
+                    <p class="text-xs text-muted-foreground">{{ editId ? 'Thông tin giao hàng của đơn.' : deliveries.find((s) => s.value === delivery)?.hint }}</p>
+                    <label v-if="!editId && (delivery === 'ext' || delivery === 'later')" class="flex items-center gap-2 text-sm">
+                        <input v-model="confirmedNow" type="checkbox" class="size-4" data-testid="stage-confirmed" /> Đã xác nhận, chờ đóng gói
+                    </label>
+                </div>
+                <div v-if="editId || delivery !== 'completed'" :class="cn('grid gap-5', (editId || delivery === 'ext') && 'lg:grid-cols-[minmax(0,1fr)_340px]')">
                     <div class="space-y-3">
                         <p class="font-medium">Địa chỉ người nhận</p>
                         <div class="grid gap-3 sm:grid-cols-2">
@@ -1000,7 +1099,27 @@ async function saveDraft() {
                             </button>
                         </div>
                     </div>
-                    <div class="space-y-3 rounded-lg bg-slate-50 p-4">
+                    <div v-if="!editId && delivery === 'later'" class="flex items-center gap-4">
+                        <label class="flex items-center gap-2 text-sm"><input v-model="form.is_cod" type="checkbox" class="size-4" /> Thu hộ (COD) khi giao</label>
+                    </div>
+                    <div v-if="!editId && delivery === 'api'" class="space-y-3" data-testid="delivery-api">
+                        <div class="flex flex-wrap items-center gap-4">
+                            <p class="font-medium">Đẩy qua hãng vận chuyển</p>
+                            <label class="flex items-center gap-2 text-sm"><input v-model="form.is_cod" type="checkbox" class="size-4" data-testid="api-cod" /> Thu hộ (COD) {{ form.is_cod ? formatMoney(codAmount) : '' }}</label>
+                        </div>
+                        <Alert v-if="!hasCarrierAccount" tone="amber">
+                            Chưa kết nối hãng vận chuyển nào. <RouterLink to="/shipments" class="font-medium text-primary hover:underline">Kết nối hãng</RouterLink> (miễn phí, dùng tài khoản của shop) hoặc chọn "Đẩy vận chuyển ngoài".
+                        </Alert>
+                        <div v-else class="grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+                            <ParcelOptionsPanel v-model="parcel" hide-cod :weight-hint="quote?.weight_g" />
+                            <div>
+                                <p v-if="quoteMissing" class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{{ quoteMissing }}</p>
+                                <CarrierQuotePicker v-else v-model="carrierChoice" :quote="quote" :loading="quoteLoading" :error="quoteError" />
+                            </div>
+                        </div>
+                        <p v-if="pushError" class="text-sm text-destructive" data-testid="push-choice-error">{{ pushError }}</p>
+                    </div>
+                    <div v-if="editId || delivery === 'ext'" class="space-y-3 rounded-lg bg-slate-50 p-4">
                         <p class="font-medium">Vận chuyển</p>
                         <div class="grid grid-cols-2 gap-2" data-testid="carrier-options">
                             <button
@@ -1024,7 +1143,7 @@ async function saveDraft() {
                         <Input v-if="otherCarrier || (form.carrier && !isCarrier)" id="o-carrier" v-model="form.carrier" placeholder="Shipper riêng, Ahamove, GHTK…" aria-label="Đơn vị vận chuyển khác" />
                         <label class="flex items-center gap-2 text-sm"><input v-model="form.is_cod" type="checkbox" class="size-4" /> Thu hộ (COD) khi giao</label>
                         <p class="rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-800">
-                            Đơn lưu kèm mã tỉnh/phường chuẩn (đơn vị hành chính mới). Khi nối API GHN, Viettel Post, SPX, J&amp;T sẽ đẩy đơn sang không phải nhập lại.
+                            Nhập mã vận đơn của hãng ở trang đơn sau khi tạo. Hãng đã kết nối (GHN): chọn "Đẩy qua hãng vận chuyển" để đẩy đơn ngay.
                         </p>
                     </div>
                 </div>

@@ -157,6 +157,10 @@ class ShipmentController extends Controller
         $this->authorize('view', $shipment->order);
         $this->authorize('manageShipments', Order::class);
         $data = $request->validate(['reason' => ['nullable', 'string', 'max:255']]);
+        if ($action === 'cancel' && $shipment->source === Shipment::SOURCE_API && $shipment->tracking_number !== null) {
+            // Cancelling only here would leave the parcel live at the carrier.
+            throw ValidationException::withMessages(['action' => 'Vận đơn đã tạo trên hãng: dùng "Hủy trên hãng" để hủy cả ở hãng.']);
+        }
 
         return new ShipmentResource($service->act($shipment, $action, $data['reason'] ?? null)->load(['order.channel', 'warehouse', 'events']));
     }

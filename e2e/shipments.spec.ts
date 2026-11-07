@@ -43,7 +43,7 @@ test('shipments: open one on the order, record pickup and a failed delivery, the
     await shot(page, '03-van-don-tren-don-hang');
 
     // The shipments page: the failed parcel is counted, found by its number, and redelivered from the drawer.
-    await page.goto('/shipments');
+    await page.goto('/shipments?tab=all');
     await expect(page.getByTestId('shipment-kpis')).toContainText('Giao thất bại');
     await page.getByTestId('shipment-search').fill(`GHN${run}S`);
     await expect(page.getByTestId('shipment-table')).toContainText(`GHN${run}S`);
@@ -76,7 +76,7 @@ test('shipments: tracking numbers made on the carrier site come in from a file',
     await expect(page.getByTestId('order-status')).toHaveText('Chờ đóng gói');
     const number = ((await page.locator('h1').first().textContent()) ?? '').replace('Đơn', '').trim();
 
-    await page.goto('/shipments');
+    await page.goto('/shipments?tab=all');
     await page.getByTestId('shipment-import').click();
     await page.getByTestId('shipment-import-file').setInputFiles({
         name: 'van-don.csv',

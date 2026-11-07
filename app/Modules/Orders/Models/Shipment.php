@@ -3,6 +3,7 @@
 namespace App\Modules\Orders\Models;
 
 use App\Modules\Inventory\Models\Warehouse;
+use App\Modules\Shipping\Models\CarrierAccount;
 use App\Modules\Tenancy\Concerns\BelongsToTenant;
 use App\Shared\Concerns\HasPublicUlid;
 use Illuminate\Database\Eloquent\Model;
@@ -38,6 +39,12 @@ use Illuminate\Support\Carbon;
  * @property string|null $fee_actual
  * @property string|null $cod_collected
  * @property string|null $failure_reason
+ * @property int|null $carrier_account_id
+ * @property string|null $client_code
+ * @property string|null $service_name
+ * @property Carbon|null $expected_delivery_at
+ * @property string|null $api_error
+ * @property array<string, mixed>|null $api_options
  */
 class Shipment extends Model
 {
@@ -84,6 +91,9 @@ class Shipment extends Model
             'returned_at' => 'datetime',
             'cancelled_at' => 'datetime',
             'last_event_at' => 'datetime',
+            'expected_delivery_at' => 'datetime',
+            'api_options' => 'array',
+            'tracked_at' => 'datetime',
         ];
     }
 
@@ -97,6 +107,12 @@ class Shipment extends Model
     public function warehouse(): BelongsTo
     {
         return $this->belongsTo(Warehouse::class);
+    }
+
+    /** @return BelongsTo<CarrierAccount, $this> */
+    public function carrierAccount(): BelongsTo
+    {
+        return $this->belongsTo(CarrierAccount::class);
     }
 
     /** @return HasMany<ShipmentEvent, $this> */

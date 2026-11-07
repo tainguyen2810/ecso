@@ -42,6 +42,7 @@ test('create a manual order for a new customer, then confirm, pack, hand over an
     await expect(page.locator('#nc-addr-street')).toHaveValue('20 Pasteur');
     await page.getByTestId('nc-save').click();
     await expect(page.getByTestId('customer-delivery')).toContainText('20 Pasteur, Phường Sài Gòn, Thành phố Hồ Chí Minh');
+    await page.getByTestId('delivery-ext').check();
     await page.getByTestId('carrier-GHN').click();
     await page.getByTestId('shipping-fee').fill('30000');
     await page.getByTestId('order-discount').fill('10000');

@@ -35,6 +35,9 @@ Schedule::command('ecso:sync:recover')->everyTenMinutes()->withoutOverlapping(10
 Schedule::command('ecso:sync:prune')->dailyAt('03:20')->withoutOverlapping(60)->onOneServer();
 
 // WooCommerce webhooks: Woo disables a webhook after failed deliveries; turn ECSO's back on (order sync round B).
+// Carrier parcels that heard nothing for a while are asked again (lost webhooks, webhook not set up yet).
+Schedule::command('ecso:carriers:track')->everyThirtyMinutes()->withoutOverlapping(25)->onOneServer();
+
 Schedule::command('ecso:woo:check-webhooks')->hourlyAt(17)->withoutOverlapping(50)->onOneServer();
 
 // Fee check: actual marketplace fees vs fee tables, loss orders (round 3 WooCommerce/pricing).

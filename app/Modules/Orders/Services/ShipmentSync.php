@@ -113,7 +113,8 @@ class ShipmentSync
         if ($tracking !== null) {
             $shipment->tracking_number = $tracking;
         }
-        if ($name !== null) {
+        // A shipment made through a carrier connection keeps the connection's carrier (ShipmentSync never renames it).
+        if ($name !== null && $shipment->carrier_account_id === null) {
             $shipment->carrier_name = $name;
             $shipment->carrier = Tracking::carrierKey($name);
         }
