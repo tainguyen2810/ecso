@@ -41,6 +41,9 @@ class CarrierEventApplier
                 continue;
             }
             try {
+                if ($shipment->tracking_number === null && $shipment->source === Shipment::SOURCE_API && $shipment->status === ShipmentStatus::PENDING && filled($event->trackingNumber)) {
+                    $shipment = app(CarrierShipmentService::class)->adopt($shipment, $event->trackingNumber);
+                }
                 $new += $this->one($shipment, $event) ? 1 : 0;
             } catch (Throwable $e) {
                 Log::error('carrier.event_failed', ['shipment' => $shipment->ulid, 'status' => $event->rawStatus, 'error' => $e->getMessage()]);

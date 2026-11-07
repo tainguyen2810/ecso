@@ -28,7 +28,7 @@ class CarrierAccountService
             'name' => mb_substr($info->name, 0, 150),
             'external_account' => $info->externalAccount,
             'status' => CarrierAccount::CONNECTED,
-            'credentials' => $credentials,
+            'credentials' => $info->credentials ?? $credentials,
             'locations' => $info->locations,
             'pickups' => $this->matchPickups($info->locations, (array) ($account->pickups ?? [])),
             'last_verified_at' => now(),
@@ -44,7 +44,11 @@ class CarrierAccountService
     {
         try {
             $info = $this->carriers->get($account->carrier)->verify((array) $account->credentials, $account->environment);
-            $account->fill(['status' => CarrierAccount::CONNECTED, 'locations' => $info->locations, 'last_verified_at' => now(), 'last_error' => null])->save();
+            $account->fill(['status' => CarrierAccount::CONNECTED, 'locations' => $info->locations, 'last_verified_at' => now(), 'last_error' => null]);
+            if ($info->credentials !== null) {
+                $account->credentials = $info->credentials;
+            }
+            $account->save();
         } catch (CarrierException $e) {
             $account->fill(['status' => $e->authFailed ? CarrierAccount::ERROR : $account->status, 'last_error' => mb_substr($e->getMessage(), 0, 255)])->save();
         }
