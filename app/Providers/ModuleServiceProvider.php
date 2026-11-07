@@ -71,6 +71,7 @@ use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Sales\Policies\CashShiftPolicy;
 use App\Modules\Sales\Policies\CustomerPolicy;
 use App\Modules\Sales\Policies\SalesChannelPolicy;
+use App\Modules\Shipping\Console\TrackCarrierShipmentsCommand;
 use App\Modules\Tenancy\Events\TenantCreated;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Models\TenantInvitation;
@@ -90,7 +91,7 @@ use Illuminate\Support\ServiceProvider;
 class ModuleServiceProvider extends ServiceProvider
 {
     /** Modules whose Routes/api.php is mounted under /api/v1. */
-    private const API_MODULES = ['Identity', 'Tenancy', 'Billing', 'Audit', 'Admin', 'Catalog', 'Inventory', 'Marketplace', 'Orders', 'Analytics', 'Sales', 'Purchasing', 'Cashbook', 'Geo'];
+    private const API_MODULES = ['Identity', 'Tenancy', 'Billing', 'Audit', 'Admin', 'Catalog', 'Inventory', 'Marketplace', 'Orders', 'Analytics', 'Sales', 'Purchasing', 'Cashbook', 'Geo', 'Shipping'];
 
     public function register(): void
     {
@@ -152,7 +153,7 @@ class ModuleServiceProvider extends ServiceProvider
         $this->configureAuthLinks();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([AutoGroupCustomersCommand::class, CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, VerifyOrderMoneyCommand::class, LowStockDigestCommand::class, PushDueInventoryCommand::class, RecoverSyncCommand::class, PruneSyncLogsCommand::class, CheckFeesCommand::class, CheckWebhooksCommand::class, ReconcileOrdersCommand::class, BackfillShipmentsCommand::class, BillingSweepCommand::class, MonitorCommand::class, DemoTenantCommand::class]);
+            $this->commands([AutoGroupCustomersCommand::class, CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, VerifyOrderMoneyCommand::class, LowStockDigestCommand::class, PushDueInventoryCommand::class, RecoverSyncCommand::class, PruneSyncLogsCommand::class, CheckFeesCommand::class, CheckWebhooksCommand::class, ReconcileOrdersCommand::class, BackfillShipmentsCommand::class, TrackCarrierShipmentsCommand::class, BillingSweepCommand::class, MonitorCommand::class, DemoTenantCommand::class]);
         }
     }
 
