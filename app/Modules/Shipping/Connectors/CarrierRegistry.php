@@ -34,7 +34,14 @@ class CarrierRegistry
     /** @return array<int, string> */
     public function keys(): array
     {
-        return array_values(array_filter(array_keys(self::CONNECTORS), fn (string $k) => $k !== FakeCarrier::KEY || config('shipping.fake_enabled')));
+        $keys = [];
+        foreach (array_keys(self::CONNECTORS) as $key) {
+            if ($key !== FakeCarrier::KEY || config('shipping.fake_enabled')) {
+                $keys[] = $key;
+            }
+        }
+
+        return $keys;
     }
 
     public function get(string $carrier): CarrierConnector

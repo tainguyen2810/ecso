@@ -465,7 +465,7 @@ async function createReturn() {
                     <p v-if="!isManual" class="border-t px-5 py-2 text-xs text-muted-foreground">Số tiền khách trả chưa phải tiền thực nhận: phí sàn, phí thanh toán và đối soát sẽ được tính ở module Tài chính.</p>
                 </Card>
 
-                <OrderShipmentsCard :order-id="order.id" :shipments="order.shipments ?? []" :ships-itself="shipsItself" :order-status="order.status" @changed="load" />
+                <OrderShipmentsCard :order-id="order.id" :order-code="order.external_order_id" :shipments="order.shipments ?? []" :ships-itself="shipsItself" :order-status="order.status" @changed="load" />
 
                 <Card caps title="Lịch sử trạng thái">
                     <ol class="relative px-5 py-4 text-sm before:absolute before:bottom-6 before:left-[23px] before:top-6 before:border-l before:border-dashed before:border-blue-200" data-testid="order-history">

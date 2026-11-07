@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
-import { Pencil, Undo2, Wallet, X } from 'lucide-vue-next';
+import { Pencil, Printer, RefreshCw, Trash2, Undo2, Wallet, X, XCircle } from 'lucide-vue-next';
 import Alert from '@/shared/ui/Alert.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
@@ -9,6 +9,8 @@ import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { cn, formatDateTime, formatMoney } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
+import { useToast } from '@/shared/composables/useToast';
+import { openLabels, shortDate } from './carriers';
 import { marketplaceNames, returnStatus } from '../orders/labels';
 import type { OrderReturnData } from '@/shared/types';
 import ShipmentActionButtons from './ShipmentActionButtons.vue';
@@ -24,6 +26,32 @@ interface CodLink { id: string | null; number: string | null; remitted_at: strin
 const shipment = ref<(ShipmentData & { returns?: OrderReturnData[]; cod_reconciliations?: CodLink[] }) | null>(null);
 const error = ref<string | null>(null);
 const editOpen = ref(false);
+const toast = useToast();
+const busy = ref(false);
+
+/** Steps at the carrier itself, for parcels pushed through a carrier connection. */
+async function carrierStep(step: 'carrier-cancel' | 'carrier-refresh' | 'carrier-discard') {
+    if (step === 'carrier-cancel' && !window.confirm('Hủy vận đơn này trên hãng? Hãng sẽ không đến lấy hàng nữa.')) return;
+    busy.value = true;
+    try {
+        const { data } = await api.post(`/shipments/${props.id}/${step}`);
+        if (step === 'carrier-refresh') toast.success(data.data.new_events ? `Có ${data.data.new_events} tin mới từ hãng` : 'Chưa có tin mới từ hãng');
+        else toast.success(step === 'carrier-cancel' ? 'Đã hủy vận đơn trên hãng' : 'Đã bỏ vận đơn');
+        changed();
+    } catch (e) {
+        const err = e as ApiError;
+        toast.error(err.field('carrier') ?? err.field('shipment') ?? err.message);
+    } finally {
+        busy.value = false;
+    }
+}
+async function printLabel() {
+    try {
+        await openLabels([props.id]);
+    } catch (e) {
+        toast.error((e as ApiError).field('ids') ?? (e as ApiError).message);
+    }
+}
 
 async function load() {
     try {
@@ -82,6 +110,15 @@ const dot = (status: string) => (['failed'].includes(status) ? 'bg-red-400 ring-
                         Giao thất bại<template v-if="shipment.failure_reason">: <b>{{ shipment.failure_reason }}</b></template>. Chọn <b>Giao lại</b> nếu hãng đi giao tiếp, hoặc <b>Chuyển hoàn</b> nếu hàng quay về kho.
                     </Alert>
 
+                    <Alert v-if="shipment.api_error" tone="red" data-testid="drawer-api-error">{{ shipment.tracking_number ? 'Đơn chưa theo kịp hãng' : 'Hãng chưa nhận vận đơn' }}: <b>{{ shipment.api_error }}</b></Alert>
+
+                    <div v-if="shipment.source === 'api' && tenant.can('shipments.manage')" class="flex flex-wrap gap-2" data-testid="drawer-carrier-actions">
+                        <Button v-if="shipment.tracking_number && shipment.status !== 'cancelled'" size="sm" variant="outline" data-testid="drawer-print" @click="printLabel"><Printer /> In nhãn</Button>
+                        <Button v-if="shipment.tracking_number" size="sm" variant="outline" :disabled="busy" data-testid="drawer-refresh" @click="carrierStep('carrier-refresh')"><RefreshCw /> Cập nhật từ hãng</Button>
+                        <Button v-if="shipment.tracking_number && ['pending', 'awaiting_pickup'].includes(shipment.status)" size="sm" variant="outline" :disabled="busy" data-testid="drawer-carrier-cancel" @click="carrierStep('carrier-cancel')"><XCircle /> Hủy trên hãng</Button>
+                        <Button v-if="!shipment.tracking_number && shipment.status === 'pending'" size="sm" variant="outline" :disabled="busy" data-testid="drawer-discard" @click="carrierStep('carrier-discard')"><Trash2 /> Bỏ vận đơn</Button>
+                    </div>
+
                     <div class="flex flex-wrap gap-2">
                         <ShipmentActionButtons :shipment="shipment" @done="changed" />
                         <Button v-if="tenant.can('shipments.manage') && !['cancelled'].includes(shipment.status)" size="sm" variant="outline" class="ml-auto" data-testid="shipment-edit" @click="editOpen = true"><Pencil /> Sửa vận đơn</Button>
@@ -93,6 +130,10 @@ const dot = (status: string) => (['failed'].includes(status) ? 'bg-red-400 ring-
                         <dd>{{ shipment.order?.recipient ?? '—' }} <span v-if="shipment.order?.phone" class="text-muted-foreground">· {{ shipment.order.phone }}</span></dd>
                         <dt class="text-muted-foreground">Địa chỉ</dt>
                         <dd>{{ shipment.order?.address ?? shipment.order?.area ?? '—' }}</dd>
+                        <template v-if="shipment.service_name">
+                            <dt class="text-muted-foreground">Dịch vụ</dt>
+                            <dd>{{ shipment.service_name }}<template v-if="shipment.expected_delivery_at"> · dự kiến giao {{ shortDate(shipment.expected_delivery_at) }}</template></dd>
+                        </template>
                         <dt class="text-muted-foreground">Kho xuất</dt>
                         <dd>{{ shipment.warehouse?.name ?? '—' }}</dd>
                         <dt class="text-muted-foreground">Kiện · khối lượng</dt>

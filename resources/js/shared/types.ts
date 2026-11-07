@@ -983,6 +983,12 @@ export interface ShipmentData {
     carrier_name: string | null;
     source: 'manual' | 'self' | 'api' | 'marketplace' | 'import';
     tracking_number: string | null;
+    carrier_account_id?: string | null;
+    service?: string | null;
+    service_name?: string | null;
+    expected_delivery_at?: string | null;
+    api_error?: string | null;
+    raw_status?: string | null;
     status: string;
     status_label: string;
     packages: number;

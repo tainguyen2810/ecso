@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { AlarmClock, CircleAlert, Clock, Download, FileUp, PackageCheck, Search, Truck, Undo2, Wallet } from 'lucide-vue-next';
+import { AlarmClock, CircleAlert, Clock, Download, FileUp, PackageCheck, Plug, Printer, Search, Truck, Undo2, Wallet } from 'lucide-vue-next';
+import Button from '@/shared/ui/Button.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Card from '@/shared/ui/Card.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
@@ -22,9 +23,15 @@ import Tabs from '../../components/Tabs.vue';
 import { marketplaceNames } from '../orders/labels';
 import ShipmentDrawer from './ShipmentDrawer.vue';
 import ShipmentImportDialog from './ShipmentImportDialog.vue';
+import CarrierConnectDialog from './CarrierConnectDialog.vue';
+import PushQueue from './PushQueue.vue';
+import { carrierMarks, loadCarrierAccounts, openLabels, type CarrierAccountData } from './carriers';
 import { carrierKeys, carrierText, shipmentTabs, shipmentTone, statusText, type ShipmentData, type ShipmentSummary } from './shipments';
 
-/** "Vận chuyển & giao hàng": every shipment, what needs the shop's attention, and the COD carriers hold. */
+/**
+ * "Đẩy qua vận chuyển": orders waiting for a carrier (compare prices, push in bulk), then every shipment, what needs
+ * the shop's attention, and the COD carriers hold.
+ */
 const route = useRoute();
 const router = useRouter();
 const tenant = useTenantStore();
@@ -35,7 +42,7 @@ const meta = ref({ current_page: 1, last_page: 1, total: 0 });
 const summary = ref<ShipmentSummary | null>(null);
 const loading = ref(true);
 const loadError = ref<string | null>(null);
-const tab = ref(typeof route.query.tab === 'string' ? route.query.tab : 'all');
+const tab = ref(typeof route.query.tab === 'string' ? route.query.tab : 'to_push');
 const q = ref('');
 const carrier = ref('');
 const channel = ref('');
@@ -48,11 +55,50 @@ const page = ref(1);
 const openId = ref<string | null>(typeof route.query.shipment === 'string' ? route.query.shipment : null);
 const warehouses = ref<{ id: string; name: string }[]>([]);
 
-const tabs = computed(() => shipmentTabs.map((t) => ({ ...t, count: summary.value?.tabs[t.value] ?? null })));
+const queueCount = ref<number | null>(null);
+const tabs = computed(() => [{ value: 'to_push', label: 'Chờ đẩy', count: queueCount.value }, ...shipmentTabs.map((t) => ({ ...t, count: summary.value?.tabs[t.value] ?? null }))]);
+
+const accounts = ref<CarrierAccountData[]>([]);
+const connectOpen = ref(false);
+async function loadAccounts() {
+    try {
+        accounts.value = await loadCarrierAccounts();
+    } catch {
+        // The chips just stay empty.
+    }
+}
+async function loadQueueCount() {
+    try {
+        queueCount.value = (await api.get('/carrier-shipments/queue')).data.meta.total;
+    } catch {
+        queueCount.value = null;
+    }
+}
+
+/** Ticked shipments made through a carrier connection: their labels print together. */
+const picked = ref<Set<string>>(new Set());
+const printable = (s: ShipmentData) => s.source === 'api' && !!s.tracking_number && s.status !== 'cancelled';
+function togglePick(id: string) {
+    const next = new Set(picked.value);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    picked.value = next;
+}
+const printing = ref(false);
+async function printPicked() {
+    printing.value = true;
+    try {
+        await openLabels([...picked.value]);
+    } catch (e) {
+        toast.error((e as ApiError).field('ids') ?? (e as ApiError).message);
+    } finally {
+        printing.value = false;
+    }
+}
 
 function filterParams() {
     return {
-            tab: tab.value === 'all' ? undefined : tab.value,
+            tab: tab.value === 'all' || tab.value === 'to_push' ? undefined : tab.value,
             q: q.value || undefined,
             carrier: carrier.value || undefined,
             channel: channel.value || undefined,
@@ -67,6 +113,7 @@ function filterParams() {
 async function load() {
     loading.value = true;
     loadError.value = null;
+    picked.value = new Set();
     try {
         const params = { ...filterParams(), page: page.value };
         const [list, sum] = await Promise.all([api.get('/shipments', { params }), api.get('/shipments/summary')]);
@@ -81,6 +128,8 @@ async function load() {
 }
 onMounted(async () => {
     void load();
+    void loadAccounts();
+    void loadQueueCount();
     try {
         warehouses.value = (await api.get('/warehouses')).data.data;
     } catch {
@@ -92,7 +141,15 @@ watch(q, () => {
     clearTimeout(timer);
     timer = setTimeout(() => ((page.value = 1), load()), 300);
 });
-watch([tab, carrier, channel, warehouse, cod, from, to, late], () => ((page.value = 1), load()));
+watch([carrier, channel, warehouse, cod, from, to, late], () => ((page.value = 1), load()));
+watch(tab, (t) => {
+    router.replace({ query: { ...route.query, tab: t === 'to_push' ? undefined : t } });
+    if (t !== 'to_push') ((page.value = 1), load());
+});
+function afterPush() {
+    void load();
+    void loadQueueCount();
+}
 watch(openId, (id) => router.replace({ query: { ...route.query, shipment: id ?? undefined } }));
 
 function pickTab(value: string, onlyLate = false) {
@@ -121,7 +178,16 @@ const isLate = (s: ShipmentData) => ['picked_up', 'in_transit', 'out_for_deliver
 </script>
 
 <template>
-    <PageHeader title="Vận chuyển & giao hàng" description="Theo dõi từng vận đơn: hãng, mã vận đơn, trạng thái giao và tiền COD hãng đang giữ.">
+    <PageHeader title="Đẩy qua vận chuyển" description="So sánh giá, đẩy đơn qua tài khoản hãng của shop, rồi theo dõi từng vận đơn và tiền COD hãng đang giữ.">
+        <template #default>
+            <div class="flex flex-wrap items-center gap-2" data-testid="carrier-chips">
+                <button v-for="a in accounts" :key="a.id" class="inline-flex items-center gap-1.5 rounded-full border bg-card px-2.5 py-1 text-xs" :title="a.last_error ?? a.name" @click="connectOpen = true">
+                    <span :class="cn('rounded px-1 text-[9px] font-bold text-white', carrierMarks[a.carrier]?.bg ?? 'bg-slate-500')">{{ carrierMarks[a.carrier]?.short ?? a.carrier }}</span>
+                    {{ a.carrier_label }}<span :class="cn('size-2 rounded-full', a.status === 'connected' ? 'bg-emerald-500' : 'bg-red-500')" />
+                </button>
+                <Button size="sm" variant="outline" data-testid="open-carrier-connect" @click="connectOpen = true"><Plug /> Kết nối hãng</Button>
+            </div>
+        </template>
         <template #links>
             <HeaderLink :icon="Download" :disabled="exporting" data-testid="shipment-export" @click="exportXlsx">Xuất file</HeaderLink>
             <HeaderLink v-if="tenant.can('shipments.import')" :icon="FileUp" data-testid="shipment-import" @click="importOpen = true">Nhập mã vận đơn từ file</HeaderLink>
@@ -139,6 +205,8 @@ const isLate = (s: ShipmentData) => ['picked_up', 'in_transit', 'out_for_deliver
 
     <Card class="mt-5">
         <div class="border-b px-3"><Tabs v-model="tab" :tabs="tabs" variant="underline" @update:model-value="late = false" /></div>
+        <PushQueue v-if="tab === 'to_push'" :accounts="accounts" @connect="connectOpen = true" @pushed="afterPush" />
+        <template v-else>
         <div class="flex flex-wrap items-center gap-2 border-b p-4">
             <div class="relative min-w-60 flex-1">
                 <Search class="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
@@ -160,7 +228,8 @@ const isLate = (s: ShipmentData) => ['picked_up', 'in_transit', 'out_for_deliver
             <table class="w-full text-sm" data-testid="shipment-table">
                 <thead class="whitespace-nowrap border-b bg-slate-50 text-left text-xs font-semibold text-foreground/80">
                     <tr>
-                        <th class="px-4 py-3">Mã vận đơn</th>
+                        <th class="w-8 py-3 pl-4"></th>
+                        <th class="px-3 py-3">Mã vận đơn</th>
                         <th class="px-3 py-3">Đơn hàng</th>
                         <th class="px-3 py-3">Hãng · kho</th>
                         <th class="px-3 py-3">Người nhận</th>
@@ -173,7 +242,10 @@ const isLate = (s: ShipmentData) => ['picked_up', 'in_transit', 'out_for_deliver
                 </thead>
                 <tbody class="divide-y">
                     <tr v-for="s in rows" :key="s.id" :class="cn('cursor-pointer hover:bg-blue-50/40', openId === s.id && 'bg-blue-50/60')" @click="openId = s.id">
-                        <td class="whitespace-nowrap px-4 py-3">
+                        <td class="py-3 pl-4" @click.stop>
+                            <input v-if="printable(s)" type="checkbox" class="accent-blue-600" :checked="picked.has(s.id)" :aria-label="`Chọn ${s.tracking_number}`" @change="togglePick(s.id)" />
+                        </td>
+                        <td class="whitespace-nowrap px-3 py-3">
                             <span v-if="s.tracking_number" class="font-mono font-medium text-primary">{{ s.tracking_number }}</span>
                             <span v-else class="text-xs text-muted-foreground">Không có mã</span>
                         </td>
@@ -205,8 +277,17 @@ const isLate = (s: ShipmentData) => ['picked_up', 'in_transit', 'out_for_deliver
             </table>
         </div>
         <Pagination :page="meta.current_page" :last-page="meta.last_page" :total="meta.total" @go="(p) => ((page = p), load())" />
+        <div v-if="picked.size" class="sticky bottom-3 z-10 mx-4 mb-4 flex items-center gap-3 rounded-xl bg-slate-900 px-4 py-3 text-sm text-white shadow-lg">
+            <b>Đã chọn {{ picked.size }} vận đơn</b>
+            <span class="ml-auto flex gap-2">
+                <Button size="sm" variant="ghost" class="text-white hover:bg-white/10" @click="picked = new Set()">Bỏ chọn</Button>
+                <Button size="sm" :disabled="printing" data-testid="print-labels" @click="printPicked"><Printer /> In nhãn của hãng</Button>
+            </span>
+        </div>
+        </template>
     </Card>
 
     <ShipmentDrawer v-if="openId" :id="openId" :key="openId" @close="openId = null" @changed="load" />
-    <ShipmentImportDialog v-model:open="importOpen" @saved="load" />
+    <ShipmentImportDialog v-model:open="importOpen" @saved="afterPush" />
+    <CarrierConnectDialog v-model:open="connectOpen" :accounts="accounts" @changed="loadAccounts" />
 </template>

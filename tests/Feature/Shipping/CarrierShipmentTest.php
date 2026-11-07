@@ -191,3 +191,17 @@ it('asks the carrier again about parcels that heard nothing, without asking twic
     // "Cập nhật từ hãng" by hand.
     $this->api->postJson('/api/v1/shipments/'.($this->shipment)($id)->ulid.'/carrier-refresh')->assertOk()->assertJsonPath('data.new_events', 0);
 });
+
+it('lists the orders waiting to be pushed, keeps refused ones there and drops pushed ones', function () {
+    $account = ($this->connect)();
+    $waiting = ($this->order)();
+    $refused = ($this->order)(['note' => 'x']);
+    $pushed = ($this->order)();
+    $this->api->postJson("/api/v1/orders/{$refused}/carrier-shipments", ['account_id' => $account['id'], 'service' => 'standard', 'note' => '[reject]'])->assertStatus(422);
+    $this->api->postJson("/api/v1/orders/{$pushed}/carrier-shipments", ['account_id' => $account['id'], 'service' => 'standard'])->assertCreated();
+
+    $rows = collect($this->api->getJson('/api/v1/carrier-shipments/queue')->assertOk()->json('data'))->keyBy('id');
+    expect($rows->keys()->all())->toEqualCanonicalizing([$waiting, $refused])
+        ->and($rows[$waiting]['weight_g'])->toBe(600)->and($rows[$waiting]['has_address'])->toBeTrue()->and($rows[$waiting]['failed_shipment'])->toBeNull()
+        ->and($rows[$refused]['failed_shipment']['error'])->not->toBeNull();
+});

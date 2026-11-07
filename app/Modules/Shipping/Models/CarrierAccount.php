@@ -21,7 +21,7 @@ use Illuminate\Support\Str;
  * @property string $status
  * @property array<string, mixed>|null $credentials
  * @property string $webhook_token
- * @property array<string, array{id: string, name: string, address?: string|null}>|null $pickups warehouse id => carrier pickup point
+ * @property array<int|string, array{id: string, name: string, address?: string|null}>|null $pickups warehouse id => carrier pickup point
  * @property array<int, array{id: string, name: string, address?: string|null, province_code?: string|null}>|null $locations pickup points the carrier knows for this account
  * @property Carbon|null $last_verified_at
  * @property Carbon|null $last_event_at
@@ -72,8 +72,11 @@ class CarrierAccount extends Model
     /** The carrier's pickup point for a warehouse: the mapped one, else the first the carrier knows. */
     public function pickupFor(?int $warehouseId): ?array
     {
-        $mapped = $warehouseId !== null ? ($this->pickups[(string) $warehouseId] ?? null) : null;
+        $pickups = $this->pickups ?? [];
+        if ($warehouseId !== null && isset($pickups[$warehouseId])) {
+            return $pickups[$warehouseId];
+        }
 
-        return $mapped ?? ($this->locations[0] ?? null);
+        return $this->locations[0] ?? null;
     }
 }

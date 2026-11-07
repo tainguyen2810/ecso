@@ -95,7 +95,8 @@ class CarrierAccountController extends Controller
             'environment' => $account->environment,
             'status' => $account->status,
             'locations' => $account->locations ?? [],
-            'pickups' => collect($account->pickups ?? [])->map(fn ($p, $warehouseId) => ['warehouse' => isset($warehouses[$warehouseId]) ? ['id' => $warehouses[$warehouseId]->ulid, 'code' => $warehouses[$warehouseId]->code, 'name' => $warehouses[$warehouseId]->name] : null, 'pickup' => $p])->filter(fn ($r) => $r['warehouse'] !== null)->values(),
+            // Every warehouse, with the carrier's pickup point chosen for it (null = the account's first point).
+            'pickups' => $warehouses->map(fn ($w) => ['warehouse' => ['id' => $w->ulid, 'code' => $w->code, 'name' => $w->name], 'pickup' => ($account->pickups ?? [])[$w->id] ?? null])->values(),
             // Only who can change the connection sees where the carrier sends its updates.
             'webhook_url' => $canManage ? route('carrier-webhooks.receive', ['token' => $account->webhook_token]) : null,
             'last_verified_at' => $account->last_verified_at?->toIso8601String(),

@@ -97,7 +97,7 @@ class CarrierAccountService
      * Each warehouse gets the pickup point in its province (else the first point), unless the shop already chose one.
      *
      * @param  array<int, array<string, mixed>>  $locations
-     * @param  array<string, array<string, mixed>>  $current
+     * @param  array<int|string, array<string, mixed>>  $current
      */
     private function matchPickups(array $locations, array $current): array
     {
@@ -107,7 +107,7 @@ class CarrierAccountService
         $ids = array_column($locations, 'id');
         $map = [];
         foreach (Warehouse::query()->get(['id', 'province_code']) as $warehouse) {
-            $kept = $current[(string) $warehouse->id] ?? null;
+            $kept = $current[$warehouse->id] ?? null;
             if ($kept !== null && in_array($kept['id'] ?? null, $ids, true)) {
                 $map[(string) $warehouse->id] = $kept;
 

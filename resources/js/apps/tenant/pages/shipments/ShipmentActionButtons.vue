@@ -19,7 +19,9 @@ const toast = useToast();
 
 const list = computed(() => {
     const a = props.shipment.actions ?? {};
-    return actionOrder.filter((k) => a[k]).map((k) => ({ key: k, ...a[k]! })).slice(0, props.limit);
+    // A parcel made at the carrier is cancelled there first ("Hủy trên hãng" in the drawer).
+    const atCarrier = props.shipment.source === 'api' && !!props.shipment.tracking_number;
+    return actionOrder.filter((k) => a[k] && !(atCarrier && k === 'cancel')).map((k) => ({ key: k, ...a[k]! })).slice(0, props.limit);
 });
 const asking = ref<string | null>(null);
 const reason = ref('');

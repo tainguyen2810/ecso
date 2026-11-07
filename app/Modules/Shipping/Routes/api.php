@@ -19,6 +19,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::post('carrier-accounts/{account}/check', [CarrierAccountController::class, 'check'])->middleware('throttle:10,1,shipping.carrier-accounts.check');
     Route::delete('carrier-accounts/{account}', [CarrierAccountController::class, 'destroy']);
 
+    Route::get('carrier-shipments/queue', [CarrierShipmentController::class, 'queue']);
     Route::post('shipping/quotes', [CarrierShipmentController::class, 'quote'])->middleware('throttle:120,1,shipping.quotes');
     Route::post('orders/{order}/carrier-shipments', [CarrierShipmentController::class, 'push'])->middleware(['idempotent', 'throttle:60,1,shipping.push']);
     Route::post('carrier-shipments/bulk', [CarrierShipmentController::class, 'bulk'])->middleware(['idempotent', 'throttle:10,1,shipping.bulk']);

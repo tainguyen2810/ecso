@@ -3,6 +3,8 @@
 namespace App\Modules\Shipping\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Geo\Models\Ward;
+use App\Modules\Orders\Domain\ShipmentStatus;
 use App\Modules\Orders\Http\Resources\ShipmentResource;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\Shipment;
@@ -39,6 +41,55 @@ class CarrierShipmentController extends Controller
             : $this->drafts->fromInput($data);
 
         return response()->json(['data' => ['weight_g' => $draft->weightG, 'cod_amount' => $draft->codAmount, ...$this->quotes->quote($draft)]]);
+    }
+
+    /**
+     * "Chờ đẩy": orders the shop ships itself that are confirmed or packed and have no shipment at a carrier yet,
+     * with the reason when the last push was refused.
+     */
+    public function queue(Request $request): JsonResponse
+    {
+        $this->authorize('viewAny', Order::class);
+        $data = $request->validate(['q' => ['nullable', 'string', 'max:100'], 'page' => ['nullable', 'integer', 'min:1']]);
+        $active = fn ($s) => $s->where('status', '!=', ShipmentStatus::CANCELLED);
+        $page = Order::query()
+            ->where(fn ($q) => $q->where('marketplace', Order::SOURCE_MANUAL)->orWhere('marketplace', 'woocommerce'))
+            ->whereIn('status', CarrierShipmentService::PUSHABLE)
+            ->whereNull('tracking_number')
+            // A parcel the carrier refused stays here to push again; any other live shipment means it is handled.
+            ->whereDoesntHave('shipments', fn ($s) => $active($s)->where(fn ($w) => $w->where('source', '!=', Shipment::SOURCE_API)->orWhereNotNull('tracking_number')))
+            ->when(filled($data['q'] ?? null), fn ($q) => $q->where(fn ($w) => $w->where('external_order_id', 'like', '%'.$data['q'].'%')->orWhere('buyer_name', 'like', '%'.$data['q'].'%')->orWhere('buyer_phone', 'like', '%'.$data['q'].'%')))
+            ->with(['warehouse:id,ulid,code,name', 'shipments' => $active])
+            ->orderBy('id')
+            ->paginate(20);
+        $areas = Ward::query()->with('province')->whereIn('code', $page->getCollection()->pluck('shipping_ward_code')->filter()->unique())->get()
+            ->mapWithKeys(fn (Ward $w) => [$w->code => trim($w->name.', '.($w->province->name ?? ''), ', ')]);
+
+        return response()->json([
+            'data' => $page->getCollection()->map(function (Order $o) use ($areas) {
+                $draft = $this->drafts->fromOrder($o);
+                $failed = $o->shipments->first(fn (Shipment $s) => $s->source === Shipment::SOURCE_API && $s->tracking_number === null);
+
+                return [
+                    'id' => $o->ulid,
+                    'external_order_id' => $o->external_order_id,
+                    'marketplace' => $o->marketplace,
+                    'status' => $o->status,
+                    'recipient' => $o->buyer_name,
+                    'phone' => $o->buyer_phone,
+                    'address' => $o->shipping_address,
+                    'area' => $areas[(string) $o->shipping_ward_code] ?? null,
+                    'has_address' => filled($o->shipping_province_code) && filled($o->shipping_ward_code),
+                    'total' => (string) $o->total,
+                    'cod_amount' => $draft->codAmount,
+                    'weight_g' => $draft->weightG,
+                    'warehouse' => $o->warehouse ? ['id' => $o->warehouse->ulid, 'code' => $o->warehouse->code, 'name' => $o->warehouse->name] : null,
+                    'placed_at' => $o->placed_at?->toIso8601String(),
+                    'failed_shipment' => $failed ? ['id' => $failed->ulid, 'carrier_name' => $failed->carrier_name, 'error' => $failed->api_error] : null,
+                ];
+            })->values(),
+            'meta' => ['current_page' => $page->currentPage(), 'last_page' => $page->lastPage(), 'total' => $page->total()],
+        ]);
     }
 
     public function push(Request $request, Order $order): JsonResponse
