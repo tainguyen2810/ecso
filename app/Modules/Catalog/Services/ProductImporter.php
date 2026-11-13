@@ -12,6 +12,7 @@ use App\Modules\Inventory\Models\StockReceipt;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Services\InventoryDocumentService;
 use App\Modules\Tenancy\Support\TenantContext;
+use App\Shared\Support\ImportHeaders;
 use Illuminate\Support\Facades\DB;
 use OpenSpout\Reader\CSV\Reader as CsvReader;
 use OpenSpout\Reader\XLSX\Reader as XlsxReader;
@@ -26,6 +27,9 @@ use OpenSpout\Reader\XLSX\Reader as XlsxReader;
  *  - All rows are validated first; if any row is invalid nothing is written (all-or-nothing).
  *  - Optional opening_qty/opening_cost create one opening receipt in the chosen warehouse
  *    (only for SKUs created by this import, so re-importing a file cannot add stock twice).
+ *  - Files exported from Sapo or KiotViet are read as they are (see ALIASES): their variants are grouped into one
+ *    product by product name, and the attribute values make the variant name.
+ *  - With skip_invalid the rows with errors are left out and reported, and the rest is imported.
  */
 class ProductImporter
 {
@@ -33,10 +37,32 @@ class ProductImporter
 
     public const MAX_ROWS = 20000;
 
+    /** key => header patterns (normalized by ImportHeaders), EzSell's own header first, then Sapo's, then KiotViet's. */
+    public const ALIASES = [
+        'product_key' => ['/^product_key$/', '/^ma_hh_lien_quan$/'],
+        'sku' => ['/^sku$/', '/^ma_sku$/', '/^ma_hang$/', '/^ma_hang_hoa$/', '/^ma_san_pham$/'],
+        'product_name' => ['/^product_name$/', '/^ten_san_pham$/', '/^ten_hang$/', '/^ten_hang_hoa$/'],
+        'variant_name' => ['/^variant_name$/', '/^ten_phien_ban$/'],
+        'barcode' => ['/^barcode$/', '/^ma_vach$/'],
+        'category' => ['/^category$/', '/^loai_san_pham$/', '/^nhom_hang/', '/^danh_muc$/'],
+        'brand' => ['/^brand$/', '/^nhan_hieu$/', '/^thuong_hieu$/'],
+        'ref_price' => ['/^ref_price$/', '/^pl_gia_ban_le$/', '/^gia_ban_le$/', '/^gia_ban$/'],
+        'wholesale_price' => ['/^wholesale_price$/', '/^pl_gia_ban_buon$/', '/^gia_ban_buon$/', '/^gia_si$/'],
+        'weight_gram' => ['/^weight_gram$/', '/^khoi_luong$/', '/^trong_luong$/'],
+        'status' => ['/^status$/', '/^dang_kinh_doanh$/'],
+        'opening_qty' => ['/^opening_qty$/', '/^lc_.+_ton_kho_ban_dau$/', '/^ton_kho_ban_dau$/', '/^ton_kho$/', '/^ton_dau_ky$/'],
+        'opening_cost' => ['/^opening_cost$/', '/^lc_.+_gia_von_khoi_tao$/', '/^gia_von$/', '/^pl_gia_nhap$/', '/^gia_nhap$/'],
+        'unit' => ['/^unit$/', '/^don_vi$/', '/^don_vi_tinh$/', '/^dvt$/'],
+        // Read to build other fields, not imported as such.
+        '_attr1' => ['/^gia_tri_thuoc_tinh_1$/'], '_attr2' => ['/^gia_tri_thuoc_tinh_2$/'], '_attr3' => ['/^gia_tri_thuoc_tinh_3$/'],
+        '_attributes' => ['/^thuoc_tinh$/'],
+        '_weight_unit' => ['/^don_vi_khoi_luong$/'],
+    ];
+
     public function __construct(private readonly InventoryDocumentService $documents, private readonly AuditLogger $audit) {}
 
     /**
-     * @return array{rows: array<int, array<string, string>>, errors: array<int, array{row: int, message: string}>}
+     * @return array{rows: array<int, array<string, string>>, errors: array<int, array{row: int, message: string}>, source: string, columns: list<array{header: string, key: string|null}>}
      */
     public function read(string $path, string $extension): array
     {
@@ -46,6 +72,8 @@ class ProductImporter
         $rows = [];
         $errors = [];
         $header = null;
+        $source = ImportHeaders::EZSELL;
+        $columns = [];
         $line = 0;
 
         foreach ($reader->getSheetIterator() as $sheet) {
@@ -54,10 +82,17 @@ class ProductImporter
                 $cells = array_map(fn ($v) => trim((string) ($v instanceof \DateTimeInterface ? $v->format('Y-m-d') : $v)), $row->toArray());
 
                 if ($header === null) {
-                    $cells[0] = preg_replace('/^\xEF\xBB\xBF/', '', $cells[0] ?? '');
-                    $header = array_map(fn ($h) => strtolower(trim($h)), $cells);
+                    $source = ImportHeaders::source($cells);
+                    $header = ImportHeaders::map($cells, self::ALIASES);
+                    foreach ($cells as $index => $title) {
+                        if (trim((string) preg_replace('/^\xEF\xBB\xBF/', '', $title)) !== '') {
+                            $key = array_search($index, $header, true);
+                            $key = $key === false ? null : ($key === '_weight_unit' ? 'weight_gram' : (str_starts_with($key, '_') ? 'variant_name' : $key));
+                            $columns[] = ['header' => trim((string) preg_replace('/^\xEF\xBB\xBF/', '', $title)), 'key' => $key];
+                        }
+                    }
                     foreach (['product_name', 'sku'] as $required) {
-                        if (! in_array($required, $header, true)) {
+                        if (! isset($header[$required])) {
                             $errors[] = ['row' => 1, 'message' => "Thiếu cột bắt buộc: {$required}"];
                         }
                     }
@@ -78,30 +113,103 @@ class ProductImporter
 
                 $assoc = [];
                 foreach (self::COLUMNS as $column) {
-                    $index = array_search($column, $header, true);
-                    $assoc[$column] = $index === false ? '' : ($cells[$index] ?? '');
+                    $assoc[$column] = isset($header[$column]) ? ($cells[$header[$column]] ?? '') : '';
                 }
-                $rows[$line] = $assoc;
+                $rows[$line] = $source === ImportHeaders::EZSELL ? $assoc : $this->fromOtherApp($assoc, $cells, $header, $source);
             }
             break; // first sheet only
         }
 
         $reader->close();
 
-        return ['rows' => $rows, 'errors' => $errors];
+        return ['rows' => $rows, 'errors' => $errors, 'source' => $source, 'columns' => $columns];
+    }
+
+    /**
+     * A row of a Sapo or KiotViet file in EzSell's terms: numbers without thousand separators, the attribute
+     * values as the variant name, variants of one product grouped by its name, weight in grams.
+     *
+     * @param  array<string, string>  $row
+     * @param  list<string>  $cells
+     * @param  array<string, int>  $header
+     * @return array<string, string>
+     */
+    private function fromOtherApp(array $row, array $cells, array $header, string $source): array
+    {
+        $cell = fn (string $key) => isset($header[$key]) ? trim((string) ($cells[$header[$key]] ?? '')) : '';
+
+        if ($row['variant_name'] === '') {
+            $values = array_filter([$cell('_attr1'), $cell('_attr2'), $cell('_attr3')], fn ($v) => $v !== '');
+            if ($values === [] && $cell('_attributes') !== '') {
+                // KiotViet: "MAUSAC:Đỏ|SIZE:M"
+                foreach (preg_split('/\|/', $cell('_attributes')) ?: [] as $pair) {
+                    $value = trim(str_contains($pair, ':') ? substr($pair, strpos($pair, ':') + 1) : $pair);
+                    if ($value !== '') {
+                        $values[] = $value;
+                    }
+                }
+            }
+            $row['variant_name'] = implode(' / ', $values);
+        }
+        if ($row['product_key'] === '' && $row['product_name'] !== '') {
+            $row['product_key'] = 'name:'.mb_strtolower($row['product_name']);
+        }
+        if ($source === ImportHeaders::KIOTVIET && $row['variant_name'] !== '' && $row['product_name'] !== '') {
+            // KiotViet names each variant "Áo thun - Đỏ - M": the product is the part before the attributes.
+            $suffix = ' - '.str_replace(' / ', ' - ', $row['variant_name']);
+            if (str_ends_with($row['product_name'], $suffix)) {
+                $row['product_name'] = mb_substr($row['product_name'], 0, mb_strlen($row['product_name']) - mb_strlen($suffix));
+                $row['product_key'] = 'name:'.mb_strtolower($row['product_name']);
+            }
+        }
+        if (str_contains($row['category'], '>>')) {
+            $parts = array_filter(array_map('trim', explode('>>', $row['category'])));
+            $row['category'] = (string) end($parts);
+        }
+        foreach (['ref_price', 'wholesale_price', 'opening_cost'] as $money) {
+            $row[$money] = ImportHeaders::number($row[$money]);
+        }
+        $row['opening_qty'] = ImportHeaders::integer($row['opening_qty']);
+        if (is_numeric($row['opening_qty']) && (int) $row['opening_qty'] < 0) {
+            $row['opening_qty'] = ''; // KiotViet lets stock go below zero: nothing to bring over.
+        }
+        if ($row['weight_gram'] !== '') {
+            $weight = ImportHeaders::number($row['weight_gram']);
+            if (is_numeric($weight)) {
+                $row['weight_gram'] = (string) (int) round((float) $weight * (mb_strtolower($cell('_weight_unit')) === 'kg' ? 1000 : 1));
+            }
+        }
+        if ($row['status'] !== '') {
+            $row['status'] = match (mb_strtolower($row['status'])) {
+                '1', 'true', 'có', 'co', 'x', 'đang kinh doanh', 'active' => Product::STATUS_ACTIVE,
+                '0', 'false', 'không', 'khong', 'ngừng kinh doanh', 'inactive' => 'inactive',
+                default => $row['status'],
+            };
+        }
+
+        return $row;
     }
 
     /**
      * @param  array<int, array<string, string>>  $rows  keyed by file line number
-     * @return array{created: int, updated: int, products: int, errors: array<int, array{row: int, message: string}>, opening_receipt: string|null, dry_run: bool, zero_cost_rows: array<int, int>}
+     * @return array{created: int, updated: int, products: int, errors: array<int, array{row: int, message: string}>, opening_receipt: string|null, dry_run: bool, zero_cost_rows: array<int, int>, skipped: list<array{row: int, message: string}>}
      */
-    public function import(array $rows, bool $dryRun = false, ?Warehouse $openingWarehouse = null): array
+    public function import(array $rows, bool $dryRun = false, ?Warehouse $openingWarehouse = null, bool $skipInvalid = false): array
     {
         $existing = ProductVariant::query()->withTrashed()->get(['id', 'sku', 'barcode', 'product_id', 'deleted_at'])
             ->keyBy(fn ($v) => mb_strtolower($v->sku));
         $barcodes = $existing->filter(fn ($v) => filled($v->barcode))->mapWithKeys(fn ($v) => [mb_strtolower($v->barcode) => mb_strtolower($v->sku)]);
 
         $errors = $this->validate($rows, $existing, $barcodes, $openingWarehouse);
+        // Leaving rows out can change what is left (a duplicate SKU no longer duplicates): checked again until clean.
+        $skipped = [];
+        while ($skipInvalid && $errors !== []) {
+            foreach ($errors as $error) {
+                unset($rows[$error['row']]);
+                $skipped[] = $error;
+            }
+            $errors = $this->validate($rows, $existing, $barcodes, $openingWarehouse);
+        }
         $creates = 0;
         $updates = 0;
         foreach ($rows as $row) {
@@ -117,10 +225,10 @@ class ProductImporter
         }
 
         if ($errors || $dryRun) {
-            return ['created' => $errors ? 0 : $creates, 'updated' => $errors ? 0 : $updates, 'products' => 0, 'errors' => $errors, 'opening_receipt' => null, 'dry_run' => $dryRun, 'zero_cost_rows' => $zeroCost];
+            return ['created' => $errors ? 0 : $creates, 'updated' => $errors ? 0 : $updates, 'products' => 0, 'errors' => $errors, 'opening_receipt' => null, 'dry_run' => $dryRun, 'zero_cost_rows' => $zeroCost, 'skipped' => $skipped];
         }
 
-        return DB::transaction(function () use ($rows, $existing, $openingWarehouse, $creates, $updates, $zeroCost) {
+        return DB::transaction(function () use ($rows, $existing, $openingWarehouse, $creates, $updates, $zeroCost, $skipped) {
             $categories = Category::query()->whereNull('parent_id')->pluck('id', 'name')->mapWithKeys(fn ($id, $n) => [mb_strtolower($n) => $id]);
             $brands = Brand::query()->pluck('id', 'name')->mapWithKeys(fn ($id, $n) => [mb_strtolower($n) => $id]);
             $productsByKey = [];
@@ -182,9 +290,9 @@ class ProductImporter
                 DB::afterCommit(fn () => SaleStatusChanged::dispatch($tenantId, $statusChanged));
             }
 
-            $this->audit->record('product.imported', null, ['created' => $creates, 'updated' => $updates, 'products' => $productCount]);
+            $this->audit->record('product.imported', null, ['created' => $creates, 'updated' => $updates, 'products' => $productCount, 'skipped' => count($skipped)]);
 
-            return ['created' => $creates, 'updated' => $updates, 'products' => $productCount, 'errors' => [], 'opening_receipt' => $receipt?->number, 'dry_run' => false, 'zero_cost_rows' => $zeroCost];
+            return ['created' => $creates, 'updated' => $updates, 'products' => $productCount, 'errors' => [], 'opening_receipt' => $receipt?->number, 'dry_run' => false, 'zero_cost_rows' => $zeroCost, 'skipped' => $skipped];
         });
     }
 

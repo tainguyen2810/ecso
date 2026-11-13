@@ -28,6 +28,7 @@ class CustomerTransferController extends Controller
         $data = $request->validate([
             'file' => ['required', 'file', 'max:20480', 'mimes:csv,txt,xlsx'],
             'dry_run' => ['sometimes', 'boolean'],
+            'skip_invalid' => ['sometimes', 'boolean'],
         ]);
 
         $file = $data['file'];
@@ -43,20 +44,28 @@ class CustomerTransferController extends Controller
 
             return response()->json(['queued' => true, 'import' => new CustomerImportResource($import->refresh())], 202);
         }
+        // Which app the file came from and how its columns were read, so the user can check before importing.
+        $fileInfo = ['source' => $parsed['source'], 'columns' => $parsed['columns']];
         if ($parsed['errors']) {
-            return response()->json(['message' => 'Tệp không hợp lệ.', 'created' => 0, 'updated' => 0, 'errors' => $parsed['errors']], 422);
+            return response()->json(['message' => 'Tệp không hợp lệ.', 'created' => 0, 'updated' => 0, 'errors' => $parsed['errors']] + $fileInfo, 422);
         }
         if ($parsed['rows'] === []) {
-            return response()->json(['message' => 'Tệp không có dòng dữ liệu.', 'created' => 0, 'updated' => 0, 'errors' => []], 422);
+            return response()->json(['message' => 'Tệp không có dòng dữ liệu.', 'created' => 0, 'updated' => 0, 'errors' => []] + $fileInfo, 422);
         }
 
-        $result = $importer->import($parsed['rows'], (bool) ($data['dry_run'] ?? false));
+        $result = $importer->import(
+            $parsed['rows'],
+            (bool) ($data['dry_run'] ?? false),
+            skipInvalid: (bool) ($data['skip_invalid'] ?? false),
+            withDebt: $request->user()->can('adjustDebt', Customer::class),
+            source: $parsed['source'],
+        );
         if (! $result['dry_run'] && ! $result['errors']) {
-            $audit->record('customer.imported', null, ['file' => $file->getClientOriginalName(), 'created' => $result['created'], 'updated' => $result['updated']]);
+            $audit->record('customer.imported', null, ['file' => $file->getClientOriginalName(), 'created' => $result['created'], 'updated' => $result['updated'], 'skipped' => count($result['skipped']), 'debts' => $result['debts']]);
         }
 
         return response()->json(
-            ['message' => $result['errors'] ? 'Có lỗi, chưa nhập dòng nào.' : 'OK', 'total' => count($parsed['rows'])] + $result,
+            ['message' => $result['errors'] ? 'Có lỗi, chưa nhập dòng nào.' : 'OK', 'total' => count($parsed['rows'])] + $result + $fileInfo,
             $result['errors'] ? 422 : 200,
         );
     }
