@@ -2,6 +2,7 @@
 
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
+use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\PromotionUsage;
 
 /** Promotions of the shop's own channels (C4): order, product, gift and code promotions on the order form and POS. */
@@ -57,7 +58,7 @@ it('takes a code once per customer, refuses wrong or used codes and respects cha
         ->assertOk()->assertJsonPath('data.discount', '50000.00')->assertJsonPath('data.code_error', null);
     $id = ($this->order)([[$this->shirt, 1, 159000]], ['coupon_code' => 'chaoban50', ...$customer])->assertCreated()->json('data.id');
     expect(($this->fetch)($id)->promotion_discount)->toBe('50000.00')->and(($this->fetch)($id)->coupon_code)->toBe('CHAOBAN50');
-    $customerId = ($this->fetch)($id)->customer?->ulid;
+    $customerId = Customer::withoutGlobalScopes()->find(($this->fetch)($id)->customer_id)?->ulid;
     ($this->order)([[$this->shirt, 1, 159000]], ['coupon_code' => 'CHAOBAN50', 'customer_id' => $customerId])->assertStatus(422)->assertJsonPath('errors.coupon_code.0', 'Khách này đã dùng mã CHAOBAN50.');
 
     // A cancelled order gives its use back.
