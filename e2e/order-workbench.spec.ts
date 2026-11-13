@@ -34,9 +34,19 @@ test('order list: to-handle strip, quick view, advanced filters, bulk actions, e
     await page.getByTestId('more-filters').click();
     await expect(page.getByTestId('advanced-filters')).toBeVisible();
     await page.getByLabel('Trạng thái thanh toán').selectOption('unpaid');
+    await page.getByTestId('filters-apply').click();
+    await expect(page.getByTestId('advanced-filters')).toBeHidden();
+    await expect(page.getByTestId('filter-chip')).toHaveText(['Chưa thanh toán']);
     await expect(page.getByRole('button', { name: 'Xóa bộ lọc' })).toBeVisible();
     await shot(page, '03-order-advanced-filters');
     await page.getByRole('button', { name: 'Xóa bộ lọc' }).click();
+
+    // Compact list: one short line per order, remembered after a reload.
+    await page.getByTestId('density-compact').click();
+    await expect(page.getByTestId('order-table')).toHaveAttribute('data-density', 'compact');
+    await page.reload();
+    await expect(page.getByTestId('order-table')).toHaveAttribute('data-density', 'compact');
+    await page.getByRole('button', { name: 'Đầy đủ' }).click();
 
     // Bulk bar with quick payment.
     await page.locator('[data-testid="order-table"] tbody input[type="checkbox"]').first().check();
