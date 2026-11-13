@@ -48,7 +48,7 @@ beforeEach(function () {
                 return Http::response('', 504);
             }
 
-            return $ok(['billCode' => '8500'.(1234567 + $this->created++), 'txlogisticId' => $biz($r)['txlogisticId'], 'sumFreight' => 28500]);
+            return $ok(['billCode' => '850'.(1234567 + $this->created++), 'txlogisticId' => $biz($r)['txlogisticId'], 'sumFreight' => 28500]);
         },
         "{$base}order/getOrders" => fn (Request $r) => $ok([['billCode' => '850099999', 'txlogisticId' => $biz($r)['serialNumber'][0]]]),
         "{$base}order/printOrder" => $ok(['base64EncodeContent' => base64_encode('%PDF-1.4 label')]),

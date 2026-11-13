@@ -11,7 +11,7 @@ beforeEach(function () {
     stockIn($this->tenant, $this->shirt, 50);
     $this->api = fn () => actingInTenant($this->owner, $this->tenant);
     $this->connectFake = fn () => ($this->api)()->postJson('/api/v1/einvoice/account', [
-        'provider' => 'fake', 'environment' => 'sandbox', 'credentials' => ['client_id' => 'demo', 'client_secret' => 'secret'],
+        'provider' => 'fake', 'environment' => 'sandbox', 'credentials' => ['client_id' => 'demo', 'client_secret' => 'sk-hidden-42'],
     ]);
 });
 
@@ -31,7 +31,7 @@ it('connects a provider, lists its templates and never shows the secrets', funct
 
     ($this->api)()->getJson('/api/v1/einvoice/settings')->assertOk()
         ->assertJson(fn ($json) => $json->where('data.providers', fn ($p) => collect($p)->firstWhere('provider', 'misa')['available'] === false)->etc());
-    expect(json_encode(($this->api)()->getJson('/api/v1/einvoice/settings')->json()))->not->toContain('secret"');
+    expect(json_encode(($this->api)()->getJson('/api/v1/einvoice/settings')->json()))->not->toContain('sk-hidden-42');
 
     $staff = addMember($this->tenant, 'ORDER_STAFF');
     actingInTenant($staff, $this->tenant)->postJson('/api/v1/einvoice/account', ['provider' => 'fake', 'environment' => 'sandbox', 'credentials' => ['client_id' => 'x', 'client_secret' => 'y']])->assertForbidden();
