@@ -42,7 +42,7 @@ it('connects in one step, hides the credentials and matches warehouses to pickup
     ($this->connect)();
     expect($this->api->getJson('/api/v1/carrier-accounts')->json('data'))->toHaveCount(1);
     $catalog = collect($this->api->getJson('/api/v1/carriers')->json('data'))->keyBy('carrier');
-    expect($catalog['fake']['available'])->toBeTrue()->and($catalog['jt']['available'])->toBeFalse();
+    expect($catalog['fake']['available'])->toBeTrue()->and($catalog['jt']['available'])->toBeTrue()->and($catalog['spx']['available'])->toBeFalse();
 
     // Staff without settings rights cannot connect; other businesses never see the account.
     $staff = addMember($this->tenant, 'WAREHOUSE_STAFF');
