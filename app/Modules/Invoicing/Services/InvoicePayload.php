@@ -24,7 +24,7 @@ final class InvoicePayload
     private const NO_TAX = -2;
 
     /**
-     * @param  array{name: string, legal_name?: string|null, tax_code?: string|null, address?: string|null, email?: string|null, phone?: string|null}  $buyer
+     * @param  array{name: string, legal_name?: string|null, tax_code?: string|null, address?: string|null, email?: string|null, phone?: string|null, code?: string|null}  $buyer
      * @return array<string, mixed>
      */
     public static function build(Order $order, EInvoiceAccount $account, array $buyer, string $referenceCode): array

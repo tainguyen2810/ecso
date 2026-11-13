@@ -29,7 +29,7 @@ class ProviderRegistry
     /** @return array<int, string> */
     public function keys(): array
     {
-        return array_values(array_filter(array_keys(self::PROVIDERS), fn ($k) => $k !== FakeEInvoiceProvider::KEY || config('einvoice.fake_enabled')));
+        return array_filter(array_keys(self::PROVIDERS), fn ($k) => $k !== FakeEInvoiceProvider::KEY || config('einvoice.fake_enabled'));
     }
 
     public function has(string $key): bool
