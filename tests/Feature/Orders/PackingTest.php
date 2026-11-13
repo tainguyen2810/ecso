@@ -104,4 +104,3 @@ it('prints the pick list of every order waiting to be packed', function () {
     actingInTenant($this->owner, $this->tenant)->postJson('/api/v1/orders/pick-list', ['waiting' => true])->assertOk()
         ->assertJsonCount(1, 'data.orders')->assertJsonPath('data.rows.0.quantity', 2);
 });
-
