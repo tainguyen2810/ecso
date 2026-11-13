@@ -158,7 +158,7 @@ class ZaloService
     {
         $rule = $account->rules[$event] ?? null;
 
-        return is_array($rule) && ($rule['enabled'] ?? false) && filled($rule['template_id'] ?? null) ? $rule : null;
+        return is_array($rule) && $rule['enabled'] && filled($rule['template_id']) ? $rule : null;
     }
 
     /** Sends the event's message for the order once. Returns the log row, or null when nothing was to be sent. */

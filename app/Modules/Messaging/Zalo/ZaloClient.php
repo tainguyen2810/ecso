@@ -85,19 +85,19 @@ class ZaloClient
         });
     }
 
-    /** @return array<string, mixed> the answer's data */
+    /** @return array<int|string, mixed> the answer's data */
     public function get(ZaloAccount $account, string $url, array $query = []): array
     {
         return $this->call($account, 'GET', $url, $query);
     }
 
-    /** @return array<string, mixed> the answer's data */
+    /** @return array<int|string, mixed> the answer's data */
     public function post(ZaloAccount $account, string $url, array $body): array
     {
         return $this->call($account, 'POST', $url, $body);
     }
 
-    /** @return array<string, mixed> */
+    /** @return array<int|string, mixed> */
     private function call(ZaloAccount $account, string $method, string $url, array $payload, bool $retried = false): array
     {
         $token = $this->token($account, $retried);
