@@ -32,7 +32,6 @@ use App\Modules\Orders\Support\Tracking;
 use App\Modules\Sales\Http\Resources\PaymentResource;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\OrderPayment;
-use App\Modules\Sales\Models\PromotionUsage;
 use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Sales\Services\ManualOrderService;
 use App\Modules\Sales\Services\PaymentService;
@@ -113,9 +112,9 @@ class OrderController extends Controller
                     'status' => $reservations[$i->id]['status'],
                 ] : null,
             ]),
-            'promotions' => PromotionUsage::query()->join('promotions', 'promotions.id', '=', 'promotion_usages.promotion_id')->where('promotion_usages.order_id', $order->id)
+            'promotions' => DB::table('promotion_usages')->join('promotions', 'promotions.id', '=', 'promotion_usages.promotion_id')->where('promotion_usages.order_id', $order->id)
                 ->get(['promotions.ulid', 'promotions.name', 'promotions.type', 'promotions.code', 'promotion_usages.amount'])
-                ->map(fn ($p) => ['id' => $p->ulid, 'name' => $p->name, 'type' => $p->type, 'code' => $p->code, 'amount' => $p->amount]),
+                ->map(fn (object $p) => ['id' => $p->ulid, 'name' => $p->name, 'type' => $p->type, 'code' => $p->code, 'amount' => number_format((float) $p->amount, 2, '.', '')]),
             'history' => OrderStatusHistory::query()->with('actor:id,name')->where('order_id', $order->id)->orderBy('id')->get()->map(fn (OrderStatusHistory $h) => [
                 'from' => $h->from_status,
                 'to' => $h->to_status,

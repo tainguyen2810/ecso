@@ -105,7 +105,7 @@ class PromotionController extends Controller
                 'variant_id' => $v?->id,
                 'category_id' => $v?->product?->category_id,
                 'quantity' => (int) $l['quantity'],
-                'unit_price' => (string) ($l['unit_price'] ?? $v?->ref_price ?? 0),
+                'unit_price' => (string) ($l['unit_price'] ?? $v->ref_price ?? 0),
                 'discount' => (string) ($l['discount'] ?? 0),
             ];
         }, $data['lines'] ?? []);
@@ -115,7 +115,7 @@ class PromotionController extends Controller
         $result = $engine->evaluate($lines, [
             'channel_id' => filled($data['channel_id'] ?? null) ? SalesChannel::query()->where('ulid', $data['channel_id'])->value('id') : null,
             // A buyer typed on the form is saved with the order: a customer with no earlier uses (0 = not saved yet).
-            'customer_id' => $customer?->id ?? (! empty($data['new_customer']) ? 0 : null),
+            'customer_id' => $customer->id ?? (! empty($data['new_customer']) ? 0 : null),
             'group_id' => $customer?->customer_group_id,
             'order_id' => $orderId,
             'code' => $data['coupon_code'] ?? null,
