@@ -143,7 +143,7 @@ class PackingService
     /**
      * Today's figures for the side panel, on the shop's clock.
      *
-     * @return array{packed_today: int, errors_today: int, remaining: int, recent: Collection<int, array<string, mixed>>}
+     * @return array{packed_today: int, errors_today: int, remaining: int, recent: Collection<int, array{id: string, external_order_id: string, items: int, by: string|null, at: string}>}
      */
     public function stats(): array
     {
