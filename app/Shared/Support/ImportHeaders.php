@@ -65,6 +65,7 @@ class ImportHeaders
                     if (! isset($taken[$index]) && $header !== '' && preg_match($pattern, $header)) {
                         $map[$key] = $index;
                         $taken[$index] = true;
+
                         continue 3;
                     }
                 }
