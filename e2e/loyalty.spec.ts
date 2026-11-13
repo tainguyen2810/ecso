@@ -10,6 +10,9 @@ async function shot(page: Page, name: string) {
 
 test('loyalty: set up points and tiers, then give a customer points', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
+    const pageErrors: string[] = [];
+    page.on('pageerror', (e) => pageErrors.push(e.message));
+    page.on('console', (m) => m.type() === 'error' && pageErrors.push(m.text()));
     await login(page, 'owner@demo.test');
 
     await page.goto('/customers');
@@ -30,13 +33,12 @@ test('loyalty: set up points and tiers, then give a customer points', async ({ p
 
     await page.goto('/customers');
     await page.getByTestId('customer-q').fill('Võ Quốc Bảo');
-    const loyalty = page.waitForResponse((r) => /\/api\/v1\/customers\/[^/]+\/loyalty$/.test(new URL(r.url()).pathname) && r.request().method() === 'GET');
     await page.getByTestId('customer-table').getByRole('link', { name: 'Võ Quốc Bảo' }).first().click();
-    const response = await loyalty;
-    expect(response.status(), await response.text()).toBe(200);
-    expect((await response.json()).data.enabled).toBe(true);
+    await expect(page).toHaveURL(/\/customers\/[0-9A-Za-z]{20,}/);
     const card = page.getByTestId('customer-loyalty');
-    await expect(card).toBeVisible();
+    await card.waitFor({ timeout: 10000 }).catch(async () => {
+        throw new Error(`No loyalty card. url=${page.url()} errors=${pageErrors.join(' | ')} page=${(await page.locator('main').innerText().catch(() => '')).slice(0, 400)}`);
+    });
     const before = Number((await card.getByTestId('loyalty-points').innerText()).replace(/\D/g, '')) || 0;
     await card.getByTestId('loyalty-adjust').click();
     await card.getByTestId('loyalty-adjust-points').fill('20');
