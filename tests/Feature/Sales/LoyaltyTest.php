@@ -2,6 +2,7 @@
 
 use App\Modules\Orders\Models\Order;
 use App\Modules\Sales\Models\Customer;
+use App\Modules\Sales\Models\CustomerGroup;
 use App\Modules\Sales\Models\LoyaltyEntry;
 use Illuminate\Support\Facades\Artisan;
 
@@ -41,7 +42,7 @@ it('earns points when an order completes, takes them back on refunds and cancels
     ($this->sell)(2, ['customer_id' => $customer->ulid, 'customer' => null]);
     $customer->refresh();
     expect($customer->loyalty_points)->toBe(20)->and($customer->loyalty_tier_id)->not->toBeNull()
-        ->and($customer->customerGroup?->name)->toBe('Khách Vàng');
+        ->and(CustomerGroup::withoutGlobalScopes()->find($customer->customer_group_id)?->name)->toBe('Khách Vàng');
     $third = ($this->sell)(2, ['customer_id' => $customer->ulid, 'customer' => null]);
     expect($customer->refresh()->loyalty_points)->toBe(35); // 10 × 1,5
 
