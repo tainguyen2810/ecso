@@ -124,7 +124,7 @@ class EInvoiceService
         if ($order->status === OrderStatus::CANCELLED) {
             throw ValidationException::withMessages(['einvoice' => 'Đơn đã hủy, không xuất hóa đơn.']);
         }
-        if ((float) $order->total - (float) $order->refunded_amount <= 0) {
+        if (bccomp(bcsub((string) $order->total, (string) $order->refunded_amount, 2), '0', 2) <= 0) {
             throw ValidationException::withMessages(['einvoice' => 'Đơn không còn số tiền nào để xuất hóa đơn.']);
         }
 
@@ -137,7 +137,7 @@ class EInvoiceService
             if ($existing?->status === EInvoice::PENDING) {
                 throw ValidationException::withMessages(['einvoice' => 'Hóa đơn của đơn này đang chờ nhà cung cấp xử lý. Bấm "Kiểm tra lại" để xem kết quả.']);
             }
-            $data = [...$this->buyerFor($order), ...array_filter($buyer ?? [], fn ($v) => $v !== null)];
+            $data = array_merge($this->buyerFor($order), array_filter($buyer ?? [], fn ($v) => $v !== null));
             if (! $account->send_email) {
                 $data['email'] = null;
             }
@@ -148,7 +148,7 @@ class EInvoiceService
                 'template_code' => $account->template_code,
                 'invoice_series' => $account->invoice_series,
                 'buyer' => $data,
-                'total' => number_format((float) $order->total - (float) $order->refunded_amount, 2, '.', ''),
+                'total' => bcsub((string) $order->total, (string) $order->refunded_amount, 2),
                 'message' => null,
                 'checks' => 0,
                 'created_by' => Auth::id(),
