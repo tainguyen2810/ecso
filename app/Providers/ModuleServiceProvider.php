@@ -64,8 +64,10 @@ use App\Modules\Purchasing\Models\SupplierPayment;
 use App\Modules\Purchasing\Models\SupplierReturn;
 use App\Modules\Purchasing\Policies\PurchasingPolicy;
 use App\Modules\Sales\Console\AutoGroupCustomersCommand;
+use App\Modules\Sales\Console\LoyaltyNightlyCommand;
 use App\Modules\Sales\Console\VerifyOrderMoneyCommand;
 use App\Modules\Sales\Listeners\CreateDefaultSalesChannel;
+use App\Modules\Sales\Loyalty\LoyaltyService;
 use App\Modules\Sales\Models\CashShift;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\SalesChannel;
@@ -129,6 +131,7 @@ class ModuleServiceProvider extends ServiceProvider
         }
 
         Order::saved(fn (Order $order) => app(QueueAutoEInvoice::class)->handle($order));
+        Order::saved(fn (Order $order) => app(LoyaltyService::class)->orderSaved($order));
         Event::listen(TenantCreated::class, CreateDefaultWarehouse::class);
         Event::listen(TenantCreated::class, CreateDefaultSalesChannel::class);
         Event::listen(OrderImported::class, CountOrderUsage::class);
@@ -155,7 +158,7 @@ class ModuleServiceProvider extends ServiceProvider
         $this->configureAuthLinks();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([AutoGroupCustomersCommand::class, CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, VerifyOrderMoneyCommand::class, LowStockDigestCommand::class, PushDueInventoryCommand::class, RecoverSyncCommand::class, PruneSyncLogsCommand::class, CheckFeesCommand::class, CheckWebhooksCommand::class, ReconcileOrdersCommand::class, BackfillShipmentsCommand::class, TrackCarrierShipmentsCommand::class, BillingSweepCommand::class, MonitorCommand::class, DemoTenantCommand::class]);
+            $this->commands([AutoGroupCustomersCommand::class, LoyaltyNightlyCommand::class, CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, VerifyOrderMoneyCommand::class, LowStockDigestCommand::class, PushDueInventoryCommand::class, RecoverSyncCommand::class, PruneSyncLogsCommand::class, CheckFeesCommand::class, CheckWebhooksCommand::class, ReconcileOrdersCommand::class, BackfillShipmentsCommand::class, TrackCarrierShipmentsCommand::class, BillingSweepCommand::class, MonitorCommand::class, DemoTenantCommand::class]);
         }
     }
 

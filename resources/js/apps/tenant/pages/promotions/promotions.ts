@@ -46,6 +46,8 @@ export interface PromotionPreview {
     discount: string;
     applied: PreviewApplied[];
     code_error: string | null;
+    /** Tích điểm (C5): the buyer's points and how many this order may use. */
+    loyalty?: { enabled: boolean; with_promotions: boolean; balance: number; max: number; point_value: number };
 }
 
 /** The four kinds the shop picks from; "Mã giảm giá" is an order discount that needs a code. */

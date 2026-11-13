@@ -45,6 +45,8 @@ Schedule::command('ecso:marketplace:check-fees')->dailyAt('06:00')->withoutOverl
 
 // Customers who reached a group's buying threshold join it (only customers with no group yet).
 Schedule::command('ecso:customers:auto-group')->dailyAt('03:30')->withoutOverlapping(120)->onOneServer();
+// Tích điểm (C5): expire points and move customers between tiers.
+Schedule::command('ecso:loyalty:nightly')->dailyAt('03:45')->withoutOverlapping(120)->onOneServer();
 
 // Monitoring alerts (queues, failed jobs, scheduler, circuits, disk) — Phase 8.
 Schedule::command('ecso:monitor')->everyFiveMinutes()->withoutOverlapping(10)->onOneServer();

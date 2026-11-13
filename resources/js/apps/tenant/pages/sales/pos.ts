@@ -31,6 +31,8 @@ export interface Cart {
     split?: SplitRow[] | null;
     /** Mã giảm giá typed at the counter (C4). */
     coupon?: string;
+    /** Points the buyer spends on this sale (C5). */
+    points?: number | string;
 }
 
 export interface SplitRow {

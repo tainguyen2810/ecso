@@ -41,7 +41,9 @@ const promo = ref<PromotionPreview | null>(null);
 const promoDiscount = computed(() => Number(promo.value?.discount ?? 0));
 const promoGifts = computed(() => (promo.value?.applied ?? []).flatMap((a) => a.gifts.map((g) => ({ ...g, promotion: a.name }))));
 const promoNames = computed(() => (promo.value?.applied ?? []).filter((a) => a.type !== 'gift' && Number(a.amount) > 0).map((a) => a.name).join(', '));
-const totals = computed(() => cartTotals({ ...cart.value, discount: (Number(cart.value.discount) || 0) + promoDiscount.value }, taxRule.value));
+const loyalty = computed(() => (cart.value.customer ? (promo.value?.loyalty ?? null) : null));
+const pointsDiscount = computed(() => Math.min(Number(cart.value.points) || 0, loyalty.value?.max ?? 0) * (loyalty.value?.point_value ?? 0));
+const totals = computed(() => cartTotals({ ...cart.value, discount: (Number(cart.value.discount) || 0) + promoDiscount.value + pointsDiscount.value }, taxRule.value));
 let promoSeq = 0;
 async function loadPromo() {
     const seq = ++promoSeq;
@@ -55,6 +57,7 @@ async function loadPromo() {
             channel_id: channelId.value || null,
             customer_id: c.customer?.id ?? null,
             coupon_code: c.coupon?.trim() || null,
+            discount: Number(c.discount) || 0,
             lines: c.lines.map((l) => ({ variant_id: l.variant_id, quantity: l.quantity, unit_price: l.unit_price, discount: l.discount })),
         });
         if (seq === promoSeq) promo.value = res;
@@ -64,7 +67,7 @@ async function loadPromo() {
 }
 let promoTimer: ReturnType<typeof setTimeout> | undefined;
 watch(
-    () => [active.value, channelId.value, cart.value.customer?.id, cart.value.coupon, cart.value.lines.map((l) => [l.variant_id, l.quantity, l.unit_price, l.discount])],
+    () => [active.value, channelId.value, cart.value.customer?.id, cart.value.coupon, cart.value.discount, cart.value.lines.map((l) => [l.variant_id, l.quantity, l.unit_price, l.discount])],
     () => {
         clearTimeout(promoTimer);
         promoTimer = setTimeout(loadPromo, 300);
@@ -261,6 +264,7 @@ async function pay() {
             customer_id: cart.value.customer?.id ?? null,
             discount: Number(cart.value.discount) || 0,
             coupon_code: cart.value.coupon?.trim() || null,
+            points_used: cart.value.customer ? Math.min(Number(cart.value.points) || 0, loyalty.value?.max ?? 0) : 0,
             lines: cart.value.lines.map((l) => ({ variant_id: l.variant_id, quantity: l.quantity, unit_price: l.unit_price, discount: l.discount })),
             payments: split.value ? split.value.payments : collected > 0 ? [{ method: cart.value.method, amount: collected }] : [],
         }, idempotent(key));
@@ -426,6 +430,11 @@ const quick = computed(() => quickCash(totals.value.total));
                 <div class="flex items-center justify-between"><span class="text-muted-foreground">Giảm giá<template v-if="cart.discountAuto"> (nhóm {{ cart.groupPercent }}%)</template><template v-if="cart.tier === 'wholesale'"> · giá buôn</template></span><input v-model="cart.discount" type="number" min="0" :disabled="!canEditPrice" class="h-7 w-28 rounded-md border bg-card px-2 text-right tabular-nums disabled:bg-muted/50" data-testid="pos-discount" @input="cart.discountAuto = false" /></div>
                 <div v-if="promoDiscount > 0" class="flex justify-between text-emerald-700" data-testid="pos-promotion"><span>Khuyến mãi <span class="text-xs">{{ promoNames }}</span></span><span class="tabular-nums">−{{ formatMoney(promoDiscount) }}</span></div>
                 <div v-for="g in promoGifts" :key="`${g.promotion}-${g.sku}`" class="flex justify-between text-emerald-700" data-testid="pos-gift"><span>Tặng {{ g.quantity }} × {{ g.name ?? g.sku }}</span><span class="tabular-nums">0 ₫</span></div>
+                <div v-if="loyalty?.enabled && loyalty.balance > 0" class="flex items-center justify-between">
+                    <span class="text-muted-foreground">Dùng điểm <span class="text-xs">(có {{ loyalty.balance }}, tối đa {{ loyalty.max }})</span></span>
+                    <input v-model="cart.points" type="number" min="0" :max="loyalty.max" placeholder="0" class="h-7 w-28 rounded-md border bg-card px-2 text-right tabular-nums" data-testid="pos-points" />
+                </div>
+                <div v-if="pointsDiscount > 0" class="flex justify-between text-emerald-700"><span>Trừ điểm</span><span class="tabular-nums">−{{ formatMoney(pointsDiscount) }}</span></div>
                 <div class="flex items-center justify-between"><span class="text-muted-foreground">Mã giảm giá</span><input v-model="cart.coupon" placeholder="Nhập mã" maxlength="40" class="h-7 w-28 rounded-md border bg-card px-2 text-right uppercase" data-testid="pos-coupon" /></div>
                 <p v-if="cart.coupon?.trim() && promo?.code_error" class="text-right text-xs text-destructive">{{ promo.code_error }}</p>
                 <div v-if="taxRule.rate > 0" class="flex justify-between text-muted-foreground" data-testid="pos-tax"><span>{{ taxRule.included ? 'Trong đó' : 'Cộng' }} thuế GTGT {{ taxRule.rate }}%</span><span class="tabular-nums">{{ formatMoney(totals.tax) }}</span></div>

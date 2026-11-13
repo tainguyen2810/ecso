@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Catalog\Models\Category;
 use App\Modules\Catalog\Models\ProductVariant;
+use App\Modules\Sales\Loyalty\LoyaltyService;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\CustomerGroup;
 use App\Modules\Sales\Models\Promotion;
@@ -80,7 +81,7 @@ class PromotionController extends Controller
     }
 
     /** What an order being typed would receive (the server applies the same on save). */
-    public function preview(Request $request, PromotionEngine $engine): JsonResponse
+    public function preview(Request $request, PromotionEngine $engine, LoyaltyService $loyalty): JsonResponse
     {
         $this->can('orders.create', 'orders.update');
         $data = $request->validate([
@@ -91,6 +92,7 @@ class PromotionController extends Controller
             'coupon_code' => ['nullable', 'string', 'max:40'],
             'promotions_off' => ['boolean'],
             'placed_at' => ['nullable', 'date'],
+            'discount' => ['nullable', 'numeric', 'min:0'],
             'lines' => ['array', 'max:300'],
             'lines.*.variant_id' => ['nullable', 'string'],
             'lines.*.quantity' => ['required', 'integer', 'min:1'],
@@ -130,6 +132,21 @@ class PromotionController extends Controller
                 $out['applied'][$i]['gifts'] = array_map(fn ($g) => $g + ['variant_id' => $v?->ulid, 'sku' => $v?->sku, 'name' => $v ? $v->displayName() : null], $a['gifts']);
             }
         }
+
+        // Tích điểm (C5): what this buyer may spend on the order once the discounts are taken off.
+        $goods = '0';
+        foreach ($lines as $l) {
+            $line = bcsub(bcmul($l['unit_price'], (string) $l['quantity'], 2), $l['discount'], 2);
+            $goods = bcadd($goods, bccomp($line, '0', 2) > 0 ? $line : '0', 2);
+        }
+        $goods = bcsub(bcsub($goods, (string) ($data['discount'] ?? 0), 2), $result->discount, 2);
+        $held = $orderId ? (int) DB::table('orders')->where('id', $orderId)->where('status', '!=', 'CANCELLED')->value('points_used') : 0;
+        $settings = LoyaltyService::settings();
+        $out['loyalty'] = [
+            'enabled' => $settings['enabled'],
+            'with_promotions' => $settings['with_promotions'],
+            ...$loyalty->redeemable($customer, bccomp($goods, '0', 2) > 0 ? $goods : '0', $held),
+        ];
 
         return response()->json(['data' => $out]);
     }

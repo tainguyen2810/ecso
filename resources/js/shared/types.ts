@@ -304,6 +304,9 @@ export interface OrderDetail extends OrderSummary {
     promotion_discount?: string;
     coupon_code?: string | null;
     promotions_off?: boolean;
+    /** Points spent on the order (C5) and their value, already inside discount. */
+    points_used?: number;
+    points_discount?: string;
     promotions?: { id: string; name: string; type: string; code: string | null; amount: string }[];
     history: { from: string | null; to: string; raw_status: string | null; source: string; actor: string | null; note: string | null; occurred_at: string | null; created_at: string }[];
     edits?: { at: string | null; actor: string | null; changes: string[] }[];
@@ -411,6 +414,7 @@ export interface Customer {
     id: string;
     code: string;
     name: string;
+    loyalty_points?: number;
     type?: 'individual' | 'company';
     source?: string | null;
     invoice?: { name: string | null; address: string | null; email: string | null };

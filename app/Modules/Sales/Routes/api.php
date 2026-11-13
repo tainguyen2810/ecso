@@ -9,6 +9,7 @@ use App\Modules\Sales\Http\Controllers\CustomerMergeController;
 use App\Modules\Sales\Http\Controllers\CustomerProfileController;
 use App\Modules\Sales\Http\Controllers\CustomerTaskController;
 use App\Modules\Sales\Http\Controllers\CustomerTransferController;
+use App\Modules\Sales\Http\Controllers\LoyaltyController;
 use App\Modules\Sales\Http\Controllers\OrderDraftController;
 use App\Modules\Sales\Http\Controllers\PosController;
 use App\Modules\Sales\Http\Controllers\PromotionController;
@@ -23,6 +24,10 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::apiResource('customer-groups', CustomerGroupController::class)->except('show');
     Route::post('promotions/preview', [PromotionController::class, 'preview'])->middleware('throttle:240,1,sales.promotions.preview');
     Route::apiResource('promotions', PromotionController::class)->except('show');
+    Route::get('loyalty', [LoyaltyController::class, 'show']);
+    Route::put('loyalty', [LoyaltyController::class, 'update']);
+    Route::get('customers/{customer}/loyalty', [LoyaltyController::class, 'customer']);
+    Route::post('customers/{customer}/loyalty/adjust', [LoyaltyController::class, 'adjust'])->middleware('throttle:60,1,sales.customers.loyalty');
     Route::get('customers/tags', [CustomerController::class, 'tags']);
     Route::get('customers/staff', [CustomerController::class, 'staff']);
     Route::post('customers/bulk', [CustomerController::class, 'bulk']);

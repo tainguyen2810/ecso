@@ -115,6 +115,9 @@ jobs:
           mysql -h127.0.0.1 -uroot -proot -e "CREATE DATABASE ecso_wizard CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
           INSTALL_DB_DATABASE=ecso_wizard INSTALL_DB_USERNAME=root INSTALL_DB_PASSWORD=root scripts/e2e-install.sh
       - if: failure()
+        name: Server errors
+        run: tail -n 60 storage/logs/laravel.log 2>/dev/null || true
+      - if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-results

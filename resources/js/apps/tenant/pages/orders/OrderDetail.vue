@@ -455,6 +455,7 @@ async function createReturn() {
                             <dt class="text-muted-foreground">Tiền hàng</dt><dd class="text-right tabular-nums">{{ formatMoney(order.subtotal) }}</dd>
                             <dt class="text-muted-foreground">Phí vận chuyển</dt><dd class="text-right tabular-nums">{{ formatMoney(order.shipping_fee) }}</dd>
                             <dt class="text-muted-foreground">Giảm giá<span v-if="order.coupon_codes?.length" class="ml-1 font-mono text-xs" data-testid="coupon-codes">({{ order.coupon_codes.join(', ') }})</span></dt><dd class="text-right tabular-nums">−{{ formatMoney(order.discount) }}</dd>
+                            <dd v-if="order.points_used" class="col-span-2 -mt-1 text-right text-xs text-emerald-700" data-testid="order-points">Dùng {{ order.points_used }} điểm −{{ formatMoney(order.points_discount ?? 0) }}</dd>
                             <template v-if="order.promotions?.length">
                                 <dd v-for="p in order.promotions" :key="p.id" class="col-span-2 -mt-1 text-right text-xs text-emerald-700" data-testid="order-promotions">
                                     {{ p.code ? `Mã ${p.code}` : p.name }}<template v-if="Number(p.amount) > 0 && p.type !== 'gift'"> −{{ formatMoney(p.amount) }}</template><template v-else> (quà tặng)</template>

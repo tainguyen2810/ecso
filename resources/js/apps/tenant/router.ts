@@ -53,6 +53,7 @@ const routes: RouteRecordRaw[] = [
             { path: 'orders/:id/edit', name: 'order-edit', component: () => import('./pages/orders/OrderForm.vue'), meta: { permission: 'orders.create', nav: 'orders' } },
             { path: 'customers', name: 'customers', component: () => import('./pages/customers/CustomerList.vue'), meta: { permission: 'customers.view', nav: 'customers' } },
             { path: 'customers/groups', name: 'customer-groups', component: () => import('./pages/customers/CustomerGroups.vue'), meta: { permission: 'customers.view', nav: 'customers' } },
+            { path: 'customers/loyalty', name: 'customer-loyalty', component: () => import('./pages/customers/LoyaltySettings.vue'), meta: { permission: 'customers.view', nav: 'customers' } },
             { path: 'promotions', name: 'promotions', component: () => import('./pages/promotions/PromotionList.vue'), meta: { anyPermission: ['orders.create', 'promotions.manage'], nav: 'customers' } },
             { path: 'promotions/new', name: 'promotion-new', component: () => import('./pages/promotions/PromotionForm.vue'), meta: { permission: 'promotions.manage', nav: 'customers' } },
             { path: 'promotions/:id', name: 'promotion-edit', component: () => import('./pages/promotions/PromotionForm.vue'), meta: { permission: 'promotions.manage', nav: 'customers' } },

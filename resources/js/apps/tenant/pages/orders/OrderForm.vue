@@ -92,6 +92,7 @@ const form = reactive({
     discount: 0 as number | string,
     coupon_code: '',
     promotions_off: false,
+    points_used: '' as number | string,
     note: '',
     tags: [] as string[],
     deliver_on: '',
@@ -118,7 +119,9 @@ const taxRule = computed<TaxRule>(() => orderTax.value ?? { rate: Number(setting
 // Promotions (C4): what the server will apply on save, shown while typing. The seller's own discount stays apart.
 const promo = ref<PromotionPreview | null>(null);
 const promoDiscount = computed(() => Number(promo.value?.discount ?? 0));
-const allDiscount = computed(() => num(form.discount) + promoDiscount.value);
+const loyalty = computed(() => promo.value?.loyalty ?? null);
+const pointsDiscount = computed(() => Math.min(num(form.points_used), loyalty.value?.max ?? 0) * (loyalty.value?.point_value ?? 0));
+const allDiscount = computed(() => num(form.discount) + promoDiscount.value + pointsDiscount.value);
 // What the running promotions give this order, asked again (debounced) whenever the lines, buyer or code change.
 let promoTimer: ReturnType<typeof setTimeout> | undefined;
 let promoSeq = 0;
@@ -139,6 +142,7 @@ function refreshPromo() {
                 order_id: editId.value,
                 coupon_code: form.coupon_code.trim() || null,
                 promotions_off: form.promotions_off,
+                discount: num(form.discount),
                 lines: goods.map((l) => ({ variant_id: l.kind === 'sku' ? l.variant_id : null, quantity: num(l.quantity), unit_price: num(l.unit_price), discount: num(l.discount) })),
             });
             if (seq === promoSeq) promo.value = res;
@@ -148,7 +152,7 @@ function refreshPromo() {
     }, 350);
 }
 watch(
-    () => [lines.value.map((l) => [l.variant_id, l.quantity, l.unit_price, l.discount]), customer.value?.id, newCustomer.enabled && !!newCustomer.name, form.channel_id, form.coupon_code, form.promotions_off],
+    () => [lines.value.map((l) => [l.variant_id, l.quantity, l.unit_price, l.discount]), customer.value?.id, newCustomer.enabled && !!newCustomer.name, form.channel_id, form.coupon_code, form.promotions_off, form.discount],
     refreshPromo,
     { deep: true },
 );
@@ -219,7 +223,8 @@ async function loadOrder(id: string, asCopy = false) {
     form.carrier = o.carrier ?? '';
     form.is_cod = o.is_cod;
     form.shipping_fee = Number(o.shipping_fee);
-    form.discount = Math.max(0, Number(o.discount) - Number(o.promotion_discount ?? 0));
+    form.discount = Math.max(0, Number(o.discount) - Number(o.promotion_discount ?? 0) - Number(o.points_discount ?? 0));
+    form.points_used = asCopy || !o.points_used ? '' : o.points_used;
     form.coupon_code = asCopy ? '' : (o.coupon_code ?? '');
     form.promotions_off = asCopy ? false : !!o.promotions_off;
     form.note = o.buyer_note ?? '';
@@ -641,6 +646,7 @@ async function submit() {
         discount: num(form.discount),
         coupon_code: form.coupon_code.trim() || null,
         promotions_off: form.promotions_off,
+        points_used: customer.value ? num(form.points_used) : 0,
         note: form.note || null,
         tags: form.tags,
         deliver_on: form.deliver_on || null,
@@ -1078,6 +1084,13 @@ async function saveDraft() {
                     <dd><input v-model="form.coupon_code" placeholder="Nhập mã" maxlength="40" class="h-8 w-full rounded-md border border-input bg-card px-2 text-right text-sm uppercase" data-testid="order-coupon" /></dd>
                     <p v-if="form.coupon_code.trim() && promo?.code_error" class="col-span-2 -mt-1.5 text-right text-xs text-destructive" data-testid="coupon-error">{{ promo.code_error }}</p>
                     <p v-if="error?.field('coupon_code')" class="col-span-2 -mt-1.5 text-right text-xs text-destructive">{{ error.field('coupon_code') }}</p>
+                    <template v-if="loyalty?.enabled && customer && loyalty.balance > 0">
+                        <dt>Dùng điểm <span class="block text-xs font-normal text-muted-foreground">Có {{ loyalty.balance }} điểm · tối đa {{ loyalty.max }}</span></dt>
+                        <dd><input v-model="form.points_used" type="number" min="0" :max="loyalty.max" placeholder="0" class="h-8 w-full rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" data-testid="order-points" /></dd>
+                        <p v-if="pointsDiscount > 0" class="col-span-2 -mt-1.5 text-right text-xs text-emerald-700" data-testid="order-points-value">−{{ formatMoney(pointsDiscount) }}</p>
+                        <p v-if="num(form.points_used) > loyalty.max" class="col-span-2 -mt-1.5 text-right text-xs text-destructive">Đơn này dùng tối đa {{ loyalty.max }} điểm.</p>
+                    </template>
+                    <p v-if="error?.field('points_used')" class="col-span-2 -mt-1.5 text-right text-xs text-destructive">{{ error.field('points_used') }}</p>
                     <label v-if="canEditPrice" class="col-span-2 -mt-1 flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
                         <input v-model="form.promotions_off" type="checkbox" class="size-3.5" data-testid="promotions-off" /> Bỏ khuyến mãi tự động trên đơn này
                     </label>
