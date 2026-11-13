@@ -4,6 +4,7 @@ use App\Modules\Messaging\Models\ZaloAccount;
 use App\Modules\Messaging\Models\ZaloMessage;
 use App\Modules\Messaging\Zalo\ZaloService;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Http;
@@ -84,7 +85,7 @@ it('sends the chosen template when an order is confirmed, once, and logs failure
         ->and($this->sent[0]['template_data'])->toEqual(['customer_name' => 'Trần Thị Mai', 'order_code' => $order->external_order_id, 'total' => '300.000']);
 
     // Sending again for the same order and event does nothing; an expired token is refreshed once.
-    expect(app(ZaloService::class)->send($order, 'confirmed'))->toBeNull();
+    expect(TenantContext::run($this->tenant, fn () => app(ZaloService::class)->send($order, 'confirmed')))->toBeNull();
     $second = ($this->order)();
     $this->api->postJson("/api/v1/orders/{$second}/actions/confirm")->assertOk();
     expect($this->sent)->toHaveCount(2)->and($this->refreshes)->toBe(2);
