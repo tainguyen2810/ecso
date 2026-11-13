@@ -36,7 +36,7 @@ it('earns points when an order completes, takes them back on refunds and cancels
     expect($customer->loyalty_points)->toBe(10);
     $loyalty = $this->api->getJson("/api/v1/customers/{$customer->ulid}/loyalty")->assertOk()->json('data');
     expect($loyalty['tier']['name'])->toBe('Thành viên')->and($loyalty['next_tier']['name'])->toBe('Vàng')
-        ->and($loyalty['entries'][0]['note'])->toContain('hoàn tất');
+        ->and(collect($loyalty['entries'])->firstWhere('kind', 'earn')['note'])->toContain('hoàn tất');
 
     // Another 1.000.000: spending reaches 2.000.000 → Vàng (and its group); points at the multiplier the buyer had.
     ($this->sell)(2, ['customer_id' => $customer->ulid, 'customer' => null]);
