@@ -36,6 +36,9 @@ class TenantSettings
             ['label' => 'Hàng lỗi, hỏng', 'cancel' => false, 'return' => true],
             ['label' => 'Giao sai mẫu', 'cancel' => false, 'return' => true],
         ],
+        // Tích điểm (C5): 1 point per earn_per đồng paid (shipping left out), each point worth point_value đồng when
+        // spent, at most max_redeem_percent of the order; points expire after expire_months (0 = never).
+        'loyalty' => ['enabled' => false, 'earn_per' => 100000, 'point_value' => 1000, 'max_redeem_percent' => 50, 'expire_months' => 12, 'with_promotions' => true],
         'print' => [
             'defaults' => ['sale' => 'a5', 'purchase' => 'a4', 'receipt' => 'a4', 'stocktake' => 'a4', 'cash' => 'a5'],
             'show_logo' => true,

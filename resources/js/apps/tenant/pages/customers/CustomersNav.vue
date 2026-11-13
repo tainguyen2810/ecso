@@ -9,6 +9,7 @@ const tenant = useTenantStore();
 const links = computed(() => [
     { to: '/customers', label: 'Danh sách khách hàng', match: ['customers'] },
     { to: '/customers/groups', label: 'Nhóm khách hàng', match: ['customer-groups'] },
+    { to: '/customers/loyalty', label: 'Tích điểm và hạng', match: ['customer-loyalty'] },
     ...(tenant.can('orders.create') || tenant.can('promotions.manage') ? [{ to: '/promotions', label: 'Khuyến mãi', match: ['promotions', 'promotion-new', 'promotion-edit'] }] : []),
     ...(tenant.can('customers.merge') ? [{ to: '/customers/duplicates', label: 'Khách trùng', match: ['customer-duplicates'] }] : []),
 ]);

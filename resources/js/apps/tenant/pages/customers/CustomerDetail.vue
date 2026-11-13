@@ -8,6 +8,7 @@ import Tabs from '../../components/Tabs.vue';
 import AddressPicker from '../../components/AddressPicker.vue';
 import { emptyAddress, type AddressParts } from '@/shared/lib/geo';
 import CustomerDialog from './CustomerDialog.vue';
+import CustomerLoyaltyCard from './CustomerLoyaltyCard.vue';
 import DebtEntryDialog from './DebtEntryDialog.vue';
 import DebtReceiptDialog from './DebtReceiptDialog.vue';
 import MergeDialog from './MergeDialog.vue';
@@ -583,6 +584,7 @@ const thead = 'border-b bg-slate-50 text-left text-[11px] uppercase tracking-wid
             </div>
 
             <div class="space-y-4">
+                <CustomerLoyaltyCard :customer-id="customer.id" />
                 <Card title="Thông tin">
                     <dl class="grid grid-cols-2 gap-x-4 gap-y-3 px-5 py-4 text-sm">
                         <div><dt class="text-xs text-muted-foreground">Điện thoại</dt><dd>{{ customer.phone ?? '—' }}</dd></div>

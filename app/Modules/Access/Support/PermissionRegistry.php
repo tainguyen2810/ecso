@@ -26,7 +26,7 @@ final class PermissionRegistry
             'orders.payment' => 'Thu tiền, hoàn tiền đơn bán',
             'orders.payment.void' => 'Hủy phiếu thu, phiếu hoàn tiền nhập nhầm',
             'orders.price' => 'Sửa giá, chiết khấu khi bán (khi Cấu hình không cho nhân viên sửa)',
-            'promotions.manage' => 'Tạo, sửa, dừng chương trình khuyến mãi',
+            'promotions.manage' => 'Tạo, sửa, dừng khuyến mãi; cài đặt tích điểm, cộng/trừ điểm khách',
             'orders.shifts' => 'Xem và đóng ca bán hàng của mọi thu ngân',
             'shipments.manage' => 'Tạo, sửa vận đơn và cập nhật trạng thái giao',
             'shipments.import' => 'Nhập mã vận đơn từ file',

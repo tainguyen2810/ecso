@@ -23,6 +23,7 @@ use App\Modules\Sales\Models\CashShift;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Sales\Models\SalesChannel;
+use App\Modules\Sales\Loyalty\LoyaltyService;
 use App\Modules\Sales\Promotions\OrderPromotions;
 use App\Modules\Sales\Support\PhoneNumber;
 use App\Modules\Tenancy\Support\TenantSettings;
@@ -67,6 +68,7 @@ class ManualOrderService
         private readonly ExchangeService $exchanges,
         private readonly VnAddress $addresses,
         private readonly OrderPromotions $promotions,
+        private readonly LoyaltyService $loyalty,
     ) {}
 
     /**
@@ -110,6 +112,7 @@ class ManualOrderService
             $order->save();
             $this->replaceItems($order, $data['lines']);
             $this->promotions->apply($order, $data, bcadd((string) ($data['discount'] ?? 0), '0', 2));
+            $this->loyalty->applyToOrder($order, $data, 0);
             $this->refreshTotals($order);
 
             $this->history($order, null, OrderStatus::PENDING_CONFIRMATION, 'Tạo đơn');
@@ -167,6 +170,7 @@ class ManualOrderService
             }
 
             $before = $this->editSnapshot($order);
+            $pointsBefore = (int) $order->points_used;
             $typedDiscount = array_key_exists('discount', $data) ? bcadd((string) ($data['discount'] ?? 0), '0', 2) : OrderPromotions::typedDiscount($order);
             $previousCustomer = $order->customer_id !== null ? (int) $order->customer_id : null;
             $customer = array_key_exists('customer_id', $data) || isset($data['customer']) ? $this->customer($data, $previousCustomer) : $order->customer;
@@ -188,6 +192,7 @@ class ManualOrderService
             $order->version = $order->version + 1;
             $order->save();
             $this->promotions->apply($order, $data, $typedDiscount);
+            $this->loyalty->applyToOrder($order, $data, $pointsBefore);
             $this->refreshTotals($order);
             $this->stock->apply($order);
             $this->payments->recompute($order);

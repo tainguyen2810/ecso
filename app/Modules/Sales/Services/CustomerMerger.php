@@ -100,8 +100,12 @@ class CustomerMerger
             }
             $keep->save();
 
-            foreach (['orders', 'order_payments', 'customer_debt_entries', 'cash_vouchers', 'customer_addresses', 'customer_notes'] as $table) {
+            foreach (['orders', 'order_payments', 'customer_debt_entries', 'cash_vouchers', 'customer_addresses', 'customer_notes', 'promotion_usages', 'loyalty_entries'] as $table) {
                 DB::table($table)->where('customer_id', $merge->id)->update(['customer_id' => $keep->id]);
+            }
+            // Points come along with their history (C5).
+            if ((int) $merge->loyalty_points !== 0) {
+                DB::table('customers')->where('id', $keep->id)->increment('loyalty_points', (int) $merge->loyalty_points);
             }
             // A store id belongs to one card only (unique per store), so the duplicate's ids simply move over.
             DB::table('customer_identities')->where('customer_id', $merge->id)->update(['customer_id' => $keep->id]);

@@ -24,6 +24,7 @@ class CustomerResource extends JsonResource
             'street' => $this->street,
             'province_code' => $this->province_code,
             'ward_code' => $this->ward_code,
+            'loyalty_points' => (int) ($this->loyalty_points ?? 0),
             'group' => $this->whenLoaded('customerGroup', fn () => $this->customerGroup ? [
                 'id' => $this->customerGroup->ulid, 'code' => $this->customerGroup->code, 'name' => $this->customerGroup->name,
                 'price_tier' => $this->customerGroup->price_tier, 'discount_percent' => (string) $this->customerGroup->discount_percent, 'payment_method' => $this->customerGroup->payment_method, 'is_active' => (bool) $this->customerGroup->is_active,

@@ -86,6 +86,8 @@ class Order extends Model
             'discount' => 'decimal:2',
             'promotion_discount' => 'decimal:2',
             'promotions_off' => 'boolean',
+            'points_used' => 'integer',
+            'points_discount' => 'decimal:2',
             'tax_rate' => 'decimal:2',
             'prices_include_tax' => 'boolean',
             'tax_amount' => 'decimal:2',

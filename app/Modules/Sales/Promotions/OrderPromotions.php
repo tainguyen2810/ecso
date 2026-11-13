@@ -100,10 +100,10 @@ class OrderPromotions
         return $result;
     }
 
-    /** The order discount the seller typed, without the promotions already on it. */
+    /** The order discount the seller typed, without the promotions and points already on it. */
     public static function typedDiscount(Order $order): string
     {
-        $typed = bcsub((string) $order->discount, (string) $order->promotion_discount, 2);
+        $typed = bcsub(bcsub((string) $order->discount, (string) $order->promotion_discount, 2), (string) $order->points_discount, 2);
 
         return bccomp($typed, '0', 2) < 0 ? '0.00' : $typed;
     }

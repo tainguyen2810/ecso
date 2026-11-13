@@ -44,6 +44,8 @@ class OrderResource extends JsonResource
             'promotion_discount' => $this->promotion_discount ?? '0.00',
             'coupon_code' => $this->coupon_code,
             'promotions_off' => (bool) $this->promotions_off,
+            'points_used' => (int) ($this->points_used ?? 0),
+            'points_discount' => $this->points_discount ?? '0.00',
             'tax_rate' => $this->tax_rate,
             'prices_include_tax' => (bool) ($this->prices_include_tax ?? true),
             'tax_amount' => $this->tax_amount,

@@ -190,6 +190,7 @@ class SalesOrderController extends Controller
             'discount' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             'coupon_code' => ['nullable', 'string', 'max:40'],
             'promotions_off' => ['boolean'],
+            'points_used' => ['nullable', 'integer', 'min:0', 'max:100000000'],
             'is_cod' => ['boolean'],
             'carrier' => ['nullable', 'string', 'max:100'],
             'tracking_number' => ['nullable', 'string', 'max:100'],
