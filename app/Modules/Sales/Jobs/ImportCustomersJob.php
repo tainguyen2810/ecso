@@ -84,7 +84,7 @@ class ImportCustomersJob implements ShouldQueue
             }
 
             if ($this->mode === self::CHECK) {
-                $result = $importer->import($parsed['rows'], dryRun: true);
+                $result = $importer->import($parsed['rows'], dryRun: true, source: $parsed['source']);
                 $this->finish($import, $result['errors'] ? CustomerImport::FAILED : CustomerImport::CHECKED, [
                     'total' => count($parsed['rows']), 'created_count' => $result['created'], 'updated_count' => $result['updated'],
                     'message' => $result['errors'] ? 'Có lỗi, chưa nhập dòng nào.' : null,
@@ -93,7 +93,7 @@ class ImportCustomersJob implements ShouldQueue
                 return;
             }
 
-            $result = $importer->import($parsed['rows'], progress: function (int $done) use ($import): void {
+            $result = $importer->import($parsed['rows'], source: $parsed['source'], progress: function (int $done) use ($import): void {
                 Cache::put($import->progressKey(), $done, 3600);
             });
             if ($result['errors']) {

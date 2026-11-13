@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import { Cake, Columns3, Download, Search, SlidersHorizontal, Upload, UserPlus, UsersRound, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
@@ -140,7 +140,7 @@ async function load() {
         const query = Object.fromEntries(Object.entries({ ...rest, view }).filter(([k, v]) => v && !(k === 'view' && v === 'all') && !(k === 'sort' && v === 'newest')));
         // Only while still on the list: a slow load must not pull the user back from a page they opened.
         const key = (o: Record<string, unknown>) => JSON.stringify(Object.entries(o).filter(([, v]) => v).sort(([a], [b]) => a.localeCompare(b)));
-        if (key(query) !== key(route.query) && route.name === 'customers') router.replace({ query });
+        if (key(query) !== key(route.query) && route.name === 'customers' && !leaving) router.replace({ query });
         const { data } = await api.get('/customers', { params: { ...apiParams(), page } });
         rows.value = data.data;
         meta.value = data.meta;
@@ -182,6 +182,12 @@ onMounted(async () => {
 });
 
 let timer: ReturnType<typeof setTimeout> | undefined;
+// Typing a name then clicking a result at once: the search must not fire while the next page loads and pull the user back.
+let leaving = false;
+onBeforeRouteLeave(() => {
+    leaving = true;
+    clearTimeout(timer);
+});
 watch(() => filters.q, () => {
     clearTimeout(timer);
     timer = setTimeout(() => ((filters.page = 1), load()), 300);

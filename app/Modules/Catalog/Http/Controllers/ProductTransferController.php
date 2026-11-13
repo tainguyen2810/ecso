@@ -26,6 +26,7 @@ class ProductTransferController extends Controller
             'file' => ['required', 'file', 'max:20480', 'mimes:csv,txt,xlsx'],
             'dry_run' => ['sometimes', 'boolean'],
             'warehouse_id' => ['nullable', 'string'],
+            'skip_invalid' => ['sometimes', 'boolean'],
         ]);
 
         $warehouse = null;
@@ -38,17 +39,19 @@ class ProductTransferController extends Controller
         $extension = strtolower($file->getClientOriginalExtension()) === 'xlsx' ? 'xlsx' : 'csv';
         $parsed = $importer->read($file->getRealPath(), $extension);
 
+        // Which app the file came from and how its columns were read, so the user can check before importing.
+        $fileInfo = ['source' => $parsed['source'], 'columns' => $parsed['columns']];
         if ($parsed['errors']) {
-            return response()->json(['message' => 'Tệp không hợp lệ.', 'created' => 0, 'updated' => 0, 'errors' => $parsed['errors']], 422);
+            return response()->json(['message' => 'Tệp không hợp lệ.', 'created' => 0, 'updated' => 0, 'errors' => $parsed['errors']] + $fileInfo, 422);
         }
         if ($parsed['rows'] === []) {
-            return response()->json(['message' => 'Tệp không có dòng dữ liệu.', 'created' => 0, 'updated' => 0, 'errors' => []], 422);
+            return response()->json(['message' => 'Tệp không có dòng dữ liệu.', 'created' => 0, 'updated' => 0, 'errors' => []] + $fileInfo, 422);
         }
 
-        $result = $importer->import($parsed['rows'], (bool) ($data['dry_run'] ?? false), $warehouse);
+        $result = $importer->import($parsed['rows'], (bool) ($data['dry_run'] ?? false), $warehouse, (bool) ($data['skip_invalid'] ?? false));
 
         return response()->json(
-            ['message' => $result['errors'] ? 'Có lỗi, chưa nhập dòng nào.' : 'OK', 'total' => count($parsed['rows'])] + $result,
+            ['message' => $result['errors'] ? 'Có lỗi, chưa nhập dòng nào.' : 'OK', 'total' => count($parsed['rows'])] + $result + $fileInfo,
             $result['errors'] ? 422 : 200,
         );
     }

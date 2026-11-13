@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Marketplace\Connectors\Capability;
 use App\Modules\Marketplace\Connectors\ConnectorRegistry;
+use App\Modules\Marketplace\Connectors\Tiki\TikiConnector;
 use App\Modules\Marketplace\Connectors\WooCommerce\WooCommerceConnector;
 use App\Modules\Marketplace\Http\Resources\AccountResource;
 use App\Modules\Marketplace\Models\InventorySyncOutbox;
@@ -44,12 +45,14 @@ class MarketplaceAccountController extends Controller
                 'key' => $key,
                 'name' => $name,
                 'available' => $available,
-                'credentials_configured' => in_array($key, ['fake', WooCommerceConnector::MARKETPLACE], true) || ShopAuthorizationService::configured($key),
+                'credentials_configured' => in_array($key, ['fake', WooCommerceConnector::MARKETPLACE, TikiConnector::MARKETPLACE], true) || ShopAuthorizationService::configured($key),
                 'is_fake' => $key === 'fake',
                 // How a shop is connected: marketplace app authorization, store approval / API keys, or the simulator.
                 'connect_mode' => match ($key) {
                     'fake' => 'fake',
                     WooCommerceConnector::MARKETPLACE => 'store',
+                    // The shop's own In-house app: Client ID and Secret pasted by the owner.
+                    TikiConnector::MARKETPLACE => 'app_keys',
                     default => 'oauth',
                 },
                 'capabilities' => $capabilities,

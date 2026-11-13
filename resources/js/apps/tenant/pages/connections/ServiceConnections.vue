@@ -14,10 +14,11 @@ import CarrierConnectDialog from '../shipments/CarrierConnectDialog.vue';
 import { carrierMarks, loadCarrierAccounts, type CarrierAccountData, type CarrierCatalogItem } from '../shipments/carriers';
 import EInvoiceConnectDialog from './EInvoiceConnectDialog.vue';
 import { loadEInvoiceSettings, providerMarks, type EInvoiceSettings } from './einvoice';
+import { loadZalo, type ZaloSettings } from './zalo';
 
 /**
  * Cấu hình → "Kết nối dịch vụ": every outside service the shop connects with its own account, in one place.
- * Carriers open the same dialog as Vận chuyển; e-invoice has its own; Zalo and Tiki come in later rounds.
+ * Carriers open the same dialog as Vận chuyển; e-invoice has its own; Zalo ZNS has its own page.
  */
 const tenant = useTenantStore();
 const loading = ref(true);
@@ -25,11 +26,13 @@ const error = ref<string | null>(null);
 const carriers = ref<CarrierCatalogItem[]>([]);
 const accounts = ref<CarrierAccountData[]>([]);
 const einvoice = ref<EInvoiceSettings | null>(null);
+const zalo = ref<ZaloSettings | null>(null);
 
 async function load() {
     error.value = null;
     try {
-        const [catalog, accs, inv] = await Promise.all([api.get('/carriers'), loadCarrierAccounts(), loadEInvoiceSettings()]);
+        const [catalog, accs, inv, z] = await Promise.all([api.get('/carriers'), loadCarrierAccounts(), loadEInvoiceSettings(), loadZalo().catch(() => null)]);
+        zalo.value = z;
         carriers.value = (catalog.data.data as CarrierCatalogItem[]).filter((c) => c.carrier !== 'fake' || accs.some((a) => a.carrier === 'fake'));
         accounts.value = accs;
         einvoice.value = inv;
@@ -67,6 +70,8 @@ const invoiceProviders = computed(() => {
 });
 
 const canManage = computed(() => tenant.can('settings.manage'));
+const zaloOn = computed(() => !!zalo.value?.account && zalo.value.account.status !== 'disconnected');
+const zaloRules = computed(() => Object.values(zalo.value?.account?.rules ?? {}).filter((r) => r.enabled).length);
 </script>
 
 <template>
@@ -132,9 +137,15 @@ const canManage = computed(() => tenant.can('settings.manage'));
                 <span class="grid h-9 w-11 shrink-0 place-items-center rounded-md bg-blue-600 text-[11px] font-bold text-white">Zalo</span>
                 <div class="min-w-0 flex-1">
                     <div class="font-medium">Zalo ZNS</div>
-                    <div class="text-xs text-muted-foreground">Báo xác nhận đơn, đang giao, đã giao qua Zalo</div>
+                    <div class="text-xs text-muted-foreground">
+                        <template v-if="zaloOn">OA {{ zalo?.account?.oa_name ?? zalo?.account?.app_id }} · {{ zaloRules }} sự kiện đang gửi</template>
+                        <template v-else>Báo xác nhận đơn, đang giao, đã giao qua Zalo</template>
+                    </div>
                 </div>
-                <Badge tone="muted">Sắp có</Badge>
+                <Badge v-if="zaloOn" :tone="zalo?.account?.status === 'connected' ? 'success' : 'danger'">{{ zalo?.account?.status === 'connected' ? 'Đã kết nối' : 'Lỗi kết nối' }}</Badge>
+                <RouterLink v-if="canManage" to="/settings/connections/zalo" data-testid="svc-zalo-open">
+                    <Button size="sm" :variant="zaloOn ? 'outline' : 'default'">{{ zaloOn ? 'Cài đặt' : 'Kết nối' }}</Button>
+                </RouterLink>
             </div>
         </Card>
 

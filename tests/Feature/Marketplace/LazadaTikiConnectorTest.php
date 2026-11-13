@@ -11,7 +11,7 @@ beforeEach(function () {
     [$this->tenant, $this->owner] = tenantWithOwner();
 });
 
-it('registers Lazada and Tiki as skeletons whose capabilities are all UNKNOWN', function (string $key, string $class) {
+it('registers Lazada as a skeleton whose capabilities are all UNKNOWN', function (string $key, string $class) {
     $connector = app(ConnectorRegistry::class)->for($key);
 
     expect($connector)->toBeInstanceOf($class)
@@ -21,7 +21,7 @@ it('registers Lazada and Tiki as skeletons whose capabilities are all UNKNOWN', 
 
     $row = collect(actingInTenant($this->owner, $this->tenant)->getJson('/api/v1/marketplaces')->assertOk()->json('data'))->firstWhere('key', $key);
     expect($row['available'])->toBeTrue()->and($row['credentials_configured'])->toBeFalse();
-})->with([['lazada', LazadaConnector::class], ['tiki', TikiConnector::class]]);
+})->with([['lazada', LazadaConnector::class]]);
 
 it('refuses to connect without credentials, and reports UNKNOWN once they exist', function (string $key, array $credentials) {
     $api = actingInTenant($this->owner, $this->tenant);
@@ -34,8 +34,17 @@ it('refuses to connect without credentials, and reports UNKNOWN once they exist'
     expect(MarketplaceAccount::withoutGlobalScopes()->count())->toBe(0);
 })->with([
     ['lazada', ['app_key' => 'k', 'app_secret' => 's']],
-    ['tiki', ['client_id' => 'c', 'client_secret' => 's']],
 ]);
+
+it('marks Tiki as connected with the shop\'s own app keys, everything past the token still UNKNOWN', function () {
+    $capabilities = app(ConnectorRegistry::class)->for('tiki')->capabilities();
+    expect($capabilities[Capability::SHOP_AUTHORIZE])->toBe(Capability::SUPPORTED)
+        ->and($capabilities[Capability::INVENTORY_UPDATE])->toBe(Capability::UNKNOWN)
+        ->and($capabilities[Capability::ORDERS_LIST])->toBe(Capability::UNKNOWN);
+
+    $row = collect(actingInTenant($this->owner, $this->tenant)->getJson('/api/v1/marketplaces')->assertOk()->json('data'))->firstWhere('key', TikiConnector::MARKETPLACE);
+    expect($row['connect_mode'])->toBe('app_keys')->and($row['credentials_configured'])->toBeTrue();
+});
 
 it('rejects Lazada and Tiki webhooks and keeps them for inspection', function (string $key) {
     $this->postJson("/api/v1/webhooks/{$key}", ['seller_id' => '1', 'data' => ['order_id' => '9']])->assertStatus(401);

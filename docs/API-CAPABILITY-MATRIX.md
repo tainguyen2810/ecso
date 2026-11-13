@@ -107,6 +107,10 @@ Từ Phase 4 có thêm `shop.authorize` (kết nối shop qua trang ủy quyền
 - **Cập nhật tồn**: UNKNOWN — không biết API cho seller có cho cập nhật tồn hay không. Không ghi `unsupported` khi chưa đọc được tài liệu. Giao diện đã sẵn: thẻ sàn ghi "Cập nhật tồn qua API: chưa xác minh — cập nhật tay trên Seller Center"; nếu sau này xác minh là không hỗ trợ, connector trả `UnsupportedCapability`, outbox ghi `unsupported` và trang Liên kết SKU hiển thị hướng dẫn cập nhật tay theo cột "Có thể bán".
 - Chưa làm: event queue (polling — cần `orders.list` + cursor sẵn có trong `sync_cursors`), token, đơn, sản phẩm, ánh xạ trạng thái.
 
+**Cập nhật C8 (2026-11-14):** kết nối bằng **ứng dụng Inhouse của chính shop** (không cần Tiki duyệt app, không cần `TIKI_CLIENT_ID` trên máy chủ). Chủ shop dán Client ID + Client Secret ở Kết nối sàn → Tiki.
+- Đã xác minh theo Guides công khai và đã làm: token `POST https://api.tiki.vn/sc/oauth2/token` (Basic client_id:secret, `grant_type=client_credentials`, không có refresh token → xin lại), `GET https://api.tiki.vn/integration/v2/sellers/me` (sid, name). `shop.authorize`, `auth.refresh` = supported. Secret lưu mã hóa.
+- Vẫn UNKNOWN: đơn (`GET /integration/v2/orders` có trong Guides nhưng không có mẫu trả về công khai), event queue Inhouse, sản phẩm, cập nhật tồn. Shop kết nối với `sync_enabled = false` cho tới khi chạy thử trên shop thật.
+
 ## 4. Rủi ro tích hợp đã thấy
 
 1. **Không có credentials và không đọc được docs chính thức** ⇒ chưa thể cam kết lịch Phase 4–7. Mọi connector sẽ chỉ có Fake adapter cho tới khi có tài khoản.

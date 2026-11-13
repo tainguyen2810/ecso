@@ -61,3 +61,6 @@ Schedule::call(fn () => DB::table('idempotency_keys')->where('created_at', '<', 
 // Customer files checked but never imported are dropped after a day (they hold phones and addresses); a background
 // import stuck for two hours (its worker died) is marked failed: its transaction was rolled back.
 Schedule::call(fn () => CustomerImport::pruneStale())->name('customer-imports-prune')->hourlyAt(23)->onOneServer();
+
+// Zalo ZNS (C6): payment reminders go out in the morning, not at night.
+Schedule::command('ecso:zalo:payment-reminders')->dailyAt('09:00')->withoutOverlapping(60)->onOneServer();
