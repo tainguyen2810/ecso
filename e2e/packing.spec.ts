@@ -13,9 +13,6 @@ test("scan to pack: open by order code, count items, refuse wrong and extra scan
     // A fresh own-channel order waiting to be packed: 2 × ATC-TRANG-M and 1 × POL-NAVY-XL.
     await page.goto("/orders/new");
     await expect(page.getByTestId("order-form")).toBeVisible();
-    await page
-        .getByTestId("order-channel")
-        .selectOption({ label: "Fanpage Cửa hàng Mẫu · Facebook" });
     await page.getByTestId("sku-picker").fill("ATC-TRANG-M");
     await page.getByTestId("sku-picker").press("Enter");
     await page.getByTestId("sku-picker").fill("POL-NAVY-XL");
@@ -23,15 +20,14 @@ test("scan to pack: open by order code, count items, refuse wrong and extra scan
     await page.getByTestId("line-qty-0").fill("2");
     await page.getByTestId("new-customer").click();
     await page.getByTestId("nc-name").fill("Trần Gói Hàng");
-    await page.getByTestId("nc-phone").fill("0938 654 321");
-    await page
-        .locator("#nc-addr-quick")
-        .fill("20 Pasteur, P. Bến Nghé, Quận 1, TP.HCM");
+    await page.getByTestId("nc-phone").fill(`09${Date.now().toString().slice(-8)}`);
+    await page.locator("#nc-addr-quick").fill("20 Pasteur, P. Bến Nghé, Quận 1, TP.HCM");
     await page.locator("#nc-addr-quick").press("Enter");
+    await expect(page.locator("#nc-addr-ward")).toHaveValue("Phường Sài Gòn");
     await page.getByTestId("nc-save").click();
-    await page.getByTestId("delivery-ext").check();
-    await page.getByTestId("carrier-GHN").click();
+    await expect(page.getByTestId("customer-delivery")).toContainText("20 Pasteur");
     await page.getByTestId("submit-order").click();
+    await expect(page.getByTestId("order-status")).toHaveText("Chờ xác nhận");
     await page.getByTestId("action-confirm").click();
     await expect(page.getByTestId("order-status")).toHaveText("Chờ đóng gói");
     const orderId = page.url().split("/").pop()!;
