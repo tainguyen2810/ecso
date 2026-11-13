@@ -30,6 +30,7 @@ use App\Modules\Inventory\Models\StockTransfer;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Policies\InventoryPolicy;
 use App\Modules\Inventory\Policies\WarehousePolicy;
+use App\Modules\Invoicing\Listeners\QueueAutoEInvoice;
 use App\Modules\Marketplace\Console\CheckFeesCommand;
 use App\Modules\Marketplace\Console\CheckWebhooksCommand;
 use App\Modules\Marketplace\Console\PruneSyncLogsCommand;
@@ -91,7 +92,7 @@ use Illuminate\Support\ServiceProvider;
 class ModuleServiceProvider extends ServiceProvider
 {
     /** Modules whose Routes/api.php is mounted under /api/v1. */
-    private const API_MODULES = ['Identity', 'Tenancy', 'Billing', 'Audit', 'Admin', 'Catalog', 'Inventory', 'Marketplace', 'Orders', 'Analytics', 'Sales', 'Purchasing', 'Cashbook', 'Geo', 'Shipping'];
+    private const API_MODULES = ['Identity', 'Tenancy', 'Billing', 'Audit', 'Admin', 'Catalog', 'Inventory', 'Marketplace', 'Orders', 'Analytics', 'Sales', 'Purchasing', 'Cashbook', 'Geo', 'Shipping', 'Invoicing'];
 
     public function register(): void
     {
@@ -127,6 +128,7 @@ class ModuleServiceProvider extends ServiceProvider
             Gate::policy($model, CashbookPolicy::class);
         }
 
+        Order::saved(fn (Order $order) => app(QueueAutoEInvoice::class)->handle($order));
         Event::listen(TenantCreated::class, CreateDefaultWarehouse::class);
         Event::listen(TenantCreated::class, CreateDefaultSalesChannel::class);
         Event::listen(OrderImported::class, CountOrderUsage::class);

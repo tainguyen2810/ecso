@@ -16,7 +16,7 @@ use Illuminate\Validation\ValidationException;
 
 class ProductService
 {
-    public const VARIANT_FIELDS = ['sku', 'barcode', 'name', 'options', 'ref_price', 'price_source', 'wholesale_price', 'weight_gram', 'status', 'supplier_id', 'supplier_sku', 'length_mm', 'width_mm', 'height_mm'];
+    public const VARIANT_FIELDS = ['sku', 'barcode', 'location', 'name', 'options', 'ref_price', 'price_source', 'wholesale_price', 'weight_gram', 'status', 'supplier_id', 'supplier_sku', 'length_mm', 'width_mm', 'height_mm'];
 
     public function __construct(private readonly AuditLogger $audit, private readonly InventoryDocumentService $documents) {}
 

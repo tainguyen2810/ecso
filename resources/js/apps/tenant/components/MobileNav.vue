@@ -13,6 +13,7 @@ import {
     Package,
     PackagePlus,
     PlugZap,
+    ScanBarcode,
     Plus,
     Settings,
     ShoppingCart,
@@ -53,6 +54,7 @@ const groups = computed(() =>
             tiles: [
                 { label: 'Bán tại quầy', to: '/pos', icon: Store, can: any('orders.create') },
                 { label: 'Khách hàng', to: '/customers', icon: UsersRound, can: any('customers.view') },
+                { label: 'Đóng gói', to: '/orders/pack', icon: ScanBarcode, can: any('orders.pack') },
                 { label: 'Vận chuyển', to: '/shipments', icon: Truck, can: any('orders.view') },
                 { label: 'Trả hàng', to: '/returns', icon: Undo2, can: any('returns.view') },
             ],

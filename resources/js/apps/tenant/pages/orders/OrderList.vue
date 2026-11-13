@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Ban, Banknote, Bookmark, FilePen, Trash2, ChevronDown, ChevronsRight, Clock, Columns3, Download, Filter, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingCart, UserPlus, X } from 'lucide-vue-next';
+import { Ban, Banknote, Bookmark, ClipboardList, FilePen, ScanBarcode, Trash2, ChevronDown, ChevronsRight, Clock, Columns3, Download, Filter, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingCart, UserPlus, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
@@ -24,6 +24,8 @@ import { useTenantStore } from '@/shared/stores/tenant';
 import { actionLabels, deadlineLabel, marketplaceNames, orderFlags, orderStatus, orderTabs, paymentMethods, paymentStatus } from './labels';
 import PrintDialog from './PrintDialog.vue';
 import { downloadPackingSlips } from './packingSlip';
+import { downloadPickList } from './packing';
+import { useAuthStore } from '@/shared/stores/auth';
 import OrderPipeline from './OrderPipeline.vue';
 import OrderQuickView from './OrderQuickView.vue';
 import type { MarketplaceAccountData, OrderDetail, OrderSummary, Ref, SalesChannel, Variant, Warehouse } from '@/shared/types';
@@ -393,6 +395,24 @@ async function print() {
     }
 }
 
+/** Pick list (phiếu nhặt hàng) of the ticked orders: items summed per SKU, sorted by shelf location. */
+const auth = useAuthStore();
+async function printPickList() {
+    busy.value = 'pick';
+    try {
+        const { data } = await api.post('/orders/pick-list', { ids: [...selected.value] });
+        if (!data.data.rows.length) {
+            toast.info('Các đơn đã chọn không có sản phẩm cần nhặt.');
+            return;
+        }
+        await downloadPickList(data.data, { shop: tenant.current?.name ?? '', by: auth.user?.name ?? '', size: 'A4' });
+    } catch (e) {
+        toast.error(e instanceof ApiError ? e.message : 'Không tạo được phiếu nhặt hàng.');
+    } finally {
+        busy.value = null;
+    }
+}
+
 const printOpen = ref(false);
 const printOrders = ref<OrderDetail[]>([]);
 /** Sales receipts of the selected manual orders, printed in one job (template picked in the print dialog). */
@@ -433,6 +453,7 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
     <PageHeader title="Đơn hàng" description="Đơn từ các sàn (cập nhật theo webhook, thao tác gửi lên sàn qua API) và đơn của kênh bán riêng (xử lý ngay trên ECSO).">
         <Button variant="outline" :loading="loading" @click="refresh"><RefreshCw /> Làm mới</Button>
         <Button variant="outline" :loading="busy === 'export'" data-testid="export-orders" @click="exportOrders"><Download /> Xuất Excel</Button>
+        <Button v-if="tenant.can('orders.pack')" variant="outline" data-testid="open-packing" @click="$router.push('/orders/pack')"><ScanBarcode /> Đóng gói</Button>
         <Button v-if="tenant.can('orders.create') && drafts.length" variant="outline" data-testid="open-drafts" @click="draftsOpen = true"><FilePen /> Đơn nháp ({{ drafts.length }})</Button>
         <Button v-if="tenant.can('orders.create')" data-testid="create-order" @click="$router.push('/orders/new')"><Plus /> Tạo đơn</Button>
     </PageHeader>
@@ -597,6 +618,7 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
             <Button v-if="tenant.can('orders.assign')" size="sm" variant="outline" @click="assignOpen = true"><UserPlus /> Phân công</Button>
             <Button size="sm" variant="outline" :loading="busy === 'invoice'" data-testid="bulk-invoice" @click="printInvoices"><ReceiptText /> In hóa đơn</Button>
             <Button v-if="tenant.can('orders.print')" size="sm" :loading="busy === 'print'" data-testid="print-slips" @click="print"><Printer /> In phiếu đóng gói</Button>
+            <Button v-if="tenant.can('orders.print')" size="sm" variant="outline" :loading="busy === 'pick'" data-testid="print-picklist" @click="printPickList"><ClipboardList /> In phiếu nhặt hàng</Button>
             <Button v-if="tenant.can('orders.cancel')" size="sm" variant="outline" class="text-destructive" data-testid="bulk-cancel" @click="cancelOpen = true"><Ban /> Hủy đơn</Button>
             <button class="ml-auto text-xs text-muted-foreground hover:underline" @click="selected = new Set()">Bỏ chọn</button>
         </div>

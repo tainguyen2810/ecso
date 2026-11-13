@@ -25,6 +25,8 @@ interface VariantRow {
     sku: string;
     name: string;
     barcode: string;
+    /** Shelf location (vị trí kệ), printed on the pick list. */
+    location: string;
     options: Record<string, string>;
     ref_price: string;
     wholesale_price: string;
@@ -134,7 +136,7 @@ async function suggestBarcode(row: VariantRow) {
 }
 
 function emptyRow(): VariantRow {
-    return { sku: '', name: '', barcode: '', options: {}, ref_price: '', wholesale_price: '', weight_gram: '', supplier_id: '', supplier_sku: '', length_mm: '', width_mm: '', height_mm: '', opening_qty: '', opening_cost: '' };
+    return { sku: '', name: '', barcode: '', location: '', options: {}, ref_price: '', wholesale_price: '', weight_gram: '', supplier_id: '', supplier_sku: '', length_mm: '', width_mm: '', height_mm: '', opening_qty: '', opening_cost: '' };
 }
 
 const money = (value: string | number | null | undefined) => (Number(value) ? String(Math.round(Number(value))) : '');
@@ -179,6 +181,7 @@ onMounted(async () => {
             sku: copying ? '' : v.sku,
             name: v.name ?? '',
             barcode: copying ? '' : (v.barcode ?? ''),
+            location: v.location ?? '',
             options: Array.isArray(v.options) ? {} : v.options,
             ref_price: money(v.ref_price),
             wholesale_price: money(v.wholesale_price),
@@ -272,6 +275,7 @@ async function save(then: 'detail' | 'labels' = 'detail') {
                 sku: v.sku.trim(),
                 name: v.name || null,
                 barcode: v.barcode || null,
+                location: v.location.trim() || null,
                 options: Object.keys(v.options).length ? v.options : null,
                 ref_price: num(v.ref_price),
                 wholesale_price: num(v.wholesale_price),
@@ -479,6 +483,7 @@ async function removeImage(id: number) {
                                     <th class="px-3 py-2 font-medium">SKU *</th>
                                     <th class="px-3 py-2 font-medium">Tên biến thể</th>
                                     <th class="px-3 py-2 font-medium">Mã vạch</th>
+                                    <th class="px-3 py-2 font-medium" title="Vị trí trên kệ, in ở phiếu nhặt hàng">Vị trí kệ</th>
                                     <th class="px-3 py-2 text-right font-medium">Giá bán lẻ</th>
                                     <th class="px-3 py-2 text-right font-medium">Giá bán buôn</th>
                                     <th class="px-3 py-2 text-right font-medium">KL (g)</th>
@@ -511,6 +516,7 @@ async function removeImage(id: number) {
                                         </div>
                                         <p v-if="fieldError(i, 'barcode')" class="mt-1 max-w-36 text-xs text-destructive">{{ fieldError(i, 'barcode') }}</p>
                                     </td>
+                                    <td class="px-3 py-2"><input v-model="v.location" maxlength="50" :disabled="!canManage" placeholder="VD: A1-02" aria-label="Vị trí kệ" :data-testid="`location-${i}`" class="h-8 w-20 rounded-md border border-input bg-card px-2 font-mono text-xs" /></td>
                                     <td class="px-3 py-2 text-right"><input v-model="v.ref_price" type="number" min="0" :disabled="!canManage" aria-label="Giá bán lẻ" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
                                     <td class="px-3 py-2 text-right"><input v-model="v.wholesale_price" type="number" min="0" :disabled="!canManage" aria-label="Giá bán buôn" :data-testid="`wholesale-${i}`" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
                                     <td class="px-3 py-2 text-right"><input v-model="v.weight_gram" type="number" min="0" :disabled="!canManage" class="h-8 w-16 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>

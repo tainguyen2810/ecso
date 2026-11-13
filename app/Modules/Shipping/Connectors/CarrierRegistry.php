@@ -4,6 +4,7 @@ namespace App\Modules\Shipping\Connectors;
 
 use App\Modules\Shipping\Connectors\Fake\FakeCarrier;
 use App\Modules\Shipping\Connectors\Ghn\GhnCarrier;
+use App\Modules\Shipping\Connectors\Jt\JtCarrier;
 use App\Modules\Shipping\Connectors\ViettelPost\ViettelPostCarrier;
 use InvalidArgumentException;
 
@@ -14,6 +15,7 @@ class CarrierRegistry
     private const CONNECTORS = [
         GhnCarrier::KEY => GhnCarrier::class,
         ViettelPostCarrier::KEY => ViettelPostCarrier::class,
+        JtCarrier::KEY => JtCarrier::class,
         FakeCarrier::KEY => FakeCarrier::class,
     ];
 
@@ -23,7 +25,6 @@ class CarrierRegistry
      * @var array<string, array{label: string, note: string}>
      */
     public const UPCOMING = [
-        'jt' => ['label' => 'J&T Express', 'note' => 'Chờ J&T cấp quyền API. Trong lúc chờ: nhập mã vận đơn trên đơn hoặc nhập file.'],
         'spx' => ['label' => 'SPX Express', 'note' => 'SPX chưa mở API cho phần mềm ngoài. Đơn Shopee lấy vận đơn qua sàn; đơn tự bán nhập mã hoặc nhập file.'],
     ];
 

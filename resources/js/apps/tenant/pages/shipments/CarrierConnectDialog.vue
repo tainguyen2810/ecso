@@ -18,7 +18,7 @@ import { carrierMarks, type CarrierAccountData, type CarrierCatalogItem } from '
  * shop's pickup points and matches them to warehouses. Free: the shop keeps its own account, price and COD.
  */
 const open = defineModel<boolean>('open', { required: true });
-const props = defineProps<{ accounts: CarrierAccountData[] }>();
+const props = defineProps<{ accounts: CarrierAccountData[]; initial?: string | null }>();
 const emit = defineEmits<{ changed: [] }>();
 const tenant = useTenantStore();
 const toast = useToast();
@@ -42,11 +42,13 @@ watch(open, async (v) => {
             error.value = (e as ApiError).message;
         }
     }
+    if (props.initial && catalog.value.some((c) => c.carrier === props.initial)) picked.value = props.initial;
     picked.value = picked.value || catalog.value.find((c) => c.available && c.carrier !== 'fake')?.carrier || catalog.value.find((c) => c.available)?.carrier || '';
 }, { immediate: true });
 
 const current = computed(() => catalog.value.find((c) => c.carrier === picked.value) ?? null);
 const help: Record<string, string> = {
+    jt: 'Liên hệ nhân viên kinh doanh J&T (1900 1088) xin mở API cho tài khoản shop; J&T gửi 4 thông tin trên. Mật khẩu API là mật khẩu J&T cấp cho API, không phải mật khẩu đăng nhập. J&T không có danh sách điểm lấy hàng: EzSell gửi địa chỉ kho của shop. Lần đầu nên bật sandbox và tạo 1 vận đơn thử.',
     viettelpost:
         'Dùng số điện thoại và mật khẩu đăng nhập viettelpost.vn (hoặc app Viettel Post). EzSell chỉ dùng để lấy token kết nối dài hạn, không lưu mật khẩu. Địa chỉ lấy hàng lấy từ mục Kho hàng của tài khoản.',
     ghn: 'Đăng nhập khachhang.ghn.vn (tài khoản thử: 5sao.ghn.dev, bật ô sandbox) → bấm vào tài khoản ở góc trên trái → tab Bảo mật → Token API & IP tin cậy → Quản lý → bấm hình con mắt rồi chép token.',
@@ -168,7 +170,7 @@ const statusText = { connected: 'Đang kết nối', error: 'Lỗi kết nối',
             <form v-if="current?.available" class="space-y-3" @submit.prevent="connect">
                 <label v-for="(label, field) in current.fields" :key="field" class="block space-y-1 text-sm">
                     <span class="text-muted-foreground">{{ label }}</span>
-                    <Input v-model="creds[field]" :type="String(field).endsWith('password') ? 'password' : 'text'" autocomplete="off" :data-testid="`carrier-cred-${field}`" />
+                    <Input v-model="creds[field]" :type="/password|key|secret/.test(String(field)) ? 'password' : 'text'" autocomplete="off" :data-testid="`carrier-cred-${field}`" />
                 </label>
                 <p v-if="help[current.carrier]" class="text-xs text-muted-foreground">{{ help[current.carrier] }}</p>
                 <label v-if="current.carrier !== 'fake'" class="flex items-center gap-2 text-xs text-muted-foreground"><input v-model="sandbox" type="checkbox" /> Tài khoản môi trường thử nghiệm (sandbox) của hãng</label>

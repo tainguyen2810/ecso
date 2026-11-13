@@ -36,6 +36,7 @@ class CarrierWebhookController extends Controller
             $context->clear();
         }
 
-        return response()->json(['received' => true, 'new' => $new]);
+        // J&T reads {code: "1"} as received; the others ignore the body.
+        return response()->json(['received' => true, 'new' => $new, 'code' => '1', 'msg' => 'success']);
     }
 }

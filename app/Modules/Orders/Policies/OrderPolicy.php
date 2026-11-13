@@ -44,6 +44,12 @@ class OrderPolicy extends PermissionPolicy
         return $this->allows('orders.assign');
     }
 
+    /** Scan-to-pack: warehouse staff who may not otherwise change orders. */
+    public function pack(User $user): bool
+    {
+        return $this->allows('orders.pack') || $this->allows('orders.update');
+    }
+
     public function print(User $user): bool
     {
         return $this->allows('orders.print');

@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Shipping\Http\Controllers\CarrierAccountController;
+use App\Modules\Shipping\Http\Controllers\CarrierLabelController;
 use App\Modules\Shipping\Http\Controllers\CarrierShipmentController;
 use App\Modules\Shipping\Http\Controllers\CarrierWebhookController;
 use Illuminate\Support\Facades\Route;
@@ -10,6 +11,12 @@ Route::post('carrier-webhooks/{token}', CarrierWebhookController::class)
     ->where('token', '[A-Za-z0-9]{32,64}')
     ->middleware('throttle:600,1,shipping.carrier-webhooks')
     ->name('carrier-webhooks.receive');
+
+// A label PDF kept for an hour (J&T): the signed link is the permission, so it opens in a plain new tab.
+Route::get('carrier-labels/{file}', CarrierLabelController::class)
+    ->where('file', '[A-Za-z0-9]{40}\\.pdf')
+    ->middleware(['signed', 'throttle:120,1,shipping.carrier-labels'])
+    ->name('carrier-labels.show');
 
 Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::get('carriers', [CarrierAccountController::class, 'catalog']);
