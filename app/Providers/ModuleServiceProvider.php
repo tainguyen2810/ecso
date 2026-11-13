@@ -39,6 +39,8 @@ use App\Modules\Marketplace\Console\RecoverSyncCommand;
 use App\Modules\Marketplace\Events\ListingMappingChanged;
 use App\Modules\Marketplace\Events\WebhookReceived;
 use App\Modules\Marketplace\Listeners\PlanInventoryPush;
+use App\Modules\Messaging\Console\ZnsPaymentRemindersCommand;
+use App\Modules\Messaging\Zalo\QueueOrderZns;
 use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Policies\MarketplacePolicy;
@@ -94,7 +96,7 @@ use Illuminate\Support\ServiceProvider;
 class ModuleServiceProvider extends ServiceProvider
 {
     /** Modules whose Routes/api.php is mounted under /api/v1. */
-    private const API_MODULES = ['Identity', 'Tenancy', 'Billing', 'Audit', 'Admin', 'Catalog', 'Inventory', 'Marketplace', 'Orders', 'Analytics', 'Sales', 'Purchasing', 'Cashbook', 'Geo', 'Shipping', 'Invoicing'];
+    private const API_MODULES = ['Identity', 'Tenancy', 'Billing', 'Audit', 'Admin', 'Catalog', 'Inventory', 'Marketplace', 'Orders', 'Analytics', 'Sales', 'Purchasing', 'Cashbook', 'Geo', 'Shipping', 'Invoicing', 'Messaging'];
 
     public function register(): void
     {
@@ -132,6 +134,7 @@ class ModuleServiceProvider extends ServiceProvider
 
         Order::saved(fn (Order $order) => app(QueueAutoEInvoice::class)->handle($order));
         Order::saved(fn (Order $order) => app(LoyaltyService::class)->orderSaved($order));
+        Order::saved(fn (Order $order) => app(QueueOrderZns::class)->handle($order));
         Event::listen(TenantCreated::class, CreateDefaultWarehouse::class);
         Event::listen(TenantCreated::class, CreateDefaultSalesChannel::class);
         Event::listen(OrderImported::class, CountOrderUsage::class);
@@ -158,7 +161,7 @@ class ModuleServiceProvider extends ServiceProvider
         $this->configureAuthLinks();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([AutoGroupCustomersCommand::class, LoyaltyNightlyCommand::class, CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, VerifyOrderMoneyCommand::class, LowStockDigestCommand::class, PushDueInventoryCommand::class, RecoverSyncCommand::class, PruneSyncLogsCommand::class, CheckFeesCommand::class, CheckWebhooksCommand::class, ReconcileOrdersCommand::class, BackfillShipmentsCommand::class, TrackCarrierShipmentsCommand::class, BillingSweepCommand::class, MonitorCommand::class, DemoTenantCommand::class]);
+            $this->commands([AutoGroupCustomersCommand::class, ZnsPaymentRemindersCommand::class, LoyaltyNightlyCommand::class, CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, VerifyOrderMoneyCommand::class, LowStockDigestCommand::class, PushDueInventoryCommand::class, RecoverSyncCommand::class, PruneSyncLogsCommand::class, CheckFeesCommand::class, CheckWebhooksCommand::class, ReconcileOrdersCommand::class, BackfillShipmentsCommand::class, TrackCarrierShipmentsCommand::class, BillingSweepCommand::class, MonitorCommand::class, DemoTenantCommand::class]);
         }
     }
 
