@@ -18,6 +18,7 @@ class VariantResource extends JsonResource
             'id' => $this->ulid,
             'sku' => $this->sku,
             'barcode' => $this->barcode,
+            'location' => $this->location,
             'name' => $this->name,
             'options' => $this->options ?? (object) [],
             'ref_price' => $this->ref_price,

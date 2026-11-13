@@ -23,7 +23,7 @@ function detailedProduct(array $overrides = []): array
         'tags' => ['Đồ uống', 'đồ uống', ' Hàng mới '],
         'vat_rate' => 8,
         'variants' => [
-            ['sku' => 'NS-500', 'ref_price' => 6000, 'wholesale_price' => 4800, 'barcode' => '8934563138165'],
+            ['sku' => 'NS-500', 'ref_price' => 6000, 'wholesale_price' => 4800, 'barcode' => '8934563138165', 'location' => 'A1-02'],
             ['sku' => 'NS-500-THUNG', 'name' => 'Thùng 24 chai', 'ref_price' => 120000, 'wholesale_price' => 105000],
         ],
     ], $overrides);
@@ -35,7 +35,8 @@ it('saves unit, tags, VAT rate and wholesale price', function () {
         ->assertJsonPath('data.unit', 'Chai')
         ->assertJsonPath('data.tags', ['Đồ uống', 'Hàng mới'])
         ->assertJsonPath('data.vat_rate', '8.00')
-        ->assertJsonPath('data.variants.0.wholesale_price', '4800.00');
+        ->assertJsonPath('data.variants.0.wholesale_price', '4800.00')
+        ->assertJsonPath('data.variants.0.location', 'A1-02');
 
     actingInTenant($this->owner, $this->tenant)->putJson('/api/v1/products/'.$res->json('data.id'), ['vat_rate' => null, 'tags' => [], 'unit' => ''])
         ->assertOk()->assertJsonPath('data.vat_rate', null)->assertJsonPath('data.tags', [])->assertJsonPath('data.unit', null);

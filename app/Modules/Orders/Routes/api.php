@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Orders\Http\Controllers\OrderController;
+use App\Modules\Orders\Http\Controllers\PackingController;
 use App\Modules\Orders\Http\Controllers\ReturnController;
 use App\Modules\Orders\Http\Controllers\ShipmentController;
 use Illuminate\Support\Facades\Route;
@@ -23,6 +24,11 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::get('orders/tags', [OrderController::class, 'tags']);
     Route::post('orders/bulk', [OrderController::class, 'bulk'])->middleware('throttle:30,1,orders.orders.bulk');
     Route::post('orders/packing-slips', [OrderController::class, 'packingSlips']);
+    Route::post('orders/pick-list', [PackingController::class, 'pickList']);
+    Route::get('orders/packing/lookup', [PackingController::class, 'lookup'])->middleware('throttle:240,1,orders.packing.lookup');
+    Route::get('orders/packing/stats', [PackingController::class, 'stats']);
+    Route::post('orders/{order}/packing/errors', [PackingController::class, 'error'])->middleware('throttle:240,1,orders.packing.errors');
+    Route::post('orders/{order}/packing/finish', [PackingController::class, 'finish']);
     Route::get('orders/{order}', [OrderController::class, 'show']);
     Route::post('orders/{order}/actions/{action}', [OrderController::class, 'action'])->whereIn('action', ['confirm', 'pack', 'handover', 'cancel']);
     Route::put('orders/{order}/assignee', [OrderController::class, 'assign']);

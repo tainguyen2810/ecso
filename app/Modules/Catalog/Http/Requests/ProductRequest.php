@@ -49,6 +49,7 @@ class ProductRequest extends FormRequest
             // Usual supplier (ULID) and the supplier's code; package size in millimetres.
             'variants.*.supplier_id' => ['nullable', 'string'],
             'variants.*.supplier_sku' => ['nullable', 'string', 'max:64'],
+            'variants.*.location' => ['nullable', 'string', 'max:50'],
             'variants.*.length_mm' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'variants.*.width_mm' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'variants.*.height_mm' => ['nullable', 'integer', 'min:0', 'max:100000'],

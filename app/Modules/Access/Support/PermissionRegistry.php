@@ -20,6 +20,7 @@ final class PermissionRegistry
             'orders.cancel' => 'Hủy đơn hàng',
             'orders.assign' => 'Phân công đơn',
             'orders.print' => 'In phiếu đóng gói, vận đơn',
+            'orders.pack' => 'Đóng gói đơn bằng quét mã',
             'orders.create' => 'Tạo đơn bán, bán tại quầy',
             'orders.payment' => 'Thu tiền, hoàn tiền đơn bán',
             'orders.payment.void' => 'Hủy phiếu thu, phiếu hoàn tiền nhập nhầm',
@@ -108,17 +109,17 @@ final class PermissionRegistry
             Role::OWNER => ['name' => 'Chủ doanh nghiệp', 'rank' => 100, 'permissions' => $all],
             Role::ADMIN => ['name' => 'Quản trị doanh nghiệp', 'rank' => 90, 'permissions' => array_values(array_diff($all, ['billing.manage']))],
             Role::MANAGER => ['name' => 'Quản lý vận hành', 'rank' => 70, 'permissions' => [
-                ...self::READ_ALL, 'orders.update', 'orders.cancel', 'orders.assign', 'orders.print', 'orders.create', 'orders.payment', 'orders.payment.void', 'orders.price', 'orders.shifts', 'shipments.manage', 'shipments.import', 'customers.manage', 'customers.import', 'customers.export', 'customers.delete', 'customers.debt_adjust', 'customers.merge', 'products.manage',
+                ...self::READ_ALL, 'orders.update', 'orders.cancel', 'orders.assign', 'orders.print', 'orders.pack', 'orders.create', 'orders.payment', 'orders.payment.void', 'orders.price', 'orders.shifts', 'shipments.manage', 'shipments.import', 'customers.manage', 'customers.import', 'customers.export', 'customers.delete', 'customers.debt_adjust', 'customers.merge', 'products.manage',
                 'inventory.receive', 'inventory.adjust', 'inventory.adjust.approve', 'inventory.transfer', 'purchasing.manage', 'purchasing.payment',
                 'returns.inspect', 'finance.view', 'finance.balances', 'finance.profit', 'finance.vouchers', 'finance.vouchers.void', 'members.view',
                 'sync.operate',
             ]],
             Role::WAREHOUSE_STAFF => ['name' => 'Nhân viên kho', 'rank' => 40, 'permissions' => [
-                'dashboard.view', 'orders.view', 'orders.view.all', 'orders.print', 'products.view', 'inventory.view',
+                'dashboard.view', 'orders.view', 'orders.view.all', 'orders.print', 'orders.pack', 'products.view', 'inventory.view',
                 'inventory.receive', 'inventory.adjust', 'inventory.transfer', 'purchasing.view', 'returns.view', 'returns.inspect',
             ]],
             Role::ORDER_STAFF => ['name' => 'Nhân viên xử lý đơn', 'rank' => 40, 'permissions' => [
-                'dashboard.view', 'orders.view', 'orders.view.all', 'orders.update', 'orders.cancel', 'orders.print', 'orders.create', 'orders.payment', 'orders.payment.void', 'shipments.manage', 'shipments.import', 'products.view',
+                'dashboard.view', 'orders.view', 'orders.view.all', 'orders.update', 'orders.cancel', 'orders.print', 'orders.pack', 'orders.create', 'orders.payment', 'orders.payment.void', 'shipments.manage', 'shipments.import', 'products.view',
                 'inventory.view', 'returns.view', 'customers.view', 'customers.manage', 'customers.import', 'customers.export', 'customers.delete',
             ]],
             Role::ACCOUNTANT => ['name' => 'Kế toán', 'rank' => 40, 'permissions' => [

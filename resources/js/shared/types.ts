@@ -74,6 +74,7 @@ export interface Variant {
     id?: string;
     sku: string;
     barcode: string | null;
+    location?: string | null;
     name: string | null;
     options: Record<string, string>;
     ref_price: string | number | null;

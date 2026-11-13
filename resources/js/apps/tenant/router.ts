@@ -48,6 +48,7 @@ const routes: RouteRecordRaw[] = [
                 { path: `inventory/${kind}/:id`, name: `inventory-${kind}-show`, component: () => import('./pages/inventory/DocumentDetail.vue'), meta: { permission: 'inventory.view', nav: 'inventory', kind, section: `inventory-${kind}` } },
             ]),
             { path: 'orders', name: 'orders', component: () => import('./pages/orders/OrderList.vue'), meta: { permission: 'orders.view', nav: 'orders' } },
+            { path: 'orders/pack', name: 'order-pack', component: () => import('./pages/orders/PackingPage.vue'), meta: { permission: 'orders.pack', nav: 'orders' } },
             { path: 'orders/new', name: 'order-new', component: () => import('./pages/orders/OrderForm.vue'), meta: { permission: 'orders.create', nav: 'orders' } },
             { path: 'orders/:id/edit', name: 'order-edit', component: () => import('./pages/orders/OrderForm.vue'), meta: { permission: 'orders.create', nav: 'orders' } },
             { path: 'customers', name: 'customers', component: () => import('./pages/customers/CustomerList.vue'), meta: { permission: 'customers.view', nav: 'customers' } },
