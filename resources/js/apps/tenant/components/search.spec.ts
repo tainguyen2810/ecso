@@ -26,3 +26,11 @@ describe('inbox', () => {
         expect(unseenCount([item('a', 2)], { a: 3 })).toBe(0);
     });
 });
+
+describe('phone menu badge', () => {
+    it('adds orders waiting to be confirmed or packed', async () => {
+        const { ordersWaiting } = await import('./inbox');
+        const item = (key: string, count: number) => ({ key, count, group: 'orders' as const, tone: 'blue' as const, title: '', detail: null, to: '/' });
+        expect(ordersWaiting([item('orders.to_confirm', 2), item('orders.to_pack', 3), item('orders.overdue', 9)])).toBe(5);
+    });
+});

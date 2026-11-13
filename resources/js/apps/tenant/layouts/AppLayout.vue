@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Check, ChevronDown, ChevronRight, ChevronsUpDown, LogOut, Menu, Plus, Search, X } from 'lucide-vue-next';
+import { Check, ChevronDown, ChevronRight, ChevronsUpDown, LogOut, Plus, Search } from 'lucide-vue-next';
 import { useAuthStore } from '@/shared/stores/auth';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useGoShortcuts } from '@/shared/composables/useShortcuts';
@@ -11,6 +11,8 @@ import Badge from '@/shared/ui/Badge.vue';
 import { allNavItems, navGroups, type NavItem } from '../navigation';
 import GlobalSearch from '../components/GlobalSearch.vue';
 import NotificationBell from '../components/NotificationBell.vue';
+import MobileNav from '../components/MobileNav.vue';
+import InstallBanner from '../components/InstallBanner.vue';
 
 const auth = useAuthStore();
 const tenant = useTenantStore();
@@ -190,10 +192,8 @@ useGoShortcuts(
         <div class="flex min-w-0 flex-1 flex-col">
             <!-- Top bar (B1, B2): global search (Ctrl + K) and the bell; on phones also the menu button. -->
             <header class="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur lg:px-8">
-                <button class="rounded p-1.5 hover:bg-muted lg:hidden" aria-label="Mở menu" @click="mobileOpen = !mobileOpen">
-                    <X v-if="mobileOpen" class="size-5" />
-                    <Menu v-else class="size-5" />
-                </button>
+                <!-- Phones use the bottom menu (MobileNav); the sidebar is for wide screens. -->
+                <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-xs font-semibold text-white lg:hidden">{{ initials(tenant.current?.name ?? '?') }}</span>
                 <span class="min-w-0 flex-1 truncate font-semibold sm:hidden">{{ tenant.current?.name }}</span>
                 <button
                     type="button"
@@ -213,9 +213,11 @@ useGoShortcuts(
                 </div>
             </header>
             <GlobalSearch v-model:open="searchOpen" />
-            <main class="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
+            <main :class="cn('mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:pb-6', route.path === '/pos' ? 'pb-6' : 'pb-28')">
                 <RouterView :key="tenant.current?.id" />
             </main>
+            <MobileNav @switch-tenant="switchTenant" @logout="logout" />
+            <InstallBanner />
         </div>
     </div>
 </template>

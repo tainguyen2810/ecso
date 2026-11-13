@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DateTimeInput from '@/shared/ui/DateTimeInput.vue';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ArrowLeft, Ban, Banknote, CalendarClock, Download, HandCoins, Link2, MapPin, Merge, Pencil, Plus, ShoppingCart, Trash2 } from 'lucide-vue-next';
@@ -535,7 +536,7 @@ const thead = 'border-b bg-slate-50 text-left text-[11px] uppercase tracking-wid
                 <Card v-if="tab === 'notes'" title="Việc cần làm với khách" data-testid="customer-tasks">
                     <form class="grid gap-2 border-b p-4 sm:grid-cols-[1fr_12rem_auto]" @submit.prevent="addTask">
                         <Input v-model="taskForm.title" placeholder="Gọi lại báo giá, nhắc thanh toán…" maxlength="200" data-testid="task-title" />
-                        <Input v-model="taskForm.due_at" type="datetime-local" aria-label="Hạn" data-testid="task-due" />
+                        <DateTimeInput v-model="taskForm.due_at" aria-label="Hạn" data-testid="task-due" class="w-64" />
                         <Button type="submit" variant="outline" :loading="taskSaving" :disabled="!taskForm.title.trim() || !taskForm.due_at" data-testid="task-add"><CalendarClock /> Hẹn</Button>
                     </form>
                     <ul v-if="tasks.length" class="divide-y text-sm">

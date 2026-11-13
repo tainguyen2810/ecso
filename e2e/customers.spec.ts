@@ -95,7 +95,9 @@ test('customer detail: profile, group terms, debt book, addresses and notes', as
     await page.getByTestId('note-add').click();
     await expect(page.getByText('Khách muốn nhận báo giá sỉ mới qua Zalo.')).toBeVisible();
     await page.getByTestId('task-title').fill('Gửi báo giá sỉ tháng sau');
-    await page.getByTestId('task-due').fill('2030-01-15T09:00');
+    await page.getByTestId('task-due').fill('15/01/2030');
+    await page.getByLabel('Giờ').fill('9');
+    await page.getByLabel('Giờ').press('Enter');
     await page.getByTestId('task-add').click();
     await expect(page.getByTestId('customer-tasks')).toContainText('Gửi báo giá sỉ tháng sau');
     await shot(page, '06-customer-notes');

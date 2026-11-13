@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DateTimeInput from '@/shared/ui/DateTimeInput.vue';
 import { computed, reactive, ref, watch } from 'vue';
 import { ArrowRight } from 'lucide-vue-next';
 import Button from '@/shared/ui/Button.vue';
@@ -90,7 +91,7 @@ async function save() {
                     <Input id="t-fee" :model-value="form.fee ? formatNumber(form.fee) : ''" inputmode="numeric" class="text-right tabular-nums" placeholder="0" data-testid="t-fee" @input="form.fee = digits($event)" />
                 </FormField>
                 <FormField label="Ngày chuyển" for="t-at" :error="error?.field('transferred_at')">
-                    <Input id="t-at" v-model="form.transferred_at" type="datetime-local" :max="nowLocal()" />
+                    <DateTimeInput id="t-at" v-model="form.transferred_at" :max="nowLocal()" />
                 </FormField>
                 <FormField label="Tham chiếu" for="t-ref" hint="Mã giao dịch ngân hàng, số giấy nộp tiền…"><Input id="t-ref" v-model="form.reference" maxlength="100" /></FormField>
                 <FormField label="Diễn giải" for="t-note"><Input id="t-note" v-model="form.note" maxlength="500" placeholder="VD: Nộp tiền bán hàng ngày 04/11" /></FormField>

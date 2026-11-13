@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { AlertTriangle, CheckCircle2, ChevronLeft, History, RotateCw, X } from 'lucide-vue-next';
+import { AlertTriangle, CheckCircle2, History, RotateCw, X } from 'lucide-vue-next';
+import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import Tabs from '../../components/Tabs.vue';
 import Badge from '@/shared/ui/Badge.vue';
@@ -115,16 +116,12 @@ const duration = (ms: number | null) => (ms === null ? '—' : ms < 1000 ? `${ms
 </script>
 
 <template>
-    <RouterLink v-if="!embedded" to="/marketplaces" class="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ChevronLeft class="size-4" /> Kết nối sàn</RouterLink>
-    <div :class="['flex flex-wrap items-end justify-between gap-4', embedded ? 'mb-4' : 'mb-5']">
-        <div v-if="!embedded">
-            <h1 class="text-xl font-semibold tracking-tight">Lịch sử và lỗi đồng bộ</h1>
-            <p class="text-sm text-muted-foreground">Đơn website chưa đồng bộ được, và từng lượt ECSO đối soát đơn với website.</p>
-        </div>
-        <p v-else class="text-sm text-muted-foreground">Đơn sàn chưa đồng bộ được và từng lượt đối soát đơn.</p>
-        <div class="w-64">
-            <Select v-model="account" :options="[{ value: '', label: 'Mọi website và gian hàng' }, ...accounts.map((a) => ({ value: a.id, label: a.shop_name }))]" data-testid="sync-account" />
-        </div>
+    <PageHeader v-if="!embedded" title="Lịch sử và lỗi đồng bộ" description="Đơn website chưa đồng bộ được, và từng lượt ECSO đối soát đơn với website." :back="{ to: '/marketplaces', label: 'Kết nối sàn' }">
+        <div class="w-64"><Select v-model="account" :options="[{ value: '', label: 'Mọi website và gian hàng' }, ...accounts.map((a) => ({ value: a.id, label: a.shop_name }))]" data-testid="sync-account" /></div>
+    </PageHeader>
+    <div v-else class="mb-4 flex flex-wrap items-end justify-between gap-4">
+        <p class="text-sm text-muted-foreground">Đơn sàn chưa đồng bộ được và từng lượt đối soát đơn.</p>
+        <div class="w-64"><Select v-model="account" :options="[{ value: '', label: 'Mọi website và gian hàng' }, ...accounts.map((a) => ({ value: a.id, label: a.shop_name }))]" data-testid="sync-account" /></div>
     </div>
 
     <div v-if="tab === 'errors'" class="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5" data-testid="sync-error-groups">

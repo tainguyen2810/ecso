@@ -41,3 +41,15 @@ describe('dates', () => {
         expect(daysBetween('2026-11-01', '2026-11-13')).toBe(13);
     });
 });
+
+describe('parseTime', () => {
+    it('reads short ways of typing a time', async () => {
+        const { parseTime } = await import('./dates');
+        expect(parseTime('9')).toBe('09:00');
+        expect(parseTime('930')).toBe('09:30');
+        expect(parseTime('14:05')).toBe('14:05');
+        expect(parseTime('9h30')).toBe('09:30');
+        expect(parseTime('25:00')).toBeNull();
+        expect(parseTime('abc')).toBeNull();
+    });
+});

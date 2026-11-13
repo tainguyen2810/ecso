@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import PageHeader from '../../PageHeader.vue';
 import { computed, onMounted, ref } from 'vue';
-import { AlertTriangle, ChevronLeft, CircleDashed, Download, FileSpreadsheet, TrendingDown, Upload, XCircle } from 'lucide-vue-next';
+import { AlertTriangle, CircleDashed, Download, FileSpreadsheet, TrendingDown, Upload, XCircle } from 'lucide-vue-next';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
@@ -113,14 +114,9 @@ const guides: Record<string, { name: string; path: string }> = {
 </script>
 
 <template>
-    <RouterLink to="/settings/pricing" class="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ChevronLeft class="size-4" /> Thuế và chính sách giá</RouterLink>
-    <div class="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div>
-            <h1 class="text-xl font-semibold tracking-tight">Kiểm tra phí sàn</h1>
-            <p class="text-sm text-muted-foreground">Phí thực tế sàn đã thu, tính từ dữ liệu đối soát 30 ngày gần nhất (bỏ đơn hủy, hoàn). Tự kiểm tra mỗi sáng lúc 06:00.</p>
-        </div>
+    <PageHeader title="Kiểm tra phí sàn" description="Phí thực tế sàn đã thu, tính từ dữ liệu đối soát 30 ngày gần nhất (bỏ đơn hủy, hoàn). Tự kiểm tra mỗi sáng lúc 06:00." :back="{ to: '/settings/pricing', label: 'Thuế và chính sách giá' }">
         <Button v-if="canEdit && shops.length" data-testid="open-import" @click="openImport()"><Upload /> Nhập file đối soát</Button>
-    </div>
+    </PageHeader>
 
     <div v-if="loading && !shops.length" class="space-y-3"><Skeleton v-for="i in 3" :key="i" class="h-20" /></div>
     <template v-else>

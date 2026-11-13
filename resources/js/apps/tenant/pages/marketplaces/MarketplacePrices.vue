@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import PageHeader from '../../PageHeader.vue';
 import { computed, onMounted, ref, watch } from 'vue';
-import { ChevronLeft, Download, Lock, LockOpen, Search } from 'lucide-vue-next';
+import { Download, Lock, LockOpen, Search } from 'lucide-vue-next';
 import Pagination from '../../components/Pagination.vue';
 import Tabs from '../../components/Tabs.vue';
 import Button from '@/shared/ui/Button.vue';
@@ -95,20 +96,14 @@ const diffText = (c: PriceBoardCell) => (c.current !== null && c.new !== null ? 
 </script>
 
 <template>
-    <RouterLink to="/marketplaces" class="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ChevronLeft class="size-4" /> Kết nối sàn</RouterLink>
-    <div class="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div>
-            <h1 class="text-xl font-semibold tracking-tight">Bảng giá sàn</h1>
-            <p class="text-sm text-muted-foreground">Giá niêm yết từng sàn tính từ giá gốc và <RouterLink to="/settings/pricing" class="text-primary hover:underline">bảng phí</RouterLink>. Duyệt rồi áp dụng, hoặc xuất file giá để tải lên Seller Center.</p>
-        </div>
-        <div class="flex flex-wrap gap-2">
-            <Button v-for="a in accounts" v-show="exportable" :key="a.id" variant="outline" :data-testid="`export-${a.id}`" @click="exportFile(a.id)"><Download /> File giá {{ a.shop_name }}</Button>
-            <Button v-if="canEdit && selected.size" variant="outline" :loading="busy?.startsWith('lock')" @click="lock([...selected], true)"><Lock /> Khóa giá đã chọn</Button>
-            <Button v-if="canEdit" :loading="busy === 'apply'" :disabled="!counts.pending" data-testid="apply-prices" @click="apply(selected.size ? [...selected] : null)">
-                {{ selected.size ? `Áp dụng đã chọn (${selected.size})` : `Áp dụng tất cả (${counts.pending})` }}
-            </Button>
-        </div>
-    </div>
+    <PageHeader title="Bảng giá sàn" :back="{ to: '/marketplaces', label: 'Kết nối sàn' }">
+        <template #description>Giá niêm yết từng sàn tính từ giá gốc và <RouterLink to="/settings/pricing" class="text-primary hover:underline">bảng phí</RouterLink>. Duyệt rồi áp dụng, hoặc xuất file giá để tải lên Seller Center.</template>
+        <Button v-for="a in accounts" v-show="exportable" :key="a.id" variant="outline" :data-testid="`export-${a.id}`" @click="exportFile(a.id)"><Download /> File giá {{ a.shop_name }}</Button>
+        <Button v-if="canEdit && selected.size" variant="outline" :loading="busy?.startsWith('lock')" @click="lock([...selected], true)"><Lock /> Khóa giá đã chọn</Button>
+        <Button v-if="canEdit" :loading="busy === 'apply'" :disabled="!counts.pending" data-testid="apply-prices" @click="apply(selected.size ? [...selected] : null)">
+            {{ selected.size ? `Áp dụng đã chọn (${selected.size})` : `Áp dụng tất cả (${counts.pending})` }}
+        </Button>
+    </PageHeader>
 
     <Card class="mb-4">
         <div class="grid divide-y sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x">

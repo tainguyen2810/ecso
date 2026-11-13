@@ -130,3 +130,14 @@ export function presetOf(from: string, to: string, now = new Date()): RangePrese
         return r.from === from && r.to === to;
     }) ?? null;
 }
+
+/** "9", "930", "9:30", "09h30" → "09:30" (24 h); null when it is not a time of day. */
+export function parseTime(text: string): string | null {
+    const t = text.trim().toLowerCase().replace(/h/, ':');
+    const m = /^(\d{1,2})(?::?(\d{2}))?$/.exec(t);
+    if (!m) return null;
+    const h = Number(m[1]);
+    const min = Number(m[2] ?? 0);
+    if (h > 23 || min > 59) return null;
+    return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}

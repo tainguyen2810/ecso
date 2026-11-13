@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DateTimeInput from '@/shared/ui/DateTimeInput.vue';
 import { computed, reactive, ref, watch } from 'vue';
 import { Info, Search } from 'lucide-vue-next';
 import Button from '@/shared/ui/Button.vue';
@@ -258,7 +259,7 @@ async function save(again = false) {
                 <Select id="v-type" v-model="form.type" :options="activeTypes.map((t) => ({ value: t.id, label: t.name }))" data-testid="v-type" />
             </FormField>
             <FormField label="Ngày ghi nhận" for="v-paid-at" :error="error?.field('paid_at')">
-                <Input id="v-paid-at" v-model="form.paid_at" type="datetime-local" :max="nowLocal()" />
+                <DateTimeInput id="v-paid-at" v-model="form.paid_at" :max="nowLocal()" />
             </FormField>
             <FormField label="Tham chiếu" for="v-ref" hint="Mã giao dịch ngân hàng, số hóa đơn…"><Input id="v-ref" v-model="form.reference" maxlength="100" data-testid="v-ref" /></FormField>
             <FormField label="Diễn giải" for="v-note"><Input id="v-note" v-model="form.note" maxlength="500" :placeholder="receipt ? 'VD: Thu tiền bán thùng carton' : 'VD: Quảng cáo Shopee tháng 11'" data-testid="v-note" /></FormField>

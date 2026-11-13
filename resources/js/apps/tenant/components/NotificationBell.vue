@@ -7,7 +7,7 @@ import { cn } from '@/shared/lib/utils';
 import { toneClasses, type Tone } from '@/shared/lib/tones';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { usePopover } from '@/shared/composables/usePopover';
-import { inboxKinds, readJson, unseenCount, writeJson, type InboxItem } from './inbox';
+import { inboxItems, inboxKinds, readJson, unseenCount, writeJson, type InboxItem } from './inbox';
 
 /**
  * Chuông thông báo (B2): what waits for the member now, grouped by kind. Counts are live, so a row goes away once
@@ -17,7 +17,8 @@ const tenant = useTenantStore();
 const route = useRoute();
 const router = useRouter();
 
-const items = ref<InboxItem[]>([]);
+const items = inboxItems;
+items.value = [];
 const seen = ref<Record<string, number>>({});
 const off = ref<string[]>([]);
 const settings = ref(false);
