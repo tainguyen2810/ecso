@@ -27,6 +27,7 @@ import { downloadPackingSlips } from './packingSlip';
 import OrderPipeline from './OrderPipeline.vue';
 import OrderQuickView from './OrderQuickView.vue';
 import type { MarketplaceAccountData, OrderDetail, OrderSummary, Ref, SalesChannel, Variant, Warehouse } from '@/shared/types';
+import DateRangeInput from '@/shared/ui/DateRangeInput.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -435,8 +436,7 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
             </div>
 
             <div v-if="moreFilters" class="grid gap-3 rounded-lg border bg-slate-50 p-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="advanced-filters">
-                <FormField label="Ngày đặt từ" for="f-from"><Input id="f-from" v-model="filters.from" type="date" /></FormField>
-                <FormField label="đến ngày" for="f-to"><Input id="f-to" v-model="filters.to" type="date" /></FormField>
+                <FormField label="Ngày đặt" for="f-from"><DateRangeInput id="f-from" v-model:from="filters.from" v-model:to="filters.to" class="sm:w-full" clearable placeholder="Mọi ngày" /></FormField>
                 <FormField label="Trạng thái thanh toán" for="f-pay">
                     <Select id="f-pay" v-model="filters.payment_status" :options="[{ value: '', label: 'Tất cả' }, ...Object.entries(paymentStatus).map(([value, s]) => ({ value, label: s.label }))]" />
                 </FormField>
@@ -463,8 +463,7 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                 <FormField label="Tag" for="f-tag">
                     <Select id="f-tag" v-model="filters.tag" :options="[{ value: '', label: tags.length ? 'Mọi tag' : 'Chưa có tag nào' }, ...tags.map((t) => ({ value: t, label: t }))]" data-testid="filter-tag" />
                 </FormField>
-                <FormField label="Hẹn giao từ" for="f-deliver-from"><Input id="f-deliver-from" v-model="filters.deliver_from" type="date" /></FormField>
-                <FormField label="đến ngày" for="f-deliver-to"><Input id="f-deliver-to" v-model="filters.deliver_to" type="date" /></FormField>
+                <FormField label="Hẹn giao" for="f-deliver-from"><DateRangeInput id="f-deliver-from" v-model:from="filters.deliver_from" v-model:to="filters.deliver_to" class="sm:w-full" clearable placeholder="Mọi ngày" /></FormField>
             </div>
 
             <div v-if="savedViews.length" class="flex flex-wrap items-center gap-2 text-xs" data-testid="saved-views">
@@ -501,7 +500,7 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
             </div>
         </div>
 
-        <div v-if="selected.size" class="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-blue-100 bg-blue-50 px-4 py-2.5 text-sm" data-testid="bulk-bar">
+        <div v-if="selected.size" class="sticky top-14 z-10 flex flex-wrap items-center gap-2 border-b border-blue-100 bg-blue-50 px-4 py-2.5 text-sm" data-testid="bulk-bar">
             <span class="mr-1 rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">{{ selected.size }}</span><span class="mr-2 font-medium">đơn đã chọn</span>
             <template v-if="tenant.can('orders.update')">
                 <Button size="sm" variant="outline" :loading="busy === 'confirm'" @click="bulk('confirm')">{{ actionLabels.confirm }}</Button>

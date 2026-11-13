@@ -42,6 +42,8 @@ Chốt ngày 03/11/2026 cùng màn Tổng quan mới (tham khảo bố cục T�
 | `Tabs` (tenant/components) | `variant="underline"` cho tab trạng thái của trang danh sách (gạch chân xanh, số đếm trong pill); mặc định là tab dạng nút. |
 | `Badge` | Trạng thái (tone `success`, `warning`, `danger`, `muted`, `default`). |
 | `EmptyState` | Khối chưa có dữ liệu, kèm hành động tiếp theo. |
+| `DateInput` | Ô một ngày: hiện và gõ `dd/mm/yyyy` (gõ được 15/11, 151126), lịch tuần bắt đầu Thứ 2, Chủ nhật đỏ. Giá trị vẫn là `yyyy-mm-dd`. `weekday` hiện thứ, `quick="future"` thêm Hôm nay / Ngày mai / +2 ngày. **Không dùng `<input type="date">`** (máy nhiều người hiện mm/dd/yyyy). |
+| `DateRangeInput` | Ô khoảng ngày cho bộ lọc: khoảng có sẵn (Hôm nay … Năm nay) áp dụng ngay, lịch hai tháng + "Áp dụng"; `clearable` để quay về "Mọi ngày". |
 
 Mẫu hay dùng (viết trực tiếp bằng Tailwind, không cần component riêng):
 
@@ -56,6 +58,8 @@ Mẫu hay dùng (viết trực tiếp bằng Tailwind, không cần component ri
 - **Form:** các Card `caps`, cột phải dính (`lg:sticky`) chứa tóm tắt + nút lưu `size=lg`; lựa chọn dạng thẻ radio (chọn = `border-blue-300 bg-blue-50/70`); phím tắt hiển thị bằng `kbd` ở đầu trang.
 
 ## Bố cục
+
+- **Thanh trên cùng** (mọi trang): ô tìm kiếm chung (`Ctrl K`, `GlobalSearch`) và chuông thông báo (`NotificationBell`, dữ liệu từ `GET /api/v1/inbox`). Phần tử dính đầu trang dùng `top-14` để không bị thanh này che.
 
 - Trang: `PageHeader` (tiêu đề + mô tả, nút/bộ lọc bên phải), rồi các `Card` cách nhau `gap-5`. Thao tác phụ (Xuất file, Nhập file, Danh mục, In tem…) đặt ở slot `#links` bằng `HeaderLink` (icon + chữ xám, như Sapo); nút chính giữ bên phải. Không dùng thanh tab điều hướng riêng cho từng nhóm: menu con ở sidebar đã làm việc đó.
 - Nhóm Sản phẩm (như Sapo): Danh sách sản phẩm, Quản lý kho, Đặt hàng nhập, Nhập hàng, Kiểm hàng, Chuyển hàng, Nhà cung cấp, Điều chỉnh giá vốn. Bán tại quầy nằm trong Đơn hàng.

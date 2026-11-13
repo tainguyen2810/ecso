@@ -1,10 +1,12 @@
 <?php
 
 use App\Modules\Analytics\Http\Controllers\AnalyticsController;
+use App\Modules\Analytics\Http\Controllers\InboxController;
 use App\Modules\Analytics\Http\Controllers\ReportsController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
+    Route::get('inbox', InboxController::class)->middleware('throttle:120,1,inbox');
     Route::get('finance/summary', [AnalyticsController::class, 'finance']);
     Route::get('finance/details', [AnalyticsController::class, 'financeDetails']);
     Route::get('reports/best-sellers', [AnalyticsController::class, 'bestSellers']);

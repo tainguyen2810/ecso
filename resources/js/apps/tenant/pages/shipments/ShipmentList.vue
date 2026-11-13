@@ -27,6 +27,7 @@ import CarrierConnectDialog from './CarrierConnectDialog.vue';
 import PushQueue from './PushQueue.vue';
 import { carrierMarks, loadCarrierAccounts, openLabels, type CarrierAccountData } from './carriers';
 import { carrierKeys, carrierText, shipmentTabs, shipmentTone, statusText, type ShipmentData, type ShipmentSummary } from './shipments';
+import DateRangeInput from '@/shared/ui/DateRangeInput.vue';
 
 /**
  * "Đẩy qua vận chuyển": orders waiting for a carrier (compare prices, push in bulk), then every shipment, what needs
@@ -216,8 +217,7 @@ const isLate = (s: ShipmentData) => ['picked_up', 'in_transit', 'out_for_deliver
             <Select v-model="channel" class="w-36" aria-label="Kênh" :options="[{ value: '', label: 'Mọi kênh' }, { value: 'manual', label: 'Bán riêng' }, { value: 'woocommerce', label: 'Website' }, { value: 'shopee', label: 'Shopee' }, { value: 'tiktok', label: 'TikTok Shop' }, { value: 'lazada', label: 'Lazada' }, { value: 'tiki', label: 'Tiki' }]" />
             <Select v-model="warehouse" class="w-36" aria-label="Kho" :options="[{ value: '', label: 'Mọi kho' }, ...warehouses.map((w) => ({ value: w.id, label: w.name }))]" />
             <Select v-model="cod" class="w-40" aria-label="COD" :options="[{ value: '', label: 'COD: tất cả' }, { value: 'with', label: 'Có thu hộ' }, { value: 'without', label: 'Không thu hộ' }, { value: 'collected', label: 'Hãng đang giữ' }, { value: 'remitted', label: 'Đã đối soát' }]" />
-            <label class="flex items-center gap-1 text-xs text-muted-foreground">Lấy hàng từ <Input v-model="from" type="date" class="h-9 w-36" /></label>
-            <label class="flex items-center gap-1 text-xs text-muted-foreground">đến <Input v-model="to" type="date" class="h-9 w-36" /></label>
+            <DateRangeInput v-model:from="from" v-model:to="to" clearable placeholder="Ngày lấy hàng" aria-label="Ngày lấy hàng" />
             <button :class="cn('rounded-full border px-2.5 py-1 text-xs', late ? 'border-amber-300 bg-amber-50 text-amber-700' : 'text-muted-foreground')" data-testid="filter-late" @click="late = !late">Giao chậm</button>
         </div>
 

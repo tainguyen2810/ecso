@@ -7,6 +7,7 @@ import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { useToast } from '@/shared/composables/useToast';
+import DateInput from '@/shared/ui/DateInput.vue';
 
 /** Opening balance or adjustment of a customer's debt: a numbered document with its reason. */
 const open = defineModel<boolean>('open', { required: true });
@@ -57,8 +58,8 @@ async function save() {
             <FormField label="Số tiền" for="de-amount" :error="error?.field('amount')" :class="opening ? 'sm:col-span-2' : ''">
                 <Input id="de-amount" v-model="form.amount" type="number" min="1" step="any" required data-testid="de-amount" />
             </FormField>
-            <FormField label="Ngày chứng từ" for="de-date" :error="error?.field('entry_date')"><Input id="de-date" v-model="form.entry_date" type="date" /></FormField>
-            <FormField label="Hạn thanh toán" for="de-due" hint="Quá ngày này thì tính là nợ quá hạn." :error="error?.field('due_date')"><Input id="de-due" v-model="form.due_date" type="date" /></FormField>
+            <FormField label="Ngày chứng từ" for="de-date" :error="error?.field('entry_date')"><DateInput id="de-date" v-model="form.entry_date" /></FormField>
+            <FormField label="Hạn thanh toán" for="de-due" hint="Quá ngày này thì tính là nợ quá hạn." :error="error?.field('due_date')"><DateInput id="de-due" v-model="form.due_date" /></FormField>
             <FormField label="Lý do" for="de-reason" class="sm:col-span-2" :error="error?.field('reason') ?? error?.field('kind')">
                 <Input id="de-reason" v-model="form.reason" maxlength="500" required data-testid="de-reason" />
             </FormField>

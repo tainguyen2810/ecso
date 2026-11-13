@@ -188,7 +188,7 @@ const hints: Record<DocumentKindKey, string> = {
         </Card>
 
         <div class="space-y-5">
-            <Card title="Thông tin phiếu" class="lg:sticky lg:top-4">
+            <Card title="Thông tin phiếu" class="lg:sticky lg:top-[4.5rem]">
                 <div class="space-y-4 p-5">
                     <FormField :label="kindKey === 'transfers' ? 'Kho xuất' : 'Kho'" for="doc-warehouse" :error="error?.field('warehouse_id') ?? error?.field('from_warehouse_id')">
                         <Select id="doc-warehouse" v-model="form.warehouse_id" :options="ownWarehouses" data-testid="doc-warehouse" />

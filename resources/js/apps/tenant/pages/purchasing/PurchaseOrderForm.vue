@@ -20,6 +20,7 @@ import { purchaseCosts, VAT_RATES } from './costs';
 import { supplierPaymentMethods } from './labels';
 import { useSettingsStore } from '@/shared/stores/settings';
 import type { PurchaseOrderData, Supplier, Variant, Warehouse } from '@/shared/types';
+import DateInput from '@/shared/ui/DateInput.vue';
 
 /**
  * "Tạo đơn nhập hàng" like Sapo: supplier card with debt, invoice details, lines, order discount (F6) and purchase
@@ -247,9 +248,9 @@ function onKey(e: KeyboardEvent) {
                 <FormField label="Kho nhập" :error="error?.field('warehouse_id')">
                     <Select v-model="form.warehouse_id" :options="warehouses.map((w) => ({ value: w.id, label: `${w.code} · ${w.name}` }))" data-testid="po-warehouse" />
                 </FormField>
-                <FormField label="Ngày hẹn giao" for="po-expected"><Input id="po-expected" v-model="form.expected_at" type="date" /></FormField>
-                <FormField label="Ngày hóa đơn" for="po-invoice-date" :error="error?.field('invoice_date')"><Input id="po-invoice-date" v-model="form.invoice_date" type="date" data-testid="po-invoice-date" /></FormField>
-                <FormField label="Hạn thanh toán" for="po-due-date" :error="error?.field('due_date')"><Input id="po-due-date" v-model="form.due_date" type="date" data-testid="po-due-date" /></FormField>
+                <FormField label="Ngày hẹn giao" for="po-expected"><DateInput id="po-expected" v-model="form.expected_at" /></FormField>
+                <FormField label="Ngày hóa đơn" for="po-invoice-date" :error="error?.field('invoice_date')"><DateInput id="po-invoice-date" v-model="form.invoice_date" data-testid="po-invoice-date" /></FormField>
+                <FormField label="Hạn thanh toán" for="po-due-date" :error="error?.field('due_date')"><DateInput id="po-due-date" v-model="form.due_date" data-testid="po-due-date" /></FormField>
                 <FormField label="Tham chiếu" for="po-reference" :error="error?.field('reference')">
                     <Input id="po-reference" v-model="form.reference" placeholder="Số hóa đơn, mã đơn của NCC" data-testid="po-reference" />
                 </FormField>

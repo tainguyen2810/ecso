@@ -20,6 +20,7 @@ import { cn, formatDate, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
 import type { Product, Ref } from '@/shared/types';
+import DateRangeInput from '@/shared/ui/DateRangeInput.vue';
 
 const tenant = useTenantStore();
 const toast = useToast();
@@ -305,14 +306,10 @@ function toggleAll() {
                     ]"
                 />
             </label>
-            <label class="grid gap-1">
-                <span class="text-xs text-muted-foreground">Tạo từ ngày</span>
-                <Input v-model="filters.created_from" type="date" class="w-40" aria-label="Tạo từ ngày" />
-            </label>
-            <label class="grid gap-1">
-                <span class="text-xs text-muted-foreground">Đến ngày</span>
-                <Input v-model="filters.created_to" type="date" class="w-40" aria-label="Tạo đến ngày" />
-            </label>
+            <div class="grid gap-1">
+                <span class="text-xs text-muted-foreground">Ngày tạo</span>
+                <DateRangeInput v-model:from="filters.created_from" v-model:to="filters.created_to" clearable placeholder="Mọi ngày" aria-label="Ngày tạo" />
+            </div>
             <Button v-if="activeExtra" variant="ghost" size="sm" @click="clearExtra"><X /> Xóa bộ lọc</Button>
         </div>
 

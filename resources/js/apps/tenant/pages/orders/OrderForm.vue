@@ -28,6 +28,7 @@ import CarrierQuotePicker from '../shipments/CarrierQuotePicker.vue';
 import ParcelOptionsPanel from '../shipments/ParcelOptionsPanel.vue';
 import { choiceOf, loadCarrierAccounts, type CarrierAccountData, type CarrierChoice, type ParcelOptions, type QuoteResult } from '../shipments/carriers';
 import type { Customer, CustomerSummary, OrderDetail, OrderReturnData, SalesChannel, Variant, Warehouse } from '@/shared/types';
+import DateInput from '@/shared/ui/DateInput.vue';
 
 /** A SKU line (stock is held) or a service line (own name and price, no stock). */
 interface Line {
@@ -904,7 +905,7 @@ async function saveDraft() {
                         </div>
                         <div v-else-if="e.key === 'deliver_on'" class="grid grid-cols-[88px_1fr] items-center gap-2">
                             <label for="o-deliver-on" class="text-muted-foreground">Hẹn giao</label>
-                            <Input id="o-deliver-on" v-model="form.deliver_on" type="date" data-testid="form-deliver-on" />
+                            <DateInput weekday quick="future" id="o-deliver-on" v-model="form.deliver_on" data-testid="form-deliver-on" />
                         </div>
                     </template>
                     <div v-if="canBackdate" class="grid grid-cols-[88px_1fr] items-center gap-2">

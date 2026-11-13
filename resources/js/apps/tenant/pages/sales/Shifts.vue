@@ -14,6 +14,7 @@ import { formatDateTime, formatMoney } from '@/shared/lib/utils';
 import ShiftPanel from './ShiftPanel.vue';
 import { differenceLabel } from './shift';
 import type { CashShift } from '@/shared/types';
+import DateRangeInput from '@/shared/ui/DateRangeInput.vue';
 
 const shifts = ref<CashShift[]>([]);
 const loading = ref(true);
@@ -62,8 +63,7 @@ function onChanged(s: CashShift) {
             </div>
             <div class="flex flex-wrap gap-2">
                 <Select v-model="filters.status" class="w-36" :options="[{ value: '', label: 'Mọi trạng thái' }, { value: 'open', label: 'Đang mở' }, { value: 'closed', label: 'Đã đóng' }]" aria-label="Trạng thái" />
-                <Input v-model="filters.from" type="date" class="w-40" aria-label="Từ ngày" />
-                <Input v-model="filters.to" type="date" class="w-40" aria-label="Đến ngày" />
+                <DateRangeInput v-model:from="filters.from" v-model:to="filters.to" clearable placeholder="Mọi ngày" aria-label="Khoảng ngày" />
             </div>
         </div>
 
