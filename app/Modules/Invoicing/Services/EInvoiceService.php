@@ -57,7 +57,11 @@ class EInvoiceService
         return $account;
     }
 
-    /** @param  array{template?: string, issue_mode?: string, send_email?: bool}  $data  template = "code|series" */
+    /**
+     * Saves the template (sent as "code|series"), the issue mode and the e-mail choice.
+     *
+     * @param  array{template?: string, issue_mode?: string, send_email?: bool}  $data
+     */
     public function updateSettings(EInvoiceAccount $account, array $data): EInvoiceAccount
     {
         if (isset($data['template'])) {
