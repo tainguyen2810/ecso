@@ -49,8 +49,10 @@ beforeEach(function () {
         },
     ]);
     $this->connect = fn (array $override = []) => $this->api->postJson('/api/v1/zalo/account', ['app_id' => '4501234567', 'secret_key' => 'sk-1', 'refresh_token' => 'rt-0', ...$override]);
+    // The default channel is the counter (POS), which never sends ZNS: orders here come from a fanpage.
+    $this->channel = $this->api->postJson('/api/v1/sales-channels', ['name' => 'Fanpage', 'type' => 'facebook', 'warehouse_id' => defaultWarehouse($this->tenant)->ulid])->assertCreated()->json('data.id');
     $this->order = fn (string $phone = '0938123321', array $extra = []) => createSalesOrder($this->owner, $this->tenant, [[$this->variant, 2, 150000]], [
-        'stage' => 'pending', 'buyer_name' => 'Trần Thị Mai', 'buyer_phone' => $phone, ...$extra,
+        'stage' => 'pending', 'channel_id' => $this->channel, 'buyer_name' => 'Trần Thị Mai', 'buyer_phone' => $phone, ...$extra,
     ])->assertCreated()->json('data.id');
 });
 

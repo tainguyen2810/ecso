@@ -45,7 +45,7 @@ class CustomerImporter
     /** key => header patterns (normalized by ImportHeaders): EzSell's, Sapo's and KiotViet's names. */
     public const ALIASES = [
         'code' => ['/^ma_khach_hang$/', '/^ma_kh$/', '/^code$/'],
-        'name' => ['/^ten_khach_hang$/', '/^ten_kh$/', '/^ho_va_ten$/', '/^ho_ten$/', '/^name$/'],
+        'name' => ['/^ten_khach_hang$/', '/^ten_kh$/', '/^name$/'],
         'phone' => ['/^so_dien_thoai$/', '/^dien_thoai$/', '/^di_dong$/', '/^sdt$/', '/^phone$/'],
         'email' => ['/^email$/'],
         'address' => ['/^dia_chi$/', '/^address$/'],

@@ -82,6 +82,7 @@ it('reads a KiotViet customer file with opening debts, and skips debts the user 
         ->and($check->json('skipped.0.row'))->toBe(4)
         ->and(collect($check->json('warnings'))->pluck('message')->implode(' '))->toContain('không có quyền')->toContain('Khách sỉ KiotViet');
 
+    $this->api = actingInTenant($this->owner, $this->tenant); // back to the owner, who may set debts
     $this->api->postJson('/api/v1/customers/import', ['file' => $file()])->assertUnprocessable(); // the repeated phone stops it
     $this->api->postJson('/api/v1/customers/import', ['file' => $file(), 'skip_invalid' => true])->assertOk()
         ->assertJsonPath('created', 2)->assertJsonPath('debts', 1);
