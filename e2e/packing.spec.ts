@@ -32,7 +32,7 @@ test("scan to pack: open by order code, count items, refuse wrong and extra scan
     await expect(page.getByTestId("order-status")).toHaveText("Chờ đóng gói");
     const orderId = page.url().split("/").pop()!;
 
-    await page.getByRole("button", { name: "Đơn hàng", exact: true }).click();
+    // The menu group is already open on an order page: the link is right there.
     await page.getByRole("link", { name: "Đóng gói", exact: true }).click();
     await expect(page).toHaveURL(/\/orders\/pack$/);
     const scan = page.getByTestId("pack-scan");
