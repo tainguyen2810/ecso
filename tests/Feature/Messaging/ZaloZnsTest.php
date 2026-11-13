@@ -81,7 +81,7 @@ it('sends the chosen template when an order is confirmed, once, and logs failure
     $this->api->postJson("/api/v1/orders/{$id}/actions/confirm")->assertOk();
     $order = Order::withoutGlobalScopes()->where('ulid', $id)->sole();
     expect($this->sent)->toHaveCount(1)->and($this->sent[0]['phone'])->toBe('84938123321')
-        ->and($this->sent[0]['template_data'])->toBe(['customer_name' => 'Trần Thị Mai', 'order_code' => $order->external_order_id, 'total' => '300.000']);
+        ->and($this->sent[0]['template_data'])->toEqual(['customer_name' => 'Trần Thị Mai', 'order_code' => $order->external_order_id, 'total' => '300.000']);
 
     // Sending again for the same order and event does nothing; an expired token is refreshed once.
     expect(app(ZaloService::class)->send($order, 'confirmed'))->toBeNull();
