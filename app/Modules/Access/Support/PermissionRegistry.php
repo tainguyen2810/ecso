@@ -26,6 +26,7 @@ final class PermissionRegistry
             'orders.payment' => 'Thu tiền, hoàn tiền đơn bán',
             'orders.payment.void' => 'Hủy phiếu thu, phiếu hoàn tiền nhập nhầm',
             'orders.price' => 'Sửa giá, chiết khấu khi bán (khi Cấu hình không cho nhân viên sửa)',
+            'promotions.manage' => 'Tạo, sửa, dừng chương trình khuyến mãi',
             'orders.shifts' => 'Xem và đóng ca bán hàng của mọi thu ngân',
             'shipments.manage' => 'Tạo, sửa vận đơn và cập nhật trạng thái giao',
             'shipments.import' => 'Nhập mã vận đơn từ file',
@@ -110,7 +111,7 @@ final class PermissionRegistry
             Role::OWNER => ['name' => 'Chủ doanh nghiệp', 'rank' => 100, 'permissions' => $all],
             Role::ADMIN => ['name' => 'Quản trị doanh nghiệp', 'rank' => 90, 'permissions' => array_values(array_diff($all, ['billing.manage']))],
             Role::MANAGER => ['name' => 'Quản lý vận hành', 'rank' => 70, 'permissions' => [
-                ...self::READ_ALL, 'orders.update', 'orders.cancel', 'orders.assign', 'orders.print', 'orders.pack', 'orders.create', 'orders.payment', 'orders.payment.void', 'orders.price', 'orders.shifts', 'einvoice.issue', 'shipments.manage', 'shipments.import', 'customers.manage', 'customers.import', 'customers.export', 'customers.delete', 'customers.debt_adjust', 'customers.merge', 'products.manage',
+                ...self::READ_ALL, 'orders.update', 'orders.cancel', 'orders.assign', 'orders.print', 'orders.pack', 'orders.create', 'orders.payment', 'orders.payment.void', 'orders.price', 'orders.shifts', 'einvoice.issue', 'promotions.manage', 'shipments.manage', 'shipments.import', 'customers.manage', 'customers.import', 'customers.export', 'customers.delete', 'customers.debt_adjust', 'customers.merge', 'products.manage',
                 'inventory.receive', 'inventory.adjust', 'inventory.adjust.approve', 'inventory.transfer', 'purchasing.manage', 'purchasing.payment',
                 'returns.inspect', 'finance.view', 'finance.balances', 'finance.profit', 'finance.vouchers', 'finance.vouchers.void', 'members.view',
                 'sync.operate',

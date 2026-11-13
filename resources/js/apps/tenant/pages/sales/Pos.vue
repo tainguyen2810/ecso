@@ -17,6 +17,7 @@ import { printShopFrom } from '../orders/printShop';
 import { useSettingsStore } from '@/shared/stores/settings';
 import { addToCart, applyGroup, cartTotals, emptyCart, quickCash, splitPayments, syncGroupDiscount, type Cart } from './pos';
 import ShiftPanel from './ShiftPanel.vue';
+import { previewPromotions, type PromotionPreview } from '../promotions/promotions';
 import type { CashShift, Customer, OrderDetail, SalesChannel, Variant, Warehouse } from '@/shared/types';
 
 const STORAGE_KEY = 'ecso.pos.carts';
@@ -35,7 +36,41 @@ const carts = ref<Cart[]>([emptyCart(1)]);
 const active = ref(0);
 const cart = computed(() => carts.value[active.value]!);
 const taxRule = computed(() => ({ rate: Number(settings.data?.tax.sale_rate) || 0, included: settings.data?.tax.prices_include_tax ?? true }));
-const totals = computed(() => cartTotals(cart.value, taxRule.value));
+// Khuyến mãi (C4): what the running promotions give this cart; the server applies the same when the sale is saved.
+const promo = ref<PromotionPreview | null>(null);
+const promoDiscount = computed(() => Number(promo.value?.discount ?? 0));
+const promoGifts = computed(() => (promo.value?.applied ?? []).flatMap((a) => a.gifts.map((g) => ({ ...g, promotion: a.name }))));
+const promoNames = computed(() => (promo.value?.applied ?? []).filter((a) => a.type !== 'gift' && Number(a.amount) > 0).map((a) => a.name).join(', '));
+const totals = computed(() => cartTotals({ ...cart.value, discount: (Number(cart.value.discount) || 0) + promoDiscount.value }, taxRule.value));
+let promoSeq = 0;
+async function loadPromo() {
+    const seq = ++promoSeq;
+    const c = cart.value;
+    if (!c.lines.length) {
+        promo.value = null;
+        return;
+    }
+    try {
+        const res = await previewPromotions({
+            channel_id: channelId.value || null,
+            customer_id: c.customer?.id ?? null,
+            coupon_code: c.coupon?.trim() || null,
+            lines: c.lines.map((l) => ({ variant_id: l.variant_id, quantity: l.quantity, unit_price: l.unit_price, discount: l.discount })),
+        });
+        if (seq === promoSeq) promo.value = res;
+    } catch {
+        if (seq === promoSeq) promo.value = null;
+    }
+}
+let promoTimer: ReturnType<typeof setTimeout> | undefined;
+watch(
+    () => [active.value, channelId.value, cart.value.customer?.id, cart.value.coupon, cart.value.lines.map((l) => [l.variant_id, l.quantity, l.unit_price, l.discount])],
+    () => {
+        clearTimeout(promoTimer);
+        promoTimer = setTimeout(loadPromo, 300);
+    },
+    { deep: true },
+);
 // Phones and small tablets: the cart is a sheet over the products, opened from the bar at the bottom.
 const cartOpen = ref(false);
 
@@ -212,6 +247,8 @@ async function pay() {
     }
     paying.value = true;
     error.value = null;
+    clearTimeout(promoTimer);
+    await loadPromo(); // the amount taken must match the promotions the server applies
     const collected = Math.min(received.value, totals.value.total);
     // Same key on every retry of this cart: a sale that went through but whose answer was lost is not sold again.
     const key = (cart.value.key ??= newIdempotencyKey());
@@ -223,6 +260,7 @@ async function pay() {
             counter: true,
             customer_id: cart.value.customer?.id ?? null,
             discount: Number(cart.value.discount) || 0,
+            coupon_code: cart.value.coupon?.trim() || null,
             lines: cart.value.lines.map((l) => ({ variant_id: l.variant_id, quantity: l.quantity, unit_price: l.unit_price, discount: l.discount })),
             payments: split.value ? split.value.payments : collected > 0 ? [{ method: cart.value.method, amount: collected }] : [],
         }, idempotent(key));
@@ -386,6 +424,10 @@ const quick = computed(() => quickCash(totals.value.total));
             <div class="space-y-2 border-t p-3 text-sm">
                 <div class="flex justify-between"><span class="text-muted-foreground">Tiền hàng ({{ totals.quantity }} sp)</span><span class="tabular-nums">{{ formatMoney(totals.subtotal) }}</span></div>
                 <div class="flex items-center justify-between"><span class="text-muted-foreground">Giảm giá<template v-if="cart.discountAuto"> (nhóm {{ cart.groupPercent }}%)</template><template v-if="cart.tier === 'wholesale'"> · giá buôn</template></span><input v-model="cart.discount" type="number" min="0" :disabled="!canEditPrice" class="h-7 w-28 rounded-md border bg-card px-2 text-right tabular-nums disabled:bg-muted/50" data-testid="pos-discount" @input="cart.discountAuto = false" /></div>
+                <div v-if="promoDiscount > 0" class="flex justify-between text-emerald-700" data-testid="pos-promotion"><span>Khuyến mãi <span class="text-xs">{{ promoNames }}</span></span><span class="tabular-nums">−{{ formatMoney(promoDiscount) }}</span></div>
+                <div v-for="g in promoGifts" :key="`${g.promotion}-${g.sku}`" class="flex justify-between text-emerald-700" data-testid="pos-gift"><span>Tặng {{ g.quantity }} × {{ g.name ?? g.sku }}</span><span class="tabular-nums">0 ₫</span></div>
+                <div class="flex items-center justify-between"><span class="text-muted-foreground">Mã giảm giá</span><input v-model="cart.coupon" placeholder="Nhập mã" maxlength="40" class="h-7 w-28 rounded-md border bg-card px-2 text-right uppercase" data-testid="pos-coupon" /></div>
+                <p v-if="cart.coupon?.trim() && promo?.code_error" class="text-right text-xs text-destructive">{{ promo.code_error }}</p>
                 <div v-if="taxRule.rate > 0" class="flex justify-between text-muted-foreground" data-testid="pos-tax"><span>{{ taxRule.included ? 'Trong đó' : 'Cộng' }} thuế GTGT {{ taxRule.rate }}%</span><span class="tabular-nums">{{ formatMoney(totals.tax) }}</span></div>
                 <div class="flex justify-between text-lg font-semibold"><span>Khách phải trả</span><span class="tabular-nums" data-testid="pos-total">{{ formatMoney(totals.total) }}</span></div>
 

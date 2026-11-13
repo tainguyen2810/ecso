@@ -291,6 +291,8 @@ export interface OrderItemDetail {
     discount: string;
     tax?: string;
     mapping_status: string;
+    /** A gift line added by a promotion (0 ₫); the server adds it again on save. */
+    is_gift?: boolean;
     listing_id: string | null;
     variant: { id: string; sku: string; name: string } | null;
     reservation: { quantity: number; shortage: number; status: string } | null;
@@ -298,6 +300,11 @@ export interface OrderItemDetail {
 
 export interface OrderDetail extends OrderSummary {
     items: OrderItemDetail[];
+    /** Money off from promotions, already inside discount. */
+    promotion_discount?: string;
+    coupon_code?: string | null;
+    promotions_off?: boolean;
+    promotions?: { id: string; name: string; type: string; code: string | null; amount: string }[];
     history: { from: string | null; to: string; raw_status: string | null; source: string; actor: string | null; note: string | null; occurred_at: string | null; created_at: string }[];
     edits?: { at: string | null; actor: string | null; changes: string[] }[];
     notes: { id: number; body: string; user: string | null; created_at: string | null }[];

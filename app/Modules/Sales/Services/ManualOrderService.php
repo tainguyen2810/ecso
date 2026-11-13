@@ -23,6 +23,7 @@ use App\Modules\Sales\Models\CashShift;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Sales\Models\SalesChannel;
+use App\Modules\Sales\Promotions\OrderPromotions;
 use App\Modules\Sales\Support\PhoneNumber;
 use App\Modules\Tenancy\Support\TenantSettings;
 use Illuminate\Support\Collection;
@@ -65,6 +66,7 @@ class ManualOrderService
         private readonly AuditLogger $audit,
         private readonly ExchangeService $exchanges,
         private readonly VnAddress $addresses,
+        private readonly OrderPromotions $promotions,
     ) {}
 
     /**
@@ -107,6 +109,7 @@ class ManualOrderService
             $this->fillDetails($order, $data, $customer);
             $order->save();
             $this->replaceItems($order, $data['lines']);
+            $this->promotions->apply($order, $data, bcadd((string) ($data['discount'] ?? 0), '0', 2));
             $this->refreshTotals($order);
 
             $this->history($order, null, OrderStatus::PENDING_CONFIRMATION, 'Tạo đơn');
@@ -164,6 +167,7 @@ class ManualOrderService
             }
 
             $before = $this->editSnapshot($order);
+            $typedDiscount = array_key_exists('discount', $data) ? bcadd((string) ($data['discount'] ?? 0), '0', 2) : OrderPromotions::typedDiscount($order);
             $previousCustomer = $order->customer_id !== null ? (int) $order->customer_id : null;
             $customer = array_key_exists('customer_id', $data) || isset($data['customer']) ? $this->customer($data, $previousCustomer) : $order->customer;
             $this->fillDetails($order, $data, $customer);
@@ -183,6 +187,7 @@ class ManualOrderService
 
             $order->version = $order->version + 1;
             $order->save();
+            $this->promotions->apply($order, $data, $typedDiscount);
             $this->refreshTotals($order);
             $this->stock->apply($order);
             $this->payments->recompute($order);
@@ -485,7 +490,7 @@ class ManualOrderService
 
     private function currentLines(Order $order): array
     {
-        return $order->items()->with('variant')->get()->map(fn (OrderItem $i) => $i->variant === null
+        return $order->items()->whereNull('promotion_id')->with('variant')->get()->map(fn (OrderItem $i) => $i->variant === null
             ? ['variant_id' => null, 'name' => $i->name, 'quantity' => $i->quantity, 'unit_price' => (string) $i->unit_price, 'discount' => (string) $i->discount]
             : ['variant_id' => $i->variant->ulid, 'quantity' => $i->quantity, 'unit_price' => (string) $i->unit_price, 'discount' => (string) $i->discount],
         )->all();

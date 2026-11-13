@@ -11,6 +11,7 @@ use App\Modules\Sales\Http\Controllers\CustomerTaskController;
 use App\Modules\Sales\Http\Controllers\CustomerTransferController;
 use App\Modules\Sales\Http\Controllers\OrderDraftController;
 use App\Modules\Sales\Http\Controllers\PosController;
+use App\Modules\Sales\Http\Controllers\PromotionController;
 use App\Modules\Sales\Http\Controllers\SalesChannelController;
 use App\Modules\Sales\Http\Controllers\SalesOrderController;
 use App\Modules\Sales\Services\ManualOrderService;
@@ -20,6 +21,8 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::apiResource('sales-channels', SalesChannelController::class)->except('show');
 
     Route::apiResource('customer-groups', CustomerGroupController::class)->except('show');
+    Route::post('promotions/preview', [PromotionController::class, 'preview'])->middleware('throttle:240,1,sales.promotions.preview');
+    Route::apiResource('promotions', PromotionController::class)->except('show');
     Route::get('customers/tags', [CustomerController::class, 'tags']);
     Route::get('customers/staff', [CustomerController::class, 'staff']);
     Route::post('customers/bulk', [CustomerController::class, 'bulk']);

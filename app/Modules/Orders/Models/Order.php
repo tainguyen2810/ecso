@@ -84,6 +84,8 @@ class Order extends Model
             'subtotal' => 'decimal:2',
             'shipping_fee' => 'decimal:2',
             'discount' => 'decimal:2',
+            'promotion_discount' => 'decimal:2',
+            'promotions_off' => 'boolean',
             'tax_rate' => 'decimal:2',
             'prices_include_tax' => 'boolean',
             'tax_amount' => 'decimal:2',

@@ -101,6 +101,7 @@ class OrderController extends Controller
                 'returnable' => $returnable[$i->id] ?? 0,
                 'unit_price' => $i->unit_price,
                 'discount' => $i->discount,
+                'is_gift' => $i->promotion_id !== null,
                 'tax' => $i->tax,
                 'mapping_status' => $i->mapping_status,
                 'listing_id' => $i->listingVariant?->ulid,
@@ -111,6 +112,9 @@ class OrderController extends Controller
                     'status' => $reservations[$i->id]['status'],
                 ] : null,
             ]),
+            'promotions' => DB::table('promotion_usages')->join('promotions', 'promotions.id', '=', 'promotion_usages.promotion_id')->where('promotion_usages.order_id', $order->id)
+                ->get(['promotions.ulid', 'promotions.name', 'promotions.type', 'promotions.code', 'promotion_usages.amount'])
+                ->map(fn (object $p) => ['id' => $p->ulid, 'name' => $p->name, 'type' => $p->type, 'code' => $p->code, 'amount' => number_format((float) $p->amount, 2, '.', '')]),
             'history' => OrderStatusHistory::query()->with('actor:id,name')->where('order_id', $order->id)->orderBy('id')->get()->map(fn (OrderStatusHistory $h) => [
                 'from' => $h->from_status,
                 'to' => $h->to_status,

@@ -59,7 +59,7 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
                     { label: 'Khách trả hàng', path: '/returns', permission: 'returns.view' },
                 ] },
             { name: 'customers', label: 'Khách hàng', path: '/customers', icon: UsersRound, permission: 'customers.view', shortcut: 'k', description: 'Danh bạ khách mua qua kênh riêng, lịch sử mua và công nợ.',
-                children: [{ label: 'Danh sách khách hàng', path: '/customers' }, { label: 'Nhóm khách hàng', path: '/customers/groups' }, { label: 'Khách trùng', path: '/customers/duplicates', permission: 'customers.merge' }] },
+                children: [{ label: 'Danh sách khách hàng', path: '/customers' }, { label: 'Nhóm khách hàng', path: '/customers/groups' }, { label: 'Khuyến mãi', path: '/promotions', permission: 'orders.create' }, { label: 'Khách trùng', path: '/customers/duplicates', permission: 'customers.merge' }] },
             { name: 'products', label: 'Sản phẩm', path: '/products', icon: Package, permission: 'products.view', anyPermission: ['inventory.view', 'purchasing.view'], shortcut: 'p', description: 'Sản phẩm, tồn kho, nhập hàng, kiểm hàng, chuyển hàng, nhà cung cấp và giá vốn.',
                 alsoActive: ['inventory', 'purchasing'],
                 children: [

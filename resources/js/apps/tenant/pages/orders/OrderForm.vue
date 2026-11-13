@@ -30,6 +30,7 @@ import ParcelOptionsPanel from '../shipments/ParcelOptionsPanel.vue';
 import { choiceOf, loadCarrierAccounts, type CarrierAccountData, type CarrierChoice, type ParcelOptions, type QuoteResult } from '../shipments/carriers';
 import type { Customer, CustomerSummary, OrderDetail, OrderReturnData, SalesChannel, Variant, Warehouse } from '@/shared/types';
 import DateInput from '@/shared/ui/DateInput.vue';
+import { previewPromotions, type PromotionPreview } from '../promotions/promotions';
 
 /** A SKU line (stock is held) or a service line (own name and price, no stock). */
 interface Line {
@@ -89,6 +90,8 @@ const form = reactive({
     is_cod: false,
     shipping_fee: 0 as number | string,
     discount: 0 as number | string,
+    coupon_code: '',
+    promotions_off: false,
     note: '',
     tags: [] as string[],
     deliver_on: '',
@@ -112,8 +115,47 @@ const subtotal = computed(() => lines.value.reduce((s, l) => s + lineTotal(l), 0
 // VAT: the rate of Cấu hình for a new order, the order's own rate when editing (changing Cấu hình never re-taxes it).
 const orderTax = ref<TaxRule | null>(null);
 const taxRule = computed<TaxRule>(() => orderTax.value ?? { rate: Number(settings.data?.tax.sale_rate) || 0, included: settings.data?.tax.prices_include_tax ?? true });
-const taxAmount = computed(() => saleTax(Math.max(0, subtotal.value - num(form.discount)), taxRule.value));
-const total = computed(() => Math.max(0, subtotal.value + num(form.shipping_fee) - num(form.discount)) + (taxRule.value.included ? 0 : taxAmount.value));
+// Promotions (C4): what the server will apply on save, shown while typing. The seller's own discount stays apart.
+const promo = ref<PromotionPreview | null>(null);
+const promoDiscount = computed(() => Number(promo.value?.discount ?? 0));
+const allDiscount = computed(() => num(form.discount) + promoDiscount.value);
+// What the running promotions give this order, asked again (debounced) whenever the lines, buyer or code change.
+let promoTimer: ReturnType<typeof setTimeout> | undefined;
+let promoSeq = 0;
+function refreshPromo() {
+    clearTimeout(promoTimer);
+    promoTimer = setTimeout(async () => {
+        const seq = ++promoSeq;
+        const goods = lines.value.filter((l) => num(l.quantity) > 0);
+        if (goods.length === 0) {
+            promo.value = null;
+            return;
+        }
+        try {
+            const res = await previewPromotions({
+                channel_id: form.channel_id || null,
+                customer_id: customer.value?.id ?? null,
+                new_customer: !customer.value && newCustomer.enabled && !!newCustomer.name,
+                order_id: editId.value,
+                coupon_code: form.coupon_code.trim() || null,
+                promotions_off: form.promotions_off,
+                lines: goods.map((l) => ({ variant_id: l.kind === 'sku' ? l.variant_id : null, quantity: num(l.quantity), unit_price: num(l.unit_price), discount: num(l.discount) })),
+            });
+            if (seq === promoSeq) promo.value = res;
+        } catch {
+            if (seq === promoSeq) promo.value = null;
+        }
+    }, 350);
+}
+watch(
+    () => [lines.value.map((l) => [l.variant_id, l.quantity, l.unit_price, l.discount]), customer.value?.id, newCustomer.enabled && !!newCustomer.name, form.channel_id, form.coupon_code, form.promotions_off],
+    refreshPromo,
+    { deep: true },
+);
+const promoGifts = computed(() => (promo.value?.applied ?? []).flatMap((a) => a.gifts.map((g) => ({ ...g, promotion: a.name }))));
+const promoNames = computed(() => (promo.value?.applied ?? []).filter((a) => Number(a.amount) > 0 && a.type !== 'gift').map((a) => a.name).join(', '));
+const taxAmount = computed(() => saleTax(Math.max(0, subtotal.value - allDiscount.value), taxRule.value));
+const total = computed(() => Math.max(0, subtotal.value + num(form.shipping_fee) - allDiscount.value) + (taxRule.value.included ? 0 : taxAmount.value));
 /** Estimate shown while typing; the server caps it at what the buyer actually paid on the original order. */
 const totalQty = computed(() => lines.value.reduce((s, l) => s + num(l.quantity), 0));
 const exchangeCredit = computed(() => (exchange.value ? Math.min(Number(exchange.value.goods_value ?? 0), total.value) : 0));
@@ -169,14 +211,17 @@ async function loadOrder(id: string, asCopy = false) {
     // A marketplace line without an internal SKU cannot be sold again from here.
     const skipped = o.items.filter((i) => !i.variant && i.mapping_status !== 'service').length;
     if (asCopy && skipped) toast.info(`Bỏ qua ${skipped} dòng chưa liên kết SKU nội bộ.`);
-    o.items = o.items.filter((i) => i.variant || i.mapping_status === 'service');
+    // Gift lines come back from the promotion on save.
+    o.items = o.items.filter((i) => (i.variant || i.mapping_status === 'service') && !i.is_gift);
     form.buyer_name = o.buyer_name ?? '';
     form.buyer_phone = o.buyer_phone ?? '';
     setAddress({ street: o.shipping_street, province_code: o.shipping_province_code, ward_code: o.shipping_ward_code, address: o.shipping_address });
     form.carrier = o.carrier ?? '';
     form.is_cod = o.is_cod;
     form.shipping_fee = Number(o.shipping_fee);
-    form.discount = Number(o.discount);
+    form.discount = Math.max(0, Number(o.discount) - Number(o.promotion_discount ?? 0));
+    form.coupon_code = asCopy ? '' : (o.coupon_code ?? '');
+    form.promotions_off = asCopy ? false : !!o.promotions_off;
     form.note = o.buyer_note ?? '';
     form.tags = [...(o.tags ?? [])];
     form.deliver_on = asCopy ? '' : (o.deliver_on ?? '');
@@ -594,6 +639,8 @@ async function submit() {
         is_cod: form.is_cod,
         shipping_fee: num(form.shipping_fee),
         discount: num(form.discount),
+        coupon_code: form.coupon_code.trim() || null,
+        promotions_off: form.promotions_off,
         note: form.note || null,
         tags: form.tags,
         deliver_on: form.deliver_on || null,
@@ -1019,6 +1066,21 @@ async function saveDraft() {
                     <dd><input v-model="form.discount" type="number" min="0" :disabled="!canEditPrice" class="h-8 w-full rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums disabled:bg-muted/50" data-testid="order-discount" @input="groupDiscountAuto = false" /></dd>
                     <p v-if="groupDiscountAuto" class="col-span-2 -mt-1.5 text-right text-xs text-muted-foreground">Chiết khấu nhóm {{ Number(customerTerms?.group?.discount_percent ?? customer?.group?.discount_percent ?? 0) }}%</p>
                     <p v-if="error?.field('discount')" class="col-span-2 text-right text-xs text-destructive">{{ error.field('discount') }}</p>
+                    <template v-if="promoDiscount > 0">
+                        <dt class="text-emerald-700">Khuyến mãi <span class="block text-xs font-normal text-muted-foreground">{{ promoNames }}</span></dt>
+                        <dd class="text-right tabular-nums text-emerald-700" data-testid="order-promotion">−{{ formatMoney(promoDiscount) }}</dd>
+                    </template>
+                    <template v-for="g in promoGifts" :key="`${g.promotion}-${g.sku}`">
+                        <dt class="text-emerald-700">Tặng {{ g.quantity }} × {{ g.name ?? g.sku }} <span class="block text-xs font-normal text-muted-foreground">{{ g.promotion }}</span></dt>
+                        <dd class="text-right tabular-nums text-emerald-700" data-testid="order-gift">0 ₫</dd>
+                    </template>
+                    <dt>Mã giảm giá</dt>
+                    <dd><input v-model="form.coupon_code" placeholder="Nhập mã" maxlength="40" class="h-8 w-full rounded-md border border-input bg-card px-2 text-right text-sm uppercase" data-testid="order-coupon" /></dd>
+                    <p v-if="form.coupon_code.trim() && promo?.code_error" class="col-span-2 -mt-1.5 text-right text-xs text-destructive" data-testid="coupon-error">{{ promo.code_error }}</p>
+                    <p v-if="error?.field('coupon_code')" class="col-span-2 -mt-1.5 text-right text-xs text-destructive">{{ error.field('coupon_code') }}</p>
+                    <label v-if="canEditPrice" class="col-span-2 -mt-1 flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
+                        <input v-model="form.promotions_off" type="checkbox" class="size-3.5" data-testid="promotions-off" /> Bỏ khuyến mãi tự động trên đơn này
+                    </label>
                     <dt class="text-primary">Phí giao hàng <kbd class="text-[10px] text-muted-foreground">F7</kbd></dt>
                     <dd><input v-model="form.shipping_fee" type="number" min="0" class="h-8 w-full rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" data-testid="shipping-fee" /></dd>
                     <template v-if="taxRule.rate > 0">
