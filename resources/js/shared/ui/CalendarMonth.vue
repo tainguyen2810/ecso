@@ -50,11 +50,11 @@ function cls(d: { iso: string; inMonth: boolean; sunday: boolean }) {
 <template>
     <div class="w-[252px]">
         <div class="mb-1.5 flex items-center justify-between">
-            <button type="button" :class="cn('rounded p-1 text-slate-500 hover:bg-slate-100', hidePrev && 'invisible')" aria-label="Tháng trước" @click="emit('prev')">
+            <button type="button" :class="cn('rounded p-1 text-slate-500 hover:bg-slate-100', hidePrev && 'invisible')" aria-label="Xem tháng trước" @click="emit('prev')">
                 <ChevronLeft class="size-4" />
             </button>
             <span class="text-sm font-semibold">Tháng {{ month + 1 }}, {{ year }}</span>
-            <button type="button" :class="cn('rounded p-1 text-slate-500 hover:bg-slate-100', hideNext && 'invisible')" aria-label="Tháng sau" @click="emit('next')">
+            <button type="button" :class="cn('rounded p-1 text-slate-500 hover:bg-slate-100', hideNext && 'invisible')" aria-label="Xem tháng sau" @click="emit('next')">
                 <ChevronRight class="size-4" />
             </button>
         </div>

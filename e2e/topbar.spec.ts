@@ -38,7 +38,7 @@ test('the bell lists what waits and opens the filtered list', async ({ page }) =
         await expect(panel.getByText('Không có việc nào đang chờ.')).toBeVisible();
     }
 
-    await page.getByTestId('inbox-bell').click();
+    if (!(await panel.isVisible())) await page.getByTestId('inbox-bell').click();
     await page.getByTestId('inbox-settings').click();
     await expect(panel.getByText('Đơn giao thất bại')).toBeVisible();
 });
@@ -49,7 +49,7 @@ test('date fields read and type dd/mm/yyyy', async ({ page }) => {
     await page.getByTestId('finance-range').click();
     const range = page.getByTestId('range-popover');
     await expect(range).toBeVisible();
-    await range.getByRole('button', { name: 'Tháng trước' }).click();
+    await range.getByRole('button', { name: 'Tháng trước', exact: true }).click();
     await expect(range).toBeHidden();
     await expect(page.getByTestId('finance-range')).toHaveText(/\d{2}\/\d{2}\/\d{4} – \d{2}\/\d{2}\/\d{4}/);
 
