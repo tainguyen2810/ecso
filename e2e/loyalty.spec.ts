@@ -24,7 +24,9 @@ test('loyalty: set up points and tiers, then give a customer points', async ({ p
     await page.getByTestId('tier-min-1').fill('3000000');
     await shot(page, '01-cai-dat-tich-diem');
     await page.getByTestId('loyalty-save').click();
-    await expect(page.getByTestId('tier-table')).toContainText('Bạc');
+    await expect(page.getByText('Đã lưu tích điểm và hạng khách.')).toBeVisible();
+    // Tier names sit in inputs, so the saved row is read from its input, not from the table text.
+    await expect(page.getByTestId('tier-name-1')).toHaveValue('Bạc');
 
     await page.goto('/customers');
     await page.getByTestId('customer-q').fill('Võ Quốc Bảo');
