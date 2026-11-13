@@ -238,7 +238,7 @@ class LoyaltyService
         $updates = ['loyalty_tier_id' => $tier?->id];
         $tierGroups = $tiers->pluck('customer_group_id')->filter()->map(fn ($id) => (int) $id)->all();
         if ($customer->customer_group_id === null || in_array((int) $customer->customer_group_id, $tierGroups, true)) {
-            $updates['customer_group_id'] = $tier?->customer_group_id ?? $customer->customer_group_id;
+            $updates['customer_group_id'] = $tier->customer_group_id ?? $customer->customer_group_id;
         }
         Customer::query()->whereKey($customerId)->update($updates);
         $money = number_format((float) $spent, 0, ',', '.');

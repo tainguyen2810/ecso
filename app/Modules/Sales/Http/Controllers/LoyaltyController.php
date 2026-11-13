@@ -151,7 +151,7 @@ class LoyaltyController extends Controller
             'point_multiplier' => $t->point_multiplier,
             'color' => $t->color,
             'customer_group' => $t->customerGroup ? ['id' => $t->customerGroup->ulid, 'name' => $t->customerGroup->name] : null,
-            'discount_percent' => $t->customerGroup?->discount_percent ?? '0.00',
+            'discount_percent' => $t->customerGroup->discount_percent ?? '0.00',
             'customers_count' => (int) ($t->customers_count ?? 0),
         ];
     }
