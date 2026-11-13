@@ -22,6 +22,7 @@ import { cn, formatDate, formatDateTime, formatMoney, formatNumber } from '@/sha
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
 import type { Customer, CustomerGroup, CustomerImportJob } from '@/shared/types';
+import DateRangeInput from '@/shared/ui/DateRangeInput.vue';
 
 const tenant = useTenantStore();
 const toast = useToast();
@@ -364,22 +365,14 @@ async function exportFile(onlySelected: boolean) {
                 <span class="text-xs text-muted-foreground">Số đơn tối thiểu</span>
                 <Input v-model="filters.orders_min" type="number" min="0" class="w-28" aria-label="Số đơn tối thiểu" />
             </label>
-            <label class="grid gap-1">
-                <span class="text-xs text-muted-foreground">Mua lần cuối từ</span>
-                <Input v-model="filters.last_order_from" type="date" class="w-40" aria-label="Mua lần cuối từ ngày" />
-            </label>
-            <label class="grid gap-1">
-                <span class="text-xs text-muted-foreground">đến</span>
-                <Input v-model="filters.last_order_to" type="date" class="w-40" aria-label="Mua lần cuối đến ngày" />
-            </label>
-            <label class="grid gap-1">
-                <span class="text-xs text-muted-foreground">Thêm từ ngày</span>
-                <Input v-model="filters.created_from" type="date" class="w-40" aria-label="Thêm từ ngày" />
-            </label>
-            <label class="grid gap-1">
-                <span class="text-xs text-muted-foreground">đến</span>
-                <Input v-model="filters.created_to" type="date" class="w-40" aria-label="Thêm đến ngày" />
-            </label>
+            <div class="grid gap-1">
+                <span class="text-xs text-muted-foreground">Mua lần cuối</span>
+                <DateRangeInput v-model:from="filters.last_order_from" v-model:to="filters.last_order_to" clearable placeholder="Mọi ngày" aria-label="Mua lần cuối" />
+            </div>
+            <div class="grid gap-1">
+                <span class="text-xs text-muted-foreground">Ngày thêm</span>
+                <DateRangeInput v-model:from="filters.created_from" v-model:to="filters.created_to" clearable placeholder="Mọi ngày" aria-label="Ngày thêm khách" />
+            </div>
             <Button v-if="activeExtra" variant="ghost" size="sm" @click="clearExtra"><X /> Xóa bộ lọc</Button>
         </div>
 

@@ -12,6 +12,7 @@ import { useToast } from '@/shared/composables/useToast';
 import { formatMoney } from '@/shared/lib/utils';
 import { carriers, codStatuses, type CodLine, type CodReconciliation } from './cod';
 import type { Fund } from './voucher';
+import DateInput from '@/shared/ui/DateInput.vue';
 
 const open = defineModel<boolean>('open', { required: true });
 const emit = defineEmits<{ saved: [r: CodReconciliation] }>();
@@ -113,7 +114,7 @@ async function confirm() {
             <div class="grid gap-3 sm:grid-cols-4">
                 <FormField label="Hãng vận chuyển"><Select v-model="carrier" :options="Object.entries(carriers).map(([value, label]) => ({ value, label }))" data-testid="cod-carrier" /></FormField>
                 <FormField label="Tiền về quỹ"><Select v-model="account" :options="fundOptions" data-testid="cod-account" /></FormField>
-                <FormField label="Ngày tiền về"><Input v-model="remittedOn" type="date" :max="today()" data-testid="cod-date" /></FormField>
+                <FormField label="Ngày tiền về"><DateInput v-model="remittedOn" :max="today()" data-testid="cod-date" /></FormField>
                 <FormField label="Số chứng từ (UNC)"><Input v-model="reference" placeholder="Không bắt buộc" /></FormField>
             </div>
             <label class="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed px-4 py-5 text-muted-foreground hover:bg-muted/40">

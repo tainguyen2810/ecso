@@ -26,6 +26,7 @@ import { orderWorkflow } from './workflow';
 import { useSettingsStore } from '@/shared/stores/settings';
 import type { OrderDetail, Ref } from '@/shared/types';
 import type { Fund } from '../cash/voucher';
+import DateInput from '@/shared/ui/DateInput.vue';
 
 const route = useRoute();
 const tenant = useTenantStore();
@@ -644,7 +645,7 @@ async function createReturn() {
                     <div class="space-y-3 px-5 py-4">
                         <TagInput v-model="meta.tags" :suggestions="tagSuggestions" :disabled="!tenant.can('orders.update')" @update:model-value="saveMeta" />
                         <FormField label="Ngày hẹn giao cho khách" for="deliver-on">
-                            <Input id="deliver-on" v-model="meta.deliver_on" type="date" :disabled="!tenant.can('orders.update')" data-testid="deliver-on" @change="saveMeta" />
+                            <DateInput weekday quick="future" id="deliver-on" v-model="meta.deliver_on" :disabled="!tenant.can('orders.update')" data-testid="deliver-on" @change="saveMeta" />
                         </FormField>
                     </div>
                 </Card>

@@ -17,6 +17,7 @@ import { downloadCsv, presetLabels, presetRange, toCsv, type Preset } from '../r
 import FinanceChart from './FinanceChart.vue';
 import FinanceDetails from './FinanceDetails.vue';
 import { change, formulas, type FinanceData, type Metric } from './finance';
+import DateRangeInput from '@/shared/ui/DateRangeInput.vue';
 
 const initial = presetRange('month');
 const from = ref(initial.from);
@@ -107,9 +108,7 @@ function exportCsv() {
     <PageHeader title="Tài chính" description="Doanh thu, phí sàn, tiền sàn chuyển về và lợi nhuận ước tính, theo shop và theo kỳ.">
         <div class="flex flex-wrap items-center gap-2 text-sm">
             <Select v-model="shop" :options="shopOptions" class="w-56" aria-label="Shop hoặc kênh bán" data-testid="finance-shop" />
-            <Input v-model="from" type="date" class="w-36" aria-label="Từ ngày" data-testid="finance-from" />
-            <span class="text-muted-foreground">–</span>
-            <Input v-model="to" type="date" class="w-36" aria-label="Đến ngày" data-testid="finance-to" />
+            <DateRangeInput v-model:from="from" v-model:to="to" aria-label="Khoảng ngày" data-testid="finance-range" />
             <Button variant="outline" size="sm" :disabled="!data" @click="exportCsv"><Download /> Xuất CSV</Button>
         </div>
     </PageHeader>

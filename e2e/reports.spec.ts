@@ -54,7 +54,8 @@ test('reports: sales and profit, stock ledger, cashbook', async ({ page }) => {
     await page.getByTestId('report-group-sales').getByRole('link', { name: 'Doanh thu theo kênh bán' }).click();
     await expect(page.getByTestId('sales-kpis')).toBeVisible();
     await page.goto('/reports/sales');
-    await page.getByRole('button', { name: '7 ngày' }).click();
+    await page.getByTestId('report-range').click();
+    await page.getByTestId('range-popover').getByRole('button', { name: '7 ngày qua' }).click();
     await expect(page.getByTestId('sales-table').locator('tbody tr')).toHaveCount(7);
     await shot(page, '04-sales-by-day');
     await page.getByTestId('sales-by-channel').click();
@@ -88,7 +89,8 @@ test('report centre: every group opens its detail reports on the same period', a
     }
     await page.goto('/reports');
     await expect(page.getByTestId('report-group-sales')).toBeVisible();
-    await page.getByRole('button', { name: '30 ngày' }).click();
+    await page.getByTestId('report-range').click();
+    await page.getByTestId('range-popover').getByRole('button', { name: '30 ngày qua' }).click();
     await expect(page).toHaveURL(/from=/);
     await snap('01-report-centre');
 

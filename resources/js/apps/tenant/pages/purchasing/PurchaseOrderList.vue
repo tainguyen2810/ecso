@@ -19,6 +19,7 @@ import { formatDate, formatDateTime, formatMoney } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { owed, poStatus, receiveStatus, tradeStatus } from './labels';
 import type { PurchaseOrderData, Supplier, Warehouse } from '@/shared/types';
+import DateRangeInput from '@/shared/ui/DateRangeInput.vue';
 
 /**
  * Two lists over the same purchase orders, like Sapo: "Nhập hàng" (every order, tabs by the deal) and
@@ -113,10 +114,7 @@ const newLink = computed(() => (ordering.value ? { path: '/purchasing/new', quer
             </div>
             <Select v-model="filters.warehouse" class="w-full sm:w-44" aria-label="Kho nhập" :options="[{ value: '', label: 'Kho nhập' }, ...warehouses.map((w) => ({ value: w.id, label: w.name }))]" />
             <Select v-model="filters.supplier" class="w-full sm:w-48" aria-label="Nhà cung cấp" :options="[{ value: '', label: 'Nhà cung cấp' }, ...suppliers.map((s) => ({ value: s.id, label: s.name }))]" />
-            <label class="flex items-center gap-1.5 text-sm text-muted-foreground">
-                Từ <Input v-model="filters.created_from" type="date" class="w-36" aria-label="Tạo từ ngày" />
-                đến <Input v-model="filters.created_to" type="date" class="w-36" aria-label="Tạo đến ngày" />
-            </label>
+            <DateRangeInput v-model:from="filters.created_from" v-model:to="filters.created_to" clearable placeholder="Ngày tạo" aria-label="Ngày tạo" />
         </div>
         <div v-if="loading && !rows.length" class="space-y-3 p-4"><Skeleton v-for="i in 5" :key="i" class="h-10" /></div>
         <ErrorState v-else-if="loadError" :message="loadError" @retry="load" />

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Check, ChevronDown, ChevronRight, ChevronsUpDown, LogOut, Menu, Plus, X } from 'lucide-vue-next';
+import { Check, ChevronDown, ChevronRight, ChevronsUpDown, LogOut, Menu, Plus, Search, X } from 'lucide-vue-next';
 import { useAuthStore } from '@/shared/stores/auth';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useGoShortcuts } from '@/shared/composables/useShortcuts';
@@ -9,6 +9,8 @@ import { useToast } from '@/shared/composables/useToast';
 import { cn, initials } from '@/shared/lib/utils';
 import Badge from '@/shared/ui/Badge.vue';
 import { allNavItems, navGroups, type NavItem } from '../navigation';
+import GlobalSearch from '../components/GlobalSearch.vue';
+import NotificationBell from '../components/NotificationBell.vue';
 
 const auth = useAuthStore();
 const tenant = useTenantStore();
@@ -18,6 +20,7 @@ const toast = useToast();
 
 const switcherOpen = ref(false);
 const mobileOpen = ref(false);
+const searchOpen = ref(false);
 
 const canSee = (i: NavItem) => tenant.can(i.permission) || (i.anyPermission ?? []).some((p) => tenant.can(p));
 const visibleGroups = computed(() =>
@@ -185,13 +188,31 @@ useGoShortcuts(
         </aside>
 
         <div class="flex min-w-0 flex-1 flex-col">
-            <header class="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-background/85 px-4 backdrop-blur lg:hidden">
-                <button class="rounded p-1.5 hover:bg-muted" aria-label="Mở menu" @click="mobileOpen = !mobileOpen">
+            <!-- Top bar (B1, B2): global search (Ctrl + K) and the bell; on phones also the menu button. -->
+            <header class="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur lg:px-8">
+                <button class="rounded p-1.5 hover:bg-muted lg:hidden" aria-label="Mở menu" @click="mobileOpen = !mobileOpen">
                     <X v-if="mobileOpen" class="size-5" />
                     <Menu v-else class="size-5" />
                 </button>
-                <span class="font-semibold">{{ tenant.current?.name }}</span>
+                <span class="min-w-0 flex-1 truncate font-semibold sm:hidden">{{ tenant.current?.name }}</span>
+                <button
+                    type="button"
+                    class="hidden h-9 w-full max-w-md items-center gap-2 rounded-lg border bg-slate-50 px-3 text-sm text-muted-foreground hover:bg-slate-100 sm:flex"
+                    data-testid="open-search"
+                    @click="searchOpen = true"
+                >
+                    <Search class="size-4" />
+                    <span class="flex-1 truncate text-left">Tìm đơn, khách, sản phẩm, vận đơn…</span>
+                    <kbd class="rounded border border-b-2 bg-card px-1.5 text-[11px]">Ctrl K</kbd>
+                </button>
+                <div class="ml-auto flex items-center gap-1">
+                    <button type="button" class="grid size-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100 sm:hidden" aria-label="Tìm kiếm" @click="searchOpen = true">
+                        <Search class="size-[18px]" :stroke-width="1.75" />
+                    </button>
+                    <NotificationBell :key="tenant.current?.id" />
+                </div>
             </header>
+            <GlobalSearch v-model:open="searchOpen" />
             <main class="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
                 <RouterView :key="tenant.current?.id" />
             </main>

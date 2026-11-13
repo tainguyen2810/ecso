@@ -21,6 +21,7 @@ import { owed, poStatus, receiveStatus, supplierPaymentMethods, tradeStatus } fr
 import { REORDER_DRAFT_KEY, type ReorderDraft } from './reorder';
 import { printPurchaseOrder } from './printOrder';
 import type { PurchaseOrderData } from '@/shared/types';
+import DateInput from '@/shared/ui/DateInput.vue';
 
 const route = useRoute();
 const toast = useToast();
@@ -289,7 +290,7 @@ async function voidPayment(id: string) {
                         <dt class="text-muted-foreground">Hạn thanh toán</dt>
                         <dd data-testid="po-due-date-info">
                             <form v-if="dueEditing" class="flex gap-1" @submit.prevent="saveDue">
-                                <input v-model="dueValue" type="date" class="h-7 rounded border px-1 text-xs" data-testid="po-due-input" />
+                                <DateInput v-model="dueValue" class="w-36" data-testid="po-due-input" />
                                 <button type="submit" class="text-xs text-primary" :disabled="busy" data-testid="po-due-save">Lưu</button>
                             </form>
                             <template v-else>

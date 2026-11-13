@@ -22,6 +22,7 @@ import type { Warehouse } from '@/shared/types';
 import { reports, type Column, type ColumnType } from './catalog';
 import { downloadCsv, toCsv } from './range';
 import { useReportQuery } from './useReportQuery';
+import DateInput from '@/shared/ui/DateInput.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -186,7 +187,7 @@ async function exportCsv() {
         <RangePicker v-if="report.period === 'range'" :from="range.from" :to="range.to" @update:from="(v) => (range = { ...range, from: v })" @update:to="(v) => (range = { ...range, to: v })" />
         <label v-else-if="report.period === 'date'" class="flex items-center gap-2 text-sm">
             <span class="text-muted-foreground">Tồn đến hết ngày</span>
-            <Input v-model="date" type="date" :max="today" class="w-40" aria-label="Ngày xem tồn" data-testid="report-date" />
+            <DateInput v-model="date" :max="today" class="w-40" aria-label="Ngày xem tồn" data-testid="report-date" />
         </label>
     </PageHeader>
 

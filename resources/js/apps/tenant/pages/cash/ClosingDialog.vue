@@ -10,6 +10,7 @@ import { api, ApiError } from '@/shared/lib/api';
 import { useToast } from '@/shared/composables/useToast';
 import { formatDate, formatDateTime, formatMoney } from '@/shared/lib/utils';
 import type { Fund } from './voucher';
+import DateInput from '@/shared/ui/DateInput.vue';
 
 interface Closing {
     id: string;
@@ -117,7 +118,7 @@ async function reopen() {
 
             <form v-if="canClose" id="closing-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="close">
                 <FormField label="Khóa đến hết ngày" for="cl-until" :error="error?.field('closed_until')">
-                    <Input id="cl-until" v-model="until" type="date" required :max="yesterday()" :min="minDate" data-testid="cl-until" />
+                    <DateInput id="cl-until" v-model="until" required :max="yesterday()" :min="minDate" data-testid="cl-until" />
                 </FormField>
                 <FormField label="Ghi chú" for="cl-note"><Input id="cl-note" v-model="note" maxlength="255" placeholder="VD: Chốt sổ tháng 10" /></FormField>
                 <div v-if="preview" class="rounded-md border sm:col-span-2" data-testid="cl-preview">

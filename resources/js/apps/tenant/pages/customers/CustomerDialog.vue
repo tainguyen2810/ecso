@@ -12,6 +12,7 @@ import Select from '@/shared/ui/Select.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { useToast } from '@/shared/composables/useToast';
 import type { Customer, CustomerGroup } from '@/shared/types';
+import DateInput from '@/shared/ui/DateInput.vue';
 
 const open = defineModel<boolean>('open', { required: true });
 const props = defineProps<{ customer?: Customer | null }>();
@@ -120,7 +121,7 @@ async function save() {
             <FormField label="Nhân viên phụ trách" for="c-staff" :error="error?.field('assigned_user_id')">
                 <Select id="c-staff" v-model="form.assigned_user_id" :options="[{ value: '', label: 'Chưa giao' }, ...staff.map((s) => ({ value: s.id, label: s.name }))]" />
             </FormField>
-            <FormField label="Ngày sinh" for="c-birthday" :error="error?.field('birthday')"><Input id="c-birthday" v-model="form.birthday" type="date" /></FormField>
+            <FormField label="Ngày sinh" for="c-birthday" :error="error?.field('birthday')"><DateInput id="c-birthday" v-model="form.birthday" /></FormField>
             <FormField label="Giới tính" for="c-gender">
                 <Select id="c-gender" v-model="form.gender" :options="[{ value: '', label: 'Không rõ' }, { value: 'male', label: 'Nam' }, { value: 'female', label: 'Nữ' }, { value: 'other', label: 'Khác' }]" />
             </FormField>

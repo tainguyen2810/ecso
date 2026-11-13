@@ -85,10 +85,13 @@ it('pushes an order: confirms it, gets the tracking number, and follows the carr
     $this->api->postJson("/api/v1/orders/{$id}/carrier-shipments", ['account_id' => $account['id'], 'service' => 'standard'])->assertStatus(422);
 
     $tracking = $res['tracking_number'];
-    ($this->webhook)(['tracking' => $tracking, 'status' => 'picked', 'time' => now()->toIso8601String()])->assertOk()->assertJsonPath('new', 1);
+    // One report, sent twice below: its time is fixed so the second send is the very same event even when the clock
+    // ticks over to the next second in between.
+    $picked = ['tracking' => $tracking, 'status' => 'picked', 'time' => now()->toIso8601String()];
+    ($this->webhook)($picked)->assertOk()->assertJsonPath('new', 1);
     expect($order->refresh()->status)->toBe(OrderStatus::HANDED_OVER)->and($balance())->toBe(18);
     // The same report twice counts once.
-    ($this->webhook)(['tracking' => $tracking, 'status' => 'picked', 'time' => now()->toIso8601String()])->assertOk()->assertJsonPath('new', 0);
+    ($this->webhook)($picked)->assertOk()->assertJsonPath('new', 0);
 
     ($this->webhook)(['tracking' => $tracking, 'status' => 'delivering', 'time' => now()->addHour()->toIso8601String()])->assertOk();
     expect(($this->shipment)($id)->status)->toBe('out_for_delivery');
