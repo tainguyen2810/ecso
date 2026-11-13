@@ -88,17 +88,12 @@ it('prices, creates with our code and the COD, prints the label through a signed
     $res = $this->api->postJson("/api/v1/orders/{$id}/carrier-shipments", ['account_id' => $account['id'], 'service' => 'EZ', 'payer' => 'buyer', 'required_note' => 'try'])->assertCreated()->json('data');
     expect($res['tracking_number'])->toBe('8501234567')->and($res['fee_estimated'])->toBe('28500.00');
     $shipment = Shipment::withoutGlobalScopes()->where('tracking_number', '8501234567')->sole();
-    Http::assertSent(function (Request $r) use ($shipment) {
-        if (! str_ends_with($r->url(), 'order/addOrder')) {
-            return false;
-        }
-        $b = json_decode($r['bizContent'], true);
-
-        return $b['txlogisticId'] === $shipment->client_code && $b['customerCode'] === '084LC12345' && $b['payType'] === 'CC_CASH'
-            && $b['itemsValue'] === 300000 && $b['weight'] === '0.60' && $b['receiver']['prov'] === $this->province->name
-            && $b['receiver']['area'] === $this->ward->name && $b['receiver']['address'] === '45 Lê Thánh Tôn'
-            && $b['sender']['address'] === '120 Ba Tháng Hai' && str_starts_with($b['remark'], 'Cho thử hàng');
-    });
+    $sent = Http::recorded(fn (Request $r) => str_ends_with($r->url(), 'order/addOrder'))->last();
+    $b = json_decode($sent[0]['bizContent'], true);
+    expect($b['txlogisticId'])->toBe($shipment->client_code)->and($b['customerCode'])->toBe('084LC12345')->and($b['payType'])->toBe('CC_CASH')
+        ->and($b['itemsValue'])->toBe(300000)->and($b['weight'])->toBe('0.60')->and($b['receiver']['prov'])->toBe($this->province->name)
+        ->and($b['receiver']['area'])->toBe($this->ward->name)->and($b['receiver']['address'])->toBe('45 Lê Thánh Tôn')
+        ->and($b['sender']['address'])->toBe('120 Ba Tháng Hai')->and($b['remark'])->toStartWith('Cho thử hàng');
 
     $url = $this->api->postJson('/api/v1/shipments/labels', ['ids' => [$shipment->ulid]])->assertOk()->json('data.url');
     expect($url)->toContain('/carrier-labels/')->toContain('signature=');

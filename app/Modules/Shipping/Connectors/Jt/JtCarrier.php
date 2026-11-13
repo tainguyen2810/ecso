@@ -411,7 +411,8 @@ class JtCarrier implements CarrierConnector
     {
         $prov = filled($draft->toProvinceCode) ? (string) Province::query()->where('code', $draft->toProvinceCode)->value('name') : '';
         $ward = filled($draft->toWardCode) ? (string) Ward::query()->where('code', $draft->toWardCode)->value('name') : '';
-        $address = trim((string) ($draft->toAddress ?: $draft->toStreet ?: ''));
+        // J&T takes province and ward in their own fields: the street part goes in the address when we have it.
+        $address = trim((string) ($draft->toStreet ?: $draft->toAddress ?: ''));
         if ($address === '') {
             throw new CarrierException('Địa chỉ nhận còn trống.');
         }
