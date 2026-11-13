@@ -33,6 +33,7 @@ test('tags and promised delivery date on an order, then filter and save the view
     await page.goto('/orders');
     await page.getByTestId('more-filters').click();
     await page.getByTestId('filter-tag').selectOption(tag);
+    await page.getByTestId('filters-apply').click();
     await expect(page.getByTestId('order-table').locator('tbody > tr')).toHaveCount(1);
     await expect(page.getByTestId('row-deliver-on')).toContainText(`${day}/11/26`);
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Ban, Banknote, Bookmark, FilePen, Trash2, ChevronDown, ChevronsRight, Clock, Columns3, Download, Filter, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingCart, UserPlus, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
@@ -18,7 +18,7 @@ import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError, downloadFile } from '@/shared/lib/api';
-import { cn, formatDate, formatDateTime, formatMoney } from '@/shared/lib/utils';
+import { cn, formatDate, formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { actionLabels, deadlineLabel, marketplaceNames, orderFlags, orderStatus, orderTabs, paymentMethods, paymentStatus } from './labels';
@@ -116,7 +116,33 @@ const activeQueue = computed(() => {
     return ['to_confirm', 'to_pack', 'to_handover', 'shipping'].includes(filters.tab) && !filters.flags.length ? filters.tab : null;
 });
 
-const advancedCount = computed(() => [filters.status, filters.payment_status, filters.from || filters.to, filters.customer, filters.sku, filters.tag, filters.deliver_from || filters.deliver_to].filter(Boolean).length);
+const advancedCount = computed(() => [filters.channel, filters.account, filters.warehouse, filters.assignee, filters.status, filters.payment_status, filters.from || filters.to, filters.customer, filters.sku, filters.tag, filters.deliver_from || filters.deliver_to].filter(Boolean).length);
+
+// "Bộ lọc khác" edits a copy; nothing reloads until "Áp dụng".
+const advancedKeys = ['channel', 'account', 'warehouse', 'assignee', 'status', 'payment_status', 'from', 'to', 'customer', 'sku', 'tag', 'deliver_from', 'deliver_to'] as const;
+type AdvancedKey = (typeof advancedKeys)[number];
+const draft = reactive<Record<AdvancedKey, string> & { customerLabel: string; skuLabel: string }>({ ...Object.fromEntries(advancedKeys.map((k) => [k, ''])), customerLabel: '', skuLabel: '' } as Record<AdvancedKey, string> & { customerLabel: string; skuLabel: string });
+function openFilters() {
+    for (const k of advancedKeys) draft[k] = filters[k];
+    draft.customerLabel = customerLabel.value;
+    draft.skuLabel = skuLabel.value;
+    moreFilters.value = true;
+}
+function applyFilters() {
+    customerLabel.value = draft.customerLabel;
+    skuLabel.value = draft.skuLabel;
+    for (const k of advancedKeys) filters[k] = draft[k];
+    moreFilters.value = false;
+}
+function clearDraft() {
+    for (const k of advancedKeys) draft[k] = '';
+}
+const onKey = (e: KeyboardEvent) => e.key === 'Escape' && moreFilters.value && !document.querySelector('[data-testid="range-popover"]') && (moreFilters.value = false);
+onMounted(() => document.addEventListener('keydown', onKey));
+onBeforeUnmount(() => document.removeEventListener('keydown', onKey));
+
+// "Gọn": one short line per order, for working through many orders; remembered in this browser.
+const compact = ref(false);
 
 function query() {
     return {
@@ -207,7 +233,7 @@ function selectQueue(key: string) {
 }
 
 function clearAdvanced() {
-    Object.assign(filters, { status: '', payment_status: '', from: '', to: '', customer: '', sku: '', tag: '', deliver_from: '', deliver_to: '' });
+    for (const k of advancedKeys) filters[k] = '';
 }
 
 // Saved filters and visible columns, kept in this browser per business (same as the product list).
@@ -242,7 +268,6 @@ function applyView(view: { filters: ViewFilters }) {
     customerLabel.value = c ?? '';
     skuLabel.value = s ?? '';
     Object.assign(filters, { ...rest, flags: [...(rest.flags ?? [])] });
-    moreFilters.value = advancedCount.value > 0;
 }
 function removeView(name: string) {
     savedViews.value = savedViews.value.filter((v) => v.name !== name);
@@ -255,6 +280,8 @@ type ColumnKey = keyof typeof columnLabels;
 // Like Sapo's list: one line per order; products and assignee can be turned on from "Cột".
 const columns = ref<Record<ColumnKey, boolean>>({ date: true, customer: true, products: false, status: true, payment: true, deadline: true, assignee: false, total: true, ...readStore('columns', {}) });
 watch(columns, (v) => writeStore('columns', v), { deep: true });
+compact.value = readStore('compact', false);
+watch(compact, (v) => writeStore('compact', v));
 const columnsOpen = ref(false);
 const columnCount = computed(() => 3 + Object.values(columns.value).filter(Boolean).length);
 
@@ -271,15 +298,36 @@ watch(customerQuery, (q) => {
     }, 250);
 });
 function pickCustomer(c: { id: string; name: string }) {
-    customerLabel.value = c.name;
-    filters.customer = c.id;
+    draft.customerLabel = c.name;
+    draft.customer = c.id;
     customerQuery.value = '';
     customerResults.value = [];
 }
 function pickSku(v: Variant) {
-    skuLabel.value = v.sku;
-    filters.sku = v.id!;
+    draft.skuLabel = v.sku;
+    draft.sku = v.id!;
 }
+const channelName = (id: string) => channels.value.find((c) => c.id === id)?.name ?? '…';
+const accountName = (id: string) => accounts.value.find((a) => a.id === id)?.shop_name ?? '…';
+const warehouseName = (id: string) => warehouses.value.find((w) => w.id === id)?.name ?? '…';
+const activeChips = computed(() => {
+    const chips: { label: string; clear: () => void }[] = [];
+    const add = (on: unknown, label: string, clear: () => void) => on && chips.push({ label, clear });
+    const range = (a: string, b: string) => `${a ? formatDate(a) : '…'} – ${b ? formatDate(b) : '…'}`;
+    add(filters.channel, `Kênh: ${channelName(filters.channel)}`, () => (filters.channel = ''));
+    add(filters.account, `Gian hàng: ${accountName(filters.account)}`, () => (filters.account = ''));
+    add(filters.warehouse, `Kho: ${warehouseName(filters.warehouse)}`, () => (filters.warehouse = ''));
+    add(filters.assignee, `Người xử lý: ${assigneeName(filters.assignee)}`, () => (filters.assignee = ''));
+    add(filters.from || filters.to, `Ngày đặt ${range(filters.from, filters.to)}`, () => ((filters.from = ''), (filters.to = '')));
+    add(filters.payment_status, paymentStatus[filters.payment_status]?.label ?? filters.payment_status, () => (filters.payment_status = ''));
+    add(filters.status, orderStatus[filters.status]?.label ?? filters.status, () => (filters.status = ''));
+    add(filters.customer, `Khách: ${customerLabel.value || '…'}`, () => (filters.customer = ''));
+    add(filters.sku, `SKU: ${skuLabel.value || '…'}`, () => (filters.sku = ''));
+    add(filters.tag, `Tag: ${filters.tag}`, () => (filters.tag = ''));
+    add(filters.deliver_from || filters.deliver_to, `Hẹn giao ${range(filters.deliver_from, filters.deliver_to)}`, () => ((filters.deliver_from = ''), (filters.deliver_to = '')));
+    return chips;
+});
+const assigneeName = (id: string) => (id === 'me' ? 'Đơn của tôi' : id === 'none' ? 'Chưa phân công' : (assignees.value.find((a) => a.id === id)?.name ?? '…'));
 
 function toggle(id: string) {
     const next = new Set(selected.value);
@@ -406,14 +454,15 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
 
     <Card>
         <div class="border-b px-3"><Tabs v-model="filters.tab" :tabs="tabs" variant="underline" data-testid="order-tabs" /></div>
-        <div class="space-y-3 border-b p-4">
-            <!-- Row 1: search and tools; row 2: the list filters in equal columns (balanced like Sapo). -->
+        <div class="relative space-y-3 border-b p-4">
+            <!-- Search and order source stay in sight; every other filter lives in "Bộ lọc khác" and shows as a chip. -->
             <div class="flex flex-wrap items-center gap-2">
-                <div class="relative min-w-72 flex-1">
+                <div class="relative min-w-60 flex-1">
                     <Search class="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
                     <Input v-model="filters.q" class="pl-8" placeholder="Tìm theo mã đơn, mã vận đơn, SKU, tên sản phẩm, tên hoặc SĐT khách…" data-testid="order-search" />
                 </div>
-                <Button variant="outline" :class="cn(moreFilters && 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-50')" data-testid="more-filters" @click="moreFilters = !moreFilters">
+                <Select v-model="filters.source" class="w-44" :options="[{ value: '', label: 'Mọi nguồn đơn' }, { value: 'manual', label: 'Kênh bán riêng' }, { value: 'marketplace', label: 'Sàn TMĐT' }]" aria-label="Nguồn đơn" data-testid="filter-source" />
+                <Button variant="outline" :class="cn((moreFilters || advancedCount) && 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-50')" :aria-expanded="moreFilters" data-testid="more-filters" @click="moreFilters ? (moreFilters = false) : openFilters()">
                     <Filter /> Bộ lọc khác <span v-if="advancedCount" class="rounded-full bg-primary px-1.5 text-xs text-primary-foreground">{{ advancedCount }}</span>
                 </Button>
                 <div class="relative">
@@ -424,46 +473,76 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                         </label>
                     </div>
                 </div>
-                <Button variant="outline" :disabled="!hasFilters" data-testid="save-view" @click="saveView"><Bookmark /> Lưu bộ lọc</Button>
-            </div>
-            <div :class="cn('grid grid-cols-2 gap-2 sm:grid-cols-3', warehouses.length > 1 ? 'lg:grid-cols-6' : 'lg:grid-cols-5')">
-                <Select v-model="filters.source" :options="[{ value: '', label: 'Mọi nguồn đơn' }, { value: 'manual', label: 'Kênh bán riêng' }, { value: 'marketplace', label: 'Sàn TMĐT' }]" aria-label="Nguồn đơn" data-testid="filter-source" />
-                <Select v-model="filters.channel" :disabled="filters.source === 'marketplace' || !channels.length" :options="[{ value: '', label: 'Mọi kênh riêng' }, ...channels.map((c) => ({ value: c.id, label: c.name }))]" aria-label="Kênh bán" />
-                <Select v-if="warehouses.length > 1" v-model="filters.warehouse" :options="[{ value: '', label: 'Mọi kho xuất' }, ...warehouses.map((w) => ({ value: w.id, label: w.name }))]" aria-label="Kho xuất" data-testid="filter-warehouse" />
-                <Select v-model="filters.account" :disabled="filters.source === 'manual' || !accounts.length" :options="[{ value: '', label: 'Tất cả gian hàng' }, ...accounts.map((a) => ({ value: a.id, label: a.shop_name }))]" aria-label="Gian hàng" />
-                <Select v-model="filters.assignee" :options="[{ value: '', label: 'Mọi người xử lý' }, { value: 'me', label: 'Đơn của tôi' }, { value: 'none', label: 'Chưa phân công' }, ...assignees.map((a) => ({ value: a.id, label: a.name }))]" aria-label="Người xử lý" />
-                <Select v-model="filters.sort" :options="[{ value: 'newest', label: 'Sắp xếp: Mới nhất' }, { value: 'oldest', label: 'Sắp xếp: Cũ nhất' }, { value: 'ship_by', label: 'Sắp xếp: Hạn giao gần nhất' }]" aria-label="Sắp xếp" />
+                <div class="flex h-9 overflow-hidden rounded-md border text-sm" role="group" aria-label="Cách hiện danh sách" data-testid="density">
+                    <button type="button" :class="cn('px-3', !compact ? 'bg-blue-50 font-semibold text-blue-700' : 'text-muted-foreground hover:bg-muted')" :aria-pressed="!compact" @click="compact = false">Đầy đủ</button>
+                    <button type="button" :class="cn('border-l px-3', compact ? 'bg-blue-50 font-semibold text-blue-700' : 'text-muted-foreground hover:bg-muted')" :aria-pressed="compact" data-testid="density-compact" @click="compact = true">Gọn</button>
+                </div>
+                <Button variant="outline" size="icon" :disabled="!hasFilters" title="Lưu bộ lọc" aria-label="Lưu bộ lọc" data-testid="save-view" @click="saveView"><Bookmark /></Button>
             </div>
 
-            <div v-if="moreFilters" class="grid gap-3 rounded-lg border bg-slate-50 p-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="advanced-filters">
-                <FormField label="Ngày đặt" for="f-from"><DateRangeInput id="f-from" v-model:from="filters.from" v-model:to="filters.to" class="sm:w-full" clearable placeholder="Mọi ngày" /></FormField>
-                <FormField label="Trạng thái thanh toán" for="f-pay">
-                    <Select id="f-pay" v-model="filters.payment_status" :options="[{ value: '', label: 'Tất cả' }, ...Object.entries(paymentStatus).map(([value, s]) => ({ value, label: s.label }))]" />
-                </FormField>
-                <FormField label="Trạng thái đơn" for="f-status">
-                    <Select id="f-status" v-model="filters.status" :options="[{ value: '', label: 'Theo tab đang chọn' }, ...Object.entries(orderStatus).map(([value, s]) => ({ value, label: s.label }))]" />
-                </FormField>
-                <div class="sm:col-span-2">
-                    <span class="mb-1.5 block text-sm font-medium">Khách hàng</span>
-                    <div class="relative">
-                        <Input v-model="customerQuery" placeholder="Tìm theo tên, mã, số điện thoại…" data-testid="filter-customer" />
-                        <ul v-if="customerResults.length" class="absolute z-20 mt-1 w-full overflow-hidden rounded-md border bg-card text-sm shadow-md">
-                            <li v-for="c in customerResults" :key="c.id">
-                                <button type="button" class="flex w-full justify-between px-3 py-2 text-left hover:bg-muted" @click="pickCustomer(c)">
-                                    <span>{{ c.name }}</span><span class="text-xs text-muted-foreground">{{ c.phone ?? c.code }}</span>
-                                </button>
-                            </li>
-                        </ul>
+            <div v-if="moreFilters" class="absolute right-4 top-16 z-30 w-[min(760px,calc(100%-2rem))] rounded-xl border bg-card shadow-xl" role="dialog" aria-label="Bộ lọc khác" data-testid="advanced-filters">
+                <div class="flex items-center border-b px-4 py-3 text-sm font-semibold">
+                    Bộ lọc khác
+                    <button type="button" class="ml-auto rounded p-1 text-muted-foreground hover:bg-muted" aria-label="Đóng bộ lọc" @click="moreFilters = false"><X class="size-4" /></button>
+                </div>
+                <div class="grid max-h-[min(560px,calc(100vh-220px))] gap-3 overflow-y-auto p-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <p class="text-[11px] font-bold uppercase tracking-wide text-slate-400 sm:col-span-2 lg:col-span-3">Đơn đến từ đâu</p>
+                    <FormField label="Kênh bán riêng" for="f-channel">
+                        <Select id="f-channel" v-model="draft.channel" :disabled="filters.source === 'marketplace' || !channels.length" :options="[{ value: '', label: 'Mọi kênh riêng' }, ...channels.map((c) => ({ value: c.id, label: c.name }))]" />
+                    </FormField>
+                    <FormField label="Gian hàng trên sàn" for="f-account">
+                        <Select id="f-account" v-model="draft.account" :disabled="filters.source === 'manual' || !accounts.length" :options="[{ value: '', label: accounts.length ? 'Tất cả gian hàng' : 'Chưa kết nối sàn' }, ...accounts.map((a) => ({ value: a.id, label: a.shop_name }))]" />
+                    </FormField>
+                    <FormField label="Kho xuất" for="f-warehouse">
+                        <Select id="f-warehouse" v-model="draft.warehouse" :disabled="warehouses.length < 2" :options="[{ value: '', label: 'Mọi kho' }, ...warehouses.map((w) => ({ value: w.id, label: w.name }))]" data-testid="filter-warehouse" />
+                    </FormField>
+                    <p class="text-[11px] font-bold uppercase tracking-wide text-slate-400 sm:col-span-2 lg:col-span-3">Trạng thái và người làm</p>
+                    <FormField label="Người xử lý" for="f-assignee">
+                        <Select id="f-assignee" v-model="draft.assignee" :options="[{ value: '', label: 'Mọi người xử lý' }, { value: 'me', label: 'Đơn của tôi' }, { value: 'none', label: 'Chưa phân công' }, ...assignees.map((a) => ({ value: a.id, label: a.name }))]" />
+                    </FormField>
+                    <FormField label="Trạng thái thanh toán" for="f-pay">
+                        <Select id="f-pay" v-model="draft.payment_status" :options="[{ value: '', label: 'Tất cả' }, ...Object.entries(paymentStatus).map(([value, s]) => ({ value, label: s.label }))]" />
+                    </FormField>
+                    <FormField label="Trạng thái đơn" for="f-status">
+                        <Select id="f-status" v-model="draft.status" :options="[{ value: '', label: 'Theo tab đang chọn' }, ...Object.entries(orderStatus).map(([value, s]) => ({ value, label: s.label }))]" />
+                    </FormField>
+                    <p class="text-[11px] font-bold uppercase tracking-wide text-slate-400 sm:col-span-2 lg:col-span-3">Thời gian, khách, sản phẩm</p>
+                    <FormField label="Ngày đặt" for="f-from"><DateRangeInput id="f-from" v-model:from="draft.from" v-model:to="draft.to" class="sm:w-full" clearable placeholder="Mọi ngày" /></FormField>
+                    <FormField label="Hẹn giao" for="f-deliver-from"><DateRangeInput id="f-deliver-from" v-model:from="draft.deliver_from" v-model:to="draft.deliver_to" class="sm:w-full" clearable placeholder="Mọi ngày" /></FormField>
+                    <FormField label="Tag" for="f-tag">
+                        <Select id="f-tag" v-model="draft.tag" :options="[{ value: '', label: tags.length ? 'Mọi tag' : 'Chưa có tag nào' }, ...tags.map((t) => ({ value: t, label: t }))]" data-testid="filter-tag" />
+                    </FormField>
+                    <div>
+                        <span class="mb-1.5 block text-sm font-medium">Khách hàng</span>
+                        <div v-if="draft.customer" class="flex h-9 items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 text-sm text-blue-800">
+                            <span class="min-w-0 flex-1 truncate">{{ draft.customerLabel || '…' }}</span>
+                            <button type="button" aria-label="Bỏ chọn khách" @click="(draft.customer = ''), (draft.customerLabel = '')"><X class="size-3.5" /></button>
+                        </div>
+                        <div v-else class="relative">
+                            <Input v-model="customerQuery" placeholder="Tên, mã, SĐT…" data-testid="filter-customer" />
+                            <ul v-if="customerResults.length" class="absolute z-20 mt-1 w-full overflow-hidden rounded-md border bg-card text-sm shadow-md">
+                                <li v-for="c in customerResults" :key="c.id">
+                                    <button type="button" class="flex w-full justify-between px-3 py-2 text-left hover:bg-muted" @click="pickCustomer(c)">
+                                        <span>{{ c.name }}</span><span class="text-xs text-muted-foreground">{{ c.phone ?? c.code }}</span>
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <span class="mb-1.5 block text-sm font-medium">Có sản phẩm</span>
+                        <div v-if="draft.sku" class="flex h-9 items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 text-sm text-blue-800">
+                            <span class="min-w-0 flex-1 truncate font-mono">{{ draft.skuLabel || '…' }}</span>
+                            <button type="button" aria-label="Bỏ chọn sản phẩm" @click="(draft.sku = ''), (draft.skuLabel = '')"><X class="size-3.5" /></button>
+                        </div>
+                        <SkuPicker v-else placeholder="Tìm SKU, tên sản phẩm hoặc quét mã vạch…" @pick="pickSku" />
                     </div>
                 </div>
-                <div class="sm:col-span-2">
-                    <span class="mb-1.5 block text-sm font-medium">Có sản phẩm</span>
-                    <SkuPicker placeholder="Tìm SKU, tên sản phẩm hoặc quét mã vạch…" @pick="pickSku" />
+                <div class="flex items-center gap-2 rounded-b-xl border-t bg-slate-50 px-4 py-2.5">
+                    <button type="button" class="text-xs text-muted-foreground hover:underline" @click="clearDraft">Xóa hết</button>
+                    <Button size="sm" variant="outline" class="ml-auto" @click="moreFilters = false">Hủy</Button>
+                    <Button size="sm" data-testid="filters-apply" @click="applyFilters">Áp dụng</Button>
                 </div>
-                <FormField label="Tag" for="f-tag">
-                    <Select id="f-tag" v-model="filters.tag" :options="[{ value: '', label: tags.length ? 'Mọi tag' : 'Chưa có tag nào' }, ...tags.map((t) => ({ value: t, label: t }))]" data-testid="filter-tag" />
-                </FormField>
-                <FormField label="Hẹn giao" for="f-deliver-from"><DateRangeInput id="f-deliver-from" v-model:from="filters.deliver_from" v-model:to="filters.deliver_to" class="sm:w-full" clearable placeholder="Mọi ngày" /></FormField>
             </div>
 
             <div v-if="savedViews.length" class="flex flex-wrap items-center gap-2 text-xs" data-testid="saved-views">
@@ -488,16 +567,23 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                 </button>
                 <template v-if="advancedCount">
                     <span class="mx-1 h-4 w-px bg-border" />
-                    <span v-if="filters.from || filters.to" class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs">{{ filters.from ? formatDate(filters.from) : '…' }} – {{ filters.to ? formatDate(filters.to) : '…' }}<button type="button" aria-label="Bỏ lọc ngày" @click="(filters.from = ''), (filters.to = '')"><X class="size-3" /></button></span>
-                    <span v-if="filters.payment_status" class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs">{{ paymentStatus[filters.payment_status]?.label }}<button type="button" aria-label="Bỏ lọc thanh toán" @click="filters.payment_status = ''"><X class="size-3" /></button></span>
-                    <span v-if="filters.status" class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs">{{ orderStatus[filters.status]?.label }}<button type="button" aria-label="Bỏ lọc trạng thái" @click="filters.status = ''"><X class="size-3" /></button></span>
-                    <span v-if="filters.customer" class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs">Khách: {{ customerLabel || '…' }}<button type="button" aria-label="Bỏ lọc khách" @click="filters.customer = ''"><X class="size-3" /></button></span>
-                    <span v-if="filters.sku" class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs">SKU: {{ skuLabel || '…' }}<button type="button" aria-label="Bỏ lọc sản phẩm" @click="filters.sku = ''"><X class="size-3" /></button></span>
-                    <span v-if="filters.tag" class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs">Tag: {{ filters.tag }}<button type="button" aria-label="Bỏ lọc tag" @click="filters.tag = ''"><X class="size-3" /></button></span>
-                    <span v-if="filters.deliver_from || filters.deliver_to" class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs">Hẹn giao {{ filters.deliver_from ? formatDate(filters.deliver_from) : '…' }} – {{ filters.deliver_to ? formatDate(filters.deliver_to) : '…' }}<button type="button" aria-label="Bỏ lọc ngày hẹn giao" @click="(filters.deliver_from = ''), (filters.deliver_to = '')"><X class="size-3" /></button></span>
+                    <span v-for="chip in activeChips" :key="chip.label" class="inline-flex items-center gap-1 rounded-full bg-blue-100 py-1 pl-2.5 pr-1.5 text-xs font-medium text-blue-900" data-testid="filter-chip">
+                        {{ chip.label }}<button type="button" class="rounded-full p-0.5 hover:bg-blue-200" :aria-label="`Bỏ lọc ${chip.label}`" @click="chip.clear()"><X class="size-3" /></button>
+                    </span>
                     <button type="button" class="text-xs text-muted-foreground hover:underline" @click="clearAdvanced">Xóa bộ lọc</button>
                 </template>
             </div>
+        </div>
+        <div class="flex items-center justify-between gap-3 border-b px-4 py-2 text-xs text-muted-foreground">
+            <span><b class="text-foreground tabular-nums">{{ formatNumber(meta.total) }} đơn</b>{{ hasFilters ? ' khớp bộ lọc' : '' }}</span>
+            <label class="flex items-center gap-1.5">
+                Sắp xếp:
+                <select v-model="filters.sort" class="rounded border-0 bg-transparent py-0.5 font-semibold text-foreground focus:ring-1" aria-label="Sắp xếp" data-testid="order-sort">
+                    <option value="newest">Mới nhất</option>
+                    <option value="oldest">Cũ nhất</option>
+                    <option value="ship_by">Hạn giao gần nhất</option>
+                </select>
+            </label>
         </div>
 
         <div v-if="selected.size" class="sticky top-14 z-10 flex flex-wrap items-center gap-2 border-b border-blue-100 bg-blue-50 px-4 py-2.5 text-sm" data-testid="bulk-bar">
@@ -526,7 +612,7 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
             <RouterLink v-if="!accounts.length" to="/marketplaces"><Button>Kết nối gian hàng</Button></RouterLink>
         </EmptyState>
         <div v-else class="overflow-x-auto">
-            <table class="w-full text-sm" data-testid="order-table">
+            <table :class="cn('w-full text-sm', compact && '[&_tbody_td]:py-1.5 [&_tbody_td]:whitespace-nowrap')" :data-density="compact ? 'compact' : 'full'" data-testid="order-table">
                 <thead class="border-b bg-slate-50 text-left text-xs font-semibold text-foreground/80">
                     <tr>
                         <th class="w-8 py-3 pl-3" />
@@ -553,11 +639,15 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                             <td class="py-3" @click.stop><input type="checkbox" :checked="selected.has(o.id)" :aria-label="`Chọn đơn ${o.external_order_id}`" @change="toggle(o.id)" /></td>
                             <td class="px-3 py-3">
                                 <div class="flex items-center gap-2">
-                                    <MarketplaceLogo :marketplace="o.marketplace" :name="marketplaceNames[o.marketplace]" size="sm" />
+                                    <MarketplaceLogo :marketplace="o.marketplace" :name="o.shop?.name ?? o.channel?.name ?? marketplaceNames[o.marketplace]" size="sm" />
                                     <span class="font-medium text-primary">{{ o.external_order_id }}</span>
                                     <span v-if="o.external_number && o.external_number !== o.external_order_id" class="font-mono text-xs text-muted-foreground">#{{ o.external_number }}</span>
+                                    <template v-if="compact">
+                                        <span v-if="o.flags.shortage" class="rounded-full bg-rose-50 px-1.5 text-[11px] text-rose-600">Thiếu hàng</span>
+                                        <span v-if="o.flags.unmapped" class="rounded-full bg-amber-50 px-1.5 text-[11px] text-amber-700">Chưa map SKU</span>
+                                    </template>
                                 </div>
-                                <div class="mt-0.5 flex flex-wrap items-center gap-1 pl-7 text-[11px] text-muted-foreground">
+                                <div v-if="!compact" class="mt-0.5 flex flex-wrap items-center gap-1 pl-7 text-[11px] text-muted-foreground">
                                     {{ o.shop?.name ?? o.channel?.name ?? marketplaceNames[o.marketplace] }}
                                     <span v-if="o.flags.shortage" class="rounded-full bg-rose-50 px-1.5 text-rose-600" title="Thiếu hàng">Thiếu hàng</span>
                                     <span v-if="o.flags.unmapped" class="rounded-full bg-amber-50 px-1.5 text-amber-700">Chưa map SKU</span>
@@ -572,10 +662,10 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                                 <div class="truncate">{{ o.customer?.name ?? o.buyer_name ?? 'Khách lẻ' }}</div>
                             </td>
                             <td v-if="columns.products" class="max-w-80 px-3 py-3">
-                                <div v-for="(i, idx) in o.items_preview" :key="idx" class="truncate text-xs">
+                                <div v-for="(i, idx) in (o.items_preview ?? []).slice(0, compact ? 1 : 3)" :key="idx" class="truncate text-xs">
                                     <span class="font-medium tabular-nums">{{ i.quantity }}×</span> {{ i.name }}<span v-if="i.variant_name" class="text-muted-foreground"> · {{ i.variant_name }}</span>
                                 </div>
-                                <div v-if="(o.items_count ?? 0) > 3" class="text-xs text-muted-foreground">+{{ (o.items_count ?? 0) - 3 }} sản phẩm khác</div>
+                                <div v-if="!compact && (o.items_count ?? 0) > 3" class="text-xs text-muted-foreground">+{{ (o.items_count ?? 0) - 3 }} sản phẩm khác</div>
                             </td>
                             <td v-if="columns.status" class="px-3 py-3"><Badge :tone="orderStatus[o.status]?.tone">{{ orderStatus[o.status]?.label ?? o.status }}</Badge></td>
                             <td v-if="columns.payment" class="whitespace-nowrap px-3 py-3 text-xs">
@@ -590,7 +680,7 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                                 <span v-if="o.flags.overdue" class="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 font-medium text-rose-600"><Clock class="size-3" />{{ deadlineLabel(o.ship_by_at) }}</span>
                                 <span v-else-if="o.flags.due_soon" class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700"><Clock class="size-3" />{{ deadlineLabel(o.ship_by_at) }}</span>
                                 <span v-else class="text-muted-foreground">{{ o.ship_by_at ? formatDateTime(o.ship_by_at) : '—' }}</span>
-                                <div v-if="o.deliver_on" class="mt-0.5 text-foreground" data-testid="row-deliver-on">Hẹn {{ formatDate(o.deliver_on) }}</div>
+                                <div v-if="o.deliver_on" :class="cn('text-foreground', compact ? 'inline ml-1.5' : 'mt-0.5')" data-testid="row-deliver-on">Hẹn {{ formatDate(o.deliver_on) }}</div>
                             </td>
                             <td v-if="columns.assignee" class="px-3 py-3 text-xs text-muted-foreground">{{ o.assignee?.name ?? '—' }}</td>
                             <td v-if="columns.total" class="px-4 py-3 text-right font-semibold tabular-nums">{{ formatMoney(o.total) }}</td>

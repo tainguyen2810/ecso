@@ -32,6 +32,7 @@ use App\Modules\Orders\Support\Tracking;
 use App\Modules\Sales\Http\Resources\PaymentResource;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\OrderPayment;
+use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Sales\Services\ManualOrderService;
 use App\Modules\Sales\Services\PaymentService;
 use App\Modules\Tenancy\Models\TenantUser;
@@ -340,7 +341,8 @@ class OrderController extends Controller
     /**
      * Dashboard figures. "Ordered revenue" is the buyer-paid total of today's non-cancelled orders, not cash received
      * (marketplace fees and settlement come with the finance module). `revenue_by_day` covers the last `days` days
-     * (7 or 30) split by marketplace (`manual` = own channels), same rule as today's figure.
+     * (7 or 30) split by channel: one key per marketplace, and one per own sales channel ("channel:<ulid>", or
+     * `manual` for an own-channel order without a channel), same rule as today's figure.
      */
     public function summary(Request $request, OrderQuery $orders): JsonResponse
     {
@@ -352,13 +354,21 @@ class OrderController extends Controller
 
         $from = $today->copy()->subDays($days - 1);
         $rows = $placed($from)->where('status', '!=', OrderStatus::CANCELLED)->toBase()
-            ->selectRaw(ReportRange::day('placed_at', $today).' as day, marketplace, SUM(total) as revenue, COUNT(*) as orders')
-            ->groupByRaw(ReportRange::day('placed_at', $today).', marketplace')->get();
+            ->selectRaw(ReportRange::day('placed_at', $today).' as day, marketplace, sales_channel_id, SUM(total) as revenue, COUNT(*) as orders')
+            ->groupByRaw(ReportRange::day('placed_at', $today).', marketplace, sales_channel_id')->get();
+        // Own-channel orders are split per sales channel (shop counter, Facebook, Zalo...): key "channel:<ulid>".
+        $salesChannels = SalesChannel::query()->whereIn('id', $rows->where('marketplace', 'manual')->pluck('sales_channel_id')->filter()->unique())->get()->keyBy('id');
+        $keyOf = function ($r) use ($salesChannels): string {
+            $channel = $r->marketplace === 'manual' && $r->sales_channel_id ? $salesChannels->get($r->sales_channel_id) : null;
+
+            return $channel ? 'channel:'.$channel->ulid : (string) $r->marketplace;
+        };
         $byDay = [];
         for ($d = $from->copy(); $d->lte($today); $d->addDay()) {
             $byDay[$d->toDateString()] = ['date' => $d->toDateString(), 'revenue' => '0.00', 'orders' => 0, 'channels' => []];
         }
         $byChannel = [];
+        $channelInfo = [];
         foreach ($rows as $r) {
             $day = substr((string) $r->day, 0, 10);
             if (! isset($byDay[$day])) {
@@ -367,8 +377,12 @@ class OrderController extends Controller
             $amount = number_format((float) $r->revenue, 2, '.', '');
             $byDay[$day]['revenue'] = bcadd($byDay[$day]['revenue'], $amount, 2);
             $byDay[$day]['orders'] += (int) $r->orders;
-            $byDay[$day]['channels'][$r->marketplace] = $amount;
-            $byChannel[$r->marketplace] = bcadd($byChannel[$r->marketplace] ?? '0', $amount, 2);
+            $key = $keyOf($r);
+            $byDay[$day]['channels'][$key] = bcadd($byDay[$day]['channels'][$key] ?? '0', $amount, 2);
+            $byChannel[$key] = bcadd($byChannel[$key] ?? '0', $amount, 2);
+            $channelInfo[$key] ??= str_starts_with($key, 'channel:')
+                ? ['marketplace' => 'manual', 'channel' => ['name' => $salesChannels->get($r->sales_channel_id)->name, 'type' => $salesChannels->get($r->sales_channel_id)->type]]
+                : ['marketplace' => $key, 'channel' => null];
         }
         arsort($byChannel, SORT_NUMERIC);
 
@@ -381,7 +395,7 @@ class OrderController extends Controller
             'queues' => $orders->tabCounts([], $request->user()->id),
             'days' => $days,
             'revenue_by_day' => array_values(array_map(fn ($d) => [...$d, 'channels' => (object) $d['channels']], $byDay)),
-            'revenue_by_channel' => collect($byChannel)->map(fn ($v, $k) => ['marketplace' => (string) $k, 'revenue' => $v])->values(),
+            'revenue_by_channel' => collect($byChannel)->map(fn ($v, $k) => ['key' => (string) $k, ...$channelInfo[$k], 'revenue' => $v])->values(),
             'to_process' => Order::query()->whereIn('status', OrderStatus::OPEN)->count(),
             'overdue' => Order::query()->whereIn('status', OrderStatus::OPEN)->where('ship_by_at', '<', now())->count(),
             'shortage' => Order::query()->where('has_shortage', true)->whereIn('status', OrderStatus::OPEN)->count(),

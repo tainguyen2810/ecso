@@ -305,3 +305,24 @@ it('sells a service line next to goods: no SKU, no stock, kept when the order is
     $api->postJson('/api/v1/sales-orders', ['channel_id' => defaultChannel($tenant)->ulid, 'lines' => [['quantity' => 1, 'unit_price' => 1000]]])
         ->assertStatus(422)->assertJsonValidationErrors(['lines.0.variant_id']);
 });
+
+it('splits own-channel revenue on the dashboard per sales channel', function () {
+    [$tenant, $owner] = tenantWithOwner();
+    $variant = makeVariant($tenant);
+    stockIn($tenant, $variant, 20);
+    $zaloId = actingInTenant($owner, $tenant)->postJson('/api/v1/sales-channels', ['name' => 'Zalo shop', 'type' => 'zalo', 'warehouse_id' => defaultWarehouse($tenant)->ulid])
+        ->assertCreated()->json('data.id');
+
+    createSalesOrder($owner, $tenant, [[$variant, 2, 100000]])->assertCreated();
+    createSalesOrder($owner, $tenant, [[$variant, 1, 50000]], ['channel_id' => $zaloId])->assertCreated();
+
+    $res = actingInTenant($owner, $tenant)->getJson('/api/v1/orders/summary')->assertOk()
+        ->assertJsonCount(2, 'data.revenue_by_channel')
+        ->assertJsonPath('data.revenue_by_channel.0.key', 'channel:'.defaultChannel($tenant)->ulid)
+        ->assertJsonPath('data.revenue_by_channel.0.marketplace', 'manual')
+        ->assertJsonPath('data.revenue_by_channel.0.channel.type', 'pos')
+        ->assertJsonPath('data.revenue_by_channel.1.channel', ['name' => 'Zalo shop', 'type' => 'zalo']);
+
+    expect((float) $res->json('data.revenue_by_channel.1.revenue'))->toBe(50000.0)
+        ->and((float) $res->json('data.revenue_by_day.6.channels.channel:'.$zaloId))->toBe(50000.0);
+});

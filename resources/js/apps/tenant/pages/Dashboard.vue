@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import {
     ArrowRight,
     Banknote,
+    BarChart3,
     CheckCircle2,
     ChevronRight,
     Circle,
@@ -12,15 +13,20 @@ import {
     Clock,
     CreditCard,
     HandHelping,
+    Package,
     PackageOpen,
     PlugZap,
+    Plus,
+    Rocket,
     ShoppingCart,
+    Store,
     TriangleAlert,
     Truck,
 } from 'lucide-vue-next';
 import type { Component } from 'vue';
 import PageHeader from '../PageHeader.vue';
 import Badge from '@/shared/ui/Badge.vue';
+import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import IconBubble from '@/shared/ui/IconBubble.vue';
@@ -29,7 +35,8 @@ import StatTile from '@/shared/ui/StatTile.vue';
 import DonutChart from '@/shared/ui/charts/DonutChart.vue';
 import StackedBarChart from '@/shared/ui/charts/StackedBarChart.vue';
 import { api } from '@/shared/lib/api';
-import { channelColor, toneClasses, type Tone } from '@/shared/lib/tones';
+import { toneClasses, type Tone } from '@/shared/lib/tones';
+import { channelColors, channelLabel, startProgress, type RevenueChannel, type StartStep } from './dashboard';
 import { formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { marketplaceNames, orderStatus } from './orders/labels';
 import type { MarketplaceAccountData, OrderSummary } from '@/shared/types';
@@ -51,7 +58,7 @@ interface Summary {
     queues: Record<string, number>;
     days: number;
     revenue_by_day: { date: string; revenue: string; orders: number; channels: Record<string, string> }[];
-    revenue_by_channel: { marketplace: string; revenue: string }[];
+    revenue_by_channel: RevenueChannel[];
     recent: OrderSummary[];
 }
 
@@ -60,6 +67,8 @@ const orders = ref<Summary | null>(null);
 const stock = ref<{ on_hand: number; inventory_value: string | null; low_stock: number; out_of_stock: number } | null>(null);
 const accounts = ref<MarketplaceAccountData[] | null>(null);
 const best = ref<{ variant: { id: string; sku: string; name: string } | null; units: number }[] | null>(null);
+const salesChannels = ref<number | null>(null);
+const members = ref<number | null>(null);
 const lowStock = ref<{ items: { variant_id: string; sku: string; name: string; warehouse: string; available: number; safety_stock: number }[]; total: number } | null>(null);
 
 function loadOrders() {
@@ -81,6 +90,8 @@ onMounted(() => {
     if (tenant.can('inventory.view')) api.get('/inventory/summary').then(({ data }) => (stock.value = data.data)).catch(() => {});
     if (tenant.can('inventory.view')) api.get('/inventory/low-stock').then(({ data }) => (lowStock.value = { items: data.data, total: data.meta.total })).catch(() => {});
     if (tenant.can('marketplace.view')) api.get('/marketplace-accounts').then(({ data }) => (accounts.value = data.data)).catch(() => {});
+    if (tenant.can('orders.view')) api.get('/sales-channels').then(({ data }) => (salesChannels.value = data.data.length)).catch(() => {});
+    if (tenant.can('members.view')) api.get('/members').then(({ data }) => (members.value = data.data.length)).catch(() => {});
 });
 watch(days, loadRange);
 
@@ -92,19 +103,18 @@ const change = computed(() => {
     return Math.round(((Number(orders.value.today_ordered_revenue) - yesterday) / yesterday) * 100);
 });
 
-const channelLabel = (k: string) => marketplaceNames[k] ?? k;
+// Each marketplace and each own sales channel (shop counter, Fanpage, Zalo...) is its own series.
+const revenueChannels = computed(() => orders.value?.revenue_by_channel ?? []);
+const colors = computed(() => channelColors(revenueChannels.value));
 const chart = computed(() => {
     const rows = orders.value?.revenue_by_day ?? [];
-    const keys = (orders.value?.revenue_by_channel ?? []).map((c) => c.marketplace);
     return {
         labels: rows.map((r) => `${r.date.slice(8, 10)}/${r.date.slice(5, 7)}`),
-        series: keys.map((k) => ({ key: k, label: channelLabel(k), color: channelColor(k), values: rows.map((r) => Number(r.channels[k] ?? 0)) })),
+        series: revenueChannels.value.map((c) => ({ key: c.key, label: channelLabel(c, marketplaceNames), color: colors.value[c.key]!, values: rows.map((r) => Number(r.channels[c.key] ?? 0)) })),
         total: rows.reduce((s, r) => s + Number(r.revenue), 0),
     };
 });
-const share = computed(() =>
-    (orders.value?.revenue_by_channel ?? []).map((c) => ({ key: c.marketplace, label: channelLabel(c.marketplace), color: channelColor(c.marketplace), value: Number(c.revenue) })),
-);
+const share = computed(() => revenueChannels.value.map((c) => ({ key: c.key, label: channelLabel(c, marketplaceNames), color: colors.value[c.key]!, value: Number(c.revenue) })));
 
 // One blue for every queue; red only where something needs checking.
 const queues: { tab: string; label: string; icon: Component; tone: Tone }[] = [
@@ -131,12 +141,37 @@ const stockBoxes = computed(() => {
 const accountTone = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 'muted' : a.circuit_open || a.last_error ? 'danger' : 'success');
 const accountLabel = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 'Đã ngắt' : a.circuit_open ? 'Tạm dừng do lỗi' : a.last_error ? 'Có lỗi' : 'Đang hoạt động');
 
-const steps = computed(() => [
-    { done: true, label: 'Tạo doanh nghiệp', to: null },
-    { done: false, label: 'Mời nhân viên và phân quyền', to: tenant.can('members.view') ? '/members' : null },
-    { done: (stock.value?.on_hand ?? 0) > 0, label: 'Tạo sản phẩm và nhập kho', to: tenant.can('products.view') ? '/products' : null },
-    { done: (accounts.value ?? []).some((a) => a.status === 'connected'), label: 'Kết nối gian hàng', to: tenant.can('marketplace.view') ? '/marketplaces' : null },
+// "Bắt đầu": setup steps, ticked from what the shop already has. Hidden per browser with "Ẩn".
+const connected = computed(() => (accounts.value ?? []).some((a) => a.status === 'connected'));
+const steps = computed<StartStep[]>(() => [
+    { key: 'shop', label: 'Tạo cửa hàng', detail: 'Xong.', done: true, to: null, action: '' },
+    { key: 'products', label: 'Thêm sản phẩm và nhập kho', detail: 'Nhập tay, hoặc tải file Excel có SKU và tồn đầu kỳ.', done: (stock.value?.on_hand ?? 0) > 0, to: tenant.can('products.view') ? '/products' : null, action: 'Thêm sản phẩm' },
+    { key: 'order', label: 'Tạo đơn đầu tiên', detail: 'Đơn Fanpage, Zalo, hoặc bán tại quầy.', done: !!orders.value?.recent.length, to: tenant.can('orders.create') ? '/orders/new' : null, action: 'Tạo đơn' },
+    { key: 'channels', label: 'Tạo kênh bán riêng', detail: 'Để xem doanh thu tách theo cửa hàng, Fanpage, Zalo…', done: (salesChannels.value ?? 0) > 1, to: tenant.can('orders.view') ? '/sales-channels' : null, action: 'Thêm kênh' },
+    { key: 'members', label: 'Mời nhân viên và phân quyền', detail: 'Kho chỉ thấy đơn và tồn, không thấy tiền.', done: (members.value ?? 0) > 1, to: tenant.can('members.view') ? '/members' : null, action: 'Mời' },
+    { key: 'marketplace', label: 'Kết nối sàn TMĐT', detail: 'Shopee, TikTok Shop, WooCommerce.', done: connected.value, optional: true, to: tenant.can('marketplace.view') ? '/marketplaces' : null, action: 'Kết nối' },
 ]);
+const progress = computed(() => startProgress(steps.value));
+const startKey = `ecso.dashboard.start-hidden.${tenant.current?.id ?? ''}`;
+const startHidden = ref(readHidden());
+function readHidden() {
+    try {
+        return localStorage.getItem(startKey) === '1';
+    } catch {
+        return false;
+    }
+}
+function hideStart() {
+    startHidden.value = true;
+    try {
+        localStorage.setItem(startKey, '1');
+    } catch {
+        // Private mode: hidden for this visit only.
+    }
+}
+/** A shop without any order yet: the page leads with the setup steps instead of empty charts. */
+const isNew = computed(() => !!orders.value && !orders.value.recent.length);
+const showStart = computed(() => !startHidden.value && !progress.value.finished);
 </script>
 
 <template>
@@ -147,9 +182,34 @@ const steps = computed(() => [
         </select>
     </PageHeader>
 
+    <Card v-if="isNew && showStart" class="mb-5 overflow-hidden" data-testid="dashboard-welcome">
+        <div class="flex flex-wrap items-center gap-5 bg-gradient-to-r from-blue-50 to-card to-70% px-5 py-5">
+            <IconBubble :icon="Rocket" tone="blue" class="size-12" />
+            <div class="min-w-0 flex-1">
+                <p class="text-base font-bold">Bắt đầu bán hàng với EzSell</p>
+                <p class="mt-0.5 text-sm text-muted-foreground">Làm 3 bước đầu là đã tạo đơn và in phiếu được. Các bước còn lại làm khi cần.</p>
+                <div class="mt-2 h-1.5 w-full max-w-72 overflow-hidden rounded-full bg-slate-100"><i class="block h-full bg-emerald-500" :style="{ width: `${(progress.done / progress.total) * 100}%` }" /></div>
+                <p class="mt-1 text-xs text-muted-foreground">Đã xong {{ progress.done }}/{{ progress.total }} bước</p>
+            </div>
+            <button type="button" class="text-xs text-muted-foreground hover:underline" @click="hideStart">Ẩn</button>
+        </div>
+        <div class="grid gap-3 px-5 pb-5 sm:grid-cols-2 lg:grid-cols-3">
+            <div v-for="(st, n) in steps" :key="st.key" class="rounded-lg border bg-card px-4 py-3">
+                <span :class="['grid size-6 place-items-center rounded-full text-xs font-bold', st.done ? 'bg-emerald-500 text-white' : 'bg-blue-50 text-blue-600']">
+                    <CheckCircle2 v-if="st.done" class="size-4" /><template v-else>{{ n + 1 }}</template>
+                </span>
+                <p :class="['mt-2 text-sm font-semibold', st.done && 'text-muted-foreground']">
+                    {{ st.label }}<span v-if="st.optional" class="ml-1.5 rounded-full bg-slate-100 px-1.5 text-[10px] font-semibold text-slate-500">khi cần</span>
+                </p>
+                <p class="mt-0.5 min-h-8 text-xs text-muted-foreground">{{ st.detail }}</p>
+                <RouterLink v-if="!st.done && st.to" :to="st.to" class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">{{ st.action }} <ArrowRight class="size-3.5" /></RouterLink>
+            </div>
+        </div>
+    </Card>
+
     <div class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div class="min-w-0 space-y-5">
-            <Card caps title="Kết quả kinh doanh hôm nay">
+            <Card v-if="!isNew || !showStart" caps title="Kết quả kinh doanh hôm nay">
                 <div class="grid divide-y sm:grid-cols-2 lg:grid-cols-4 lg:divide-x lg:divide-y-0" data-testid="dashboard-kpis">
                     <StatTile :icon="Banknote" tone="blue" label="Doanh thu" :value="orders ? formatMoney(orders.today_ordered_revenue) : null">
                         <template v-if="change !== null">
@@ -171,13 +231,23 @@ const steps = computed(() => [
 
             <Card v-if="orders" caps title="Doanh thu bán hàng" :description="rangeLabel">
                 <div class="px-5 pb-4 pt-5" data-testid="dashboard-revenue">
-                    <StackedBarChart v-if="chart.total > 0" :labels="chart.labels" :series="chart.series" />
-                    <p v-else class="py-16 text-center text-sm text-muted-foreground">Chưa có doanh thu trong {{ rangeLabel }}.</p>
-                    <p class="mt-3 text-center text-sm text-muted-foreground">Tổng doanh thu: <b class="tabular-nums text-foreground">{{ formatMoney(chart.total) }}</b></p>
+                    <template v-if="isNew">
+                        <EmptyState :icon="BarChart3" title="Chưa có doanh thu" description="Biểu đồ sẽ hiện khi có đơn đầu tiên." class="py-6">
+                            <div class="flex justify-center gap-2">
+                                <RouterLink v-if="tenant.can('orders.create')" to="/orders/new"><Button><Plus /> Tạo đơn</Button></RouterLink>
+                                <RouterLink v-if="tenant.can('orders.create')" to="/pos"><Button variant="outline"><Store /> Bán tại quầy</Button></RouterLink>
+                            </div>
+                        </EmptyState>
+                    </template>
+                    <template v-else>
+                        <StackedBarChart v-if="chart.total > 0" :labels="chart.labels" :series="chart.series" />
+                        <p v-else class="py-16 text-center text-sm text-muted-foreground">Chưa có doanh thu trong {{ rangeLabel }}.</p>
+                        <p class="mt-3 text-center text-sm text-muted-foreground">Tổng doanh thu: <b class="tabular-nums text-foreground">{{ formatMoney(chart.total) }}</b></p>
+                    </template>
                 </div>
             </Card>
 
-            <Card v-if="orders" caps title="Đơn hàng chờ xử lý">
+            <Card v-if="orders && (!isNew || !showStart)" caps title="Đơn hàng chờ xử lý">
                 <div class="grid grid-cols-3 divide-x lg:grid-cols-6 max-lg:[&>*:nth-child(n+4)]:border-t" data-testid="dashboard-queues">
                     <RouterLink v-for="q in queues" :key="q.tab" :to="`/orders?tab=${q.tab}`" class="py-4 text-center hover:bg-muted/40">
                         <IconBubble :icon="q.icon" :tone="q.tone" class="mx-auto" />
@@ -205,7 +275,10 @@ const steps = computed(() => [
                 </Card>
 
                 <Card v-if="stock" caps title="Thông tin kho">
-                    <div class="space-y-3 p-4" data-testid="dashboard-stock">
+                    <EmptyState v-if="isNew && !stock.on_hand" :icon="Package" title="Chưa có hàng trong kho" description="Thêm sản phẩm và nhập kho để theo dõi tồn và cảnh báo sắp hết hàng.">
+                    <RouterLink v-if="tenant.can('products.view')" to="/products"><Button variant="outline">Thêm sản phẩm</Button></RouterLink>
+                </EmptyState>
+                <div v-else class="space-y-3 p-4" data-testid="dashboard-stock">
                         <RouterLink v-for="s in stockBoxes" :key="s.label" :to="s.to" :class="['flex items-center rounded-lg px-4 py-3 hover:brightness-[0.98]', toneClasses[s.tone].soft]">
                             <div>
                                 <p class="flex items-center gap-1 text-xs text-muted-foreground">{{ s.label }} <CircleAlert v-if="s.alert" class="size-3.5 text-rose-400" /></p>
@@ -219,11 +292,30 @@ const steps = computed(() => [
         </div>
 
         <div class="space-y-5">
-            <Card v-if="share.length" caps title="Doanh thu theo sàn" :description="rangeLabel">
+            <Card v-if="share.length" caps title="Doanh thu theo kênh bán" :description="rangeLabel">
                 <div class="p-5" data-testid="dashboard-share"><DonutChart :items="share" /></div>
             </Card>
 
-            <Card v-if="accounts" caps title="Gian hàng kết nối">
+            <Card v-if="!isNew && showStart && !connected" caps title="Bắt đầu" data-testid="dashboard-start">
+                <template #actions><button type="button" class="text-xs text-muted-foreground hover:underline" @click="hideStart">Ẩn</button></template>
+                <div class="px-5 pb-3">
+                    <p class="text-xs text-muted-foreground">Đã xong {{ progress.done }}/{{ progress.total }} bước</p>
+                    <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><i class="block h-full bg-emerald-500" :style="{ width: `${(progress.done / progress.total) * 100}%` }" /></div>
+                </div>
+                <ul class="divide-y border-t">
+                    <li v-for="st in steps" :key="st.key" :class="['flex items-start gap-3 px-5 py-2.5 text-sm', !st.done && steps.find((x) => !x.done)?.key === st.key && 'bg-blue-50/40']">
+                        <CheckCircle2 v-if="st.done" class="mt-0.5 size-4 shrink-0 text-emerald-500" />
+                        <Circle v-else class="mt-0.5 size-4 shrink-0 text-slate-300" />
+                        <div class="min-w-0 flex-1">
+                            <p :class="st.done && 'text-muted-foreground line-through'">{{ st.label }}<span v-if="st.optional" class="ml-1.5 rounded-full bg-slate-100 px-1.5 text-[10px] font-semibold text-slate-500">khi cần</span></p>
+                            <p v-if="!st.done" class="text-xs text-muted-foreground">{{ st.detail }}</p>
+                        </div>
+                        <RouterLink v-if="!st.done && st.to" :to="st.to" class="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary hover:underline">{{ st.action }} <ArrowRight class="size-3.5" /></RouterLink>
+                    </li>
+                </ul>
+            </Card>
+
+            <Card v-if="accounts && (accounts.length || !showStart)" caps title="Gian hàng kết nối">
                 <template #actions><RouterLink to="/marketplaces" class="text-xs text-primary hover:underline">Quản lý</RouterLink></template>
                 <ul v-if="accounts.length" class="divide-y text-sm">
                     <li v-for="a in accounts" :key="a.id" class="flex items-center gap-3 px-5 py-2.5">
@@ -259,17 +351,6 @@ const steps = computed(() => [
                             <div class="min-w-0 flex-1"><div class="font-mono text-xs font-medium">{{ i.sku }}</div><div class="truncate text-xs text-muted-foreground">{{ i.name }} · {{ i.warehouse }}</div></div>
                             <span :class="['whitespace-nowrap tabular-nums', i.available <= 0 ? 'font-medium text-rose-600' : 'text-amber-600']">{{ formatNumber(i.available) }} / {{ formatNumber(i.safety_stock) }}</span>
                         </RouterLink>
-                    </li>
-                </ul>
-            </Card>
-
-            <Card v-if="orders && !orders.recent.length" caps title="Bắt đầu" description="Các bước thiết lập cửa hàng">
-                <ul class="divide-y">
-                    <li v-for="s in steps" :key="s.label" class="flex items-center gap-3 px-5 py-3 text-sm">
-                        <CheckCircle2 v-if="s.done" class="size-4 text-success" />
-                        <Circle v-else class="size-4 text-muted-foreground" />
-                        <span :class="['flex-1', s.done && 'text-muted-foreground line-through']">{{ s.label }}</span>
-                        <RouterLink v-if="s.to" :to="s.to" class="text-primary"><ArrowRight class="size-4" /></RouterLink>
                     </li>
                 </ul>
             </Card>
