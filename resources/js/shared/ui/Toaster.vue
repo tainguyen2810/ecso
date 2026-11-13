@@ -7,7 +7,7 @@ const icons = { success: CheckCircle2, error: XCircle, info: Info };
 </script>
 
 <template>
-    <div class="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-80 flex-col gap-2" aria-live="polite">
+    <div class="pointer-events-none fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] right-4 z-[60] flex w-80 max-w-[calc(100vw-2rem)] lg:bottom-4 flex-col gap-2" aria-live="polite">
         <div
             v-for="t in toasts"
             :key="t.id"

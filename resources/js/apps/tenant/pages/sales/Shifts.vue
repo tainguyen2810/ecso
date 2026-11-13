@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '../../PageHeader.vue';
 import { onMounted, reactive, ref, watch } from 'vue';
 import { Clock } from 'lucide-vue-next';
 import Badge from '@/shared/ui/Badge.vue';
@@ -56,16 +57,10 @@ function onChanged(s: CashShift) {
 
 <template>
     <div class="space-y-4">
-        <div class="flex flex-wrap items-end justify-between gap-3">
-            <div>
-                <h1 class="text-xl font-semibold">Ca bán hàng</h1>
-                <p class="text-sm text-muted-foreground">{{ canViewAll ? 'Mọi ca của các thu ngân' : 'Các ca của bạn' }}: tiền đầu ca, tiền thu, đếm két và chênh lệch khi đóng ca.</p>
-            </div>
-            <div class="flex flex-wrap gap-2">
-                <Select v-model="filters.status" class="w-36" :options="[{ value: '', label: 'Mọi trạng thái' }, { value: 'open', label: 'Đang mở' }, { value: 'closed', label: 'Đã đóng' }]" aria-label="Trạng thái" />
-                <DateRangeInput v-model:from="filters.from" v-model:to="filters.to" clearable placeholder="Mọi ngày" aria-label="Khoảng ngày" />
-            </div>
-        </div>
+        <PageHeader title="Ca bán hàng" :description="`${canViewAll ? 'Mọi ca của các thu ngân' : 'Các ca của bạn'}: tiền đầu ca, tiền thu, đếm két và chênh lệch khi đóng ca.`">
+            <Select v-model="filters.status" class="w-36" :options="[{ value: '', label: 'Mọi trạng thái' }, { value: 'open', label: 'Đang mở' }, { value: 'closed', label: 'Đã đóng' }]" aria-label="Trạng thái" />
+            <DateRangeInput v-model:from="filters.from" v-model:to="filters.to" clearable placeholder="Mọi ngày" aria-label="Khoảng ngày" />
+        </PageHeader>
 
         <Card class="overflow-x-auto">
             <div v-if="loading" class="space-y-2 p-4"><Skeleton v-for="i in 4" :key="i" class="h-8" /></div>

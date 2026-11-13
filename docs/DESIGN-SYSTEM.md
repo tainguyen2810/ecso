@@ -44,6 +44,8 @@ Chốt ngày 03/11/2026 cùng màn Tổng quan mới (tham khảo bố cục T�
 | `EmptyState` | Khối chưa có dữ liệu, kèm hành động tiếp theo. |
 | `DateInput` | Ô một ngày: hiện và gõ `dd/mm/yyyy` (gõ được 15/11, 151126), lịch tuần bắt đầu Thứ 2, Chủ nhật đỏ. Giá trị vẫn là `yyyy-mm-dd`. `weekday` hiện thứ, `quick="future"` thêm Hôm nay / Ngày mai / +2 ngày. **Không dùng `<input type="date">`** (máy nhiều người hiện mm/dd/yyyy). |
 | `DateRangeInput` | Ô khoảng ngày cho bộ lọc: khoảng có sẵn (Hôm nay … Năm nay) áp dụng ngay, lịch hai tháng + "Áp dụng"; `clearable` để quay về "Mọi ngày". |
+| `DateTimeInput` | Ngày + giờ: `dd/mm/yyyy` và giờ 24h `HH:mm` (gõ 9, 930, 9h30). Giá trị giữ dạng `yyyy-mm-ddTHH:mm`. **Không dùng `type="datetime-local"`**. |
+| `PageHeader` | Tiêu đề trang: `back` (link quay lại phía trên), `description` hoặc slot `#description`, nút chính ở slot mặc định. Mọi trang danh sách và cài đặt dùng nó, không tự viết `<h1>`. |
 
 Mẫu hay dùng (viết trực tiếp bằng Tailwind, không cần component riêng):
 
@@ -65,3 +67,8 @@ Mẫu hay dùng (viết trực tiếp bằng Tailwind, không cần component ri
 - Nhóm Sản phẩm (như Sapo): Danh sách sản phẩm, Quản lý kho, Đặt hàng nhập, Nhập hàng, Kiểm hàng, Chuyển hàng, Nhà cung cấp, Điều chỉnh giá vốn. Bán tại quầy nằm trong Đơn hàng.
 - Tổng quan: lưới hai cột `xl:grid-cols-[minmax(0,1fr)_320px]`; cột phải cho khối phụ (tỷ trọng, gian hàng, hoạt động). Dưới `xl` thành một cột; mobile mọi khối xếp dọc.
 - Sidebar: nhóm menu in hoa đậm, ngăn bằng đường kẻ `border-sidebar-border`; mục đang chọn nền `sidebar-active` chữ trắng.
+
+
+## Điện thoại
+
+Dưới `lg`, menu trái ẩn và thay bằng thanh dưới (`MobileNav`): Tổng quan, Đơn hàng, nút giữa (Tạo đơn, hoặc Tồn kho với người không tạo được đơn), Kho, Thêm. "Thêm" mở các trang còn lại dạng ô lớn, lọc theo quyền. Màn POS ẩn thanh này. Nội dung trang có `pb-28` để không bị thanh che. App cài được lên màn hình chính (PWA: `public/manifest.webmanifest`, `public/sw.js`, biểu tượng ở `public/icons/`).

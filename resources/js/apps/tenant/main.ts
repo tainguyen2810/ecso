@@ -5,6 +5,7 @@ import App from './App.vue';
 import { router } from './router';
 import { setUnauthorizedHandler } from '@/shared/lib/api';
 import { useAuthStore } from '@/shared/stores/auth';
+import { registerServiceWorker } from './pwa';
 
 const app = createApp(App).use(createPinia()).use(router);
 
@@ -15,3 +16,4 @@ setUnauthorizedHandler(() => {
 });
 
 app.mount('#app');
+registerServiceWorker();

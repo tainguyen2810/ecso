@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DateTimeInput from '@/shared/ui/DateTimeInput.vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { AlertTriangle, ArrowDown, ArrowUp, Check, CirclePlus, Clock, Contact, ImageIcon, PackageOpen, Pencil, Repeat, Search, Send, Settings2, Store, Truck, UserPlus, UserRound, Wrench, X } from 'lucide-vue-next';
@@ -910,7 +911,7 @@ async function saveDraft() {
                     </template>
                     <div v-if="canBackdate" class="grid grid-cols-[88px_1fr] items-center gap-2">
                         <label for="o-placed-at" class="text-muted-foreground">Ngày bán</label>
-                        <Input id="o-placed-at" v-model="form.placed_at" type="datetime-local" :max="new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)" data-testid="form-placed-at" />
+                        <DateTimeInput id="o-placed-at" v-model="form.placed_at" :max="new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)" data-testid="form-placed-at" />
                     </div>
                     <p v-if="error?.field('placed_at')" class="text-xs text-destructive">{{ error.field('placed_at') }}</p>
                     <p v-if="error?.field('warehouse_id')" class="text-xs text-destructive">{{ error.field('warehouse_id') }}</p>

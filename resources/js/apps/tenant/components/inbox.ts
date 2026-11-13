@@ -1,3 +1,5 @@
+import { ref } from 'vue';
+
 /** The bell's data (GET /inbox) and what this browser remembers about it. */
 export type InboxItem = {
     key: string;
@@ -8,6 +10,14 @@ export type InboxItem = {
     detail: string | null;
     to: string;
 };
+
+/** Last list the bell loaded, shared with the phone menu (badge on "Đơn hàng"). */
+export const inboxItems = ref<InboxItem[]>([]);
+
+/** Orders waiting for the member's hands (confirm or pack), shown on the phone menu. */
+export function ordersWaiting(items: InboxItem[]): number {
+    return items.filter((i) => i.key === 'orders.to_confirm' || i.key === 'orders.to_pack').reduce((s, i) => s + i.count, 0);
+}
 
 /** Kinds that can be switched off in "Cài đặt thông báo". */
 export const inboxKinds: { key: string; label: string }[] = [

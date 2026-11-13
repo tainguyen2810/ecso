@@ -96,7 +96,20 @@ test('dashboard is usable on mobile', async ({ page }) => {
     await login(page, 'owner@demo.test');
     await expect(page.getByRole('heading', { name: /Xin chào/ })).toBeVisible();
     await shot(page, '16-mobile-dashboard');
-    await page.getByRole('button', { name: 'Mở menu' }).click();
-    await page.waitForTimeout(400); // let the slide-in transition finish
+    // Phone menu at the bottom (B6): "Thêm" opens the other pages as large tiles.
+    const nav = page.getByTestId('mobile-nav');
+    await expect(nav).toBeVisible();
+    await expect(nav.getByTestId('mobile-create')).toHaveText(/Tạo đơn/);
+    await page.getByTestId('mobile-more').click();
+    const sheet = page.getByTestId('mobile-more-sheet');
+    await expect(sheet.getByRole('link', { name: 'Báo cáo' })).toBeVisible();
+    await page.waitForTimeout(300); // let the sheet slide in
     await page.screenshot({ path: 'docs/screenshots/phase-1/17-mobile-menu.png' });
+    await sheet.getByRole('link', { name: 'Khách hàng' }).click();
+    await expect(sheet).toBeHidden();
+    await expect(page).toHaveURL(/\/customers$/);
+
+    // Wide screens keep the sidebar and have no bottom menu.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(nav).toBeHidden();
 });
