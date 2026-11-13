@@ -65,7 +65,7 @@ class EInvoiceService
     public function updateSettings(EInvoiceAccount $account, array $data): EInvoiceAccount
     {
         if (isset($data['template'])) {
-            $match = collect($account->templates ?? [])->first(fn ($t) => $t['template_code'].'|'.$t['invoice_series'] === $data['template']);
+            $match = collect($account->templates ?? [])->first(fn ($t) => $data['template'] === $t['template_code'].'|'.$t['invoice_series']);
             if ($match === null) {
                 throw ValidationException::withMessages(['template' => 'Mẫu số / ký hiệu này không có trong tài khoản hóa đơn.']);
             }
