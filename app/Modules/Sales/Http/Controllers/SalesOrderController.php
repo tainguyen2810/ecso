@@ -129,6 +129,9 @@ class SalesOrderController extends Controller
         if ($settings->get('pricing.staff_edit_price') || $request->user()->can('changePrice', Order::class)) {
             return;
         }
+        if (! empty($data['promotions_off'])) {
+            throw ValidationException::withMessages(['promotions_off' => 'Bạn không có quyền bỏ khuyến mãi trên đơn.']);
+        }
         $lines = $data['lines'] ?? [];
         $variants = ProductVariant::query()->whereIn('ulid', array_filter(array_column($lines, 'variant_id')))->get()->keyBy('ulid');
         $subtotal = '0';
@@ -185,6 +188,8 @@ class SalesOrderController extends Controller
             ...VnAddress::rules('shipping_'),
             'shipping_fee' => ['nullable', 'numeric', 'min:0', 'max:999999999'],
             'discount' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
+            'coupon_code' => ['nullable', 'string', 'max:40'],
+            'promotions_off' => ['boolean'],
             'is_cod' => ['boolean'],
             'carrier' => ['nullable', 'string', 'max:100'],
             'tracking_number' => ['nullable', 'string', 'max:100'],

@@ -29,6 +29,8 @@ export interface Cart {
     discountAuto?: boolean;
     /** Paid with several methods ("Chia nhiều hình thức"): one row per method; null = one method (`method`). */
     split?: SplitRow[] | null;
+    /** Mã giảm giá typed at the counter (C4). */
+    coupon?: string;
 }
 
 export interface SplitRow {
