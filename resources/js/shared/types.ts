@@ -548,7 +548,7 @@ export interface MarketplaceCatalogEntry {
     is_fake: boolean;
     credentials_configured: boolean;
     /** oauth = marketplace app authorization, store = WooCommerce (store approval / API keys), fake = simulator */
-    connect_mode?: 'oauth' | 'store' | 'fake';
+    connect_mode?: 'oauth' | 'store' | 'app_keys' | 'fake';
     capabilities: Record<string, string>;
 }
 

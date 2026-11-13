@@ -36,7 +36,7 @@ test('TikTok Shop: skeleton connector, connect refused without credentials', asy
     await page.screenshot({ path: 'docs/screenshots/phase-5/01-tiktok-connect-refused.png', clip: { x: 0, y: 0, width: 1440, height: 640 } });
 });
 
-test('Lazada and Tiki: skeleton connectors, connect refused without credentials, manual stock update guidance', async ({ page }) => {
+test('Lazada and Tiki: Lazada refused without credentials, Tiki asks for app keys, manual stock update guidance', async ({ page }) => {
     await login(page, 'owner@demo.test');
     await page.goto('/marketplaces');
     const card = page.getByTestId('real-marketplaces');
@@ -47,8 +47,15 @@ test('Lazada and Tiki: skeleton connectors, connect refused without credentials,
 
     await page.getByTestId('connect-lazada').click();
     await expect(page.getByTestId('connect-notice-lazada')).toContainText('chưa được cấu hình app credentials');
+    // Tiki connects with the shop's own In-house app keys (C8): the dialog asks for them.
     await page.getByTestId('connect-tiki').click();
-    await expect(page.getByTestId('connect-notice-tiki')).toContainText('chưa được cấu hình app credentials');
+    await expect(page.getByTestId('tiki-dialog')).toContainText('Inhouse');
+    await expect(page.getByTestId('tiki-connect')).toBeDisabled();
+    await page.getByTestId('tiki-client-id').fill('7590139168389961');
+    await page.getByTestId('tiki-client-secret').fill('chua-phai-ma-that');
+    await expect(page.getByTestId('tiki-connect')).toBeEnabled();
+    await page.screenshot({ path: 'docs/screenshots/c8-tiki/01-ket-noi-tiki.png' });
+    await page.keyboard.press('Escape');
     await card.scrollIntoViewIfNeeded();
     await page.screenshot({ path: 'docs/screenshots/phase-7/01-lazada-tiki-connect-refused.png', clip: { x: 0, y: 0, width: 1440, height: 640 } });
 });
