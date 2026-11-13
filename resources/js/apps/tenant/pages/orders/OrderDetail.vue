@@ -18,6 +18,7 @@ import { api, ApiError, idempotent, newIdempotencyKey } from '@/shared/lib/api';
 import { cn, formatDateTime, formatMoney, initials } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import OrderShipmentsCard from '../shipments/OrderShipmentsCard.vue';
+import OrderEInvoiceCard from './OrderEInvoiceCard.vue';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { actionLabels, capabilityLabels, deadlineLabel, historySource, manualActionOrder, mappingStatus, marketplaceNames, orderStatus, paymentMethodNames, paymentMethods, paymentStatus, refundStatus, returnState, returnStatus, returnTypes } from './labels';
 import PrintDialog from './PrintDialog.vue';
@@ -612,6 +613,8 @@ async function createReturn() {
                     </ul>
                     <p class="border-t px-5 py-2 text-xs text-muted-foreground">Tiền website chỉ tính vào quỹ sau khi có người xác nhận đã nhận. Trạng thái thanh toán của đơn vẫn theo website.</p>
                 </Card>
+
+                <OrderEInvoiceCard v-if="tenant.can('einvoice.issue') || tenant.can('settings.manage')" :order-id="order.id" :order-status="order.status" />
 
                 <Card caps title="Khách hàng & giao hàng">
                     <div v-if="order.customer" class="flex items-center gap-3 border-b px-5 py-3">

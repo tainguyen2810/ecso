@@ -18,7 +18,7 @@ import { carrierMarks, type CarrierAccountData, type CarrierCatalogItem } from '
  * shop's pickup points and matches them to warehouses. Free: the shop keeps its own account, price and COD.
  */
 const open = defineModel<boolean>('open', { required: true });
-const props = defineProps<{ accounts: CarrierAccountData[] }>();
+const props = defineProps<{ accounts: CarrierAccountData[]; initial?: string | null }>();
 const emit = defineEmits<{ changed: [] }>();
 const tenant = useTenantStore();
 const toast = useToast();
@@ -42,6 +42,7 @@ watch(open, async (v) => {
             error.value = (e as ApiError).message;
         }
     }
+    if (props.initial && catalog.value.some((c) => c.carrier === props.initial)) picked.value = props.initial;
     picked.value = picked.value || catalog.value.find((c) => c.available && c.carrier !== 'fake')?.carrier || catalog.value.find((c) => c.available)?.carrier || '';
 }, { immediate: true });
 
