@@ -30,7 +30,11 @@ test('loyalty: set up points and tiers, then give a customer points', async ({ p
 
     await page.goto('/customers');
     await page.getByTestId('customer-q').fill('Võ Quốc Bảo');
-    await page.getByRole('link', { name: 'Võ Quốc Bảo' }).first().click();
+    const loyalty = page.waitForResponse((r) => /\/api\/v1\/customers\/[^/]+\/loyalty$/.test(new URL(r.url()).pathname) && r.request().method() === 'GET');
+    await page.getByTestId('customer-table').getByRole('link', { name: 'Võ Quốc Bảo' }).first().click();
+    const response = await loyalty;
+    expect(response.status(), await response.text()).toBe(200);
+    expect((await response.json()).data.enabled).toBe(true);
     const card = page.getByTestId('customer-loyalty');
     await expect(card).toBeVisible();
     const before = Number((await card.getByTestId('loyalty-points').innerText()).replace(/\D/g, '')) || 0;
