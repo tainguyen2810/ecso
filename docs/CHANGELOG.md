@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+### A2: Thiết lập sau đăng ký và Cửa hàng mẫu (2026-11-14)
+- Doanh nghiệp tạo từ app đi qua 3 bước `/setup`: thông tin cửa hàng (tên, SĐT, ngành hàng, địa chỉ kho → gán cho "Kho chính"), bán ở kênh nào và mấy người làm, rồi chọn cách bắt đầu (cửa hàng mẫu, chuyển dữ liệu từ Sapo/KiotViet, hoặc cửa hàng trống). Doanh nghiệp đã có và doanh nghiệp tạo bằng seeder/lệnh coi như đã thiết lập.
+- API: `PUT /tenant/setup` (industry, channels, team_size, complete); tenant có `setup_completed`, `channels`, `team_size`, `is_demo`, `demo_status`, `demo_expires_at`.
+- Câu trả lời chỉ sắp xếp gợi ý: không chọn "Bán tại cửa hàng" thì ẩn menu Bán tại quầy; bán trên sàn thì "Kết nối sàn" lên ngay sau "Thêm sản phẩm" và thành bắt buộc trong danh sách Bắt đầu; làm một mình thì bỏ bước mời nhân viên.
+- **Cửa hàng mẫu**: doanh nghiệp riêng của người dùng (mỗi người 1), gói Free, có dữ liệu mẫu 60 ngày (job nền `PopulateDemoStore`), dải vàng trên mọi trang, xóa bằng 1 nút (`DELETE /demo-store/{id}`, chỉ xóa được cửa hàng mẫu), tự xóa sau 30 ngày (`ecso:demo-stores:prune` 04:10). Không kết nối được sàn, hãng vận chuyển, hóa đơn điện tử, Zalo thật (middleware `real-tenant`, mã lỗi `DEMO_STORE`). Cấu hình → Cửa hàng mẫu để tạo, mở, xóa.
+
+### A6: Sao lưu DB hằng ngày (2026-11-14)
+- `ecso:backup` lúc 01:30: PHP xuất SQL gzip vào `storage/app/backups`, giữ 14 ngày; `ecso:monitor` cảnh báo khi lỗi hoặc quá 26 giờ không có bản mới. Sửa lỗi "Server Error" ở bước cuối trình cài đặt khi có open_basedir.
+
 ### Trung tâm đồng bộ, vòng 2: giao diện (2026-11-05)
 - Trang **Kết nối sàn → Trung tâm đồng bộ** (`/marketplaces/sync`, quyền `sync.view`) thay trang "Lịch sử và lỗi đồng bộ"; menu Kết nối sàn có 2 mục con "Shop & tài khoản" và "Trung tâm đồng bộ", không thêm menu mới.
 - **Tổng quan**: cảnh báo shop mất kết nối, số shop hoạt động / mất kết nối / token sắp hết hạn / quá hạn đối soát, tác vụ 24 giờ theo trạng thái (bấm để mở Hàng đợi đã lọc), bảng từng shop với "Đồng bộ ngay".

@@ -17,6 +17,10 @@ use Illuminate\Support\Facades\Storage;
  * @property-read int|null $members_count  withCount('memberships')
  * @property array<string, mixed>|null $settings
  * @property string|null $logo_path
+ * @property \Illuminate\Support\Carbon|null $setup_completed_at
+ * @property bool $is_demo
+ * @property string|null $demo_status  preparing | ready | failed
+ * @property \Illuminate\Support\Carbon|null $demo_expires_at
  */
 class Tenant extends Model
 {
@@ -27,13 +31,16 @@ class Tenant extends Model
 
     public const STATUS_SUSPENDED = 'suspended';
 
+    /** A2: how long a sample store lives before it is deleted. */
+    public const DEMO_DAYS = 30;
+
     protected $fillable = ['name', 'timezone', 'currency'];
 
     protected $hidden = ['id', 'owner_user_id'];
 
     protected function casts(): array
     {
-        return ['settings' => 'array'];
+        return ['settings' => 'array', 'setup_completed_at' => 'datetime', 'is_demo' => 'boolean', 'demo_expires_at' => 'datetime'];
     }
 
     /** Relative URL so it works on every domain the app is served from. */

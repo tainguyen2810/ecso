@@ -78,6 +78,7 @@ use App\Modules\Sales\Policies\CashShiftPolicy;
 use App\Modules\Sales\Policies\CustomerPolicy;
 use App\Modules\Sales\Policies\SalesChannelPolicy;
 use App\Modules\Shipping\Console\TrackCarrierShipmentsCommand;
+use App\Modules\Tenancy\Console\PruneDemoStoresCommand;
 use App\Modules\Tenancy\Events\TenantCreated;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Models\TenantInvitation;
@@ -162,7 +163,7 @@ class ModuleServiceProvider extends ServiceProvider
         $this->configureAuthLinks();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([AutoGroupCustomersCommand::class, ZnsPaymentRemindersCommand::class, LoyaltyNightlyCommand::class, CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, VerifyOrderMoneyCommand::class, LowStockDigestCommand::class, PushDueInventoryCommand::class, RecoverSyncCommand::class, PruneSyncLogsCommand::class, CheckFeesCommand::class, CheckWebhooksCommand::class, ReconcileOrdersCommand::class, BackfillShipmentsCommand::class, TrackCarrierShipmentsCommand::class, BillingSweepCommand::class, MonitorCommand::class, BackupDatabaseCommand::class, DemoTenantCommand::class]);
+            $this->commands([AutoGroupCustomersCommand::class, ZnsPaymentRemindersCommand::class, LoyaltyNightlyCommand::class, CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, VerifyOrderMoneyCommand::class, LowStockDigestCommand::class, PushDueInventoryCommand::class, RecoverSyncCommand::class, PruneSyncLogsCommand::class, CheckFeesCommand::class, CheckWebhooksCommand::class, ReconcileOrdersCommand::class, BackfillShipmentsCommand::class, TrackCarrierShipmentsCommand::class, BillingSweepCommand::class, MonitorCommand::class, BackupDatabaseCommand::class, PruneDemoStoresCommand::class, DemoTenantCommand::class]);
         }
     }
 

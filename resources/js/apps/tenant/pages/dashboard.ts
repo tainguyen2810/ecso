@@ -38,3 +38,22 @@ export type StartStep = { key: string; label: string; detail: string; done: bool
 export function startProgress(steps: StartStep[]): { done: number; total: number; finished: boolean } {
     return { done: steps.filter((s) => s.done).length, total: steps.length, finished: steps.every((s) => s.done || s.optional) };
 }
+
+export const MARKETPLACE_CHANNELS = ['shopee', 'tiktok', 'woocommerce', 'lazada_tiki'];
+
+/**
+ * A2: arranges "Bắt đầu" by the setup answers. A shop that sells on a marketplace connects it right after the
+ * products (and must); a shop run by one person skips inviting staff. Without answers the list stays as it is.
+ */
+export function arrangeStartSteps(steps: StartStep[], channels: string[] | null | undefined, teamSize: string | null | undefined): StartStep[] {
+    let out = teamSize === '1' ? steps.filter((s) => s.key !== 'members') : [...steps];
+    if (channels?.some((c) => MARKETPLACE_CHANNELS.includes(c))) {
+        const market = out.find((s) => s.key === 'marketplace');
+        if (market) {
+            out = out.filter((s) => s !== market);
+            const at = out.findIndex((s) => s.key === 'products') + 1;
+            out.splice(at, 0, { ...market, optional: false });
+        }
+    }
+    return out;
+}

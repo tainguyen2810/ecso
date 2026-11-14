@@ -40,7 +40,7 @@ class TenantController extends Controller
             'timezone' => ['sometimes', 'string', Rule::in(timezone_identifiers_list())],
         ]);
 
-        $tenant = $service->create($request->user(), $data);
+        $tenant = $service->create($request->user(), $data, setupDone: false);
 
         return (new TenantResource($tenant))->response()->setStatusCode(201);
     }

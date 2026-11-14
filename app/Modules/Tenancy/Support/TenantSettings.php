@@ -18,6 +18,8 @@ class TenantSettings
 
     public const DEFAULTS = [
         'store' => ['phone' => null, 'email' => null, 'website' => null, 'tax_code' => null, 'business_type' => null, 'address' => null, 'province' => null, 'ward' => null, 'province_code' => null, 'ward_code' => null],
+        // A2: answers from the setup steps. channels: shopee, tiktok, woocommerce, pos, social, lazada_tiki.
+        'setup' => ['industry' => null, 'channels' => null, 'team_size' => null],
         'tax' => ['sale_rate' => 0, 'purchase_rate' => 0, 'prices_include_tax' => true],
         'pricing' => ['sale_price' => 'retail', 'staff_edit_price' => true],
         'payments' => [

@@ -20,6 +20,7 @@ const routes: RouteRecordRaw[] = [
     { path: '/reset-password', name: 'reset-password', component: () => import('./pages/auth/ResetPassword.vue'), meta: { guest: true } },
     { path: '/verify-email', name: 'verify-email', component: () => import('./pages/auth/VerifyEmail.vue'), meta: { auth: true } },
     { path: '/invitations/:token', name: 'invitation', component: () => import('./pages/Invitation.vue') },
+    { path: '/setup', name: 'setup', component: () => import('./pages/setup/Setup.vue'), meta: { auth: true, verified: true } },
     { path: '/tenants', name: 'tenants', component: () => import('./pages/SelectTenant.vue'), meta: { auth: true, verified: true } },
     {
         path: '/',
@@ -103,7 +104,8 @@ const routes: RouteRecordRaw[] = [
             { path: 'settings/pricing/fees', name: 'settings-pricing-fees', component: () => import('./pages/settings/FeeCheck.vue'), meta: { permission: 'settings.manage', nav: 'settings' } },
             { path: 'settings/payments', name: 'settings-payments', component: () => import('./pages/settings/PaymentSettings.vue'), meta: { permission: 'settings.manage', nav: 'settings' } },
             { path: 'settings/sales', name: 'settings-sales', component: () => import('./pages/settings/SalesSettings.vue'), meta: { permission: 'settings.manage', nav: 'settings' } },
-            { path: 'settings/data-migration', name: 'settings-data-migration', component: () => import('./pages/settings/DataMigration.vue'), meta: { anyPermission: ['products.manage', 'customers.import'], nav: 'settings' } },
+            { path: 'settings/demo-store', name: 'settings-demo-store', component: () => import('./pages/settings/DemoStore.vue'), meta: { nav: 'settings' } },
+        { path: 'settings/data-migration', name: 'settings-data-migration', component: () => import('./pages/settings/DataMigration.vue'), meta: { anyPermission: ['products.manage', 'customers.import'], nav: 'settings' } },
             { path: 'settings/connections', name: 'settings-connections', component: () => import('./pages/connections/ServiceConnections.vue'), meta: { permission: 'settings.manage', nav: 'settings' } },
             { path: 'settings/connections/zalo', name: 'settings-zalo', component: () => import('./pages/connections/ZaloSettings.vue'), meta: { permission: 'settings.manage', nav: 'settings' } },
             { path: 'settings/print', name: 'settings-print', component: () => import('./pages/settings/PrintSettings.vue'), meta: { permission: 'settings.manage', nav: 'settings' } },
@@ -131,6 +133,8 @@ router.beforeEach(async (to) => {
             const ok = await tenant.restore().catch(() => false);
             if (!ok) return { name: 'tenants' };
         }
+        // A2: a business made from the app goes through the setup steps first (the owner or an admin does them).
+        if (tenant.current && tenant.current.setup_completed === false && tenant.can('settings.manage')) return { name: 'setup' };
         const permission = to.meta.permission as string | undefined;
         if (permission && !tenant.can(permission)) return { name: 'forbidden' };
         const anyPermission = to.meta.anyPermission as string[] | undefined;

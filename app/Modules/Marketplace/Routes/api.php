@@ -25,14 +25,14 @@ Route::post('woocommerce/auth-callback', [WooCommerceController::class, 'receive
     ->name('woocommerce.auth-callback');
 
 Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
-    Route::post('marketplace-accounts/woocommerce/authorize', [WooCommerceController::class, 'authorizeStore'])->middleware('throttle:10,1,marketplace.woocommerce.authorize');
-    Route::post('marketplace-accounts/woocommerce/complete', [WooCommerceController::class, 'complete'])->middleware('throttle:10,1,marketplace.woocommerce.complete');
-    Route::post('marketplace-accounts/tiki/connect', [TikiController::class, 'connect'])->middleware('throttle:10,1,marketplace.tiki.connect');
-    Route::post('marketplace-accounts/woocommerce/keys', [WooCommerceController::class, 'connectWithKeys'])->middleware('throttle:10,1,marketplace.woocommerce.keys');
+    Route::post('marketplace-accounts/woocommerce/authorize', [WooCommerceController::class, 'authorizeStore'])->middleware(['real-tenant', 'throttle:10,1,marketplace.woocommerce.authorize']);
+    Route::post('marketplace-accounts/woocommerce/complete', [WooCommerceController::class, 'complete'])->middleware(['real-tenant', 'throttle:10,1,marketplace.woocommerce.complete']);
+    Route::post('marketplace-accounts/tiki/connect', [TikiController::class, 'connect'])->middleware(['real-tenant', 'throttle:10,1,marketplace.tiki.connect']);
+    Route::post('marketplace-accounts/woocommerce/keys', [WooCommerceController::class, 'connectWithKeys'])->middleware(['real-tenant', 'throttle:10,1,marketplace.woocommerce.keys']);
     Route::get('marketplaces', [MarketplaceAccountController::class, 'catalog']);
     Route::get('marketplace-accounts', [MarketplaceAccountController::class, 'index']);
-    Route::post('marketplace-accounts/authorize/{marketplace}', [MarketplaceAccountController::class, 'authorizeShop'])->where('marketplace', '[a-z]+')->middleware('throttle:10,1,marketplace.marketplace-accounts.authorize.x');
-    Route::post('marketplace-accounts/callback/{marketplace}', [MarketplaceAccountController::class, 'completeAuthorization'])->where('marketplace', '[a-z]+')->middleware('throttle:10,1,marketplace.marketplace-accounts.callback.x');
+    Route::post('marketplace-accounts/authorize/{marketplace}', [MarketplaceAccountController::class, 'authorizeShop'])->where('marketplace', '[a-z]+')->middleware(['real-tenant', 'throttle:10,1,marketplace.marketplace-accounts.authorize.x']);
+    Route::post('marketplace-accounts/callback/{marketplace}', [MarketplaceAccountController::class, 'completeAuthorization'])->where('marketplace', '[a-z]+')->middleware(['real-tenant', 'throttle:10,1,marketplace.marketplace-accounts.callback.x']);
     Route::post('marketplace-accounts/fake', [MarketplaceAccountController::class, 'connectFake']);
     Route::get('marketplace-accounts/{account}', [MarketplaceAccountController::class, 'show']);
     Route::get('marketplace-accounts/{account}/new-products', [MarketplaceAccountController::class, 'newProducts']);
