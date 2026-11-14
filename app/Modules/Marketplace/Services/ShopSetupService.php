@@ -49,9 +49,9 @@ class ShopSetupService
         $preview = (clone $variants)->with(['listing:id,title', 'variant:id,sku,name,product_id', 'variant.product:id,name'])
             ->orderByRaw("FIELD(mapping_status, 'suggested', 'mapped', 'unmapped', 'ignored')")->orderBy('id')->limit(8)->get()
             ->map(fn (ListingVariant $v) => [
-                'title' => trim(($v->listing?->title ?? '').($v->name ? ' · '.$v->name : '')),
+                'title' => trim(($v->listing->title ?? '').($v->name ? ' · '.$v->name : '')),
                 'seller_sku' => $v->seller_sku,
-                'internal' => $v->variant ? trim(($v->variant->product?->name ?? '').' · '.($v->variant->name ?? $v->variant->sku)) : null,
+                'internal' => $v->variant ? trim(($v->variant->product->name ?? '').' · '.($v->variant->name ?? $v->variant->sku)) : null,
                 'action' => match (true) {
                     $v->product_variant_id !== null && in_array($v->mapping_status, [ListingVariant::MAPPED, ListingVariant::SUGGESTED], true) => 'link',
                     $newListingIds->contains($v->listing_id) => blank($v->seller_sku) ? 'create_generated' : 'create',
