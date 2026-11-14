@@ -61,10 +61,27 @@ export const useTenantStore = defineStore('tenant', () => {
         return data.data;
     }
 
+    /** Reloads the current business (after the setup steps change it). */
+    async function refresh(): Promise<void> {
+        if (current.value) await select(current.value.id);
+    }
+
+    /** A2: the user's sample store; made on the first call. The fake data is filled in the background. */
+    async function createDemo(): Promise<Tenant> {
+        const { data } = await api.post('/demo-store');
+        await fetchTenants();
+        return data.data;
+    }
+
+    async function deleteDemo(ulid: string): Promise<void> {
+        await api.delete(`/demo-store/${ulid}`);
+        await fetchTenants();
+    }
+
     function reset(): void {
         tenants.value = [];
         context.value = null;
     }
 
-    return { tenants, context, current, permissions, can, worksIn, fetchTenants, restore, select, create, reset };
+    return { tenants, context, current, permissions, can, worksIn, fetchTenants, restore, select, create, refresh, createDemo, deleteDemo, reset };
 });

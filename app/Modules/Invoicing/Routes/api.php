@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::get('einvoice/settings', [EInvoiceController::class, 'settings']);
-    Route::post('einvoice/account', [EInvoiceController::class, 'connect'])->middleware('throttle:10,1,einvoice.connect');
+    Route::post('einvoice/account', [EInvoiceController::class, 'connect'])->middleware(['real-tenant', 'throttle:10,1,einvoice.connect']);
     Route::put('einvoice/account', [EInvoiceController::class, 'update']);
     Route::delete('einvoice/account', [EInvoiceController::class, 'disconnect']);
     Route::get('orders/{order}/einvoice', [EInvoiceController::class, 'forOrder']);

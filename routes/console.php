@@ -67,3 +67,6 @@ Schedule::command('ecso:zalo:payment-reminders')->dailyAt('09:00')->withoutOverl
 
 // Daily database backup (A6): storage/app/backups, kept BACKUP_KEEP_DAYS days. `ecso:monitor` alerts when it fails.
 Schedule::command('ecso:backup')->dailyAt((string) config('ecso.backup.at', '01:30'))->withoutOverlapping(120)->onOneServer();
+
+// Sample stores (A2) live 30 days.
+Schedule::command('ecso:demo-stores:prune')->dailyAt('04:10')->withoutOverlapping(60)->onOneServer();

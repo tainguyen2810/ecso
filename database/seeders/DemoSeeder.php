@@ -88,24 +88,32 @@ class DemoSeeder extends Seeder
      * Fills one business with the demo catalog, stock, own-channel sales, purchasing and (when the marketplace
      * simulator is on) a simulated shop. Also used by `ecso:demo-tenant`, which never enables the simulator.
      */
-    public function populate(Tenant $shop, User $owner, User $staff): void
+    public function populate(Tenant $shop, User $owner, ?User $staff = null, bool $paidPlan = true): void
     {
         // Demo shop on Starter so the members screen has room for invitations (free plan allows 2 users).
         // A paid monthly period that started 10 days ago (as if the first invoice had been paid).
-        Subscription::withoutGlobalScopes()->where('tenant_id', $shop->id)->update([
-            'plan_id' => Plan::query()->where('key', 'starter')->value('id'),
-            'billing_cycle' => 'monthly',
-            'status' => Subscription::STATUS_ACTIVE,
-            'current_period_start' => now()->subDays(10),
-            'current_period_end' => now()->subDays(10)->addMonth(),
-        ]);
+        // A user's own sample store (A2) keeps the plan it was given (Pro without a billing period).
+        if ($paidPlan) {
+            Subscription::withoutGlobalScopes()->where('tenant_id', $shop->id)->update([
+                'plan_id' => Plan::query()->where('key', 'starter')->value('id'),
+                'billing_cycle' => 'monthly',
+                'status' => Subscription::STATUS_ACTIVE,
+                'current_period_start' => now()->subDays(10),
+                'current_period_end' => now()->subDays(10)->addMonth(),
+            ]);
+        }
 
-        TenantContext::run($shop, fn () => TenantUser::create([
-            'user_id' => $staff->id,
-            'role_id' => Role::system(Role::WAREHOUSE_STAFF)->id,
-            'status' => TenantUser::STATUS_ACTIVE,
-            'joined_at' => now(),
-        ]));
+        // Without a second login (a user's sample store), the owner plays the warehouse staff too.
+        if ($staff === null) {
+            $staff = $owner;
+        } else {
+            TenantContext::run($shop, fn () => TenantUser::create([
+                'user_id' => $staff->id,
+                'role_id' => Role::system(Role::WAREHOUSE_STAFF)->id,
+                'status' => TenantUser::STATUS_ACTIVE,
+                'joined_at' => now(),
+            ]));
+        }
 
         Auth::setUser($owner);
         TenantContext::run($shop, fn () => $this->catalog($staff));

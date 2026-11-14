@@ -26,6 +26,9 @@ return [
         'connection' => env('BACKUP_DB_CONNECTION'), // default: a separate copy of the default connection
     ],
 
+    // Days of sales history in a user's sample store (A2, "Cửa hàng mẫu").
+    'demo_store_days' => (int) env('DEMO_STORE_DAYS', 60),
+
     // Open orders whose ship-by time is within this many hours are flagged "sắp quá hạn" (ORDER-LIFECYCLE §7).
     'orders' => [
         'due_soon_hours' => 6,

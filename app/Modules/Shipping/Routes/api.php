@@ -21,9 +21,9 @@ Route::get('carrier-labels/{file}', CarrierLabelController::class)
 Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::get('carriers', [CarrierAccountController::class, 'catalog']);
     Route::get('carrier-accounts', [CarrierAccountController::class, 'index']);
-    Route::post('carrier-accounts', [CarrierAccountController::class, 'store'])->middleware('throttle:10,1,shipping.carrier-accounts.store');
+    Route::post('carrier-accounts', [CarrierAccountController::class, 'store'])->middleware(['real-tenant', 'throttle:10,1,shipping.carrier-accounts.store']);
     Route::put('carrier-accounts/{account}', [CarrierAccountController::class, 'update']);
-    Route::post('carrier-accounts/{account}/check', [CarrierAccountController::class, 'check'])->middleware('throttle:10,1,shipping.carrier-accounts.check');
+    Route::post('carrier-accounts/{account}/check', [CarrierAccountController::class, 'check'])->middleware(['real-tenant', 'throttle:10,1,shipping.carrier-accounts.check']);
     Route::delete('carrier-accounts/{account}', [CarrierAccountController::class, 'destroy']);
 
     Route::get('carrier-shipments/queue', [CarrierShipmentController::class, 'queue']);

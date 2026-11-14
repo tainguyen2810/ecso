@@ -36,7 +36,7 @@ import DonutChart from '@/shared/ui/charts/DonutChart.vue';
 import StackedBarChart from '@/shared/ui/charts/StackedBarChart.vue';
 import { api } from '@/shared/lib/api';
 import { toneClasses, type Tone } from '@/shared/lib/tones';
-import { channelColors, channelLabel, startProgress, type RevenueChannel, type StartStep } from './dashboard';
+import { arrangeStartSteps, channelColors, channelLabel, startProgress, type RevenueChannel, type StartStep } from './dashboard';
 import { formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { marketplaceNames, orderStatus } from './orders/labels';
 import type { MarketplaceAccountData, OrderSummary } from '@/shared/types';
@@ -143,14 +143,14 @@ const accountLabel = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 
 
 // "Bắt đầu": setup steps, ticked from what the shop already has. Hidden per browser with "Ẩn".
 const connected = computed(() => (accounts.value ?? []).some((a) => a.status === 'connected'));
-const steps = computed<StartStep[]>(() => [
+const steps = computed<StartStep[]>(() => arrangeStartSteps([
     { key: 'shop', label: 'Tạo cửa hàng', detail: 'Xong.', done: true, to: null, action: '' },
     { key: 'products', label: 'Thêm sản phẩm và nhập kho', detail: 'Nhập tay, hoặc tải file Excel có SKU và tồn đầu kỳ.', done: (stock.value?.on_hand ?? 0) > 0, to: tenant.can('products.view') ? '/products' : null, action: 'Thêm sản phẩm' },
     { key: 'order', label: 'Tạo đơn đầu tiên', detail: 'Đơn Fanpage, Zalo, hoặc bán tại quầy.', done: !!orders.value?.recent.length, to: tenant.can('orders.create') ? '/orders/new' : null, action: 'Tạo đơn' },
     { key: 'channels', label: 'Tạo kênh bán riêng', detail: 'Để xem doanh thu tách theo cửa hàng, Fanpage, Zalo…', done: (salesChannels.value ?? 0) > 1, to: tenant.can('orders.view') ? '/sales-channels' : null, action: 'Thêm kênh' },
     { key: 'members', label: 'Mời nhân viên và phân quyền', detail: 'Kho chỉ thấy đơn và tồn, không thấy tiền.', done: (members.value ?? 0) > 1, to: tenant.can('members.view') ? '/members' : null, action: 'Mời' },
     { key: 'marketplace', label: 'Kết nối sàn TMĐT', detail: 'Shopee, TikTok Shop, WooCommerce.', done: connected.value, optional: true, to: tenant.can('marketplace.view') ? '/marketplaces' : null, action: 'Kết nối' },
-]);
+], tenant.current?.channels, tenant.current?.team_size));
 const progress = computed(() => startProgress(steps.value));
 const startKey = `ecso.dashboard.start-hidden.${tenant.current?.id ?? ''}`;
 const startHidden = ref(readHidden());

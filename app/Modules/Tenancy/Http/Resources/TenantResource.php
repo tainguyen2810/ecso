@@ -19,6 +19,12 @@ class TenantResource extends JsonResource
             'currency' => $this->currency,
             'status' => $this->status,
             'role' => $this->whenHas('role_key'),
+            'setup_completed' => $this->setup_completed_at !== null,
+            'channels' => $this->settings['setup']['channels'] ?? null,
+            'team_size' => $this->settings['setup']['team_size'] ?? null,
+            'is_demo' => (bool) $this->is_demo,
+            'demo_status' => $this->demo_status,
+            'demo_expires_at' => $this->demo_expires_at?->toIso8601String(),
             'created_at' => $this->created_at?->toIso8601String(),
         ];
     }

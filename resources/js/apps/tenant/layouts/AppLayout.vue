@@ -13,6 +13,8 @@ import GlobalSearch from '../components/GlobalSearch.vue';
 import NotificationBell from '../components/NotificationBell.vue';
 import MobileNav from '../components/MobileNav.vue';
 import InstallBanner from '../components/InstallBanner.vue';
+import DemoBanner from '../components/DemoBanner.vue';
+import { hidesPos } from '../pages/setup/setup';
 
 const auth = useAuthStore();
 const tenant = useTenantStore();
@@ -32,7 +34,8 @@ const visibleGroups = computed(() =>
             items: g.items
                 .filter((i) => !i.hidden && canSee(i))
                 .map((i) => {
-                    const children = i.children?.filter((c) => !c.permission || tenant.can(c.permission));
+                    // A2: the POS pages leave the menu when the shop said it does not sell in a store.
+                    const children = i.children?.filter((c) => (!c.permission || tenant.can(c.permission)) && !(c.path.startsWith('/pos') && hidesPos(tenant.current?.channels)));
                     // A member who only sees part of a group lands on the first sub-page they may open.
                     return { ...i, children, path: tenant.can(i.permission) ? i.path : (children?.[0]?.path ?? i.path) };
                 }),
@@ -121,10 +124,11 @@ useGoShortcuts(
                         @click="switchTenant(t.id)"
                     >
                         <span class="flex-1 truncate text-left">{{ t.name }}</span>
+                        <span v-if="t.is_demo" class="rounded bg-amber-100 px-1.5 text-[10px] font-bold text-amber-700">MẪU</span>
                         <Check v-if="t.id === tenant.current?.id" class="size-4 text-primary" />
                     </button>
                     <div class="my-1 border-t" />
-                    <RouterLink to="/tenants" class="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted" @click="switcherOpen = false">
+                    <RouterLink to="/setup?new=1" class="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted" @click="switcherOpen = false">
                         <Plus class="size-4" /> Tạo doanh nghiệp mới
                     </RouterLink>
                 </div>
@@ -212,6 +216,7 @@ useGoShortcuts(
                     <NotificationBell :key="tenant.current?.id" />
                 </div>
             </header>
+            <DemoBanner />
             <GlobalSearch v-model:open="searchOpen" />
             <main :class="cn('mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:pb-6', route.path === '/pos' ? 'pb-6' : 'pb-28')">
                 <RouterView :key="tenant.current?.id" />

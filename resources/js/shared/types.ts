@@ -15,6 +15,12 @@ export interface Tenant {
     currency: string;
     status: string;
     role?: string;
+    setup_completed?: boolean;
+    channels?: string[] | null;
+    team_size?: string | null;
+    is_demo?: boolean;
+    demo_status?: 'preparing' | 'ready' | 'failed' | null;
+    demo_expires_at?: string | null;
 }
 
 export interface Entitlement {

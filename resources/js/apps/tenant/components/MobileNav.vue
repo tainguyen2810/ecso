@@ -30,6 +30,7 @@ import { useAuthStore } from '@/shared/stores/auth';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { inboxItems, ordersWaiting } from './inbox';
 import { usePwaInstall } from '../pwa';
+import { hidesPos } from '../pages/setup/setup';
 
 /**
  * Phone menu (B6): a bar at the bottom with the four places a shop owner opens most and "Thêm" for the rest.
@@ -52,7 +53,7 @@ const groups = computed(() =>
         {
             label: 'Bán hàng',
             tiles: [
-                { label: 'Bán tại quầy', to: '/pos', icon: Store, can: any('orders.create') },
+                { label: 'Bán tại quầy', to: '/pos', icon: Store, can: any('orders.create') && !hidesPos(tenant.current?.channels) },
                 { label: 'Khách hàng', to: '/customers', icon: UsersRound, can: any('customers.view') },
                 { label: 'Đóng gói', to: '/orders/pack', icon: ScanBarcode, can: any('orders.pack') },
                 { label: 'Vận chuyển', to: '/shipments', icon: Truck, can: any('orders.view') },

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, type Component } from 'vue';
-import { ArrowRightLeft, Boxes, Cable, CreditCard, HandCoins, MessageSquareWarning, Percent, PlugZap, Printer, Receipt, ScrollText, SlidersHorizontal, Store, Users, UsersRound, Wallet, Warehouse } from 'lucide-vue-next';
+import { ArrowRightLeft, Boxes, Cable, CreditCard, HandCoins, MessageSquareWarning, Percent, PlugZap, Printer, Receipt, ScrollText, SlidersHorizontal, Sparkles, Store, Users, UsersRound, Wallet, Warehouse } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Card from '@/shared/ui/Card.vue';
 import { useTenantStore } from '@/shared/stores/tenant';
@@ -35,6 +35,7 @@ const groups: { title: string; tiles: Tile[] }[] = [
             { to: '/settings/sales', icon: SlidersHorizontal, title: 'Cấu hình bán hàng', description: 'Sửa thời gian bán, số liên in, bán tại quầy, lý do hủy và trả hàng', permission: 'settings.manage' },
             { to: '/sales-channels', icon: Store, title: 'Kênh bán riêng', description: 'Quầy, cửa hàng, Facebook, Zalo, website', permission: 'orders.view' },
             { to: '/settings/connections', icon: Cable, title: 'Kết nối dịch vụ', description: 'Hãng vận chuyển, hóa đơn điện tử, Zalo: dùng tài khoản của shop', permission: 'settings.manage' },
+            { to: '/settings/demo-store', icon: Sparkles, title: 'Cửa hàng mẫu', description: 'Một cửa hàng riêng có dữ liệu giả để bấm thử, không đụng tới dữ liệu thật', permission: 'settings.manage' },
             { to: '/settings/data-migration', icon: ArrowRightLeft, title: 'Chuyển dữ liệu', description: 'Chuyển sản phẩm, tồn kho, khách hàng, công nợ từ Sapo, KiotViet', permission: 'products.manage' },
             { to: '/marketplaces', icon: PlugZap, title: 'Kết nối sàn', description: 'Shopee, TikTok Shop, Lazada, Tiki', permission: 'marketplace.view' },
             { to: '/settings/sales#reasons', icon: MessageSquareWarning, title: 'Lý do hủy, trả hàng', description: 'Danh sách lý do chọn khi hủy đơn hoặc nhận hàng trả', permission: 'settings.manage' },

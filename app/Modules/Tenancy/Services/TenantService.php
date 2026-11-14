@@ -21,11 +21,13 @@ class TenantService
     /**
      * @param  array{name: string, timezone?: string, currency?: string}  $data
      */
-    public function create(User $owner, array $data): Tenant
+    public function create(User $owner, array $data, bool $setupDone = true): Tenant
     {
-        return DB::transaction(function () use ($owner, $data) {
+        return DB::transaction(function () use ($owner, $data, $setupDone) {
             $tenant = new Tenant($data);
             $tenant->owner_user_id = $owner->id;
+            // A2: a business made from the app goes through the setup steps; seeders and commands skip them.
+            $tenant->setup_completed_at = $setupDone ? now() : null;
             $tenant->slug = $this->uniqueSlug($data['name']);
             $tenant->status = Tenant::STATUS_ACTIVE;
             $tenant->save();
