@@ -37,7 +37,7 @@ test('owner works in the tenant dashboard', async ({ page }) => {
     await page.getByRole('button', { name: 'Thời trang Demo' }).click();
     await expect(page.getByTestId('tenant-switcher')).toContainText('Thời trang Demo');
     await page.getByTestId('tenant-switcher').click();
-    await page.getByRole('button', { name: 'Cửa hàng Mẫu' }).click();
+    await page.getByRole('button', { name: 'Cửa hàng Mẫu', exact: true }).click();
     await expect(page.getByTestId('tenant-switcher')).toContainText('Cửa hàng Mẫu');
 
     // Staff, plan and activity log are reached from Cấu hình, like Sapo.

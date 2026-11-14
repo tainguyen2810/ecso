@@ -98,6 +98,8 @@ jobs:
         run: |
           cp .env.example .env
           sed -i 's/^QUEUE_CONNECTION=.*/QUEUE_CONNECTION=sync/; s/^APP_URL=.*/APP_URL=http:\/\/127.0.0.1:8000/' .env
+          # The sync queue fills the sample store inside the request; php artisan serve stops a request after 30s.
+          echo 'DEMO_STORE_DAYS=7' >> .env
           php artisan key:generate
           php artisan migrate --seed --force
           php artisan db:seed --class=DemoSeeder --force
@@ -123,7 +125,9 @@ jobs:
           if-no-files-found: ignore
       - if: failure()
         name: Server errors
-        run: tail -n 60 storage/logs/laravel.log 2>/dev/null || true
+        run: |
+          grep -hE '\.(ERROR|CRITICAL)|Maximum execution time' storage/logs/laravel.log 2>/dev/null | cut -c1-400 | tail -n 30 || true
+          grep -vE ' ~ |Accepted|Closing|Closed without' /tmp/serve.log 2>/dev/null | tail -n 30 || true
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
