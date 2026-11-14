@@ -21,6 +21,7 @@ class AccountResource extends JsonResource
             'sync_enabled' => $this->sync_enabled,
             'base_url' => $this->base_url,
             'settings' => array_merge(MarketplaceAccount::SYNC_DEFAULTS, array_intersect_key((array) $this->settings, MarketplaceAccount::SYNC_DEFAULTS)),
+            'setup_pending' => $this->setupPending(),
             'order_sync_interval' => $this->orderSyncInterval(),
             'webhook_health' => $this->settings['webhook_health'] ?? null,
             'warehouse' => $this->warehouse ? ['id' => $this->warehouse->ulid, 'code' => $this->warehouse->code, 'name' => $this->warehouse->name] : null,

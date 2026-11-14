@@ -746,6 +746,8 @@ export interface MarketplaceAccountData {
     sync_enabled: boolean;
     base_url?: string | null;
     settings?: MarketplaceSyncSettings;
+    /** A5: connected for the first time and waiting in the setup steps (no stock is pushed yet). */
+    setup_pending?: boolean;
     warehouse: { id: string; code: string; name: string } | null;
     connected_at: string | null;
     orders_since?: string | null;

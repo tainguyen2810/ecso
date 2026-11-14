@@ -164,9 +164,15 @@ function wooConnect($test): MarketplaceAccount
 {
     actingInTenant($test->owner, $test->tenant)->postJson('/api/v1/marketplace-accounts/woocommerce/keys', [
         'website' => 'shop.example.vn', 'consumer_key' => 'ck_test', 'consumer_secret' => 'cs_test',
-    ])->assertCreated();
+    ])->assertCreated()->assertJsonPath('data.setup_pending', true);
 
-    return MarketplaceAccount::withoutGlobalScopes()->where('marketplace', 'woocommerce')->sole();
+    // A5: a new store starts in the setup steps (no stock pushed); these tests work on a store already set up.
+    $account = MarketplaceAccount::withoutGlobalScopes()->where('marketplace', 'woocommerce')->sole();
+    $settings = (array) $account->settings;
+    unset($settings['setup']);
+    $account->forceFill(['settings' => $settings])->save();
+
+    return $account;
 }
 
 function wooMap($test, MarketplaceAccount $account): void

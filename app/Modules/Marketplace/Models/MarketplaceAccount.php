@@ -83,6 +83,15 @@ class MarketplaceAccount extends Model
         return (bool) ($this->settings[$what] ?? self::SYNC_DEFAULTS[$what] ?? true);
     }
 
+    /**
+     * A5: a shop connected for the first time waits in the setup steps (pull products, link SKUs, choose the opening
+     * stock) and pushes no stock until they are done, so the shop's stock is never overwritten by an empty warehouse.
+     */
+    public function setupPending(): bool
+    {
+        return ($this->settings['setup'] ?? null) === 'pending';
+    }
+
     public function isActive(): bool
     {
         return $this->status === self::CONNECTED;

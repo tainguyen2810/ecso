@@ -195,7 +195,8 @@ class WooCommerceConnectService
                 'status' => MarketplaceAccount::CONNECTED,
                 'sync_enabled' => true,
                 'warehouse_id' => $warehouse->id ?? $account->warehouse_id ?? Warehouse::query()->where('is_default', true)->value('id'),
-                'settings' => array_merge(MarketplaceAccount::SYNC_DEFAULTS, (array) $account->settings, ['auth' => $client->auth]),
+                // A5: a store connected for the first time goes through the setup steps before any stock is pushed.
+                'settings' => array_merge(MarketplaceAccount::SYNC_DEFAULTS, (array) $account->settings, ['auth' => $client->auth], $existing ? [] : ['setup' => 'pending']),
                 'last_error' => null,
                 'consecutive_failures' => 0,
                 'circuit_open_until' => null,

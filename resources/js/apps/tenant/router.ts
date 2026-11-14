@@ -81,6 +81,7 @@ const routes: RouteRecordRaw[] = [
             { path: 'marketplaces/:id/store', name: 'marketplace-store', component: () => import('./pages/marketplaces/WooStore.vue'), meta: { permission: 'marketplace.view', nav: 'marketplaces' } },
             { path: 'marketplaces/sync', name: 'marketplace-sync', component: () => import('./pages/marketplaces/SyncCenter.vue'), meta: { permission: 'sync.view', nav: 'marketplaces' } },
             { path: 'marketplaces/prices', name: 'marketplace-prices', component: () => import('./pages/marketplaces/MarketplacePrices.vue'), meta: { permission: 'marketplace.view', nav: 'marketplaces' } },
+            { path: 'marketplaces/:id/setup', name: 'marketplace-setup', component: () => import('./pages/marketplaces/ShopSetup.vue'), meta: { permission: 'marketplace.connect', nav: 'marketplaces' } },
             { path: 'marketplaces/:id/listings', name: 'marketplace-listings', component: () => import('./pages/marketplaces/Listings.vue'), meta: { permission: 'marketplace.view', nav: 'marketplaces' } },
             { path: 'cash', name: 'cash', component: () => import('./pages/cash/VoucherList.vue'), meta: { permission: 'finance.view', nav: 'cash' } },
             { path: 'cash/accounts', name: 'cash-accounts', component: () => import('./pages/cash/CashAccounts.vue'), meta: { permission: 'finance.view', nav: 'cash' } },

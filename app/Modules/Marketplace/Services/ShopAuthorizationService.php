@@ -89,6 +89,9 @@ class ShopAuthorizationService
                 'external_shop_id' => $auth->externalShopId,
                 'warehouse_id' => Warehouse::query()->where('is_default', true)->value('id'),
             ]);
+            if (! $existing) {
+                $account->settings = ['setup' => 'pending']; // A5: the setup steps run before any stock is pushed
+            }
             $account->forceFill([
                 'shop_name' => $auth->shopName,
                 'region' => $auth->region,

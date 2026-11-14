@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### A5: Thiết lập shop vừa kết nối (2026-11-14)
+- Shop kết nối lần đầu (Shopee/TikTok/Lazada qua ủy quyền, WooCommerce, shop giả lập khi tick "Đi qua các bước thiết lập") ở trạng thái `settings.setup = pending`: **không đẩy tồn** cho tới khi thiết lập xong, nên tồn trên sàn không bị ghi đè bằng 0.
+- Trang `/marketplaces/{id}/setup`, 4 bước: (1) kéo sản phẩm từ shop, (2) ghép SKU theo mã người bán và tạo sản phẩm kho chưa có (tuỳ chọn tạo cả SKU không có mã, mã theo ID trên sàn), (3) chọn tồn ban đầu một lần: lấy tồn trên sàn (1 phiếu nhập tồn đầu kỳ cho SKU đang 0 trong kho, giá vốn tuỳ chọn = % giá bán; SKU đã có tồn giữ nguyên), giữ tồn EzSell, hoặc chưa đồng bộ tồn, (4) bật các công tắc đồng bộ và đẩy tồn mọi SKU đã ghép.
+- API: `GET /marketplace-accounts/{id}/setup`, `POST .../setup/pull|link|stock|finish`; tài khoản có `setup_pending`. Shop đã kết nối từ trước không bị ảnh hưởng.
+- Chỉ kiểm tra với sàn giả lập, chưa chạy với shop thật.
+
 ### A2: Thiết lập sau đăng ký và Cửa hàng mẫu (2026-11-14)
 - Doanh nghiệp tạo từ app đi qua 3 bước `/setup`: thông tin cửa hàng (tên, SĐT, ngành hàng, địa chỉ kho → gán cho "Kho chính"), bán ở kênh nào và mấy người làm, rồi chọn cách bắt đầu (cửa hàng mẫu, chuyển dữ liệu từ Sapo/KiotViet, hoặc cửa hàng trống). Doanh nghiệp đã có và doanh nghiệp tạo bằng seeder/lệnh coi như đã thiết lập.
 - API: `PUT /tenant/setup` (industry, channels, team_size, complete); tenant có `setup_completed`, `channels`, `team_size`, `is_demo`, `demo_status`, `demo_expires_at`.
