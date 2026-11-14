@@ -92,7 +92,7 @@ class DemoSeeder extends Seeder
     {
         // Demo shop on Starter so the members screen has room for invitations (free plan allows 2 users).
         // A paid monthly period that started 10 days ago (as if the first invoice had been paid).
-        // A user's own sample store (A2) stays on the free plan, so billing never touches it.
+        // A user's own sample store (A2) keeps the plan it was given (Pro without a billing period).
         if ($paidPlan) {
             Subscription::withoutGlobalScopes()->where('tenant_id', $shop->id)->update([
                 'plan_id' => Plan::query()->where('key', 'starter')->value('id'),

@@ -3,6 +3,8 @@
 namespace App\Modules\Tenancy\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Billing\Models\Plan;
+use App\Modules\Billing\Models\Subscription;
 use App\Modules\Identity\Models\User;
 use App\Modules\Tenancy\Jobs\PopulateDemoStore;
 use App\Modules\Tenancy\Models\Tenant;
@@ -14,7 +16,7 @@ use RuntimeException;
 /**
  * A2: "Cửa hàng mẫu", a business of its own filled with fake data so a new user can click through everything
  * without touching the real store (stock, cash book and debts are ledgers that cannot be edited back). One per
- * user, on the free plan, never connected to a real marketplace or service, deleted as a whole after 30 days.
+ * user, on Pro without a billing period, never connected to a real marketplace or service, deleted as a whole after 30 days.
  */
 class DemoStoreService
 {
@@ -37,6 +39,12 @@ class DemoStoreService
             'demo_expires_at' => now()->addDays(Tenant::DEMO_DAYS),
             'setup_completed_at' => now(),
         ])->save();
+        // Pro features (advanced reports, a second warehouse) without a billing period: billing never touches it.
+        Subscription::withoutGlobalScopes()->where('tenant_id', $tenant->id)->update([
+            'plan_id' => Plan::query()->where('key', 'pro')->value('id'),
+            'status' => Subscription::STATUS_ACTIVE,
+            'current_period_end' => null,
+        ]);
 
         PopulateDemoStore::dispatch($tenant->id, $user->id);
 

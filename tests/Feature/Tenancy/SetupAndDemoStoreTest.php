@@ -25,7 +25,7 @@ it('sends a business made in the app through the setup steps and saves the answe
     $api->putJson('/api/v1/tenant/setup', ['channels' => ['facebook']])->assertUnprocessable()->assertJsonValidationErrors('channels.0');
     $api->putJson('/api/v1/tenant/setup', ['complete' => true])->assertOk()->assertJsonPath('data.setup_completed', true);
 
-    expect($tenant->refresh()->settings['setup'])->toBe(['industry' => 'fashion', 'channels' => ['shopee', 'pos'], 'team_size' => '2-5'])
+    expect($tenant->refresh()->settings['setup'])->toEqual(['industry' => 'fashion', 'channels' => ['shopee', 'pos'], 'team_size' => '2-5'])
         ->and(defaultWarehouse($tenant)->address)->toBe('12 Lê Lợi, TP. Hồ Chí Minh');
     $api->getJson('/api/v1/tenant')->assertJsonPath('data.tenant.setup_completed', true);
 
@@ -54,7 +54,7 @@ it('makes one sample store per user, filled with fake data, and deletes it witho
         ->and($demo->demo_expires_at->isSameDay(now()->addDays(30)))->toBeTrue()
         ->and(Order::withoutGlobalScopes()->where('tenant_id', $demo->id)->count())->toBeGreaterThan(7)
         ->and(app(StockVerifier::class)->verify($demo->id))->toBe([])
-        ->and($demo->subscription->plan->key)->toBe('free')
+        ->and($demo->subscription->plan->key)->toBe('pro')->and($demo->subscription->current_period_end)->toBeNull()
         // The owner is the only member: no extra login was made.
         ->and($demo->memberships()->count())->toBe(1);
     $this->getJson('/api/v1/tenants')->assertJsonCount(2, 'data');
