@@ -11,16 +11,17 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 
 /**
  * @property-read int|null $members_count  withCount('memberships')
  * @property array<string, mixed>|null $settings
  * @property string|null $logo_path
- * @property \Illuminate\Support\Carbon|null $setup_completed_at
+ * @property Carbon|null $setup_completed_at
  * @property bool $is_demo
- * @property string|null $demo_status  preparing | ready | failed
- * @property \Illuminate\Support\Carbon|null $demo_expires_at
+ * @property string|null $demo_status preparing | ready | failed
+ * @property Carbon|null $demo_expires_at
  */
 class Tenant extends Model
 {
