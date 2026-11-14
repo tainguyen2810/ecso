@@ -77,7 +77,7 @@ class PlanService
             throw ValidationException::withMessages(['keys' => 'Danh sách gói không khớp.']);
         }
         DB::transaction(function () use ($keys) {
-            foreach (array_values($keys) as $i => $key) {
+            foreach ($keys as $i => $key) {
                 Plan::query()->where('key', $key)->update(['sort' => $i + 1]);
             }
         });
@@ -103,7 +103,7 @@ class PlanService
             'name' => $plan->name,
             'description' => $plan->description,
             'badge' => $plan->badge,
-            'highlights' => array_values($plan->highlights ?? []),
+            'highlights' => $plan->highlights ?? [],
             'price_monthly' => (float) $plan->price_monthly,
             'price_yearly' => (float) $plan->price_yearly,
             'trial_days' => $plan->trial_days,
