@@ -44,7 +44,7 @@ test('a newly connected shop goes through linking, opening stock and switching s
     await expect(page).toHaveURL(/\/marketplaces$/);
 
     // The shop leaves the setup state; disconnect it so later tests see the shops they expect.
-    const row = page.locator('div', { hasText: 'Zz Shop Thiết Lập' }).filter({ has: page.getByRole('button', { name: 'Ngắt' }) }).last();
+    const row = page.getByTestId('account-list').getByRole('listitem').filter({ hasText: 'Zz Shop Thiết Lập' });
     await expect(row).not.toContainText('Chưa thiết lập xong');
     await row.getByRole('button', { name: 'Ngắt' }).click();
 });
