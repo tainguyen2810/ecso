@@ -58,7 +58,7 @@ class AdminPlanController extends Controller
     public function reorder(Request $request): JsonResponse
     {
         $data = $request->validate(['keys' => ['required', 'array', 'max:50'], 'keys.*' => ['string', 'distinct']]);
-        $this->plans->reorder($data['keys']);
+        $this->plans->reorder(array_values($data['keys']));
 
         return response()->json(['data' => ['ok' => true]]);
     }
