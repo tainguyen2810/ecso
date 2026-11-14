@@ -107,11 +107,7 @@ Mọi dòng phải là `OK`. Các dòng "App credentials" của từng sàn sẽ
 ## 10. Việc nên làm tiếp
 - **Email gửi đi** (quên mật khẩu, mời nhân viên): sửa nhóm `MAIL_*` trong `.env`, sau đó chạy `sudo -u www php artisan config:clear`.
 - **Kết nối sàn**: khi có app credentials, điền `SHOPEE_*`, `TIKTOK_SHOP_*`, `LAZADA_*`, `TIKI_*` vào `.env`.
-- **Backup database**: vào aaPanel → **Cron** → Shell script, chạy hằng ngày lúc 01:30 bằng user `www`:
-  ```
-  /www/wwwroot/<tên-miền>/scripts/backup-db.sh /www/backup/ecso
-  ```
-  Chi tiết (mã hóa, restore) xem DEPLOYMENT-AAPANEL.md §8.
+- **Backup database**: app tự sao lưu lúc 01:30 mỗi ngày vào `storage/app/backups` (giữ 14 ngày), không cần cài thêm gì. Chạy thử ngay: `sudo -u www php artisan ecso:backup`. Nên chép thư mục đó ra ngoài server định kỳ. Chi tiết (restore, biến `.env`) xem DEPLOYMENT-AAPANEL.md §8.
 - **Cảnh báo Slack**: đặt `LOG_STACK=daily,slack` và `LOG_SLACK_WEBHOOK_URL` trong `.env`.
 
 ## 11. Cập nhật phiên bản mới (cách đơn giản)

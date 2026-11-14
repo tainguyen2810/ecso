@@ -109,7 +109,7 @@ class InstallController extends Controller
         return response()->json(['data' => [
             ...$result,
             'base_path' => base_path(),
-            'php_binary' => $this->phpCliBinary(),
+            'php_binary' => self::phpCliBinary(),
         ]]);
     }
 
@@ -147,16 +147,42 @@ class InstallController extends Controller
     /**
      * Under PHP-FPM, PHP_BINARY is the FPM daemon. aaPanel keeps the CLI next to it
      * (/www/server/php/83/sbin/php-fpm → /www/server/php/83/bin/php); otherwise fall back to `php`.
+     * aaPanel also limits the site with open_basedir, and checking a file outside it raises a warning that
+     * Laravel turns into an exception (the "Server Error" on the last install step). The path is only a hint
+     * for the cron command shown to the user, so outside open_basedir it is returned without checking.
      */
-    private function phpCliBinary(): string
+    public static function phpCliBinary(string $binary = PHP_BINARY, ?string $openBasedir = null): string
     {
-        if (! str_contains(basename(PHP_BINARY), 'fpm')) {
-            return PHP_BINARY;
+        if (! str_contains(basename($binary), 'fpm')) {
+            return $binary;
         }
 
-        $cli = dirname(PHP_BINARY, 2).'/bin/php';
+        $cli = dirname($binary, 2).'/bin/php';
+        if (! self::insideOpenBasedir($cli, $openBasedir ?? (string) ini_get('open_basedir'))) {
+            return $cli;
+        }
 
-        return is_executable($cli) ? $cli : 'php';
+        try {
+            return @is_executable($cli) ? $cli : 'php';
+        } catch (Throwable) {
+            return $cli;
+        }
+    }
+
+    /** True when open_basedir is off or `$path` lies under one of its directories. */
+    public static function insideOpenBasedir(string $path, string $openBasedir): bool
+    {
+        if (trim($openBasedir) === '') {
+            return true;
+        }
+        foreach (explode(PATH_SEPARATOR, $openBasedir) as $dir) {
+            $dir = trim($dir);
+            if ($dir !== '' && ($path === rtrim($dir, '/') || str_starts_with($path, rtrim($dir, '/').'/'))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function relative(string $path): string
