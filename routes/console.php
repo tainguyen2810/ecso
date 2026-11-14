@@ -64,3 +64,6 @@ Schedule::call(fn () => CustomerImport::pruneStale())->name('customer-imports-pr
 
 // Zalo ZNS (C6): payment reminders go out in the morning, not at night.
 Schedule::command('ecso:zalo:payment-reminders')->dailyAt('09:00')->withoutOverlapping(60)->onOneServer();
+
+// Daily database backup (A6): storage/app/backups, kept BACKUP_KEEP_DAYS days. `ecso:monitor` alerts when it fails.
+Schedule::command('ecso:backup')->dailyAt((string) config('ecso.backup.at', '01:30'))->withoutOverlapping(120)->onOneServer();

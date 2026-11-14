@@ -16,6 +16,16 @@ return [
         'scheduler_stale_minutes' => 3,
     ],
 
+    // Daily database backup (A6, `ecso:backup`): gzip SQL files written by PHP, so it works under aaPanel's
+    // open_basedir and with exec/proc_open disabled. Copy the folder off the server as well.
+    'backup' => [
+        'enabled' => (bool) env('BACKUP_ENABLED', true),
+        'path' => env('BACKUP_PATH'), // default storage/app/backups
+        'keep_days' => (int) env('BACKUP_KEEP_DAYS', 14),
+        'at' => env('BACKUP_AT', '01:30'),
+        'connection' => env('BACKUP_DB_CONNECTION'), // default: a separate copy of the default connection
+    ],
+
     // Open orders whose ship-by time is within this many hours are flagged "sắp quá hạn" (ORDER-LIFECYCLE §7).
     'orders' => [
         'due_soon_hours' => 6,

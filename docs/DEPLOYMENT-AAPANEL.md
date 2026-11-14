@@ -81,7 +81,15 @@ Cách dùng: `BASE=/www/wwwroot/ecso FPM_RELOAD_CMD='/etc/init.d/php-fpm-83 relo
 
 ## 8. Backup & restore
 
-- **Backup DB**: `scripts/backup-db.sh /www/backup/ecso`, đặt cron aaPanel lúc 01:30 bằng user `www`.
+- **Sao lưu tự động trong app (mặc định, A6)**: scheduler chạy `php artisan ecso:backup` lúc 01:30 mỗi ngày.
+  - PHP tự xuất SQL (gzip) qua PDO, không cần `mysqldump`, `exec` hay `proc_open`, nên chạy được dưới open_basedir của aaPanel và với DB nằm trong Docker.
+  - File nằm ở `storage/app/backups/ecso-<db>-<giờ UTC>.sql.gz`, kèm `.sha256`, quyền 600. Giữ `BACKUP_KEEP_DAYS` ngày (mặc định 14), luôn chừa 3 bản mới nhất.
+  - Biến `.env`: `BACKUP_ENABLED` (mặc định true), `BACKUP_PATH`, `BACKUP_KEEP_DAYS`, `BACKUP_AT` (mặc định 01:30).
+  - Lỗi sao lưu hoặc quá 26 giờ không có bản mới: `ecso:monitor` ghi log CRITICAL (tới Slack nếu đã cấu hình).
+  - Chạy tay: `sudo -u www php artisan ecso:backup`.
+  - Restore: `gunzip < file.sql.gz | mysql -h 127.0.0.1 -P <port> -u <user> -p <db>`. Với MySQL trong Docker: `gunzip < file.sql.gz | docker exec -i <container> mysql -u <user> -p<mật khẩu> <db>`.
+  - Bản sao lưu vẫn nằm trên cùng server: nên chép thêm thư mục này ra ngoài (rclone, S3, Google Drive).
+- **Backup DB bằng script** (cách cũ, cần `mysqldump` trên máy): `scripts/backup-db.sh /www/backup/ecso`, đặt cron aaPanel lúc 01:30 bằng user `www`.
   - Dùng `mysqldump --single-transaction` (không khóa ghi), có cả routines, triggers và events, nén gzip.
   - Mã hóa AES-256 (openssl, PBKDF2) khi đặt `BACKUP_ENCRYPTION_KEY_FILE` (file chứa passphrase, quyền 600, lưu thêm một bản ở nơi khác server).
   - Có file `.sha256` đi kèm. Mặc định giữ 14 ngày (`KEEP_DAYS`). Sau đó chép thư mục backup ra storage ngoài server (S3-compatible hoặc rclone).

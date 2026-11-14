@@ -55,6 +55,8 @@ class SystemMonitor
             'circuits_open' => DB::table('marketplace_accounts')->where('circuit_open_until', '>', now())->count(),
             'reconcile_overdue' => app(SyncHealth::class)->overdueReconciles(),
             'disk_free_percent' => $this->diskFreePercent(),
+            'backup' => app(DatabaseBackup::class)->status(),
+            'backup_problem' => app(DatabaseBackup::class)->problem(),
         ];
     }
 
@@ -86,6 +88,10 @@ class SystemMonitor
         }
         if ($snapshot['disk_free_percent'] !== null && $snapshot['disk_free_percent'] < 10) {
             $problems[] = "Ổ đĩa còn {$snapshot['disk_free_percent']}%";
+        }
+
+        if (! empty($snapshot['backup_problem'])) {
+            $problems[] = (string) $snapshot['backup_problem'];
         }
 
         return $problems;

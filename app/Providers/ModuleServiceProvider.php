@@ -56,6 +56,7 @@ use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Orders\Policies\OrderPolicy;
 use App\Modules\Orders\Policies\ReturnPolicy;
+use App\Modules\Platform\Console\BackupDatabaseCommand;
 use App\Modules\Platform\Console\CheckEnvCommand;
 use App\Modules\Platform\Console\DemoTenantCommand;
 use App\Modules\Platform\Console\InstallCommand;
@@ -161,7 +162,7 @@ class ModuleServiceProvider extends ServiceProvider
         $this->configureAuthLinks();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([AutoGroupCustomersCommand::class, ZnsPaymentRemindersCommand::class, LoyaltyNightlyCommand::class, CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, VerifyOrderMoneyCommand::class, LowStockDigestCommand::class, PushDueInventoryCommand::class, RecoverSyncCommand::class, PruneSyncLogsCommand::class, CheckFeesCommand::class, CheckWebhooksCommand::class, ReconcileOrdersCommand::class, BackfillShipmentsCommand::class, TrackCarrierShipmentsCommand::class, BillingSweepCommand::class, MonitorCommand::class, DemoTenantCommand::class]);
+            $this->commands([AutoGroupCustomersCommand::class, ZnsPaymentRemindersCommand::class, LoyaltyNightlyCommand::class, CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, VerifyOrderMoneyCommand::class, LowStockDigestCommand::class, PushDueInventoryCommand::class, RecoverSyncCommand::class, PruneSyncLogsCommand::class, CheckFeesCommand::class, CheckWebhooksCommand::class, ReconcileOrdersCommand::class, BackfillShipmentsCommand::class, TrackCarrierShipmentsCommand::class, BillingSweepCommand::class, MonitorCommand::class, BackupDatabaseCommand::class, DemoTenantCommand::class]);
         }
     }
 
