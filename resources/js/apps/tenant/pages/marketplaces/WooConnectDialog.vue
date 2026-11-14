@@ -69,7 +69,7 @@ async function connectWithKeys() {
 
 function goStore() {
     open.value = false;
-    if (result.value) router.push(`/marketplaces/${result.value.account.id}/store`);
+    if (result.value) router.push(`/marketplaces/${result.value.account.id}/${result.value.account.setup_pending ? 'setup' : 'store'}`);
 }
 
 const title = computed(() => (mode.value === 'done' ? `Đã kết nối ${result.value?.account.shop_name}` : 'Kết nối website WooCommerce'));

@@ -54,14 +54,21 @@ onMounted(async () => {
                     <WooConnectResult :account="result.account" :checks="result.checks" :warehouses="warehouses" />
                     <div class="mt-5 flex justify-end gap-2 border-t pt-4">
                         <Button variant="outline" @click="router.push('/marketplaces')">Xong</Button>
-                        <Button @click="router.push(`/marketplaces/${result.account.id}/store`)">Mở trang gian hàng</Button>
+                        <Button v-if="result.account.setup_pending" data-testid="go-setup" @click="router.push(`/marketplaces/${result.account.id}/setup`)">Thiết lập shop</Button>
+                        <Button v-else @click="router.push(`/marketplaces/${result.account.id}/store`)">Mở trang gian hàng</Button>
                     </div>
                 </template>
                 <div v-else-if="result.ok" class="text-center">
                     <CheckCircle2 class="mx-auto size-10 text-success" />
                     <h2 class="mt-3 font-semibold">Đã kết nối {{ result.account.shop_name }}</h2>
-                    <p class="mt-1 text-sm text-muted-foreground">Hãy liên kết SKU để bắt đầu giữ tồn và đồng bộ tồn kho.</p>
-                    <Button class="mt-4" @click="router.push(`/marketplaces/${result.account.id}/listings`)">Liên kết SKU</Button>
+                    <template v-if="result.account.setup_pending">
+                        <p class="mt-1 text-sm text-muted-foreground">Còn vài bước: ghép SKU, chọn tồn ban đầu rồi bật đồng bộ. EzSell chưa đẩy tồn lên shop cho tới khi xong.</p>
+                        <Button class="mt-4" data-testid="go-setup" @click="router.push(`/marketplaces/${result.account.id}/setup`)">Thiết lập shop</Button>
+                    </template>
+                    <template v-else>
+                        <p class="mt-1 text-sm text-muted-foreground">Hãy liên kết SKU để bắt đầu giữ tồn và đồng bộ tồn kho.</p>
+                        <Button class="mt-4" @click="router.push(`/marketplaces/${result.account.id}/listings`)">Liên kết SKU</Button>
+                    </template>
                 </div>
                 <div v-else class="text-center">
                     <XCircle class="mx-auto size-10 text-destructive" />

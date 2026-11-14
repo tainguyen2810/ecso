@@ -40,7 +40,7 @@ class InventorySyncPlanner
         $correlation = SyncCorrelation::current();
         foreach ($listings as $accountId => $rows) {
             $account = MarketplaceAccount::query()->find($accountId);
-            if (! $account || ! $account->isActive() || ! $account->sync_enabled || ! $account->syncs('sync_stock')) {
+            if (! $account || ! $account->isActive() || ! $account->sync_enabled || ! $account->syncs('sync_stock') || $account->setupPending()) {
                 continue;
             }
 

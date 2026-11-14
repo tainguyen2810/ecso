@@ -30,13 +30,13 @@ class AccountService
      * Connects a shop on the FAKE marketplace and fills it with listings copied from the tenant's catalog
      * (a few deliberately different, to exercise mapping). Real marketplaces connect through OAuth (Phase 4+).
      */
-    public function connectFake(string $shopName, ?Warehouse $warehouse): MarketplaceAccount
+    public function connectFake(string $shopName, ?Warehouse $warehouse, bool $setup = false): MarketplaceAccount
     {
         if (! ConnectorRegistry::fakeEnabled()) {
             throw ValidationException::withMessages(['marketplace' => 'Sàn giả lập đang tắt.']);
         }
 
-        $account = DB::transaction(function () use ($shopName, $warehouse) {
+        $account = DB::transaction(function () use ($shopName, $warehouse, $setup) {
             DB::table('tenants')->where('id', $this->context->id())->lockForUpdate()->value('id');
             $this->context->entitlements()->assertWithin('limit.shops', MarketplaceAccount::query()->where('status', '!=', MarketplaceAccount::REVOKED)->count());
 
@@ -49,6 +49,10 @@ class AccountService
                 'warehouse_id' => $warehouse->id ?? Warehouse::query()->where('is_default', true)->value('id'),
                 'connected_at' => now(),
             ]);
+            if ($setup) {
+                // A5: tried like a real shop, through the setup steps.
+                $account->forceFill(['settings' => ['setup' => 'pending']])->save();
+            }
             $this->audit->record('marketplace.connected', $account, ['marketplace' => $account->marketplace, 'shop' => $shopName]);
 
             return $account;

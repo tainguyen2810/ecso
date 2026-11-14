@@ -146,10 +146,11 @@ class MarketplaceAccountController extends Controller
         $data = $request->validate([
             'shop_name' => ['required', 'string', 'max:100'],
             'warehouse_id' => ['nullable', 'string'],
+            'setup' => ['sometimes', 'boolean'],
         ]);
         $warehouse = isset($data['warehouse_id']) ? Warehouse::query()->where('ulid', $data['warehouse_id'])->where('purpose', Warehouse::PURPOSE_SALE)->firstOrFail() : null;
 
-        $account = $service->connectFake($data['shop_name'], $warehouse);
+        $account = $service->connectFake($data['shop_name'], $warehouse, (bool) ($data['setup'] ?? false));
 
         return (new AccountResource($account->load('warehouse')))->response()->setStatusCode(201);
     }

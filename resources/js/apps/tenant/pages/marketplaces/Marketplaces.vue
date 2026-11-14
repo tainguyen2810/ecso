@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { AlertTriangle, BadgePercent, FlaskConical, Link2, PlugZap, RefreshCw, Send, Settings2, Unplug, Zap, History } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Badge from '@/shared/ui/Badge.vue';
@@ -24,6 +25,7 @@ import type { MarketplaceAccountData, MarketplaceCatalogEntry, OrderSummary, War
 
 const tenant = useTenantStore();
 const toast = useToast();
+const router = useRouter();
 
 const catalog = ref<MarketplaceCatalogEntry[]>([]);
 const accounts = ref<MarketplaceAccountData[]>([]);
@@ -34,7 +36,7 @@ const loadError = ref<string | null>(null);
 const busy = ref<string | null>(null);
 
 const connectOpen = ref(false);
-const connectForm = ref({ shop_name: 'Shop giả lập', warehouse_id: '' });
+const connectForm = ref({ shop_name: 'Shop giả lập', warehouse_id: '', setup: false });
 const connectError = ref<ApiError | null>(null);
 
 // Simulator (fake shops only)
@@ -105,9 +107,11 @@ async function connectFake() {
     busy.value = 'connect';
     connectError.value = null;
     try {
-        await api.post('/marketplace-accounts/fake', connectForm.value);
+        const { data } = await api.post('/marketplace-accounts/fake', connectForm.value);
         toast.success('Đã kết nối shop giả lập và tải danh sách sản phẩm.');
         connectOpen.value = false;
+        // A5: tried like a real shop, through the setup steps.
+        if (data.data.setup_pending) return router.push(`/marketplaces/${data.data.id}/setup`);
         sim.value = null;
         await load();
     } catch (e) {
@@ -213,6 +217,7 @@ const accountLabel = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 
                             <span class="font-medium">{{ a.shop_name }}</span>
                             <Badge :tone="accountTone(a)">{{ accountLabel(a) }}</Badge>
                             <Badge v-if="a.marketplace === 'fake'" tone="warning">Giả lập</Badge>
+                            <Badge v-if="a.setup_pending" tone="info">Chưa thiết lập xong</Badge>
                         </div>
                         <div class="mt-0.5 text-xs text-muted-foreground">{{ a.marketplace_name }} · {{ a.base_url ?? `Shop ID ${a.external_shop_id}` }} · kết nối {{ formatDateTime(a.connected_at) }}</div>
                         <div v-if="a.last_error" class="mt-1 flex items-center gap-1 text-xs text-destructive"><AlertTriangle class="size-3" /> {{ a.last_error }}</div>
@@ -225,6 +230,7 @@ const accountLabel = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 
                     </div>
                     <div v-if="a.status === 'connected'" class="flex flex-wrap items-center gap-2">
                         <Select class="w-44" :model-value="a.warehouse?.id ?? ''" :disabled="!tenant.can('marketplace.connect')" :options="warehouses.map((w) => ({ value: w.id, label: `Kho: ${w.code}` }))" aria-label="Kho xuất" @update:model-value="(v) => changeWarehouse(a, v)" />
+                        <RouterLink v-if="a.setup_pending && tenant.can('marketplace.connect')" :to="`/marketplaces/${a.id}/setup`"><Button size="sm" :data-testid="`setup-${a.id}`">Thiết lập shop</Button></RouterLink>
                         <RouterLink v-if="a.marketplace === 'woocommerce'" :to="`/marketplaces/${a.id}/store`"><Button size="sm" variant="outline" :data-testid="`woo-settings-${a.id}`"><Settings2 /> Cài đặt đồng bộ</Button></RouterLink>
                         <RouterLink :to="`/marketplaces/${a.id}/listings`"><Button size="sm" variant="outline"><Link2 /> Liên kết SKU <Badge v-if="a.stats?.suggested" tone="warning" class="ml-1">{{ a.stats.suggested }}</Badge></Button></RouterLink>
                         <template v-if="tenant.can('marketplace.connect')">
@@ -355,6 +361,7 @@ const accountLabel = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 
         <div class="space-y-4">
             <FormField label="Tên shop" :error="connectError?.field('shop_name')"><Input v-model="connectForm.shop_name" /></FormField>
             <FormField label="Kho xuất hàng"><Select v-model="connectForm.warehouse_id" :options="warehouses.map((w) => ({ value: w.id, label: `${w.code} · ${w.name}` }))" /></FormField>
+            <label class="flex items-start gap-2 text-sm"><input v-model="connectForm.setup" type="checkbox" class="mt-0.5" data-testid="connect-fake-setup" /> Đi qua các bước thiết lập như shop thật (ghép SKU, tồn ban đầu, bật đồng bộ)</label>
             <p v-if="connectError && !connectError.field('shop_name')" class="text-sm text-destructive">{{ connectError.message }}</p>
         </div>
         <template #footer>
