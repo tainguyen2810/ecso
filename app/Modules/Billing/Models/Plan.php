@@ -9,22 +9,26 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
  * @property int $id
  * @property string $key
  * @property string $name
+ * @property string|null $description
+ * @property string|null $badge
+ * @property list<string>|null $highlights
  * @property string $price_monthly
  * @property string $price_yearly
  * @property int $trial_days
  * @property bool $is_public
+ * @property int $sort
  */
 class Plan extends Model
 {
     public const FREE = 'free';
 
-    protected $fillable = ['key', 'name', 'price_monthly', 'price_yearly', 'trial_days', 'is_public', 'sort'];
+    protected $fillable = ['key', 'name', 'description', 'badge', 'highlights', 'price_monthly', 'price_yearly', 'trial_days', 'is_public', 'sort'];
 
     protected $hidden = ['id', 'pivot'];
 
     protected function casts(): array
     {
-        return ['price_monthly' => 'decimal:2', 'price_yearly' => 'decimal:2', 'trial_days' => 'integer', 'is_public' => 'boolean'];
+        return ['price_monthly' => 'decimal:2', 'price_yearly' => 'decimal:2', 'trial_days' => 'integer', 'is_public' => 'boolean', 'highlights' => 'array', 'sort' => 'integer'];
     }
 
     public function price(string $cycle): float

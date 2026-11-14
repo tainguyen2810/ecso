@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### A1: Admin → Gói dịch vụ (2026-11-14)
+- Quản trị tự cài gói sau khi cài đặt: thêm gói, sửa tên, giá tháng/năm, ngày dùng thử, giới hạn (người dùng, shop, kho, đơn/tháng, thời gian lưu dữ liệu; có "Không giới hạn"), tính năng (báo cáo nâng cao, tự động hóa), nhãn nổi bật, mô tả, dòng thêm; ẩn/hiện; sắp xếp thứ tự.
+- Đổi giá áp dụng từ hóa đơn tiếp theo (hóa đơn đã phát hành giữ số tiền); đổi giới hạn áp dụng ngay cho khách đang dùng gói. Gói đang có khách hoặc có hóa đơn không xóa được, chỉ ẩn; gói miễn phí (mặc định khi đăng ký) không xóa được.
+- API công khai `GET /api/v1/public/plans` (không cần đăng nhập, cache 5 phút) trả về các gói công khai theo thứ tự, để trang WordPress hiện bảng giá khớp với app.
+- Trang giới thiệu, bảng giá công khai và chính sách: làm bằng WordPress, không nằm trong app.
+
 ### A5: Thiết lập shop vừa kết nối (2026-11-14)
 - Shop kết nối lần đầu (Shopee/TikTok/Lazada qua ủy quyền, WooCommerce, shop giả lập khi tick "Đi qua các bước thiết lập") ở trạng thái `settings.setup = pending`: **không đẩy tồn** cho tới khi thiết lập xong, nên tồn trên sàn không bị ghi đè bằng 0.
 - Trang `/marketplaces/{id}/setup`, 4 bước: (1) kéo sản phẩm từ shop, (2) ghép SKU theo mã người bán và tạo sản phẩm kho chưa có (tuỳ chọn tạo cả SKU không có mã, mã theo ID trên sàn), (3) chọn tồn ban đầu một lần: lấy tồn trên sàn (1 phiếu nhập tồn đầu kỳ cho SKU đang 0 trong kho, giá vốn tuỳ chọn = % giá bán; SKU đã có tồn giữ nguyên), giữ tồn EzSell, hoặc chưa đồng bộ tồn, (4) bật các công tắc đồng bộ và đẩy tồn mọi SKU đã ghép.
