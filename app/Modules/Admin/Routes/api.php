@@ -3,6 +3,7 @@
 use App\Modules\Admin\Http\Controllers\AdminBillingController;
 use App\Modules\Admin\Http\Controllers\AdminDashboardController;
 use App\Modules\Admin\Http\Controllers\AdminMonitoringController;
+use App\Modules\Admin\Http\Controllers\AdminPlanController;
 use App\Modules\Admin\Http\Controllers\AdminTenantController;
 use App\Modules\Admin\Http\Controllers\TwoFactorController;
 use Illuminate\Support\Facades\Route;
@@ -23,4 +24,9 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'super-admin'])->group(funct
     Route::get('invoices', [AdminBillingController::class, 'invoices']);
     Route::post('invoices/{invoice}/payments', [AdminBillingController::class, 'confirmPayment'])->middleware('throttle:30,1,admin.invoices.x.payments');
     Route::post('invoices/{invoice}/cancel', [AdminBillingController::class, 'cancelInvoice']);
+    Route::get('plans', [AdminPlanController::class, 'index']);
+    Route::post('plans', [AdminPlanController::class, 'store']);
+    Route::post('plans/reorder', [AdminPlanController::class, 'reorder']);
+    Route::put('plans/{plan}', [AdminPlanController::class, 'update']);
+    Route::delete('plans/{plan}', [AdminPlanController::class, 'destroy']);
 });

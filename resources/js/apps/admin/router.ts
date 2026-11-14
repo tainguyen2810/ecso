@@ -23,6 +23,8 @@ export const router = createRouter({
         { path: '/admin', name: 'dashboard', component: () => import('./pages/Dashboard.vue') },
         { path: '/admin/tenants', name: 'tenants', component: () => import('./pages/Tenants.vue') },
         { path: '/admin/billing', name: 'billing', component: () => import('./pages/Billing.vue') },
+        { path: '/admin/plans', name: 'plans', component: () => import('./pages/plans/Plans.vue') },
+        { path: '/admin/plans/:key', name: 'plan-edit', component: () => import('./pages/plans/PlanEdit.vue') },
         { path: '/admin/monitoring', name: 'monitoring', component: () => import('./pages/Monitoring.vue') },
         { path: '/admin/2fa', name: 'two-factor', component: () => import('./pages/TwoFactor.vue'), meta: { bare: true } },
         ...adminNav

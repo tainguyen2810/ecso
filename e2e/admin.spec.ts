@@ -53,3 +53,30 @@ test('the admin API refuses a session that has not passed 2FA', async ({ page })
     expect(res.status()).toBe(403);
     expect((await res.json()).code).toBe('TWO_FACTOR_REQUIRED');
 });
+
+test('A1: the super admin adds a hidden plan, sees it in the plans list and deletes it', async ({ page }) => {
+    await loginAdmin(page);
+    await page.getByRole('link', { name: 'Gói dịch vụ', exact: true }).click();
+    await expect(page.getByTestId('plan-row-free')).toContainText('gói mặc định khi đăng ký');
+    await expect(page.getByTestId('plan-row-pro')).toContainText('499.000');
+    await shot(page, '01-goi-dich-vu', 'docs/screenshots/a1-plans');
+
+    await page.getByTestId('plan-new').click();
+    await page.getByTestId('plan-name').fill('Đối tác Zz');
+    await page.getByTestId('plan-key').fill('doi-tac-zz');
+    await page.getByTestId('plan-limit-limit.users').fill('10');
+    await page.getByRole('switch', { name: 'Công khai' }).click();
+    await shot(page, '02-them-goi', 'docs/screenshots/a1-plans');
+    await page.getByTestId('plan-save').click();
+
+    const row = page.getByTestId('plan-row-doi-tac-zz');
+    await expect(row).toContainText('Ẩn');
+    await expect(row).toContainText('10 người');
+    const publicPlans = await page.request.get('/api/v1/public/plans');
+    expect((await publicPlans.json()).data.map((p: { key: string }) => p.key)).not.toContain('doi-tac-zz');
+
+    await page.getByTestId('plan-edit-doi-tac-zz').click();
+    await page.getByRole('button', { name: 'Xóa gói' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Xóa gói' }).click();
+    await expect(page.getByTestId('plan-row-doi-tac-zz')).toHaveCount(0);
+});
