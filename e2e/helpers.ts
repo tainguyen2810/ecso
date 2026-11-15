@@ -36,6 +36,10 @@ export function totp(secret: string, stepOffset = 0, now = Date.now()): string {
     return String(value % 1_000_000).padStart(6, '0');
 }
 
+// Time steps already spent per secret in this run. Trying a spent code costs one of the 5 verify attempts a minute
+// the server allows, so three admin logins inside a minute could run out of attempts; skip spent steps instead.
+const spentSteps = new Map<string, Set<number>>();
+
 /**
  * Logs in as a super admin and passes the 2FA screen. A code can be used once per time step, so when the current
  * step was already used by an earlier test, the next step's code (accepted within the ±1 window) is tried.
@@ -43,7 +47,12 @@ export function totp(secret: string, stepOffset = 0, now = Date.now()): string {
 export async function loginAdmin(page: Page, email = 'admin@demo.test', secret = DEMO_ADMIN_TOTP_SECRET) {
     await login(page, email);
     await page.waitForURL(/\/admin\/2fa/);
+    const spent = spentSteps.get(secret) ?? new Set<number>();
+    spentSteps.set(secret, spent);
     for (const offset of [0, 1, -1]) {
+        const step = Math.floor(Date.now() / 1000 / 30) + offset;
+        if (spent.has(step)) continue;
+        spent.add(step);
         await page.getByTestId('totp-code').fill(totp(secret, offset));
         await page.getByTestId('submit-2fa').click();
         try {
