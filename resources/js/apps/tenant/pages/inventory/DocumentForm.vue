@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { ArrowLeft, PackageOpen, Trash2 } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
+import LotSplitEditor from '../../components/LotSplitEditor.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
@@ -15,6 +16,7 @@ import { useToast } from '@/shared/composables/useToast';
 import { useIdempotencyKey } from '@/shared/composables/useIdempotencyKey';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { adjustmentReasons, documentKinds, type DocumentKindKey } from './labels';
+import { blankLot, lotPayload, type LotDraft } from './lots';
 import type { Variant, Warehouse } from '@/shared/types';
 
 interface Line {
@@ -22,6 +24,8 @@ interface Line {
     quantity: string;
     unit_cost: string;
     mode: 'delta' | 'count';
+    /** Lot-tracked products on a receipt: the lots the quantity goes into. */
+    lots: LotDraft[];
 }
 
 const route = useRoute();
@@ -46,6 +50,8 @@ const activeWarehouses = computed(() => warehouses.value.filter((w) => w.status 
 // The document's own warehouse must be one the member is assigned to; a transfer may go to any warehouse.
 const ownWarehouses = computed(() => activeWarehouses.value.filter((w) => tenant.worksIn(w.value)));
 const sourceWarehouse = computed(() => form.warehouse_id);
+const lotLine = (l: Line) => kindKey.value === 'receipts' && !!l.variant.product?.track_lots;
+const colCount = computed(() => 4 + (kindKey.value === 'adjustments' ? 2 : 0) + (withCost.value ? 2 : 0));
 const total = computed(() => lines.value.reduce((t, l) => ({ qty: t.qty + (Number(l.quantity) || 0), value: t.value + (Number(l.quantity) || 0) * (Number(l.unit_cost) || 0) }), { qty: 0, value: 0 }));
 
 onMounted(async () => {
@@ -67,6 +73,7 @@ function add(variant: Variant) {
         quantity: kindKey.value === 'adjustments' ? '' : '1',
         unit_cost: variant.cost_price && Number(variant.cost_price) > 0 ? String(Math.round(Number(variant.cost_price))) : '',
         mode: writeOff ? 'delta' : 'count',
+        lots: [blankLot()],
     });
 }
 
@@ -88,6 +95,8 @@ async function submit() {
             quantity: writeOff && l.mode === 'delta' ? -Math.abs(Number(l.quantity)) : Number(l.quantity),
             ...(withCost.value ? { unit_cost: Number(l.unit_cost || 0) } : {}),
             ...(kindKey.value === 'adjustments' ? { mode: l.mode } : {}),
+            // One lot takes the whole line; several must add up to it.
+            ...(lotLine(l) ? { lots: lotPayload(l.lots.length === 1 ? [{ ...l.lots[0], quantity: l.quantity }] : l.lots) } : {}),
         }));
         const body =
             kindKey.value === 'transfers'
@@ -138,10 +147,12 @@ const hints: Record<DocumentKindKey, string> = {
                         </tr>
                     </thead>
                     <tbody class="divide-y">
-                        <tr v-for="(l, i) in lines" :key="l.variant.id" class="align-top">
+                        <template v-for="(l, i) in lines" :key="l.variant.id">
+                        <tr class="align-top" :class="lotLine(l) && 'border-b-0'">
                             <td class="px-4 py-2.5">
                                 <p class="font-mono text-xs font-medium">{{ l.variant.sku }}</p>
                                 <p class="max-w-56 truncate text-xs text-muted-foreground">{{ l.variant.product?.name }}<template v-if="l.variant.name"> · {{ l.variant.name }}</template></p>
+                                <span v-if="lotLine(l)" class="mt-0.5 inline-block rounded-full bg-sky-50 px-2 text-[11px] font-medium text-sky-700">Theo lô</span>
                                 <p v-if="lineError(i, 'variant_id')" class="text-xs text-destructive">{{ lineError(i, 'variant_id') }}</p>
                             </td>
                             <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">
@@ -182,6 +193,12 @@ const hints: Record<DocumentKindKey, string> = {
                                 <Button variant="ghost" size="icon" class="size-8" title="Xóa dòng" @click="lines.splice(i, 1)"><Trash2 class="text-muted-foreground" /></Button>
                             </td>
                         </tr>
+                        <tr v-if="lotLine(l)" class="!border-t-0">
+                            <td :colspan="colCount" class="px-4 pb-3 pt-0">
+                                <LotSplitEditor v-model="l.lots" :quantity="Number(l.quantity) || 0" :rules="l.variant.product!" :error="lineError(i, 'lots')" :testid="`lots-${i}`" />
+                            </td>
+                        </tr>
+                        </template>
                     </tbody>
                 </table>
             </div>

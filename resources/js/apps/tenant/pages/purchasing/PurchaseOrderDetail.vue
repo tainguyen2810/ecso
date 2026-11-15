@@ -4,6 +4,8 @@ import { ArrowLeft, Ban, Check, CircleCheck, Copy, PackageCheck, Pencil, Printer
 import { useRoute, useRouter } from 'vue-router';
 import PageHeader from '../../PageHeader.vue';
 import SupplierPaymentDialog from './SupplierPaymentDialog.vue';
+import LotSplitEditor from '../../components/LotSplitEditor.vue';
+import { blankLot, lotPayload, type LotDraft } from '../inventory/lots';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -117,12 +119,14 @@ const receiveOpen = ref(false);
 const receiveQty = ref<Record<string, string>>({});
 const receiveCost = ref<Record<string, string>>({});
 const receiveNote = ref('');
+const receiveLots = ref<Record<string, LotDraft[]>>({});
 const receiveError = ref<ApiError | null>(null);
 function openReceive() {
     receiveError.value = null;
     receiveNote.value = '';
     receiveQty.value = Object.fromEntries((po.value?.lines ?? []).map((l) => [l.variant!.id, String(l.remaining)]));
     receiveCost.value = Object.fromEntries((po.value?.lines ?? []).map((l) => [l.variant!.id, String(Math.round(Number(l.unit_cost)))]));
+    receiveLots.value = Object.fromEntries((po.value?.lines ?? []).filter((l) => l.variant?.product?.track_lots).map((l) => [l.variant!.id, [blankLot()]]));
     receiveOpen.value = true;
 }
 // Goods + VAT of this delivery (what it adds to the supplier debt, before any freight on the supplier invoice).
@@ -132,6 +136,13 @@ const receiveTotal = computed(() =>
 function print() {
     if (po.value) printPurchaseOrder(po.value, { name: tenant.current?.name ?? '' });
 }
+// Errors name the line by its place in what was sent (lines with a quantity only).
+function lotError(variantId: string): string | undefined {
+    const sent = (po.value?.lines ?? []).filter((l) => Number(receiveQty.value[l.variant!.id]) > 0);
+    const i = sent.findIndex((l) => l.variant!.id === variantId);
+    return i < 0 ? undefined : receiveError.value?.field(`lines.${i}.lots`);
+}
+
 async function receive() {
     busy.value = true;
     receiveError.value = null;
@@ -139,7 +150,17 @@ async function receive() {
         const canPrice = tenant.can('purchasing.manage');
         const lines = (po.value?.lines ?? [])
             .filter((l) => Number(receiveQty.value[l.variant!.id]) > 0)
-            .map((l) => ({ variant_id: l.variant!.id, quantity: Number(receiveQty.value[l.variant!.id]), ...(canPrice ? { unit_cost: Number(receiveCost.value[l.variant!.id]) } : {}) }));
+            .map((l) => {
+                const quantity = Number(receiveQty.value[l.variant!.id]);
+                const lots = receiveLots.value[l.variant!.id];
+                return {
+                    variant_id: l.variant!.id,
+                    quantity,
+                    ...(canPrice ? { unit_cost: Number(receiveCost.value[l.variant!.id]) } : {}),
+                    // One lot takes the whole quantity; several must add up to it.
+                    ...(lots ? { lots: lotPayload(lots.length === 1 ? [{ ...lots[0], quantity: String(quantity) }] : lots) } : {}),
+                };
+            });
         const { data } = await api.post(`/purchase-orders/${po.value!.id}/receive`, { lines, note: receiveNote.value || null }, idempotency.config());
         idempotency.renew();
         po.value = data.data;
@@ -335,17 +356,24 @@ async function voidPayment(id: string) {
             </div>
         </div>
 
-        <Dialog v-model:open="receiveOpen" title="Nhập hàng" description="Nhập số lượng thực nhận đợt này. Có thể nhận nhiều đợt. Tồn kho và giá vốn bình quân được cập nhật ngay.">
+        <Dialog v-model:open="receiveOpen" :size="Object.keys(receiveLots).length ? 'xl' : 'md'" title="Nhập hàng" description="Nhập số lượng thực nhận đợt này. Có thể nhận nhiều đợt. Tồn kho và giá vốn bình quân được cập nhật ngay.">
             <form id="receive-form" class="space-y-3" @submit.prevent="receive">
                 <table class="w-full text-sm">
                     <thead class="text-left text-xs uppercase text-muted-foreground"><tr><th class="py-1 font-medium">SKU</th><th class="py-1 text-right font-medium">Còn chờ</th><th class="py-1 text-right font-medium">Nhận</th><th v-if="tenant.can('purchasing.manage')" class="py-1 text-right font-medium">Giá nhập</th></tr></thead>
                     <tbody class="divide-y">
-                        <tr v-for="(l, i) in po.lines" :key="l.variant?.id">
-                            <td class="py-2"><span class="font-mono text-xs">{{ l.variant?.sku }}</span><p v-if="receiveError?.field(`lines.${i}.quantity`)" class="text-xs text-destructive">{{ receiveError.field(`lines.${i}.quantity`) }}</p></td>
+                        <template v-for="(l, i) in po.lines" :key="l.variant?.id">
+                        <tr>
+                            <td class="py-2"><span class="font-mono text-xs">{{ l.variant?.sku }}</span><span v-if="l.variant?.product?.track_lots" class="ml-1.5 rounded-full bg-sky-50 px-2 text-[11px] font-medium text-sky-700">Theo lô</span><p v-if="receiveError?.field(`lines.${i}.quantity`)" class="text-xs text-destructive">{{ receiveError.field(`lines.${i}.quantity`) }}</p></td>
                             <td class="py-2 text-right tabular-nums text-muted-foreground">{{ formatNumber(l.remaining) }}</td>
                             <td class="py-2 text-right"><input v-model="receiveQty[l.variant!.id]" type="number" min="0" :max="l.remaining" :disabled="!l.remaining" class="h-8 w-20 rounded-md border border-input bg-card px-2 text-right tabular-nums" :data-testid="`rcv-qty-${i}`" /></td>
                             <td v-if="tenant.can('purchasing.manage')" class="py-2 text-right"><input v-model="receiveCost[l.variant!.id]" type="number" min="0" :disabled="!l.remaining" class="h-8 w-28 rounded-md border border-input bg-card px-2 text-right tabular-nums" :data-testid="`rcv-cost-${i}`" /></td>
                         </tr>
+                        <tr v-if="receiveLots[l.variant!.id] && Number(receiveQty[l.variant!.id]) > 0" class="!border-t-0">
+                            <td :colspan="tenant.can('purchasing.manage') ? 4 : 3" class="pb-3">
+                                <LotSplitEditor v-model="receiveLots[l.variant!.id]" :quantity="Number(receiveQty[l.variant!.id]) || 0" :rules="l.variant!.product!" :error="lotError(l.variant!.id)" :testid="`rcv-lots-${i}`" />
+                            </td>
+                        </tr>
+                        </template>
                     </tbody>
                 </table>
                 <FormField label="Ghi chú phiếu nhập"><Input v-model="receiveNote" placeholder="Số hóa đơn NCC, người giao…" /></FormField>

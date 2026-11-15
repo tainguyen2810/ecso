@@ -31,6 +31,8 @@ export const inboxKinds: { key: string; label: string }[] = [
     { key: 'sync.problems', label: 'Lỗi đồng bộ' },
     { key: 'sync.token_expiring', label: 'Kết nối sàn sắp hết hạn' },
     { key: 'stock.low', label: 'SKU dưới tồn an toàn' },
+    { key: 'stock.expired', label: 'Lô hết hạn còn tồn' },
+    { key: 'stock.expiring', label: 'Lô sắp hết hạn' },
     { key: 'cash.pending', label: 'Phiếu chi chờ duyệt' },
     { key: 'suppliers.overdue', label: 'Nợ nhà cung cấp quá hạn' },
 ];

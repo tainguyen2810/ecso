@@ -6,13 +6,13 @@ use Illuminate\Support\Str;
 /**
  * INVENTORY-ENGINE.md: every stock change goes through InventoryService.
  */
-const STOCK_WRITERS = ['app/Modules/Inventory/Services/InventoryService.php'];
+const STOCK_WRITERS = ['app/Modules/Inventory/Services/InventoryService.php', 'app/Modules/Inventory/Services/LotLedger.php'];
 
 it('writes stock tables only from InventoryService', function () {
     $offenders = [];
-    $pattern = '/(table\(\s*[\'"]stock_(balances|movements|reservations)[\'"]\s*\)[^;]*->(update|insert\w*|upsert|delete|increment|decrement|truncate)\s*\()'
-        .'|((StockBalance|StockMovement|StockReservation)::[^;]*->(update|delete|increment|decrement|forceFill|save)\s*\()'
-        .'|(new\s+(StockBalance|StockMovement|StockReservation)\b)/s';
+    $pattern = '/(table\(\s*[\'"]stock_(balances|movements|reservations|lots|lot_movements)[\'"]\s*\)[^;]*->(update|insert\w*|upsert|delete|increment|decrement|truncate)\s*\()'
+        .'|((StockBalance|StockMovement|StockReservation|StockLot|StockLotMovement)::[^;]*->(update|delete|increment|decrement|forceFill|save)\s*\()'
+        .'|(new\s+(StockBalance|StockMovement|StockReservation|StockLot|StockLotMovement)\b)/s';
 
     foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(app_path())) as $file) {
         if ($file->getExtension() !== 'php') {
@@ -31,7 +31,7 @@ it('writes stock tables only from InventoryService', function () {
 });
 
 arch('stock ledger models are only used inside the Inventory module')
-    ->expect(['App\Modules\Inventory\Models\StockBalance', 'App\Modules\Inventory\Models\StockMovement', 'App\Modules\Inventory\Models\StockReservation'])
+    ->expect(['App\Modules\Inventory\Models\StockBalance', 'App\Modules\Inventory\Models\StockMovement', 'App\Modules\Inventory\Models\StockReservation', 'App\Modules\Inventory\Models\StockLot', 'App\Modules\Inventory\Models\StockLotMovement'])
     ->toOnlyBeUsedIn(['App\Modules\Inventory', 'App\Providers']); // providers only register policies
 
 arch('product cost is not mass assignable')

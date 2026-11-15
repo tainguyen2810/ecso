@@ -7,9 +7,11 @@ use App\Modules\Catalog\Events\SaleStatusChanged;
 use App\Modules\Catalog\Models\Product;
 use App\Modules\Catalog\Models\ProductComponent;
 use App\Modules\Catalog\Models\ProductVariant;
+use App\Modules\Inventory\Events\AvailableStockChanged;
 use App\Modules\Inventory\Models\StockReceipt;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Services\InventoryDocumentService;
+use App\Modules\Inventory\Services\InventoryService;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -18,7 +20,7 @@ class ProductService
 {
     public const VARIANT_FIELDS = ['sku', 'barcode', 'location', 'name', 'options', 'ref_price', 'price_source', 'wholesale_price', 'weight_gram', 'status', 'supplier_id', 'supplier_sku', 'length_mm', 'width_mm', 'height_mm'];
 
-    public function __construct(private readonly AuditLogger $audit, private readonly InventoryDocumentService $documents) {}
+    public function __construct(private readonly AuditLogger $audit, private readonly InventoryDocumentService $documents, private readonly InventoryService $inventory) {}
 
     /**
      * Variants with opening_qty > 0 get their first stock in one opening receipt (same ledger path as a manual
@@ -31,6 +33,10 @@ class ProductService
         return DB::transaction(function () use ($data, $openingWarehouse) {
             $product = Product::create(collect($data)->only(Product::FIELDS)->all());
             $product->forceFill(['type' => $data['type'] ?? Product::TYPE_STANDARD])->save();
+            if ($product->isCombo() && $product->track_lots) {
+                // A combo has no stock of its own: lots are kept on its components.
+                $product->forceFill(['track_lots' => false])->save();
+            }
             $opening = [];
 
             foreach ($data['variants'] as $input) {
@@ -66,6 +72,8 @@ class ProductService
         return DB::transaction(function () use ($product, $data) {
             $product->fill(collect($data)->only(Product::FIELDS)->all())->save();
             $statusChanged = $product->wasChanged('status') ? $product->variants()->pluck('id')->all() : [];
+            $lotsStarted = $product->wasChanged('track_lots') && $product->track_lots;
+            $lotRulesChanged = $product->wasChanged(['track_lots', 'expiry_block_days']);
 
             if ($product->isCombo() && array_key_exists('components', $data)) {
                 $this->syncComponents($product->variants()->firstOrFail(), $data['components']);
@@ -110,6 +118,19 @@ class ProductService
             }
 
             $this->saleStatusChanged($statusChanged);
+
+            if ($product->isCombo() && $product->track_lots) {
+                throw ValidationException::withMessages(['track_lots' => 'Combo không có tồn riêng: bật quản lý lô trên sản phẩm thành phần.']);
+            }
+            if ($lotsStarted) {
+                foreach ($product->variants()->pluck('id') as $variantId) {
+                    $this->inventory->startLotTracking((int) $variantId);
+                }
+            }
+            if ($lotRulesChanged) {
+                // Lots that may or may not be sold changed: marketplaces get the new sellable stock.
+                AvailableStockChanged::dispatch(app(TenantContext::class)->id(), $product->variants()->pluck('id')->map(fn ($id) => (int) $id)->all());
+            }
 
             return $product;
         });

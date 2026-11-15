@@ -328,16 +328,19 @@ class ReturnService
                 }
             }
 
+            // Goods go back into the lots they were shipped from (lot-tracked SKUs).
+            $shippedLots = $this->ledger->shippedLots(Order::STOCK_REFERENCE, $byId->pluck('order_item_id')->filter()->map(fn ($id) => (int) $id)->values()->all());
+
             if ($restock !== []) {
                 // A returned combo goes back into stock as its components.
-                $restock = $this->withSoldCost($this->combos->expand($restock), $restock, $byId);
+                $restock = $this->withLots($this->withSoldCost($this->combos->expand($restock), $restock, $byId), $shippedLots);
                 $this->inventory->restockReturn($warehouse, $restock, "restock:return:{$return->id}", $return, "Hàng hoàn {$return->number}");
             }
 
             $defective = null;
             if ($damaged !== []) {
                 $defective = $this->warehouses->defective();
-                $damagedLines = $this->withSoldCost($this->combos->expand($damaged), $damaged, $byId);
+                $damagedLines = $this->withLots($this->withSoldCost($this->combos->expand($damaged), $damaged, $byId), $shippedLots);
                 $this->inventory->restockReturn($defective, $damagedLines, "damaged:return:{$return->id}", $return, "Hàng lỗi từ phiếu trả {$return->number}");
             }
 
@@ -389,6 +392,36 @@ class ReturnService
      * @param  Collection<int, OrderReturnLine>  $lines
      * @return array<int, array{variant_id: int, quantity: int, unit_cost?: string}>
      */
+    /**
+     * Splits each line over the lots its SKU was shipped from; the pool is shared, so goods restocked and goods
+     * sent to the defective warehouse do not count the same lot twice.
+     *
+     * @param  array<int, array<string, mixed>>  $lines
+     * @param  array<int, array<int, array{lot_no: string, mfg_date: string|null, expiry_date: string|null, quantity: int}>>  $pool
+     * @return array<int, array<string, mixed>>
+     */
+    private function withLots(array $lines, array &$pool): array
+    {
+        foreach ($lines as $i => $line) {
+            $remaining = (int) $line['quantity'];
+            $lots = [];
+            foreach ($pool[$line['variant_id']] ?? [] as $k => $lot) {
+                $take = min($lot['quantity'], $remaining);
+                if ($take <= 0) {
+                    continue;
+                }
+                $lots[] = ['quantity' => $take] + $lot;
+                $pool[$line['variant_id']][$k]['quantity'] -= $take;
+                $remaining -= $take;
+            }
+            if ($lots !== []) {
+                $lines[$i]['lots'] = $lots;
+            }
+        }
+
+        return $lines;
+    }
+
     private function withSoldCost(array $expanded, array $restock, $lines): array
     {
         $combos = $this->combos->componentsOf(array_column($restock, 'variant_id'));

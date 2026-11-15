@@ -50,6 +50,12 @@ trait ResolvesLines
         return [
             'lines' => ['required', 'array', 'min:1', "max:{$max}"],
             'lines.*.variant_id' => ['required', 'string', 'distinct'],
+            // Lots of a lot-tracked SKU (goods in); ignored for other SKUs.
+            'lines.*.lots' => ['nullable', 'array', 'max:50'],
+            'lines.*.lots.*.lot_no' => ['nullable', 'string', 'max:64'],
+            'lines.*.lots.*.mfg_date' => ['nullable', 'date'],
+            'lines.*.lots.*.expiry_date' => ['nullable', 'date'],
+            'lines.*.lots.*.quantity' => ['required_with:lines.*.lots', 'integer', 'min:0', 'max:1000000'],
         ];
     }
 }

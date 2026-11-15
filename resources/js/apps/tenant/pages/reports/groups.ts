@@ -1,5 +1,5 @@
 import type { Component } from 'vue';
-import { ArrowLeftRight, BookOpen, Boxes, ClipboardCheck, Coins, FileText, Flame, Landmark, Layers, List, Package, PackagePlus, Receipt, Store, TrendingDown, TrendingUp, Undo2, User, UserRound, Users, Wallet, Warehouse } from 'lucide-vue-next';
+import { ArrowLeftRight, BookOpen, Boxes, CalendarClock, ClipboardCheck, Coins, FileText, Flame, Landmark, Layers, List, Package, PackagePlus, Receipt, Store, TrendingDown, TrendingUp, Undo2, User, UserRound, Users, Wallet, Warehouse } from 'lucide-vue-next';
 
 /** The five report menus of Sapo; each lists the reports behind it. */
 export type ReportGroupKey = 'sales' | 'purchases' | 'stock' | 'finance' | 'customers';
@@ -99,6 +99,7 @@ export const reportGroups: Record<ReportGroupKey, { title: string; permission: s
             { title: 'Báo cáo tồn kho chi tiết', description: 'Tồn thực tế, đang giữ cho đơn, có thể bán, đang về từ đơn nhập, theo từng kho.', icon: Layers, permission: 'inventory.view', to: { report: 'stock-detail' } },
             { title: 'Sổ kho', description: 'Lịch sử nhập, xuất, chuyển, kiểm của từng SKU (chọn SKU ở Quản lý kho).', icon: BookOpen, permission: 'inventory.view', to: { name: 'inventory' } },
             { title: 'Tồn kho dưới định mức', description: 'SKU đã chạm tồn an toàn, kèm gợi ý nhập hàng.', icon: TrendingDown, permission: 'inventory.view', to: { report: 'low-stock' } },
+            { title: 'Hàng sắp hết hạn', description: 'Lô đã hết hạn hoặc sắp hết hạn, dự báo còn tồn khi tới hạn.', icon: CalendarClock, permission: 'inventory.view', to: { report: 'expiry' } },
             { title: 'Tồn kho vượt định mức', description: 'SKU vượt tồn tối đa, vốn đang bị chôn.', icon: TrendingUp, permission: 'inventory.view', to: { report: 'over-stock' } },
             { title: 'Xuất nhập tồn', description: 'Tồn đầu kỳ, nhập, xuất trong kỳ và tồn cuối kỳ của từng sản phẩm.', icon: ArrowLeftRight, permission: 'inventory.view', to: { name: 'report-stock' }, ranged: true },
             {

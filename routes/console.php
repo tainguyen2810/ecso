@@ -19,6 +19,8 @@ Schedule::command('horizon:snapshot')->everyFiveMinutes();
 // Read-only ledger integrity check; mismatches are logged as critical (INVENTORY-ENGINE.md §8).
 // Low-stock e-mail to buyers (Phase 12).
 Schedule::command('ecso:inventory:low-stock-digest')->dailyAt('07:30')->withoutOverlapping(120)->onOneServer();
+// Lots that reached their stop-selling day: push marketplace stock again (lô / hạn sử dụng).
+Schedule::command('ecso:inventory:lot-expiry')->dailyAt('00:10')->timezone('Asia/Ho_Chi_Minh')->withoutOverlapping(60)->onOneServer();
 
 Schedule::command('ecso:inventory:verify')->dailyAt('02:30')->withoutOverlapping(120)->onOneServer();
 Schedule::command('ecso:orders:verify-money')->dailyAt('02:45')->withoutOverlapping(120)->onOneServer();

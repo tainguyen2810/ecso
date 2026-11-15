@@ -65,7 +65,16 @@ class PurchaseOrderResource extends JsonResource
             'total_quantity' => $linesLoaded ? $this->lines->sum('quantity') : null,
             'received_quantity' => $linesLoaded ? $this->lines->sum('received_qty') : null,
             'lines' => $this->whenLoaded('lines', fn () => $this->lines->map(fn (PurchaseOrderLine $l) => [
-                'variant' => $l->relationLoaded('variant') ? ['id' => $l->variant->ulid, 'sku' => $l->variant->sku, 'name' => $l->variant->displayName()] : null,
+                'variant' => $l->relationLoaded('variant') ? [
+                    'id' => $l->variant->ulid, 'sku' => $l->variant->sku, 'name' => $l->variant->displayName(),
+                    // Lot-tracked products: receiving asks for lot number + expiry date.
+                    'product' => $l->variant->product?->track_lots ? [
+                        'track_lots' => true,
+                        'shelf_life_months' => $l->variant->product->shelf_life_months,
+                        'require_mfg_date' => (bool) $l->variant->product->require_mfg_date,
+                        'expiry_warn_days' => $l->variant->product->expiry_warn_days,
+                    ] : null,
+                ] : null,
                 'quantity' => $l->quantity,
                 'received_qty' => $l->received_qty,
                 'returned_qty' => $l->returned_qty,

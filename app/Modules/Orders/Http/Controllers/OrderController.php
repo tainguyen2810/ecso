@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Audit\Models\AuditLog;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Identity\Models\User;
+use App\Modules\Inventory\Exceptions\InvalidStockOperation;
 use App\Modules\Inventory\Services\ReservationLedger;
 use App\Modules\Marketplace\Connectors\Capability;
 use App\Modules\Marketplace\Connectors\ConnectorRegistry;
@@ -80,12 +81,47 @@ class OrderController extends Controller
         return $exporter->stream($this->filters($request), $request->user()->id);
     }
 
+    /** Lots the line's holds may take, to pick other lots than FEFO chose (lô / hạn sử dụng). */
+    public function itemLots(Order $order, OrderItem $item, ReservationLedger $ledger): JsonResponse
+    {
+        $this->authorize('view', $order);
+        abort_unless($item->order_id === $order->id, 404);
+
+        return response()->json(['data' => $ledger->lotChoices(Order::STOCK_REFERENCE, $item->id)]);
+    }
+
+    public function updateItemLots(Request $request, Order $order, OrderItem $item, ReservationLedger $ledger, AuditLogger $audit): JsonResponse
+    {
+        $this->authorize('view', $order);
+        $this->authorize('pack', Order::class);
+        abort_unless($item->order_id === $order->id, 404);
+        $data = $request->validate([
+            'reservation_id' => ['required', 'integer'],
+            'lots' => ['required', 'array', 'min:1', 'max:50'],
+            'lots.*.lot_id' => ['required', 'integer'],
+            'lots.*.quantity' => ['required', 'integer', 'min:0', 'max:1000000'],
+        ]);
+        $wanted = [];
+        foreach ($data['lots'] as $l) {
+            $wanted[(int) $l['lot_id']] = ($wanted[(int) $l['lot_id']] ?? 0) + (int) $l['quantity'];
+        }
+        try {
+            $ledger->reallocateLots(Order::STOCK_REFERENCE, $item->id, (int) $data['reservation_id'], $wanted);
+        } catch (InvalidStockOperation $e) {
+            throw ValidationException::withMessages(['lots' => $e->getMessage()]);
+        }
+        $audit->record('order.lots_changed', $order, ['item' => $item->id, 'lots' => $wanted]);
+
+        return response()->json(['data' => $ledger->lotChoices(Order::STOCK_REFERENCE, $item->id)]);
+    }
+
     public function show(Order $order, ReservationLedger $ledger, ConnectorRegistry $connectors, ReturnService $returnService): JsonResponse
     {
         $this->authorize('view', $order);
         $returnable = $returnService->returnableQuantities($order);
         $order->load(['account', 'channel', 'customer', 'creator', 'warehouse', 'assignee', 'items.variant.product', 'items.listingVariant', 'payments.creator']);
         $reservations = $ledger->snapshot(Order::STOCK_REFERENCE, $order->items->pluck('id')->all());
+        $lots = $ledger->lotsFor(Order::STOCK_REFERENCE, $order->items->pluck('id')->map(fn ($id) => (int) $id)->all());
         $capabilities = $connectors->has($order->marketplace) ? $connectors->for($order->marketplace)->capabilities() : Capability::allUnknown();
 
         return (new OrderResource($order))->additional(['data' => [
@@ -111,6 +147,13 @@ class OrderController extends Controller
                     'shortage' => $reservations[$i->id]['shortage'],
                     'status' => $reservations[$i->id]['status'],
                 ] : null,
+                // Lots held or shipped for the line (lot-tracked SKUs).
+                'lots' => array_map(fn (array $l) => [
+                    'lot_no' => $l['lot_no'] === '' ? null : $l['lot_no'],
+                    'expiry_date' => $l['expiry_date'],
+                    'quantity' => $l['quantity'],
+                    'shipped' => $l['shipped'],
+                ], $lots[$i->id] ?? []),
             ]),
             'promotions' => DB::table('promotion_usages')->join('promotions', 'promotions.id', '=', 'promotion_usages.promotion_id')->where('promotion_usages.order_id', $order->id)
                 ->get(['promotions.ulid', 'promotions.name', 'promotions.type', 'promotions.code', 'promotion_usages.amount'])

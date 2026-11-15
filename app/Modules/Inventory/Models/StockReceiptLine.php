@@ -11,11 +11,11 @@ class StockReceiptLine extends Model
 {
     public $timestamps = false;
 
-    protected $fillable = ['product_variant_id', 'quantity', 'unit_cost'];
+    protected $fillable = ['product_variant_id', 'quantity', 'unit_cost', 'lots'];
 
     protected function casts(): array
     {
-        return ['quantity' => 'integer', 'unit_cost' => 'decimal:4'];
+        return ['quantity' => 'integer', 'unit_cost' => 'decimal:4', 'lots' => 'array'];
     }
 
     /** @return BelongsTo<ProductVariant, $this> */

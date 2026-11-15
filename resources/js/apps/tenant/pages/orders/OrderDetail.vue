@@ -22,6 +22,9 @@ import OrderEInvoiceCard from './OrderEInvoiceCard.vue';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { actionLabels, capabilityLabels, deadlineLabel, historySource, manualActionOrder, mappingStatus, marketplaceNames, orderStatus, paymentMethodNames, paymentMethods, paymentStatus, refundStatus, returnState, returnStatus, returnTypes } from './labels';
 import PrintDialog from './PrintDialog.vue';
+import OrderLotsDialog from './OrderLotsDialog.vue';
+import { lotLabel } from '../inventory/lots';
+import { displayDate } from '@/shared/lib/dates';
 import { downloadPackingSlips } from './packingSlip';
 import { orderWorkflow } from './workflow';
 import { useSettingsStore } from '@/shared/stores/settings';
@@ -34,6 +37,9 @@ const tenant = useTenantStore();
 const toast = useToast();
 
 const order = ref<OrderDetail | null>(null);
+// "Đổi lô" on an order line.
+const lotItem = ref<{ id: number; title: string } | null>(null);
+const canPack = computed(() => tenant.can('orders.pack') || tenant.can('orders.update'));
 const printOpen = ref(false);
 const loading = ref(true);
 const loadError = ref<string | null>(null);
@@ -445,6 +451,21 @@ async function createReturn() {
                                             </template>
                                         </template>
                                         <span v-else class="text-muted-foreground">—</span>
+                                        <ul v-if="i.lots?.length" class="mt-1.5 space-y-0.5" data-testid="item-lots">
+                                            <li v-for="(lot, k) in i.lots" :key="k">
+                                                <span class="font-medium text-foreground">{{ lotLabel(lot.lot_no) }}</span> × {{ lot.quantity }}
+                                                <span v-if="lot.expiry_date" class="text-muted-foreground"> · HSD {{ displayDate(lot.expiry_date) }}</span>
+                                            </li>
+                                        </ul>
+                                        <button
+                                            v-if="canPack && i.lots?.some((l) => !l.shipped) && i.reservation && !['consumed', 'released'].includes(i.reservation.status)"
+                                            type="button"
+                                            class="mt-1 text-xs font-medium text-primary hover:underline"
+                                            :data-testid="`change-lots-${i.id}`"
+                                            @click="lotItem = { id: i.id, title: i.variant?.sku ?? i.name }"
+                                        >
+                                            Đổi lô
+                                        </button>
                                     </td>
                                 </tr>
                             </tbody>
@@ -708,6 +729,7 @@ async function createReturn() {
         </div>
 
 
+        <OrderLotsDialog v-if="lotItem" :open="!!lotItem" :order-id="order.id" :item-id="lotItem.id" :title="lotItem.title" @update:open="(v: boolean) => !v && (lotItem = null)" @saved="load" />
         <PrintDialog v-model:open="printOpen" :orders="[order]" />
 
         <Dialog v-model:open="cancelOpen" title="Hủy đơn" :description="isManual ? 'Hàng đang giữ được nhả lại kho ngay. Nếu khách đã trả tiền, hãy ghi nhận hoàn tiền sau khi hủy.' : 'Yêu cầu hủy được gửi lên sàn. Hàng đang giữ sẽ được nhả khi sàn xác nhận hủy.'">

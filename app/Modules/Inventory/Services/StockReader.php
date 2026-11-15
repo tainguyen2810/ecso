@@ -9,11 +9,12 @@ use App\Modules\Inventory\Models\StockBalance;
 /** Read-only stock figures for other modules (marketplace publishing). */
 class StockReader
 {
-    public function __construct(private readonly ComboResolver $combos) {}
+    public function __construct(private readonly ComboResolver $combos, private readonly LotLedger $lots) {}
 
     /**
      * Sellable quantity per variant over a set of warehouses (INVENTORY-ENGINE §1). A combo's sellable quantity is
-     * the number of whole combos its components' sellable stock makes.
+     * the number of whole combos its components' sellable stock makes. Free stock in expired or stop-selling lots
+     * is left out.
      *
      * @param  array<int, int>  $warehouseIds
      * @param  array<int, int>  $variantIds
@@ -26,12 +27,14 @@ class StockReader
         $ids = array_values(array_unique([...array_diff($variantIds, array_keys($combos)), ...$components]));
 
         $rows = StockBalance::query()->whereIn('warehouse_id', $warehouseIds)->whereIn('product_variant_id', $ids)
-            ->get(['product_variant_id', 'on_hand', 'reserved', 'safety_stock'])->groupBy('product_variant_id');
+            ->get(['warehouse_id', 'product_variant_id', 'on_hand', 'reserved', 'safety_stock'])->groupBy('product_variant_id');
+        // Expired / stop-selling lots are not offered on any channel.
+        $blocked = $this->lots->blockedFreeMap($warehouseIds, $ids);
 
         $single = [];
         foreach ($ids as $id) {
             $single[$id] = AllocationCalculator::sellable(($rows[$id] ?? collect())->map(fn (StockBalance $b) => [
-                'on_hand' => $b->on_hand, 'reserved' => $b->reserved, 'safety_stock' => $b->safety_stock,
+                'on_hand' => $b->on_hand - ($blocked["{$b->warehouse_id}:{$id}"] ?? 0), 'reserved' => $b->reserved, 'safety_stock' => $b->safety_stock,
             ])->all());
         }
         $buildable = ComboResolver::buildable($combos, $single);

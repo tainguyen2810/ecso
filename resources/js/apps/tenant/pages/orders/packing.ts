@@ -155,6 +155,19 @@ export interface PickRow {
     location: string | null;
     quantity: number;
     orders: { code: string; quantity: number }[];
+    /** Lots the orders hold (lot-tracked SKUs). */
+    lots?: { lot_no: string | null; expiry_date: string | null; quantity: number }[];
+}
+
+/** "Lô A (HSD 02/01/2027): 3 · Chưa rõ lô: 1" under the product name of the pick list. */
+export function pickLotsText(lots: PickRow["lots"]): string {
+    return (lots ?? [])
+        .map((l) => {
+            const name = l.lot_no ? `Lô ${l.lot_no}` : "Chưa rõ lô";
+            const hsd = l.expiry_date ? ` (HSD ${l.expiry_date.slice(8, 10)}/${l.expiry_date.slice(5, 7)}/${l.expiry_date.slice(0, 4)})` : "";
+            return `${name}${hsd}: ${l.quantity}`;
+        })
+        .join(" · ");
 }
 
 export interface PickListData {
@@ -235,7 +248,9 @@ export function pickListDocument(
                             },
                             r.location ?? "—",
                             r.sku ?? "—",
-                            r.name,
+                            r.lots?.length
+                                ? { stack: [r.name, { text: pickLotsText(r.lots), bold: true, fontSize: 8, color: "#1d4ed8" }] }
+                                : r.name,
                             {
                                 text: String(r.quantity),
                                 bold: true,

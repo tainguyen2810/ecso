@@ -95,7 +95,7 @@ export interface Variant {
     height_mm?: number | null;
     sellable?: boolean;
     status?: string;
-    product?: Ref & { image?: string | null; unit?: string | null };
+    product?: Ref & { image?: string | null; unit?: string | null; track_lots?: boolean; shelf_life_months?: number | null; require_mfg_date?: boolean; expiry_warn_days?: number | null };
     stock?: StockFigures;
 }
 
@@ -113,6 +113,12 @@ export interface Product {
     unit?: string | null;
     tags?: string[];
     vat_rate?: string | null;
+    /** Lots and expiry dates (lô / hạn sử dụng). */
+    track_lots?: boolean;
+    expiry_warn_days?: number | null;
+    expiry_block_days?: number | null;
+    shelf_life_months?: number | null;
+    require_mfg_date?: boolean;
     status: 'active' | 'inactive' | 'archived';
     category: Ref | null;
     brand: Ref | null;
@@ -193,6 +199,8 @@ export interface DocumentLine {
     applied_delta?: number;
     reason?: string;
     line_note?: string;
+    /** Lot-tracked products: the lots this line went into / out of. */
+    lots?: { lot_no: string; mfg_date?: string | null; expiry_date: string | null; quantity: number }[] | null;
 }
 
 export interface InventoryDocument {
@@ -302,6 +310,8 @@ export interface OrderItemDetail {
     listing_id: string | null;
     variant: { id: string; sku: string; name: string } | null;
     reservation: { quantity: number; shortage: number; status: string } | null;
+    /** Lot-tracked SKUs: the lots held for or shipped on the line. */
+    lots?: { lot_no: string | null; expiry_date: string | null; quantity: number; shipped: boolean }[];
 }
 
 export interface OrderDetail extends OrderSummary {
@@ -828,7 +838,7 @@ export interface SupplierReturnData {
 }
 
 export interface PurchaseOrderLineData {
-    variant: { id: string; sku: string; name: string } | null;
+    variant: { id: string; sku: string; name: string; product?: { track_lots: boolean; shelf_life_months: number | null; require_mfg_date: boolean; expiry_warn_days: number | null } | null } | null;
     quantity: number;
     received_qty: number;
     returned_qty: number;

@@ -169,6 +169,19 @@ class ReportsController extends Controller
         return response()->json(['data' => $stock->lowStock($this->warehouse($warehouse))]);
     }
 
+    /** Hàng sắp hết hạn: lots of lot-tracked products by days left. */
+    public function expiry(Request $request, StockReports $stock): JsonResponse
+    {
+        $this->allow('inventory.view');
+        $data = $request->validate([
+            'by' => ['nullable', 'string', 'in:'.implode(',', array_keys(StockReports::EXPIRY_TABS))],
+            'warehouse' => ['nullable', 'string'],
+            'q' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        return response()->json(['data' => $stock->expiry($data['by'] ?? 'd30', $this->warehouse($data['warehouse'] ?? null), $data['q'] ?? null)]);
+    }
+
     public function overStock(Request $request, StockReports $stock): JsonResponse
     {
         $this->allow('inventory.view');

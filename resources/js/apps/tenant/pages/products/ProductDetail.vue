@@ -5,6 +5,7 @@ import { ArrowLeft, Copy, MapPin, Package, Pencil, Tags, Trash2 } from 'lucide-v
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import Tabs from '../../components/Tabs.vue';
+import ProductLots from './ProductLots.vue';
 import { movementLabels, referenceLabels } from '../inventory/labels';
 import Badge from '@/shared/ui/Badge.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
@@ -149,6 +150,15 @@ const movementsLoaded = ref(false);
 
 const statusLabels = { active: 'Đang bán', inactive: 'Ngừng bán', archived: 'Lưu trữ' } as const;
 const statusTone = { active: 'success', inactive: 'muted', archived: 'muted' } as const;
+
+async function reloadStock() {
+    const { data } = await api.get(`/inventory/products/${id.value}/stock`);
+    stock.value = data.data;
+    movementsLoaded.value = false;
+}
+
+// ?tab=lots opens the lot tab straight away (links from the expiry report).
+if (route.query.tab === 'lots') tab.value = 'lots';
 
 onMounted(async () => {
     try {
@@ -374,7 +384,7 @@ async function remove() {
 
         <Card v-if="canStock" class="mt-5">
             <div class="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-                <Tabs v-model="tab" :tabs="[{ value: 'stock', label: 'Tồn theo kho' }, { value: 'history', label: 'Lịch sử kho' }]" />
+                <Tabs v-model="tab" :tabs="[{ value: 'stock', label: 'Tồn theo kho' }, ...(product.track_lots ? [{ value: 'lots', label: 'Lô & hạn sử dụng' }] : []), { value: 'history', label: 'Lịch sử kho' }]" />
                 <Select v-model="warehouse" class="w-48" aria-label="Kho" :options="[{ value: '', label: 'Tất cả kho' }, ...warehouses.map((w) => ({ value: w.id, label: w.name }))]" />
             </div>
 
@@ -428,6 +438,8 @@ async function remove() {
                     </tbody>
                 </table>
             </div>
+
+            <ProductLots v-else-if="tab === 'lots'" :product-id="product.id" :warehouse="warehouse" @changed="reloadStock" />
 
             <template v-else>
                 <div v-if="!movementsLoaded" class="space-y-2 p-4"><Skeleton v-for="i in 4" :key="i" class="h-8" /></div>

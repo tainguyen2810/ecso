@@ -5,8 +5,10 @@ namespace App\Modules\Inventory\Services;
 use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Catalog\Services\ComboResolver;
 use App\Modules\Inventory\Exceptions\InsufficientStock;
+use App\Modules\Inventory\Models\StockLotMovement;
 use App\Modules\Inventory\Models\StockReservation;
 use App\Modules\Inventory\Models\Warehouse;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
@@ -19,7 +21,7 @@ use Illuminate\Support\Collection;
  */
 class ReservationLedger
 {
-    public function __construct(private readonly InventoryService $inventory, private readonly ComboResolver $combos) {}
+    public function __construct(private readonly InventoryService $inventory, private readonly ComboResolver $combos, private readonly LotLedger $lots) {}
 
     /**
      * Holds stock for one reference. Idempotent: an existing active or consumed reservation is returned as is.
@@ -185,6 +187,129 @@ class ReservationLedger
                 return $this->combine($rows->where('warehouse_id', $latest->warehouse_id)->where('bundle_variant_id', $latest->bundle_variant_id));
             })
             ->all();
+    }
+
+    /**
+     * Lots shipped for the references, per SKU (returns put goods back into the same lots).
+     *
+     * @param  array<int, int>  $referenceIds
+     * @return array<int, array<int, array{lot_no: string, mfg_date: string|null, expiry_date: string|null, quantity: int}>> variant id => lots
+     */
+    public function shippedLots(string $referenceType, array $referenceIds): array
+    {
+        if ($referenceIds === []) {
+            return [];
+        }
+        $rows = StockLotMovement::query()->with('lot')
+            ->whereIn('stock_reservation_id', StockReservation::query()->where('reference_type', $referenceType)->whereIn('reference_id', $referenceIds)->select('id'))
+            ->where('on_hand_delta', '<', 0)->orderBy('id')->get();
+
+        $out = [];
+        foreach ($rows->groupBy('stock_lot_id') as $group) {
+            $lot = $group->first()->lot;
+            $out[$lot->product_variant_id][] = [
+                'lot_no' => $lot->lot_no,
+                'mfg_date' => $lot->mfg_date?->toDateString(),
+                'expiry_date' => $lot->expiry_date?->toDateString(),
+                'quantity' => (int) -$group->sum('on_hand_delta'),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Lots each reference holds (active) or shipped (consumed), for the order screen and the pick list.
+     *
+     * @param  array<int, int>  $referenceIds
+     * @return array<int, array<int, array{reservation_id: int, sku_id: int, lot_id: int, lot_no: string, expiry_date: string|null, quantity: int, shipped: bool}>> reference id => lots
+     */
+    public function lotsFor(string $referenceType, array $referenceIds): array
+    {
+        if ($referenceIds === []) {
+            return [];
+        }
+        $reservations = StockReservation::query()->where('reference_type', $referenceType)->whereIn('reference_id', $referenceIds)
+            ->whereIn('status', [StockReservation::ACTIVE, StockReservation::CONSUMED])->get()->keyBy('id');
+        if ($reservations->isEmpty()) {
+            return [];
+        }
+        $rows = StockLotMovement::query()->with('lot')->whereIn('stock_reservation_id', $reservations->keys())->get();
+
+        $out = [];
+        foreach ($rows->groupBy(fn ($r) => $r->stock_reservation_id.':'.$r->stock_lot_id) as $group) {
+            $first = $group->first();
+            $reservation = $reservations[$first->stock_reservation_id];
+            $shipped = $reservation->status === StockReservation::CONSUMED;
+            $qty = $shipped ? (int) -$group->sum('on_hand_delta') : (int) $group->sum('reserved_delta');
+            if ($qty <= 0) {
+                continue;
+            }
+            $out[$reservation->reference_id][] = [
+                'reservation_id' => $reservation->id,
+                'sku_id' => $reservation->product_variant_id,
+                'lot_id' => $first->stock_lot_id,
+                'lot_no' => $first->lot->lot_no,
+                'expiry_date' => $first->lot->expiry_date?->toDateString(),
+                'quantity' => $qty,
+                'shipped' => $shipped,
+            ];
+        }
+        foreach ($out as &$lots) {
+            usort($lots, fn ($a, $b) => [$a['sku_id'], $a['expiry_date'] ?? ''] <=> [$b['sku_id'], $b['expiry_date'] ?? '']);
+        }
+
+        return $out;
+    }
+
+    /**
+     * Lots a reference's active holds may take, per held SKU, with what each lot can give.
+     *
+     * @return array<int, array{reservation_id: int, sku_id: int, quantity: int, lots: array<int, array{lot_id: int, lot_no: string, expiry_date: string|null, days_left: int|null, free: int, taken: int, blocked: bool}>}>
+     */
+    public function lotChoices(string $referenceType, int $referenceId): array
+    {
+        $out = [];
+        foreach ($this->active($referenceType, [$referenceId]) as $reservation) {
+            if (! $this->lots->tracked($reservation->product_variant_id)) {
+                continue;
+            }
+            $held = $this->lots->held($reservation);
+            $today = LotLedger::today();
+            $lots = [];
+            foreach ($this->lots->lotsOf($reservation->warehouse_id, $reservation->product_variant_id) as $lot) {
+                $taken = $held[$lot->id] ?? 0;
+                if ($lot->on_hand <= 0 && $taken === 0) {
+                    continue;
+                }
+                $lots[] = [
+                    'lot_id' => $lot->id,
+                    'lot_no' => $lot->lot_no,
+                    'expiry_date' => $lot->expiry_date?->toDateString(),
+                    'days_left' => $lot->expiry_date ? (int) Carbon::parse($today)->diffInDays($lot->expiry_date, false) : null,
+                    'free' => $lot->free() + $taken,
+                    'taken' => $taken,
+                    'blocked' => $this->lots->isBlocked($lot),
+                ];
+            }
+            $sku = (string) ProductVariant::query()->withTrashed()->whereKey($reservation->product_variant_id)->value('sku');
+            $out[] = ['reservation_id' => $reservation->id, 'sku_id' => $reservation->product_variant_id, 'sku' => $sku, 'quantity' => $reservation->quantity, 'lots' => $lots];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Picks other lots for one active hold of a reference.
+     *
+     * @param  array<int, int>  $wanted  lot id => quantity
+     */
+    public function reallocateLots(string $referenceType, int $referenceId, int $reservationId, array $wanted): void
+    {
+        $reservation = StockReservation::query()->where('reference_type', $referenceType)->where('reference_id', $referenceId)
+            ->whereKey($reservationId)->firstOrFail();
+        ksort($wanted);
+        $this->inventory->reallocateLots($reservation, $wanted, 'lot-realloc:'.$reservation->id.':'.md5(json_encode($wanted).microtime()));
     }
 
     /**

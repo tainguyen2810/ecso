@@ -38,6 +38,16 @@ class StockVerifier
             ->when($tenantId, fn ($q) => $q->where('stock_balances.tenant_id', $tenantId))
             ->get(['stock_balances.*', 'warehouses.allow_negative']);
 
+        // Lot-tracked SKUs: the lots of a warehouse add up to its balance.
+        $lots = DB::table('stock_lots')
+            ->join('product_variants', 'product_variants.id', '=', 'stock_lots.product_variant_id')
+            ->join('products', 'products.id', '=', 'product_variants.product_id')
+            ->where('products.track_lots', true)
+            ->when($tenantId, fn ($q) => $q->where('stock_lots.tenant_id', $tenantId))
+            ->groupBy('stock_lots.tenant_id', 'stock_lots.warehouse_id', 'stock_lots.product_variant_id')
+            ->selectRaw('stock_lots.tenant_id, stock_lots.warehouse_id, stock_lots.product_variant_id, SUM(stock_lots.on_hand) as on_hand, SUM(stock_lots.reserved) as reserved')
+            ->get()->keyBy(fn ($r) => "{$r->tenant_id}:{$r->warehouse_id}:{$r->product_variant_id}");
+
         $problems = [];
         $seen = [];
 
@@ -55,6 +65,14 @@ class StockVerifier
             foreach ($checks as $problem => [$expected, $actual]) {
                 if ($expected !== $actual) {
                     $problems[] = $this->problem($b, $problem, $expected, $actual);
+                }
+            }
+            if (isset($lots[$k])) {
+                if ((int) $lots[$k]->on_hand !== (int) $b->on_hand) {
+                    $problems[] = $this->problem($b, 'lots_vs_on_hand', (int) $b->on_hand, (int) $lots[$k]->on_hand);
+                }
+                if ((int) $lots[$k]->reserved !== (int) $b->reserved) {
+                    $problems[] = $this->problem($b, 'lots_vs_reserved', (int) $b->reserved, (int) $lots[$k]->reserved);
                 }
             }
             if ((int) $b->reserved < 0) {
