@@ -8,6 +8,7 @@ use App\Modules\Inventory\Events\AvailableStockChanged;
 use App\Modules\Inventory\Exceptions\InsufficientStock;
 use App\Modules\Inventory\Exceptions\InvalidStockOperation;
 use App\Modules\Inventory\Models\StockBalance;
+use App\Modules\Inventory\Models\StockLot;
 use App\Modules\Inventory\Models\StockMovement;
 use App\Modules\Inventory\Models\StockReservation;
 use App\Modules\Inventory\Models\Warehouse;
@@ -37,12 +38,14 @@ class InventoryService
 {
     private const DEADLOCK_ATTEMPTS = 3;
 
-    public function __construct(private readonly TenantContext $context) {}
+    public function __construct(private readonly TenantContext $context, private readonly LotLedger $lots) {}
 
     /**
      * Goods in (receipt, opening stock, return restock). Receipts update the weighted average cost.
+     * A line of a lot-tracked SKU may carry lots ([lot_no, mfg_date, expiry_date, quantity]); what they do not
+     * cover goes to "Chưa rõ lô".
      *
-     * @param  array<int, array{variant_id: int, quantity: int, unit_cost?: string|float|int|null}>  $lines
+     * @param  array<int, array{variant_id: int, quantity: int, unit_cost?: string|float|int|null, lots?: array<int, array<string, mixed>>|null}>  $lines
      */
     public function receive(Warehouse $warehouse, array $lines, string $key, ?Model $reference = null, string $type = StockMovement::RECEIPT, ?string $reason = null): OperationResult
     {
@@ -62,7 +65,7 @@ class InventoryService
                     $this->updateAverageCost($line['variant_id'], $line['quantity'], $unitCost);
                 }
 
-                $movements[] = $this->write($balance, $type, $line['quantity'], 0, "{$key}#{$i}", $reference, $unitCost, $reason);
+                $movements[] = $this->write($balance, $type, $line['quantity'], 0, "{$key}#{$i}", $reference, $unitCost, $reason, $line['lots'] ?? null);
             }
 
             return new OperationResult(true, $movements);
@@ -112,7 +115,7 @@ class InventoryService
                     throw $this->insufficient($balance, $line['quantity'], $balance->available());
                 }
 
-                $movements[] = $this->write($balance, $type, -$line['quantity'], 0, "{$key}#{$i}", $reference, null, $reason);
+                $movements[] = $this->write($balance, $type, -$line['quantity'], 0, "{$key}#{$i}", $reference, null, $reason, $line['lots'] ?? null);
             }
 
             return new OperationResult(true, $movements);
@@ -131,7 +134,7 @@ class InventoryService
         return $this->run($key, $warehouse, array_column($lines, 'variant_id'), function (array $balances) use ($lines, $key, $reference, $reason) {
             $movements = [];
             foreach ($lines as $i => $line) {
-                $movements[] = $this->write($balances[$line['variant_id']], StockMovement::TRANSFER_IN, $line['quantity'], 0, "{$key}#{$i}", $reference, null, $reason);
+                $movements[] = $this->write($balances[$line['variant_id']], StockMovement::TRANSFER_IN, $line['quantity'], 0, "{$key}#{$i}", $reference, null, $reason, $line['lots'] ?? null);
             }
 
             return new OperationResult(true, $movements);
@@ -224,10 +227,11 @@ class InventoryService
             }
 
             $balance = $balances[$variant->id];
-            $reservable = min($quantity, max(0, $balance->available()));
+            $sellable = $this->sellableAvailable($balance);
+            $reservable = min($quantity, $sellable);
 
             if (! $allowShortage && $reservable < $quantity) {
-                throw $this->insufficient($balance, $quantity, max(0, $balance->available()));
+                throw $this->insufficient($balance, $quantity, $sellable);
             }
 
             $reservation = $existing ?? new StockReservation;
@@ -283,7 +287,7 @@ class InventoryService
         $this->run($key, $warehouse, [$reservation->product_variant_id], function (array $balances) use ($reservation, $key) {
             $locked = StockReservation::query()->whereKey($reservation->id)->lockForUpdate()->firstOrFail();
             $balance = $balances[$locked->product_variant_id];
-            $add = min($locked->shortage, max(0, $balance->available()));
+            $add = min($locked->shortage, $this->sellableAvailable($balance));
 
             if (! $locked->isActive() || $add <= 0) {
                 return OperationResult::duplicate();
@@ -382,6 +386,91 @@ class InventoryService
         return StockBalance::query()->where('warehouse_id', $warehouse->id)->where('product_variant_id', $variant->id)->firstOrFail();
     }
 
+    /**
+     * Moves free stock of a lot to another lot of the same SKU and warehouse (splitting "Chưa rõ lô" into real
+     * lots, fixing a lot number). On hand does not change; a zero LOT_MOVE movement records it.
+     *
+     * @param  array{lot_no?: string|null, mfg_date?: string|null, expiry_date?: string|null}  $target
+     */
+    public function moveLot(StockLot $from, array $target, int $quantity, string $key, ?string $reason = null): StockLot
+    {
+        $this->assertTracked($from->product_variant_id);
+        $warehouse = Warehouse::query()->withTrashed()->findOrFail($from->warehouse_id);
+
+        $result = $this->run($key, $warehouse, [$from->product_variant_id], function (array $balances) use ($from, $target, $quantity, $key, $reason) {
+            $balance = $balances[$from->product_variant_id];
+            $movement = $this->write($balance, StockMovement::LOT_MOVE, 0, 0, "{$key}#0", $from, null, $reason);
+
+            return $this->lots->move($balance, $movement, $from, $target, $quantity);
+        });
+
+        return $result instanceof StockLot ? $result : $from->refresh();
+    }
+
+    /**
+     * Product switched lot tracking on: every warehouse's stock of the SKU is put into lots ("Chưa rõ lô" for what
+     * has no lot yet), with the holds of open orders.
+     */
+    public function startLotTracking(int $variantId): void
+    {
+        $this->lots->forget();
+        if (! $this->lots->tracked($variantId)) {
+            return;
+        }
+        $balances = StockBalance::query()->where('product_variant_id', $variantId)->orderBy('warehouse_id')->get(['warehouse_id']);
+        foreach ($balances as $row) {
+            $warehouse = Warehouse::query()->withTrashed()->findOrFail($row->warehouse_id);
+            $key = 'lot-start:'.$variantId.':'.$warehouse->id.':'.now()->format('YmdHisu');
+            $this->run($key, $warehouse, [$variantId], function (array $balances) use ($variantId, $key) {
+                $balance = $balances[$variantId];
+                $movement = $this->write($balance, StockMovement::LOT_MOVE, 0, 0, "{$key}#0", null, null, 'Bắt đầu quản lý lô / hạn sử dụng');
+                $this->lots->syncWithBalance($balance, $movement);
+
+                return new OperationResult(true);
+            });
+        }
+    }
+
+    /** Corrects the dates of a lot. Selling may start or stop, so it runs as a (zero) stock operation. */
+    public function redateLot(StockLot $lot, ?string $mfgDate, ?string $expiryDate, string $key): StockLot
+    {
+        $this->assertTracked($lot->product_variant_id);
+        $warehouse = Warehouse::query()->withTrashed()->findOrFail($lot->warehouse_id);
+        $before = trim(($lot->mfg_date?->format('d/m/Y') ?? '–').' → '.($lot->expiry_date?->format('d/m/Y') ?? '–'));
+
+        $result = $this->run($key, $warehouse, [$lot->product_variant_id], function (array $balances) use ($lot, $mfgDate, $expiryDate, $key, $before) {
+            $this->write($balances[$lot->product_variant_id], StockMovement::LOT_REDATE, 0, 0, "{$key}#0", $lot, null, "Lô {$lot->lot_no}: NSX/HSD cũ {$before}");
+
+            return $this->lots->redate($lot, $mfgDate, $expiryDate);
+        });
+
+        return $result instanceof StockLot ? $result : $lot->refresh();
+    }
+
+    /**
+     * Changes which lots an active hold takes (staff picked other lots for an order line).
+     *
+     * @param  array<int, int>  $wanted  lot id => quantity, adding up to the held quantity
+     */
+    public function reallocateLots(StockReservation $reservation, array $wanted, string $key): StockReservation
+    {
+        $this->assertTracked($reservation->product_variant_id);
+        $warehouse = Warehouse::query()->withTrashed()->findOrFail($reservation->warehouse_id);
+
+        $this->run($key, $warehouse, [$reservation->product_variant_id], function (array $balances) use ($reservation, $wanted, $key) {
+            $locked = StockReservation::query()->whereKey($reservation->id)->lockForUpdate()->firstOrFail();
+            if (! $locked->isActive()) {
+                throw new InvalidStockOperation('Dòng hàng không còn giữ hàng (đã xuất hoặc đã hủy).');
+            }
+            $movement = $this->write($balances[$locked->product_variant_id], StockMovement::LOT_REALLOCATE, 0, 0, "{$key}#0", $locked, null, 'Đổi lô giữ cho đơn');
+            $this->lots->reallocate($locked, $movement, $wanted);
+
+            return new OperationResult(true);
+        });
+
+        return $reservation->refresh();
+    }
+
     // ------------------------------------------------------------------ internals
 
     private function settle(StockReservation $reservation, string $key, string $type, ?string $reason): StockReservation
@@ -429,6 +518,7 @@ class InventoryService
 
         $markerKey ??= "{$key}#0";
         $changed = [];
+        $this->lots->forget();
 
         try {
             $result = DB::transaction(function () use ($warehouse, $variantIds, $work, $lockVariants, $markerKey, &$changed) {
@@ -538,7 +628,10 @@ class InventoryService
             ->firstOrFail();
     }
 
-    private function write(StockBalance $balance, string $type, int $onHandDelta, int $reservedDelta, string $key, ?Model $reference, ?string $unitCost, ?string $reason): StockMovement
+    /**
+     * @param  array<int, array<string, mixed>>|null  $lots  lot split of the line (lot-tracked SKUs)
+     */
+    private function write(StockBalance $balance, string $type, int $onHandDelta, int $reservedDelta, string $key, ?Model $reference, ?string $unitCost, ?string $reason, ?array $lots = null): StockMovement
     {
         $onHand = $balance->on_hand + $onHandDelta;
         $reserved = $balance->reserved + $reservedDelta;
@@ -575,7 +668,22 @@ class InventoryService
             'reason' => $reason,
         ])->save();
 
+        $this->lots->apply($balance, $movement, $onHandDelta, $reservedDelta, $reference instanceof StockReservation ? $reference : null, $lots);
+
         return $movement;
+    }
+
+    /** Available stock a hold may take: on hand − held, less free stock in expired / stop-selling lots. */
+    private function sellableAvailable(StockBalance $balance): int
+    {
+        return max(0, $balance->available() - $this->lots->blockedFree($balance->warehouse_id, $balance->product_variant_id));
+    }
+
+    private function assertTracked(int $variantId): void
+    {
+        if (! $this->lots->tracked($variantId)) {
+            throw new InvalidStockOperation('Sản phẩm này chưa bật quản lý lô / hạn sử dụng.');
+        }
     }
 
     /**
@@ -629,7 +737,7 @@ class InventoryService
 
     /**
      * @param  array<int, array<string, mixed>>  $lines
-     * @return array<int, array{variant_id: int, quantity: int, unit_cost?: mixed}>
+     * @return array<int, array{variant_id: int, quantity: int, unit_cost?: mixed, lots?: array<int, array<string, mixed>>}>
      */
     private function normalizeLines(array $lines, bool $positive): array
     {
@@ -651,7 +759,9 @@ class InventoryService
             }
 
             $seen[$id] = true;
-            $out[] = ['variant_id' => $id, 'quantity' => $qty] + (array_key_exists('unit_cost', $line) ? ['unit_cost' => $line['unit_cost']] : []);
+            $out[] = ['variant_id' => $id, 'quantity' => $qty]
+                + (array_key_exists('unit_cost', $line) ? ['unit_cost' => $line['unit_cost']] : [])
+                + (! empty($line['lots']) ? ['lots' => $line['lots']] : []);
         }
 
         return $out;

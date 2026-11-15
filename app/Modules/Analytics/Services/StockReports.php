@@ -2,8 +2,10 @@
 
 namespace App\Modules\Analytics\Services;
 
+use App\Modules\Access\Support\DataAccess;
 use App\Modules\Analytics\Support\Search;
 use App\Modules\Inventory\Services\CostHistory;
+use App\Modules\Inventory\Services\LotLedger;
 use App\Modules\Tenancy\Support\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -230,6 +232,97 @@ class StockReports
     }
 
     /** Units shipped per SKU and warehouse in the last 30 days, as a subquery. */
+    /** Tabs of the "Hàng sắp hết hạn" report: days left up to (inclusive), null = no upper bound. */
+    public const EXPIRY_TABS = ['expired' => null, 'd30' => 30, 'd60' => 60, 'd90' => 90, 'unknown' => null, 'all' => null];
+
+    /**
+     * Lots of lot-tracked products still in stock, by how soon they expire (Báo cáo › Hàng sắp hết hạn).
+     * "Tồn khi hết hạn" estimates what will be left on the expiry date: lots sell first-expiry-first, so the
+     * earlier lots of the same SKU and warehouse use up the sales pace (last 30 days) before this one.
+     *
+     * @return array<string, mixed>
+     */
+    public function expiry(string $tab = 'd30', ?int $warehouseId = null, ?string $q = null): array
+    {
+        $today = LotLedger::today();
+        $sold = $this->soldLast30Days($warehouseId);
+        $lots = DB::table('stock_lots as l')
+            ->join('warehouses as w', 'w.id', '=', 'l.warehouse_id')
+            ->join('product_variants as v', 'v.id', '=', 'l.product_variant_id')
+            ->join('products as p', 'p.id', '=', 'v.product_id')
+            ->leftJoinSub($sold, 's', fn ($j) => $j->on('s.product_variant_id', '=', 'l.product_variant_id')->on('s.warehouse_id', '=', 'l.warehouse_id'))
+            ->where('l.tenant_id', $this->tenant())->where('p.track_lots', true)->where('l.on_hand', '>', 0)
+            ->whereNull('v.deleted_at')
+            ->when($warehouseId, fn ($w) => $w->where('l.warehouse_id', $warehouseId))
+            ->when($q, fn ($w) => $w->where(fn ($x) => $x->where('v.sku', 'like', Search::contains($q))->orWhere('p.name', 'like', Search::contains($q))->orWhere('l.lot_no', 'like', Search::contains($q))))
+            ->orderByRaw("l.warehouse_id, l.product_variant_id, l.lot_no <> '', l.expiry_date IS NULL, l.expiry_date, l.id")
+            ->limit(5000)
+            ->get(['l.id', 'l.lot_no', 'l.mfg_date', 'l.expiry_date', 'l.on_hand', 'l.reserved', 'l.warehouse_id', 'l.product_variant_id',
+                'v.ulid', 'v.sku', 'v.name as variant_name', 'v.cost_price', 'p.ulid as product_id', 'p.name as product_name',
+                'p.expiry_warn_days', 'p.expiry_block_days', 'w.ulid as warehouse_ulid', 'w.name as warehouse', 's.units']);
+
+        $all = [];
+        $before = [];
+        foreach ($lots as $r) {
+            $pair = "{$r->warehouse_id}:{$r->product_variant_id}";
+            $earlier = $before[$pair] ?? 0;
+            $before[$pair] = $earlier + (int) $r->on_hand;
+            $daysLeft = $r->expiry_date ? (int) CarbonImmutable::parse($today)->diffInDays(CarbonImmutable::parse($r->expiry_date), false) : null;
+            $pace = ((int) ($r->units ?? 0)) / 30;
+            $leftAtExpiry = $daysLeft === null ? null : (int) max(0, min((int) $r->on_hand, ceil($earlier + (int) $r->on_hand - $pace * max(0, $daysLeft))));
+            $block = (int) ($r->expiry_block_days ?? 0);
+            $all[] = [
+                'lot_id' => (int) $r->id,
+                'variant' => ['id' => $r->ulid, 'product_id' => $r->product_id, 'sku' => $r->sku, 'name' => trim($r->product_name.($r->variant_name ? ' - '.$r->variant_name : ''))],
+                'warehouse' => ['id' => $r->warehouse_ulid, 'name' => $r->warehouse],
+                'lot_no' => $r->lot_no === '' ? null : $r->lot_no,
+                'mfg_date' => $r->mfg_date,
+                'expiry_date' => $r->expiry_date,
+                'days_left' => $daysLeft,
+                'on_hand' => (int) $r->on_hand,
+                'reserved' => (int) $r->reserved,
+                'value' => app(DataAccess::class)->cost(bcmul((string) $r->on_hand, (string) ($r->cost_price ?? '0'), 2)),
+                'sold_per_day' => round($pace, 1),
+                'left_at_expiry' => $leftAtExpiry,
+                'blocked' => $daysLeft !== null && $daysLeft < $block,
+                'warn' => $daysLeft !== null && $daysLeft <= (int) ($r->expiry_warn_days ?? LotLedger::DEFAULT_WARN_DAYS),
+            ];
+        }
+
+        $bucket = fn (array $r) => match (true) {
+            $r['days_left'] === null => 'unknown',
+            $r['days_left'] < 0 => 'expired',
+            $r['days_left'] <= 30 => 'd30',
+            $r['days_left'] <= 60 => 'd60',
+            $r['days_left'] <= 90 => 'd90',
+            default => 'later',
+        };
+        $totals = [];
+        foreach (['expired', 'd30', 'd60', 'd90', 'unknown'] as $k) {
+            $in = array_filter($all, fn ($r) => $bucket($r) === $k);
+            $totals[$k] = [
+                'lots' => count($in),
+                'units' => array_sum(array_column($in, 'on_hand')),
+                'value' => app(DataAccess::class)->cost(array_reduce($in, fn ($c, $r) => bcadd($c, (string) ($r['value'] ?? '0'), 2), '0')),
+            ];
+        }
+
+        $rows = array_values(array_filter($all, fn ($r) => match ($tab) {
+            'all' => true,
+            'expired', 'unknown' => $bucket($r) === $tab,
+            default => $r['days_left'] !== null && $r['days_left'] >= 0 && $r['days_left'] <= self::EXPIRY_TABS[$tab],
+        }));
+        usort($rows, fn ($a, $b) => [$a['days_left'] === null, $a['days_left']] <=> [$b['days_left'] === null, $b['days_left']]);
+
+        return [
+            'rows' => $rows,
+            'totals' => $totals + [
+                'on_hand' => array_sum(array_column($rows, 'on_hand')),
+                'value' => app(DataAccess::class)->cost(array_reduce($rows, fn ($c, $r) => bcadd($c, (string) ($r['value'] ?? '0'), 2), '0')),
+            ],
+        ];
+    }
+
     private function soldLast30Days(?int $warehouseId)
     {
         return DB::table('stock_movements')->where('tenant_id', $this->tenant())->where('created_at', '>=', CarbonImmutable::now()->subDays(30))

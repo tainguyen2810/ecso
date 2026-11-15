@@ -11,6 +11,7 @@ import FormField from '@/shared/ui/FormField.vue';
 import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
+import Switch from '@/shared/ui/Switch.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { cn, formatMoney } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
@@ -77,6 +78,9 @@ const knownTags = ref<string[]>([]);
 const warehouses = ref<Warehouse[]>([]);
 const images = ref<{ id: number; url: string }[]>([]);
 const form = reactive({ name: '', description: '', status: 'active', category_id: '', brand_id: '', unit: '', vat_rate: '', opening_warehouse_id: '' });
+// Lots and expiry dates (lô / hạn sử dụng): receipts ask for lot + expiry, sales take the earliest expiry first.
+const lots = reactive({ track_lots: false, expiry_warn_days: '60', expiry_block_days: '0', shelf_life_months: '', require_mfg_date: false });
+const lotsWasOn = ref(false);
 const tags = ref<string[]>([]);
 const tagInput = ref('');
 const variants = ref<VariantRow[]>([]);
@@ -172,6 +176,14 @@ onMounted(async () => {
             vat_rate: p.vat_rate === null || p.vat_rate === undefined ? '' : String(Number(p.vat_rate)),
         });
         tags.value = [...(p.tags ?? [])];
+        Object.assign(lots, {
+            track_lots: !!p.track_lots,
+            expiry_warn_days: p.expiry_warn_days === null || p.expiry_warn_days === undefined ? '60' : String(p.expiry_warn_days),
+            expiry_block_days: p.expiry_block_days ? String(p.expiry_block_days) : '0',
+            shelf_life_months: p.shelf_life_months ? String(p.shelf_life_months) : '',
+            require_mfg_date: !!p.require_mfg_date,
+        });
+        lotsWasOn.value = !copying && !!p.track_lots;
         images.value = copying ? [] : (p.images ?? []);
         productType.value = p.type ?? 'standard';
         components.value = (p.variants?.[0]?.components ?? []).map((c) => ({ variant: { ...c.variant }, quantity: c.quantity }));
@@ -267,6 +279,15 @@ async function save(then: 'detail' | 'labels' = 'detail') {
             unit: form.unit.trim() || null,
             tags: tags.value,
             vat_rate: form.vat_rate === '' ? null : Number(form.vat_rate),
+            ...(isCombo.value
+                ? {}
+                : {
+                      track_lots: lots.track_lots,
+                      expiry_warn_days: num(lots.expiry_warn_days),
+                      expiry_block_days: num(lots.expiry_block_days) ?? 0,
+                      shelf_life_months: num(lots.shelf_life_months),
+                      require_mfg_date: lots.require_mfg_date,
+                  }),
             ...(isNew.value && hasOpening.value ? { opening_warehouse_id: form.opening_warehouse_id || null } : {}),
             ...(isNew.value ? { type: productType.value } : {}),
             ...(isCombo.value ? { components: components.value.map((c) => ({ variant_id: c.variant.id, quantity: c.quantity })) } : {}),
@@ -591,6 +612,36 @@ async function removeImage(id: number) {
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+                </Card>
+
+                <Card v-if="!isCombo" title="Lô và hạn sử dụng" data-testid="lot-settings">
+                    <div class="p-5">
+                        <Switch
+                            v-model="lots.track_lots"
+                            :disabled="!canManage"
+                            label="Quản lý lô & hạn sử dụng"
+                            hint="Mỗi lần nhập hàng phải ghi số lô và hạn sử dụng. Khi bán, hệ thống lấy lô hết hạn sớm nhất trước (FEFO)."
+                            data-testid="track-lots"
+                        />
+                        <div v-if="lots.track_lots" class="mt-3 rounded-lg border bg-slate-50 p-4">
+                            <div class="grid gap-4 sm:grid-cols-3">
+                                <FormField label="Cảnh báo sắp hết hạn trước (ngày)" for="p-warn" :error="error?.field('expiry_warn_days')" hint="Hiện trong báo cáo Hàng sắp hết hạn">
+                                    <Input id="p-warn" v-model="lots.expiry_warn_days" type="number" min="0" :disabled="!canManage" />
+                                </FormField>
+                                <FormField label="Ngừng bán khi còn dưới (ngày)" for="p-block" :error="error?.field('expiry_block_days')" hint="0 = chỉ ngừng khi đã hết hạn. Lô ngừng bán không bán, không đẩy tồn lên sàn">
+                                    <Input id="p-block" v-model="lots.expiry_block_days" type="number" min="0" :disabled="!canManage" data-testid="block-days" />
+                                </FormField>
+                                <FormField label="Hạn dùng mặc định (tháng từ NSX)" for="p-shelf" :error="error?.field('shelf_life_months')" hint="Không bắt buộc. Tự điền HSD khi chỉ nhập NSX">
+                                    <Input id="p-shelf" v-model="lots.shelf_life_months" type="number" min="1" :disabled="!canManage" placeholder="Không dùng" />
+                                </FormField>
+                            </div>
+                            <Switch v-model="lots.require_mfg_date" :disabled="!canManage" label="Bắt buộc nhập ngày sản xuất (NSX)" hint="Tắt: chỉ cần số lô và hạn sử dụng." />
+                        </div>
+                        <Alert v-if="lots.track_lots && !lotsWasOn && !isNew" tone="amber" class="mt-3" data-testid="lots-existing-stock">
+                            Tồn hiện có sẽ được đưa vào lô <b>"Chưa rõ lô"</b> (không có HSD) và được bán trước. Vào tab <b>Lô &amp; hạn sử dụng</b> của sản phẩm để tách ra từng lô thật.
+                        </Alert>
+                        <p v-if="lots.track_lots" class="mt-3 text-xs text-muted-foreground">Giá vốn vẫn tính bình quân gia quyền như hiện nay, không tính riêng từng lô.</p>
                     </div>
                 </Card>
 

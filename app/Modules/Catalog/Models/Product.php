@@ -30,7 +30,10 @@ class Product extends Model
     /** One SKU with no stock of its own: stock is held and shipped on its components (ProductComponent). */
     public const TYPE_COMBO = 'combo';
 
-    public const FIELDS = ['name', 'category_id', 'brand_id', 'description', 'unit', 'tags', 'vat_rate', 'status'];
+    public const FIELDS = ['name', 'category_id', 'brand_id', 'description', 'unit', 'tags', 'vat_rate', 'status', ...self::LOT_FIELDS];
+
+    /** Lot / expiry settings (lô, hạn sử dụng). */
+    public const LOT_FIELDS = ['track_lots', 'expiry_warn_days', 'expiry_block_days', 'shelf_life_months', 'require_mfg_date'];
 
     public function isCombo(): bool
     {
@@ -44,6 +47,11 @@ class Product extends Model
         return [
             'tags' => 'array',
             'vat_rate' => 'decimal:2',
+            'track_lots' => 'boolean',
+            'require_mfg_date' => 'boolean',
+            'expiry_warn_days' => 'integer',
+            'expiry_block_days' => 'integer',
+            'shelf_life_months' => 'integer',
         ];
     }
 

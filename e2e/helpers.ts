@@ -1,4 +1,7 @@
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { expect, type Page } from '@playwright/test';
 
 export const SHOTS = 'docs/screenshots/phase-1';
@@ -36,6 +39,23 @@ export function totp(secret: string, stepOffset = 0, now = Date.now()): string {
     return String(value % 1_000_000).padStart(6, '0');
 }
 
+// Time steps already spent per secret. Trying a spent code costs one of the 5 verify attempts a minute the server
+// allows, so three admin logins inside a minute could run out of attempts; skip spent steps instead. Kept in a file
+// because Playwright may start a new worker process between spec files.
+const spentFile = (secret: string) => join(tmpdir(), `ecso-e2e-totp-${createHash('sha1').update(secret).digest('hex').slice(0, 12)}.json`);
+const readSpent = (secret: string): Set<number> => {
+    try {
+        return new Set(JSON.parse(readFileSync(spentFile(secret), 'utf8')) as number[]);
+    } catch {
+        return new Set();
+    }
+};
+const spend = (secret: string, step: number) => {
+    const spent = readSpent(secret);
+    spent.add(step);
+    writeFileSync(spentFile(secret), JSON.stringify([...spent].filter((s) => s >= step - 4)));
+};
+
 /**
  * Logs in as a super admin and passes the 2FA screen. A code can be used once per time step, so when the current
  * step was already used by an earlier test, the next step's code (accepted within the ±1 window) is tried.
@@ -44,10 +64,13 @@ export async function loginAdmin(page: Page, email = 'admin@demo.test', secret =
     await login(page, email);
     await page.waitForURL(/\/admin\/2fa/);
     for (const offset of [0, 1, -1]) {
+        const step = Math.floor(Date.now() / 1000 / 30) + offset;
+        if (readSpent(secret).has(step)) continue;
+        spend(secret, step);
         await page.getByTestId('totp-code').fill(totp(secret, offset));
         await page.getByTestId('submit-2fa').click();
         try {
-            await page.waitForURL((url) => !url.pathname.startsWith('/admin/2fa'), { timeout: 3000 });
+            await page.waitForURL((url) => !url.pathname.startsWith('/admin/2fa'), { timeout: 10_000 });
             return;
         } catch {
             // Code already used in this step: try the next one.

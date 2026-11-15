@@ -106,7 +106,7 @@ class PurchaseService
      * Receives some or all of the outstanding goods. The actual unit cost may differ from the ordered one
      * (price change, discount); the receipt and the average cost use the actual cost.
      *
-     * @param  array<int, array{variant_id: int, quantity: int, unit_cost?: string|int|float|null}>  $lines
+     * @param  array<int, array{variant_id: int, quantity: int, unit_cost?: string|int|float|null, lots?: array<int, array<string, mixed>>|null}>  $lines
      */
     public function receive(PurchaseOrder $po, array $lines, ?string $note = null): StockReceipt
     {
@@ -140,7 +140,7 @@ class PurchaseService
                 $unitExtra = $this->extraCostPerUnit($po, $poLine, $poLines);
                 $unitDiscount = $this->discountPerUnit($po, $poLine, $poLines);
                 $landed = $this->atLeastZero(bcsub(bcadd(bcadd($cost, $po->vat_in_cost ? $unitTax : '0', 4), $unitExtra, 4), $unitDiscount, 4));
-                $receiptLines[] = ['variant_id' => $poLine->product_variant_id, 'quantity' => $line['quantity'], 'unit_cost' => $landed];
+                $receiptLines[] = ['variant_id' => $poLine->product_variant_id, 'quantity' => $line['quantity'], 'unit_cost' => $landed, 'lots' => $line['lots'] ?? null];
 
                 $value = bcadd($value, bcmul(bcsub(bcadd($cost, $unitTax, 4), $unitDiscount, 4), $qty, 4), 4);
                 $tax = bcadd($tax, bcmul($unitTax, $qty, 4), 4);

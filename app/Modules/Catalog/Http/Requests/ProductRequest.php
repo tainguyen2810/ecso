@@ -31,6 +31,12 @@ class ProductRequest extends FormRequest
             'tags' => ['nullable', 'array', 'max:20'],
             'tags.*' => ['string', 'max:40'],
             'vat_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            // Lots and expiry dates (lô / hạn sử dụng).
+            'track_lots' => ['sometimes', 'boolean'],
+            'expiry_warn_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
+            'expiry_block_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
+            'shelf_life_months' => ['nullable', 'integer', 'min:1', 'max:240'],
+            'require_mfg_date' => ['sometimes', 'boolean'],
             // Opening stock, only when creating: one opening receipt in this warehouse.
             'opening_warehouse_id' => $creating ? ['nullable', 'string', 'required_with:variants.*.opening_qty'] : ['prohibited'],
             'variants.*.opening_qty' => $creating ? ['nullable', 'integer', 'min:0', 'max:1000000'] : ['prohibited'],

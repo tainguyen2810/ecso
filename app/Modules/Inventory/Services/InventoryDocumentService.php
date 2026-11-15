@@ -12,8 +12,10 @@ use App\Modules\Inventory\Models\StockReceipt;
 use App\Modules\Inventory\Models\StockTransfer;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Support\DocumentNumber;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Receipts, adjustments and transfers. Documents own the workflow; InventoryService owns the stock.
@@ -21,14 +23,21 @@ use Illuminate\Support\Facades\DB;
  */
 class InventoryDocumentService
 {
-    public function __construct(private readonly InventoryService $inventory, private readonly AuditLogger $audit) {}
+    public function __construct(private readonly InventoryService $inventory, private readonly AuditLogger $audit, private readonly LotLedger $lots) {}
 
     /**
-     * @param  array<int, array{variant_id: int, quantity: int, unit_cost: string|float|int}>  $lines
+     * Lines of lot-tracked SKUs carry their lots. A manual or purchase receipt must split the whole quantity into
+     * lots; opening stock from other screens (product form, import, shop setup) may leave it in "Chưa rõ lô".
+     *
+     * @param  array<int, array{variant_id: int, quantity: int, unit_cost: string|float|int, lots?: array<int, array<string, mixed>>|null}>  $lines
      */
     public function receive(Warehouse $warehouse, array $lines, ?string $note = null, string $source = StockReceipt::SOURCE_MANUAL, ?int $purchaseOrderId = null): StockReceipt
     {
         $this->assertActive($warehouse);
+        $this->lots->forget();
+        if ($source !== StockReceipt::SOURCE_OPENING && ($errors = $this->lots->incomingErrors($lines)) !== []) {
+            throw ValidationException::withMessages($errors);
+        }
 
         return DB::transaction(function () use ($warehouse, $lines, $note, $source, $purchaseOrderId) {
             $receipt = new StockReceipt(['warehouse_id' => $warehouse->id, 'source' => $source, 'note' => $note]);
@@ -36,7 +45,8 @@ class InventoryDocumentService
             $receipt->lines()->createMany(array_map(fn ($l) => ['product_variant_id' => $l['variant_id'], 'quantity' => $l['quantity'], 'unit_cost' => $l['unit_cost']], $lines));
 
             $type = $source === StockReceipt::SOURCE_OPENING ? StockMovement::OPENING : StockMovement::RECEIPT;
-            $this->inventory->receive($warehouse, $lines, "receipt:{$receipt->id}", $receipt, $type);
+            $result = $this->inventory->receive($warehouse, $lines, "receipt:{$receipt->id}", $receipt, $type);
+            $this->keepLots($receipt->lines()->get()->all(), $result->movements);
             $this->audit->record('inventory.received', $receipt, ['number' => $receipt->number, 'lines' => count($lines)]);
 
             return $receipt;
@@ -215,7 +225,7 @@ class InventoryDocumentService
     }
 
     /**
-     * @param  array<int, array{variant_id: int, quantity: int}>  $lines
+     * @param  array<int, array{variant_id: int, quantity: int, lots?: array<int, array<string, mixed>>|null}>  $lines
      */
     public function createTransfer(Warehouse $from, Warehouse $to, array $lines, ?string $note = null): StockTransfer
     {
@@ -228,7 +238,8 @@ class InventoryDocumentService
         return DB::transaction(function () use ($from, $to, $lines, $note) {
             $transfer = new StockTransfer(['from_warehouse_id' => $from->id, 'to_warehouse_id' => $to->id, 'note' => $note]);
             $transfer->forceFill(['number' => DocumentNumber::next('TRF'), 'status' => StockTransfer::DRAFT, 'created_by' => Auth::id()])->save();
-            $transfer->lines()->createMany(array_map(fn ($l) => ['product_variant_id' => $l['variant_id'], 'quantity' => $l['quantity']], $lines));
+            // Lots asked for (a lot-tracked SKU); dispatch replaces them with the lots that actually left.
+            $transfer->lines()->createMany(array_map(fn ($l) => ['product_variant_id' => $l['variant_id'], 'quantity' => $l['quantity'], 'lots' => $l['lots'] ?? null], $lines));
             $this->audit->record('inventory.transfer.created', $transfer, ['number' => $transfer->number]);
 
             return $transfer;
@@ -242,7 +253,9 @@ class InventoryDocumentService
             $from = Warehouse::query()->findOrFail($locked->from_warehouse_id);
             $this->assertActive($from);
 
-            $this->inventory->issue($from, $this->transferLines($locked), "transfer:{$locked->id}:out", $locked, StockMovement::TRANSFER_OUT);
+            $result = $this->inventory->issue($from, $this->transferLines($locked), "transfer:{$locked->id}:out", $locked, StockMovement::TRANSFER_OUT);
+            // The receiving warehouse (or the source, on cancel) takes back exactly the lots that left.
+            $this->keepLots($locked->lines()->get()->all(), $result->movements);
             $locked->forceFill(['status' => StockTransfer::IN_TRANSIT, 'dispatched_at' => now()])->save();
             $this->audit->record('inventory.transfer.dispatched', $locked, ['number' => $locked->number]);
 
@@ -339,11 +352,27 @@ class InventoryDocumentService
     }
 
     /**
-     * @return array<int, array{variant_id: int, quantity: int}>
+     * @return array<int, array{variant_id: int, quantity: int, lots?: array<int, array<string, mixed>>}>
      */
     private function transferLines(StockTransfer $transfer): array
     {
-        return $transfer->lines()->get()->map(fn ($l) => ['variant_id' => $l->product_variant_id, 'quantity' => $l->quantity])->all();
+        return $transfer->lines()->get()->map(fn ($l) => ['variant_id' => $l->product_variant_id, 'quantity' => $l->quantity] + ($l->lots ? ['lots' => $l->lots] : []))->all();
+    }
+
+    /**
+     * Saves on each document line the lots its movement went in or out of (movements are in line order).
+     *
+     * @param  array<int, Model>  $lines
+     * @param  array<int, StockMovement>  $movements
+     */
+    private function keepLots(array $lines, array $movements): void
+    {
+        $split = $this->lots->splitOf(array_map(fn (StockMovement $m) => (int) $m->id, $movements));
+        foreach ($movements as $i => $movement) {
+            if (isset($split[$movement->id], $lines[$i])) {
+                $lines[$i]->forceFill(['lots' => $split[$movement->id]])->save();
+            }
+        }
     }
 
     private function assertActive(Warehouse $warehouse): void

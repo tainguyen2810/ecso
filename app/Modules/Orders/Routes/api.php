@@ -30,6 +30,8 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::post('orders/{order}/packing/errors', [PackingController::class, 'error'])->middleware('throttle:240,1,orders.packing.errors');
     Route::post('orders/{order}/packing/finish', [PackingController::class, 'finish']);
     Route::get('orders/{order}', [OrderController::class, 'show']);
+    Route::get('orders/{order}/items/{item}/lots', [OrderController::class, 'itemLots']);
+    Route::put('orders/{order}/items/{item}/lots', [OrderController::class, 'updateItemLots']);
     Route::post('orders/{order}/actions/{action}', [OrderController::class, 'action'])->whereIn('action', ['confirm', 'pack', 'handover', 'cancel']);
     Route::put('orders/{order}/assignee', [OrderController::class, 'assign']);
     Route::put('orders/{order}/meta', [OrderController::class, 'meta']);

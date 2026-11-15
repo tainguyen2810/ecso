@@ -6,6 +6,7 @@ describe('inventory labels', () => {
         const backendTypes = [
             'OPENING', 'RECEIPT', 'RESERVE', 'RELEASE', 'SHIP', 'SHIP_UNRESERVED', 'RETURN_RESTOCK', 'DAMAGE_OUT',
             'ADJUSTMENT_IN', 'ADJUSTMENT_OUT', 'TRANSFER_OUT', 'TRANSFER_IN', 'SUPPLIER_RETURN', 'RESERVATION_REALLOCATE',
+            'LOT_MOVE', 'LOT_REDATE', 'LOT_REALLOCATE',
         ];
         expect(Object.keys(movementLabels).sort()).toEqual(backendTypes.sort());
     });

@@ -46,6 +46,13 @@ class StockMovement extends Model
 
     public const RESERVATION_REALLOCATE = 'RESERVATION_REALLOCATE';
 
+    /** Lot-only operations (lô / hạn sử dụng): on hand and reserved of the SKU do not change. */
+    public const LOT_MOVE = 'LOT_MOVE';
+
+    public const LOT_REDATE = 'LOT_REDATE';
+
+    public const LOT_REALLOCATE = 'LOT_REALLOCATE';
+
     protected $guarded = ['*'];
 
     protected function casts(): array

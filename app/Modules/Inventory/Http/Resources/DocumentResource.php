@@ -57,6 +57,7 @@ class DocumentResource extends JsonResource
                 'applied_delta' => $line->applied_delta ?? null,
                 'reason' => $line->reason ?? null,
                 'line_note' => $line->note ?? null,
+                'lots' => $line->lots ?? null,
             ], fn ($v) => $v !== null))),
         ];
 

@@ -13,6 +13,9 @@ export const movementLabels: Record<string, { label: string; tone: 'success' | '
     TRANSFER_IN: { label: 'Chuyển đến', tone: 'success' },
     SUPPLIER_RETURN: { label: 'Trả NCC', tone: 'danger' },
     RESERVATION_REALLOCATE: { label: 'Đổi kho giữ', tone: 'muted' },
+    LOT_MOVE: { label: 'Chuyển lô', tone: 'muted' },
+    LOT_REDATE: { label: 'Sửa HSD lô', tone: 'muted' },
+    LOT_REALLOCATE: { label: 'Đổi lô giữ', tone: 'muted' },
 };
 
 export const referenceLabels: Record<string, string> = {
@@ -20,6 +23,7 @@ export const referenceLabels: Record<string, string> = {
     InventoryAdjustment: 'Phiếu điều chỉnh',
     StockTransfer: 'Phiếu chuyển',
     StockReservation: 'Giữ hàng',
+    StockLot: 'Lô hàng',
     order_item: 'Đơn hàng',
     OrderReturn: 'Phiếu trả hàng',
 };

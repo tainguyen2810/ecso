@@ -2,6 +2,7 @@
 
 use App\Modules\Inventory\Http\Controllers\AdjustmentController;
 use App\Modules\Inventory\Http\Controllers\CostAdjustmentController;
+use App\Modules\Inventory\Http\Controllers\LotController;
 use App\Modules\Inventory\Http\Controllers\ReceiptController;
 use App\Modules\Inventory\Http\Controllers\ReconciliationController;
 use App\Modules\Inventory\Http\Controllers\StockController;
@@ -21,6 +22,10 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant', 'idempotent'])->group(f
         Route::get('variants/{variant}/card', [StockController::class, 'card']);
         Route::get('products/{product}/stock', [StockController::class, 'productStock']);
         Route::get('products/{product}/movements', [StockController::class, 'productMovements']);
+        Route::get('products/{product}/lots', [LotController::class, 'index']);
+        Route::put('lots/{lot}', [LotController::class, 'update']);
+        Route::post('lots/{lot}/move', [LotController::class, 'move']);
+        Route::post('lots/{lot}/to-defective', [LotController::class, 'toDefective']);
         Route::put('variants/{variant}/location', [StockController::class, 'location']);
         Route::put('variants/{variant}/safety-stock', [StockController::class, 'safetyStock']);
 

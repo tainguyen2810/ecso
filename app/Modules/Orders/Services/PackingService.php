@@ -3,6 +3,7 @@
 namespace App\Modules\Orders\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Inventory\Services\ReservationLedger;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
@@ -35,7 +36,7 @@ class PackingService
         OrderStatus::RETURNED => 'Đã hoàn',
     ];
 
-    public function __construct(private readonly OrderActions $actions, private readonly AuditLogger $audit) {}
+    public function __construct(private readonly OrderActions $actions, private readonly AuditLogger $audit, private readonly ReservationLedger $ledger) {}
 
     /** The order behind a scanned code: our order code, the marketplace's order id or the tracking number. */
     public function find(string $code): Order
@@ -178,6 +179,8 @@ class PackingService
     public function pickList(Collection $orders): array
     {
         $rows = [];
+        // Lots the order lines hold (lot-tracked SKUs): the picker takes exactly those.
+        $lots = $this->ledger->lotsFor(Order::STOCK_REFERENCE, $orders->flatMap(fn (Order $o) => $o->items->pluck('id'))->map(fn ($id) => (int) $id)->all());
         foreach ($orders as $order) {
             foreach ($order->items as $item) {
                 if ($item->mapping_status === OrderItem::SERVICE) {
@@ -196,15 +199,27 @@ class PackingService
                     'location' => $variant?->location,
                     'quantity' => 0,
                     'orders' => [],
+                    'lots' => [],
                 ];
                 $rows[$key]['quantity'] += $quantity;
+                foreach ($lots[$item->id] ?? [] as $lot) {
+                    if ($lot['shipped'] || $lot['sku_id'] !== $variant?->id) {
+                        continue;
+                    }
+                    $lotKey = $lot['lot_no'];
+                    $rows[$key]['lots'][$lotKey] ??= ['lot_no' => $lot['lot_no'] === '' ? null : $lot['lot_no'], 'expiry_date' => $lot['expiry_date'], 'quantity' => 0];
+                    $rows[$key]['lots'][$lotKey]['quantity'] += $lot['quantity'];
+                }
                 $code = $order->external_order_id;
                 $rows[$key]['orders'][$code] = ($rows[$key]['orders'][$code] ?? 0) + $quantity;
             }
         }
 
         return collect($rows)
-            ->map(fn ($r) => [...$r, 'orders' => collect($r['orders'])->map(fn ($q, $code) => ['code' => (string) $code, 'quantity' => $q])->values()->all()])
+            ->map(fn ($r) => [...$r,
+                'orders' => collect($r['orders'])->map(fn ($q, $code) => ['code' => (string) $code, 'quantity' => $q])->values()->all(),
+                'lots' => collect($r['lots'])->sortBy('expiry_date')->values()->all(),
+            ])
             ->sortBy(fn ($r) => [$r['location'] === null ? 1 : 0, mb_strtolower((string) $r['location']), mb_strtolower((string) $r['sku'])])
             ->values()
             ->all();

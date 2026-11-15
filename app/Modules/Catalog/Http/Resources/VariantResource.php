@@ -41,6 +41,11 @@ class VariantResource extends JsonResource
                 'id' => $this->product->ulid,
                 'name' => $this->product->name,
                 'unit' => $this->product->unit,
+                // Lot-tracked: receipts ask for lot number + expiry date.
+                'track_lots' => (bool) $this->product->track_lots,
+                'shelf_life_months' => $this->product->shelf_life_months,
+                'require_mfg_date' => (bool) $this->product->require_mfg_date,
+                'expiry_warn_days' => $this->product->expiry_warn_days,
                 // First photo, for the order form's picker (only when the caller loaded product.images).
                 'image' => $this->product->relationLoaded('images') ? $this->product->images->first()?->url() : null,
             ]),

@@ -14,6 +14,8 @@ import Input from '@/shared/ui/Input.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { cn, formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
+import { lotLabel } from './lots';
+import { displayDate } from '@/shared/lib/dates';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
 import { adjustmentReasons, documentKinds, documentStatus, type DocumentKindKey } from './labels';
@@ -162,6 +164,12 @@ const steps = computed(() => {
                                 <td class="px-4 py-2.5">
                                     <RouterLink :to="`/inventory/sku/${l.variant.id}`" class="font-mono text-xs font-medium text-primary hover:underline">{{ l.variant.sku }}</RouterLink>
                                     <p class="text-xs text-muted-foreground">{{ l.variant.name }}</p>
+                                    <ul v-if="l.lots?.length" class="mt-1 space-y-0.5 text-xs" data-testid="line-lots">
+                                        <li v-for="lot in l.lots" :key="lot.lot_no">
+                                            <span class="font-medium">{{ lotLabel(lot.lot_no) }}</span> × {{ formatNumber(lot.quantity) }}
+                                            <span v-if="lot.expiry_date" class="text-muted-foreground"> · HSD {{ displayDate(lot.expiry_date) }}</span>
+                                        </li>
+                                    </ul>
                                 </td>
                                 <td v-if="doc.kind === 'adjustment'" class="px-4 py-2.5 text-muted-foreground">{{ l.mode === 'count' ? 'Số đếm thực tế' : 'Chênh lệch' }}</td>
                                 <td class="px-4 py-2.5 text-right tabular-nums">{{ l.mode === 'delta' && l.quantity > 0 ? '+' : '' }}{{ formatNumber(l.quantity) }}</td>

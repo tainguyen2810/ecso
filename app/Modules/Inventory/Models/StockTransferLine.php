@@ -6,16 +6,20 @@ use App\Modules\Catalog\Models\ProductVariant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/** Child of a tenant-scoped StockTransfer; always reached through it. */
+/**
+ * Child of a tenant-scoped StockTransfer; always reached through it.
+ *
+ * @property array<int, array<string, mixed>>|null $lots lots requested, then the lots that actually left
+ */
 class StockTransferLine extends Model
 {
     public $timestamps = false;
 
-    protected $fillable = ['product_variant_id', 'quantity'];
+    protected $fillable = ['product_variant_id', 'quantity', 'lots'];
 
     protected function casts(): array
     {
-        return ['quantity' => 'integer', 'received_qty' => 'integer'];
+        return ['quantity' => 'integer', 'received_qty' => 'integer', 'lots' => 'array'];
     }
 
     /** @return BelongsTo<ProductVariant, $this> */

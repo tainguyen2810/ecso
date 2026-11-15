@@ -3,6 +3,7 @@
 namespace App\Modules\Analytics\Services;
 
 use App\Modules\Cashbook\Models\CashVoucher;
+use App\Modules\Inventory\Services\LotLedger;
 use App\Modules\Inventory\Services\LowStockQuery;
 use App\Modules\Marketplace\Models\InventorySyncOutbox;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
@@ -27,6 +28,7 @@ class Inbox
         private readonly TenantContext $context,
         private readonly LowStockQuery $lowStock,
         private readonly SupplierAllocation $allocation,
+        private readonly LotLedger $lots,
     ) {}
 
     /**
@@ -105,9 +107,17 @@ class Inbox
         $first = $low[0] ?? null;
         $count = count($low);
 
-        return [$this->item('stock.low', 'ops', 'amber', $count, ($count >= 200 ? '200+' : $count).' SKU dưới tồn an toàn',
-            $first ? "{$first['warehouse']} · {$first['name']} còn {$first['available']}" : null,
-            $this->context->can('purchasing.view') ? '/purchasing/reorder' : '/inventory')];
+        $lots = $this->lots->alertCounts();
+        $report = $this->context->can('reports.view') ? '/reports/view/expiry' : '/inventory';
+        $soonest = $lots['first'] ? "Sớm nhất: {$lots['first']['name']} lô {$lots['first']['lot_no']} HSD {$lots['first']['expiry_date']}" : null;
+
+        return [
+            $this->item('stock.low', 'ops', 'amber', $count, ($count >= 200 ? '200+' : $count).' SKU dưới tồn an toàn',
+                $first ? "{$first['warehouse']} · {$first['name']} còn {$first['available']}" : null,
+                $this->context->can('purchasing.view') ? '/purchasing/reorder' : '/inventory'),
+            $this->item('stock.expired', 'ops', 'red', $lots['blocked'], "{$lots['blocked']} lô hết hạn / ngừng bán còn tồn", 'Chuyển sang kho hàng lỗi hoặc xuất hủy', $report.($report === '/inventory' ? '' : '?by=expired')),
+            $this->item('stock.expiring', 'ops', 'amber', $lots['expiring'], "{$lots['expiring']} lô sắp hết hạn", $soonest, $report),
+        ];
     }
 
     /** @return list<array{key: string, group: string, tone: string, count: int, title: string, detail: string|null, to: string}> */
