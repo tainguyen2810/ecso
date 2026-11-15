@@ -12,8 +12,15 @@ use Illuminate\Support\Carbon;
  * Quantity of one lot of a SKU in one warehouse. Written only by LotLedger, inside InventoryService operations
  * (tests/Arch). lot_no '' is "Chưa rõ lô".
  *
+ * @property int $id
+ * @property int $warehouse_id
+ * @property int $product_variant_id
+ * @property string $lot_no
  * @property Carbon|null $mfg_date
  * @property Carbon|null $expiry_date
+ * @property int $on_hand
+ * @property int $reserved
+ * @property Carbon|null $first_received_at
  */
 class StockLot extends Model
 {

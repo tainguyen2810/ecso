@@ -411,7 +411,7 @@ class ReturnService
                     continue;
                 }
                 $lots[] = ['quantity' => $take] + $lot;
-                $pool[$line['variant_id']][$k]['quantity'] -= $take;
+                $pool[$line['variant_id']][$k] = ['quantity' => $lot['quantity'] - $take] + $lot;
                 $remaining -= $take;
             }
             if ($lots !== []) {

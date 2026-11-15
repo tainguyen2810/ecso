@@ -44,8 +44,8 @@ class LotLedger
                 ->first(['id', 'track_lots', 'expiry_warn_days', 'expiry_block_days', 'shelf_life_months', 'require_mfg_date']);
             $this->rules[$variantId] = [
                 'track' => (bool) $product?->track_lots,
-                'warn' => $product?->expiry_warn_days ?? self::DEFAULT_WARN_DAYS,
-                'block' => $product?->expiry_block_days ?? 0,
+                'warn' => $product === null ? self::DEFAULT_WARN_DAYS : ($product->expiry_warn_days ?? self::DEFAULT_WARN_DAYS),
+                'block' => $product === null ? 0 : ($product->expiry_block_days ?? 0),
                 'shelf' => $product?->shelf_life_months,
                 'mfg' => (bool) $product?->require_mfg_date,
             ];
@@ -116,7 +116,7 @@ class LotLedger
             ->whereRaw('stock_lots.expiry_date < DATE_ADD(?, INTERVAL COALESCE(p.expiry_block_days, 0) DAY)', [self::today()])
             ->groupBy('stock_lots.warehouse_id', 'stock_lots.product_variant_id')
             ->selectRaw('stock_lots.warehouse_id, stock_lots.product_variant_id, SUM(GREATEST(stock_lots.on_hand - CAST(stock_lots.reserved AS SIGNED), 0)) as qty')
-            ->get()
+            ->toBase()->get()
             ->mapWithKeys(fn ($r) => ["{$r->warehouse_id}:{$r->product_variant_id}" => (int) $r->qty])
             ->all();
     }
@@ -273,7 +273,7 @@ class LotLedger
             ->where('l.warehouse_id', $warehouseId)->where('l.product_variant_id', $variantId)->where('r.status', '!=', StockReservation::ACTIVE)
             ->groupBy('stock_lot_movements.stock_reservation_id', 'stock_lot_movements.stock_lot_id')
             ->havingRaw('SUM(stock_lot_movements.reserved_delta) > 0')
-            ->selectRaw('stock_lot_movements.stock_reservation_id as rid, stock_lot_movements.stock_lot_id as lid, SUM(stock_lot_movements.reserved_delta) as qty')->get();
+            ->selectRaw('stock_lot_movements.stock_reservation_id as rid, stock_lot_movements.stock_lot_id as lid, SUM(stock_lot_movements.reserved_delta) as qty')->toBase()->get();
         foreach ($stale as $row) {
             $lot = StockLot::query()->whereKey($row->lid)->lockForUpdate()->firstOrFail();
             $this->post($lot, $movement, 0, -min((int) $row->qty, $lot->reserved), StockReservation::query()->find($row->rid));

@@ -6,7 +6,11 @@ use App\Modules\Catalog\Models\ProductVariant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/** Child of a tenant-scoped StockTransfer; always reached through it. */
+/**
+ * Child of a tenant-scoped StockTransfer; always reached through it.
+ *
+ * @property array<int, array<string, mixed>>|null $lots lots requested, then the lots that actually left
+ */
 class StockTransferLine extends Model
 {
     public $timestamps = false;
