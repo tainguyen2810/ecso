@@ -398,20 +398,24 @@ class ReturnService
      *
      * @param  array<int, array<string, mixed>>  $lines
      * @param  array<int, array<int, array{lot_no: string, mfg_date: string|null, expiry_date: string|null, quantity: int}>>  $pool
+     *
+     * @param-out array<int, array<int, array{lot_no: string, mfg_date: string|null, expiry_date: string|null, quantity: int}>> $pool
+     *
      * @return array<int, array<string, mixed>>
      */
     private function withLots(array $lines, array &$pool): array
     {
         foreach ($lines as $i => $line) {
             $remaining = (int) $line['quantity'];
+            $variantId = (int) $line['variant_id'];
             $lots = [];
-            foreach ($pool[$line['variant_id']] ?? [] as $k => $lot) {
+            foreach ($pool[$variantId] ?? [] as $k => $lot) {
                 $take = min($lot['quantity'], $remaining);
                 if ($take <= 0) {
                     continue;
                 }
                 $lots[] = ['quantity' => $take] + $lot;
-                $pool[$line['variant_id']][$k] = ['quantity' => $lot['quantity'] - $take] + $lot;
+                $pool[$variantId][$k] = ['quantity' => $lot['quantity'] - $take] + $lot;
                 $remaining -= $take;
             }
             if ($lots !== []) {
