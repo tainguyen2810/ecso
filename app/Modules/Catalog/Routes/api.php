@@ -20,7 +20,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant', 'idempotent'])->group(f
     Route::get('products/sku-check', [ProductController::class, 'checkSku']);
     Route::get('products/export', [ProductTransferController::class, 'export'])->middleware('throttle:10,1,catalog.products.export');
     Route::get('products/import-template', [ProductTransferController::class, 'template']);
-    Route::post('products/import', [ProductTransferController::class, 'import'])->middleware('throttle:10,1,catalog.products.import');
+    Route::post('products/import', [ProductTransferController::class, 'import'])->middleware('throttle:30,1,catalog.products.import');
     Route::post('products/bulk-status', [ProductController::class, 'bulkStatus']);
     Route::post('products/bulk-delete', [ProductController::class, 'bulkDelete']);
     Route::post('products/{product}/restore', [ProductController::class, 'restore']);
