@@ -34,7 +34,9 @@ class EzChatGateway
     }
 
     /**
-     * @return array{token: string, shop: array{type: string, shopId: string, name: string, region: string}, workspace: array{id: string, name: string}}
+     * EzChat answers {token, shop: {type, shopId, name, region}, workspace: {id, name}}; read defensively.
+     *
+     * @return array<string, mixed>
      */
     public function exchange(string $code): array
     {

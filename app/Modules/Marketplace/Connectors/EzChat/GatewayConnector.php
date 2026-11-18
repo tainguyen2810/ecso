@@ -67,7 +67,7 @@ abstract class GatewayConnector implements FetchesSingleProduct, MarketplaceConn
             shopName: (string) ($shop['name'] ?? ''),
             accessToken: (string) $result['token'],
             region: (string) ($shop['region'] ?? 'VN'),
-            scopes: ['ezchat:'.($result['workspace']['id'] ?? '')],
+            scopes: ['ezchat:'.(string) (((array) ($result['workspace'] ?? []))['id'] ?? '')],
         );
     }
 
