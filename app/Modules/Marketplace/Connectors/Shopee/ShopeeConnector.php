@@ -10,9 +10,9 @@ use App\Modules\Marketplace\Connectors\Data\ProductPage;
 use App\Modules\Marketplace\Connectors\Data\StockUpdateResult;
 use App\Modules\Marketplace\Connectors\Data\WebhookMessage;
 use App\Modules\Marketplace\Connectors\EzChat\GatewayConnector;
-use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
+use App\Modules\Orders\Domain\OrderStatus;
 use Carbon\CarbonImmutable;
 
 /**
