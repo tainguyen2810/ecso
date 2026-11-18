@@ -232,6 +232,7 @@ const accountLabel = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 
                         <Select class="w-44" :model-value="a.warehouse?.id ?? ''" :disabled="!tenant.can('marketplace.connect')" :options="warehouses.map((w) => ({ value: w.id, label: `Kho: ${w.code}` }))" aria-label="Kho xuất" @update:model-value="(v) => changeWarehouse(a, v)" />
                         <RouterLink v-if="a.setup_pending && tenant.can('marketplace.connect')" :to="`/marketplaces/${a.id}/setup`"><Button size="sm" :data-testid="`setup-${a.id}`">Thiết lập shop</Button></RouterLink>
                         <RouterLink v-if="a.marketplace === 'woocommerce'" :to="`/marketplaces/${a.id}/store`"><Button size="sm" variant="outline" :data-testid="`woo-settings-${a.id}`"><Settings2 /> Cài đặt đồng bộ</Button></RouterLink>
+                        <RouterLink v-else-if="a.marketplace !== 'fake'" :to="`/marketplaces/${a.id}/shop`"><Button size="sm" variant="outline" :data-testid="`shop-settings-${a.id}`"><Settings2 /> Cài đặt đồng bộ</Button></RouterLink>
                         <RouterLink :to="`/marketplaces/${a.id}/listings`"><Button size="sm" variant="outline"><Link2 /> Liên kết SKU <Badge v-if="a.stats?.suggested" tone="warning" class="ml-1">{{ a.stats.suggested }}</Badge></Button></RouterLink>
                         <template v-if="tenant.can('marketplace.connect')">
                             <Button size="sm" variant="outline" :loading="busy === `sync-${a.id}`" @click="syncProducts(a)"><RefreshCw /> Tải sản phẩm</Button>

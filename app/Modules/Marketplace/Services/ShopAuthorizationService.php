@@ -10,6 +10,7 @@ use App\Modules\Marketplace\Connectors\Fake\FakeConnector;
 use App\Modules\Marketplace\Exceptions\CredentialsMissing;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Models\MarketplaceCredential;
+use App\Modules\Orders\Services\OrderSync;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -91,6 +92,8 @@ class ShopAuthorizationService
             ]);
             if (! $existing) {
                 $account->settings = ['setup' => 'pending']; // A5: the setup steps run before any stock is pushed
+                // "Lấy đơn từ": a new shop starts with the orders of the last few days, changeable in its settings.
+                $account->orders_since = now()->subDays(OrderSync::FIRST_PASS_DAYS);
             }
             $account->forceFill([
                 'shop_name' => $auth->shopName,

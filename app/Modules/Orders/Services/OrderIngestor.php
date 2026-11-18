@@ -45,6 +45,11 @@ class OrderIngestor
     /** The order is gone from the store: kept in ECSO, flagged, and cancelled if it had not shipped. */
     public const DELETED = 'deleted_on_channel';
 
+    /** Old orders taken in on request: without stock, or with stock like any order. */
+    public const SOURCE_BACKFILL = 'backfill';
+
+    public const SOURCE_BACKFILL_STOCK = 'backfill_stock';
+
     public function __construct(
         private readonly StatusMapper $statuses,
         private readonly OrderStockSync $stock,
@@ -61,13 +66,17 @@ class OrderIngestor
     public function ingest(MarketplaceAccount $account, OrderData $data, string $source, ?int $webhookEventId = null, ?int $actorId = null): array
     {
         return DB::transaction(function () use ($account, $data, $source, $webhookEventId, $actorId) {
-            if ($this->beforeCutoff($account, $data) && ! Order::query()->where('marketplace_account_id', $account->id)
+            // "Lấy lại đơn theo ngày" asks for these dates on purpose: the cutoff does not apply.
+            if (! self::isBackfill($source) && $this->beforeCutoff($account, $data) && ! Order::query()->where('marketplace_account_id', $account->id)
                 ->where('external_order_id', $data->externalOrderId)->exists()) {
                 return ['result' => self::SKIPPED, 'order' => null];
             }
 
             $order = $this->lockOrCreate($account, $data);
             $isNew = $order->wasRecentlyCreated;
+            if ($isNew && $source === self::SOURCE_BACKFILL) {
+                $order->forceFill(['historical' => true])->save();
+            }
             $status = $this->statuses->map($account->marketplace, $data->rawStatus, $account);
             if ($status === OrderStatus::RETURNED && ($isNew || ! in_array($order->status, OrderStatus::SHIPPED, true))) {
                 // Refunded/returned before the goods ever left (e.g. Woo "refunded" on an unpacked order): it is a
@@ -237,6 +246,11 @@ class OrderIngestor
             ['source' => $order->marketplace, 'account_id' => $order->marketplace_account_id, 'external_id' => $data->buyerAccountId, 'label' => $data->buyerAccountName],
             $order->marketplace,
         );
+    }
+
+    public static function isBackfill(string $source): bool
+    {
+        return in_array($source, [self::SOURCE_BACKFILL, self::SOURCE_BACKFILL_STOCK], true);
     }
 
     private function beforeCutoff(MarketplaceAccount $account, OrderData $data): bool

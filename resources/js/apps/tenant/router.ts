@@ -78,6 +78,7 @@ const routes: RouteRecordRaw[] = [
             { path: 'returns/:id', name: 'return-show', component: () => import('./pages/returns/ReturnDetail.vue'), meta: { permission: 'returns.view', nav: 'returns' } },
             { path: 'marketplaces', name: 'marketplaces', component: () => import('./pages/marketplaces/Marketplaces.vue'), meta: { permission: 'marketplace.view', nav: 'marketplaces' } },
             { path: 'marketplaces/:marketplace/callback', name: 'marketplace-callback', component: () => import('./pages/marketplaces/MarketplaceCallback.vue'), meta: { permission: 'marketplace.connect', nav: 'marketplaces' } },
+            { path: 'marketplaces/:id/shop', name: 'marketplace-shop', component: () => import('./pages/marketplaces/ShopSync.vue'), meta: { permission: 'marketplace.view', nav: 'marketplaces' } },
             { path: 'marketplaces/:id/store', name: 'marketplace-store', component: () => import('./pages/marketplaces/WooStore.vue'), meta: { permission: 'marketplace.view', nav: 'marketplaces' } },
             { path: 'marketplaces/sync', name: 'marketplace-sync', component: () => import('./pages/marketplaces/SyncCenter.vue'), meta: { permission: 'sync.view', nav: 'marketplaces' } },
             { path: 'marketplaces/prices', name: 'marketplace-prices', component: () => import('./pages/marketplaces/MarketplacePrices.vue'), meta: { permission: 'marketplace.view', nav: 'marketplaces' } },

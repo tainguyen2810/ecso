@@ -21,6 +21,9 @@ use Throwable;
  */
 class OrderSync
 {
+    /** Without a "Lấy đơn từ" moment, the first pass of a shop reads this many days back. */
+    public const FIRST_PASS_DAYS = 3;
+
     public function __construct(
         private readonly ConnectorRegistry $connectors,
         private readonly OrderIngestor $ingestor,
@@ -61,19 +64,50 @@ class OrderSync
     }
 
     /**
-     * Polls orders updated since the cursor (minus an overlap), then moves the cursor. Every pass is logged in
-     * sync_runs. One order that cannot be read does not stop the others; after a temporary failure the cursor stays, so the
-     * next pass reads the window again (ingesting is idempotent). A page that cannot be listed ends the pass.
+     * Polls orders updated since the cursor (minus an overlap), then moves the cursor. The first pass of a shop starts
+     * at its "Lấy đơn từ" moment, or 3 days back. Every pass is logged in sync_runs. One order that cannot be read does
+     * not stop the others; after a temporary failure the cursor stays, so the next pass reads the window again
+     * (ingesting is idempotent). A page that cannot be listed ends the pass.
      *
      * @return array<string, int> result => count
      */
     public function syncRecent(MarketplaceAccount $account, ?CarbonImmutable $since = null, string $trigger = 'schedule'): array
     {
-        $connector = $this->connectors->for($account->marketplace);
         $cursor = SyncCursor::query()->firstOrCreate(['marketplace_account_id' => $account->id, 'resource' => 'orders']);
         $to = CarbonImmutable::now();
-        $from = ($since ?? ($cursor->last_synced_at ? CarbonImmutable::parse($cursor->last_synced_at) : $to->subDays(3)))
+        $start = $account->orders_since ? CarbonImmutable::parse($account->orders_since) : $to->subDays(self::FIRST_PASS_DAYS);
+        $from = ($since ?? ($cursor->last_synced_at ? CarbonImmutable::parse($cursor->last_synced_at) : $start))
             ->subMinutes(config('marketplaces.order_sync_overlap_minutes'));
+
+        ['counts' => $counts, 'retry' => $retry] = $this->pass($account, $from, $to, $trigger, 'poll');
+        // A temporary failure (timeout, 429, 5xx) keeps the cursor so the next pass reads those orders again; a
+        // permanent one (order gone) would fail forever, so it does not hold the cursor back.
+        if (! $retry) {
+            $cursor->forceFill(['last_synced_at' => $to])->save();
+        }
+        $account->forceFill(['last_synced_at' => $to])->save();
+
+        return $counts;
+    }
+
+    /**
+     * "Lấy lại đơn theo ngày": reads the orders of one window, whatever the cursor and the "Lấy đơn từ" moment say,
+     * without moving the cursor. Orders already in ECSO are only updated. New ones are history only unless
+     * $withStock (their goods were handled outside ECSO).
+     *
+     * @return array<string, int> result => count
+     */
+    public function syncWindow(MarketplaceAccount $account, CarbonImmutable $from, CarbonImmutable $to, bool $withStock): array
+    {
+        return $this->pass($account, $from, $to, 'backfill', $withStock ? OrderIngestor::SOURCE_BACKFILL_STOCK : OrderIngestor::SOURCE_BACKFILL)['counts'];
+    }
+
+    /**
+     * @return array{counts: array<string, int>, retry: bool}
+     */
+    private function pass(MarketplaceAccount $account, CarbonImmutable $from, CarbonImmutable $to, string $trigger, string $source): array
+    {
+        $connector = $this->connectors->for($account->marketplace);
         $run = SyncRun::query()->create([
             'marketplace_account_id' => $account->id, 'resource' => 'orders', 'correlation_id' => SyncCorrelation::fresh(), 'trigger' => $trigger, 'status' => SyncRun::RUNNING,
             'window_from' => $from, 'window_to' => $to, 'started_at' => now(),
@@ -91,7 +125,7 @@ class OrderSync
                 $pages++;
                 foreach ($result->orderIds as $orderId) {
                     try {
-                        $outcome = $this->syncOne($account, $orderId, 'poll')['result'];
+                        $outcome = $this->syncOne($account, $orderId, $source)['result'];
                     } catch (ConnectorException $e) {
                         $outcome = 'failed';
                         $lastError = "Đơn {$orderId}: {$e->getMessage()}";
@@ -114,18 +148,12 @@ class OrderSync
         }
 
         $failed = $counts['failed'] ?? 0;
-        // A temporary failure (timeout, 429, 5xx) keeps the cursor so the next pass reads those orders again; a
-        // permanent one (order gone) would fail forever, so it does not hold the cursor back.
-        if (! $retry) {
-            $cursor->forceFill(['last_synced_at' => $to])->save();
-        }
-        $account->forceFill(['last_synced_at' => $to])->save();
         $run->forceFill([
             'status' => $failed ? SyncRun::PARTIAL : SyncRun::OK, 'pages' => $pages, 'counts' => $counts,
             'error' => $lastError !== null ? mb_substr($lastError, 0, 500) : null, 'error_code' => $lastCode, 'finished_at' => now(),
         ])->save();
 
-        return $counts;
+        return ['counts' => $counts, 'retry' => $retry];
     }
 
     /** The keys were refused: the shop shows as disconnected (stock pushes already do this) until it is reconnected. */

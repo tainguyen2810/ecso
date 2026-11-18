@@ -4,11 +4,11 @@ namespace App\Modules\Marketplace\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Catalog\Models\ProductVariant;
-use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Connectors\ConnectorRegistry;
 use App\Modules\Marketplace\Connectors\Data\ProductData;
 use App\Modules\Marketplace\Connectors\FetchesSingleProduct;
 use App\Modules\Marketplace\Events\ListingMappingChanged;
+use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Models\InventorySyncOutbox;
 use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Marketplace\Models\MarketplaceAccount;

@@ -12,10 +12,12 @@ use App\Modules\Marketplace\Models\SyncRun;
 use App\Modules\Marketplace\Services\SyncErrorLog;
 use App\Modules\Marketplace\Services\WooCommerceConnectService;
 use App\Modules\Orders\Domain\OrderStatus;
+use App\Modules\Orders\Jobs\BackfillOrdersJob;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderIngestor;
 use App\Modules\Orders\Services\OrderSync;
 use App\Modules\Orders\Services\StatusMapper;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -24,6 +26,8 @@ use Illuminate\Validation\ValidationException;
 /** Sync history (one row per pass) and sync errors (one row per order that could not be synced). */
 class SyncLogController extends Controller
 {
+    public const BACKFILL_MAX_DAYS = 92;
+
     public function __construct(private readonly AuditLogger $audit) {}
 
     public function runs(Request $request): JsonResponse
@@ -124,6 +128,31 @@ class SyncLogController extends Controller
         }
 
         return response()->json(['data' => ['counts' => (object) $counts]]);
+    }
+
+    /**
+     * "Lấy lại đơn theo ngày": queues the orders of a past date range (at most 92 days) for this shop. New old orders
+     * are history only unless with_stock.
+     */
+    public function backfill(Request $request, MarketplaceAccount $account): JsonResponse
+    {
+        $this->authorize('connect', MarketplaceAccount::class);
+        abort_unless($account->isActive(), 422, 'Shop chưa kết nối.');
+        $data = $request->validate([
+            'from' => ['required', 'date_format:Y-m-d', 'before_or_equal:to'],
+            'to' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'with_stock' => ['sometimes', 'boolean'],
+        ], ['to.before_or_equal' => 'Ngày kết thúc không được ở tương lai.', 'from.before_or_equal' => 'Từ ngày phải trước Đến ngày.']);
+        $from = CarbonImmutable::parse($data['from'])->startOfDay();
+        $to = CarbonImmutable::parse($data['to'])->endOfDay()->min(CarbonImmutable::now());
+        if ($from->diffInDays($to) > self::BACKFILL_MAX_DAYS) {
+            throw ValidationException::withMessages(['from' => 'Mỗi lần lấy tối đa '.self::BACKFILL_MAX_DAYS.' ngày.']);
+        }
+
+        BackfillOrdersJob::dispatch($account->id, $from->toIso8601String(), $to->toIso8601String(), (bool) ($data['with_stock'] ?? false));
+        $this->audit->record('marketplace.orders_backfill', $account, ['from' => $data['from'], 'to' => $data['to'], 'with_stock' => (bool) ($data['with_stock'] ?? false)]);
+
+        return response()->json(['data' => ['windows' => count(BackfillOrdersJob::windows($from, $to))]], 202);
     }
 
     public function checkWebhooks(MarketplaceAccount $account, WooCommerceConnectService $service): JsonResponse

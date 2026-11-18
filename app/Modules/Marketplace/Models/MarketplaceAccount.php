@@ -63,7 +63,7 @@ class MarketplaceAccount extends Model
     public const SETTING_KEYS = ['sync_orders', 'sync_stock', 'sync_prices', 'import_new_products', 'push_status'];
 
     /** Minutes between two reconcile passes of this shop's orders. */
-    public const ORDER_SYNC_INTERVALS = [5, 15, 30];
+    public const ORDER_SYNC_INTERVALS = [5, 15, 30, 60];
 
     /** @return array<string, string> this store's own raw status => internal status */
     public function statusMap(): array
