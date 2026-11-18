@@ -238,7 +238,7 @@ it('maps EzChat errors: shop no longer shared, marketplace permission', function
 
     $answers = [
         Http::response(['error' => ['code' => 'BANHANG_NOT_SHARED', 'message' => 'x']], 401),
-        Http::response(['error' => ['code' => 'MARKETPLACE_ERROR', 'message' => 'no permission', 'details' => ['auth' => false, 'permission' => true]]], 502),
+        Http::response(['error' => ['code' => 'MARKETPLACE_ERROR', 'message' => 'no permission', 'details' => ['auth' => true, 'permission' => true]]], 424),
     ];
     fakeEzChat(['GET /api/v2/product/get_item_list' => function () use (&$answers) {
         return array_shift($answers);

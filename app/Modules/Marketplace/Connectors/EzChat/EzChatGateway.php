@@ -130,8 +130,8 @@ class EzChatGateway
         $details = (array) ($error['details'] ?? []);
 
         throw match (true) {
+            $code === 'MARKETPLACE_ERROR' && ! empty($details['permission']) => new ConnectorException("App EzChat chưa được sàn cấp quyền cho thao tác này: {$message}", temporary: false, errorCode: SyncErrorCode::PERMISSION_DENIED),
             $code === 'MARKETPLACE_ERROR' && ! empty($details['auth']) => new ConnectorException("Sàn từ chối quyền truy cập của shop: {$message}. Hãy cấp quyền lại cho shop trong EzChat.", temporary: false, authExpired: true, errorCode: SyncErrorCode::TOKEN_EXPIRED),
-            $code === 'MARKETPLACE_ERROR' && ! empty($details['permission']) => new ConnectorException("App chưa được sàn cấp quyền cho thao tác này: {$message}", temporary: false, errorCode: SyncErrorCode::PERMISSION_DENIED),
             $code === 'MARKETPLACE_ERROR' && preg_match('/not.?found|not exist|không tồn tại/i', $message) === 1 => new ConnectorException($message, temporary: false, notFound: true, errorCode: SyncErrorCode::NOT_FOUND),
             $code === 'MARKETPLACE_ERROR' && preg_match('/rate|limit|too many|frequen/i', $message) === 1 => new ConnectorException($message, errorCode: SyncErrorCode::RATE_LIMITED),
             $code === 'MARKETPLACE_ERROR' => new ConnectorException($message, temporary: true, errorCode: SyncErrorCode::API_UNAVAILABLE),
