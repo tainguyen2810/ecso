@@ -5,6 +5,8 @@ namespace App\Providers;
 use App\Shared\Database\MariaDbConnection;
 use App\Shared\Database\MySqlConnection;
 use Illuminate\Database\Connection;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -24,6 +26,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // A relation read without eager loading (an N+1 query) is logged so it can be found and fixed; it never
+        // breaks a request. LAZY_LOADING_STRICT=true makes it throw instead (for hunting them down locally).
+        Model::preventLazyLoading();
+        if (! config('app.lazy_loading_strict')) {
+            Model::handleLazyLoadingViolationUsing(function (Model $model, string $relation): void {
+                Log::warning('N+1 query: '.$model::class.'::'.$relation);
+            });
+        }
     }
 }

@@ -1,0 +1,141 @@
+# ECSO (bán hàng) in Docker. Guide: docs/DOCKER.md
+#   cp docker/.env.example .env   # fill APP_URL, passwords
+#   docker compose -p banhang up -d --build
+# Then point the domain's reverse proxy (aaPanel, HTTPS) at 127.0.0.1:${HTTP_PORT:-8090}.
+# The compose project name (-p) must be unique on the server; never reuse another app's name.
+
+x-app: &app
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+  pull_policy: build
+  restart: unless-stopped
+  environment: &env
+    APP_NAME: ${APP_NAME:-ECSO}
+    APP_ENV: production
+    APP_DEBUG: "false"
+    APP_URL: ${APP_URL:-http://localhost:8090}
+    APP_LOCALE: vi
+    LOG_CHANNEL: stack
+    LOG_STACK: ${LOG_STACK:-daily,stderr}
+    LOG_LEVEL: ${LOG_LEVEL:-info}
+    LOG_SLACK_WEBHOOK_URL: ${LOG_SLACK_WEBHOOK_URL:-}
+    DB_CONNECTION: mysql
+    DB_HOST: mysql
+    DB_PORT: 3306
+    DB_DATABASE: ${DB_DATABASE:-ecso}
+    DB_USERNAME: ${DB_USERNAME:-ecso}
+    DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    REDIS_CLIENT: phpredis
+    REDIS_HOST: redis
+    REDIS_PORT: 6379
+    REDIS_PASSWORD: "null"
+    QUEUE_CONNECTION: redis
+    CACHE_STORE: redis
+    SESSION_DRIVER: redis
+    SESSION_ENCRYPT: "true"
+    SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-true}
+    SANCTUM_STATEFUL_DOMAINS: ${SANCTUM_STATEFUL_DOMAINS:-localhost:8090}
+    TRUSTED_PROXIES: "*"
+    FILESYSTEM_DISK: local
+    MAIL_MAILER: ${MAIL_MAILER:-log}
+    MAIL_HOST: ${MAIL_HOST:-}
+    MAIL_PORT: ${MAIL_PORT:-587}
+    MAIL_USERNAME: ${MAIL_USERNAME:-}
+    MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+    MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-no-reply@example.com}
+    MAIL_FROM_NAME: ${APP_NAME:-ECSO}
+    BACKUP_ENABLED: ${BACKUP_ENABLED:-true}
+    BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    FAKE_MARKETPLACE_ENABLED: "false"
+    SHOPEE_PARTNER_ID: ${SHOPEE_PARTNER_ID:-}
+    SHOPEE_PARTNER_KEY: ${SHOPEE_PARTNER_KEY:-}
+    TIKTOK_SHOP_APP_KEY: ${TIKTOK_SHOP_APP_KEY:-}
+    TIKTOK_SHOP_APP_SECRET: ${TIKTOK_SHOP_APP_SECRET:-}
+    LAZADA_APP_KEY: ${LAZADA_APP_KEY:-}
+    LAZADA_APP_SECRET: ${LAZADA_APP_SECRET:-}
+    TIKI_CLIENT_ID: ${TIKI_CLIENT_ID:-}
+    TIKI_CLIENT_SECRET: ${TIKI_CLIENT_SECRET:-}
+    BILLING_GATEWAY: bank_transfer
+    BILLING_BANK_NAME: ${BILLING_BANK_NAME:-}
+    BILLING_BANK_ACCOUNT_NUMBER: ${BILLING_BANK_ACCOUNT_NUMBER:-}
+    BILLING_BANK_ACCOUNT_NAME: ${BILLING_BANK_ACCOUNT_NAME:-}
+    BILLING_BANK_BRANCH: ${BILLING_BANK_BRANCH:-}
+    ECSO_ADMIN_2FA: "true"
+    PHP_FPM_MAX_CHILDREN: ${PHP_FPM_MAX_CHILDREN:-16}
+  volumes: [storage:/var/www/html/storage]
+
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    command: ["--innodb-buffer-pool-size=${MYSQL_BUFFER_POOL:-512M}", "--max-connections=200", "--skip-name-resolve"]
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-ecso}
+      MYSQL_USER: ${DB_USERNAME:-ecso}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+      TZ: Asia/Ho_Chi_Minh
+    volumes: [mysqldata:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+
+  init:
+    <<: *app
+    restart: "no"
+    environment:
+      <<: *env
+      ROLE: init
+      ADMIN_NAME: ${ADMIN_NAME:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  app:
+    <<: *app
+    environment:
+      <<: *env
+      ROLE: app
+    ports: ["${HTTP_BIND:-127.0.0.1}:${HTTP_PORT:-8090}:8080"]
+    depends_on:
+      init: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 15s
+      retries: 10
+
+  horizon:
+    <<: *app
+    environment:
+      <<: *env
+      ROLE: horizon
+    stop_grace_period: 120s
+    depends_on:
+      init: { condition: service_completed_successfully }
+
+  scheduler:
+    <<: *app
+    environment:
+      <<: *env
+      ROLE: scheduler
+    depends_on:
+      init: { condition: service_completed_successfully }
+
+volumes:
+  mysqldata:
+  redisdata:
+  storage:

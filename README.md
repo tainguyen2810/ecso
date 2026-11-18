@@ -12,6 +12,15 @@ Stack: Laravel 12 (PHP 8.3), Vue 3 + TypeScript, Tailwind 4, MySQL 8, Redis, Hor
 | 1 | SaaS Foundation: auth, multi-tenant, RBAC, dashboard | ✅ [báo cáo](docs/PHASE-1-REPORT.md) |
 | 2 | Catalog & Inventory | ⏳ |
 
+## Chạy bằng Docker (production)
+
+```bash
+cp docker/.env.example .env   # điền APP_URL, mật khẩu DB, ADMIN_*
+docker compose -p banhang up -d --build
+```
+
+Chi tiết ở [docs/DOCKER.md](docs/DOCKER.md).
+
 ## Chạy local
 
 ```bash
@@ -36,6 +45,7 @@ Test: `./vendor/bin/pest` (MySQL 8, DB `ecso_test`), `npm test`, `npx playwright
 | [MULTI-TENANCY](docs/MULTI-TENANCY.md) | Multi-tenant, RBAC, entitlement |
 | [SECURITY](docs/SECURITY.md) | Bảo mật |
 | [TESTING](docs/TESTING.md) | Kiểm thử |
-| [DEPLOYMENT-AAPANEL](docs/DEPLOYMENT-AAPANEL.md) | Triển khai |
+| [DOCKER](docs/DOCKER.md) | Triển khai bằng Docker (khuyên dùng) |
+| [DEPLOYMENT-AAPANEL](docs/DEPLOYMENT-AAPANEL.md) | Triển khai aaPanel không Docker |
 | [ROADMAP](docs/ROADMAP.md) | Lộ trình, phụ thuộc, rủi ro |
 | [CHANGELOG](docs/CHANGELOG.md) / [HANDOVER](docs/HANDOVER.md) | Thay đổi, bàn giao |
