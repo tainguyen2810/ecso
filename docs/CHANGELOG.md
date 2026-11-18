@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Shopee và TikTok Shop qua EzChat (2026-11-18)
+- EzChat (app.ezchat.vn) làm cổng: EzChat giữ app đối tác Shopee/TikTok, token của shop và URL nhận push duy nhất mỗi sàn cho phép. ECSO chỉ giữ "mã chia sẻ" EzChat cấp cho từng shop (lưu mã hóa như access token) và gọi sàn qua `POST {EZCHAT_URL}/api/banhang/gw/call`, ký HMAC-SHA256 bằng `EZCHAT_SECRET` (= `BANHANG_SECRET` bên EzChat).
+- Kết nối shop: Kết nối Shopee/TikTok → trang EzChat `/connect/banhang` chọn shop → quay lại `/marketplaces/{sàn}/callback` với mã một lần → đổi lấy mã chia sẻ. Ngắt kết nối trong ECSO báo EzChat bỏ chia sẻ.
+- `ShopeeConnector` (Open Platform v2) và `TikTokConnector` (API 202309) kế thừa `GatewayConnector`: đọc đơn (chi tiết, danh sách theo thời gian cập nhật; Shopee chia cửa sổ 15 ngày), đọc sản phẩm và phân loại, đẩy tồn (Shopee theo model, TikTok theo kho đang dùng của SKU), nhận push đơn/sản phẩm EzChat chuyển tiếp (`X-EzChat-Timestamp`/`X-EzChat-Signature`). Bảng trạng thái đơn Shopee/TikTok (migration). Thao tác đơn (xác nhận, đóng gói, giao) chưa làm.
+- Cấu hình mới `EZCHAT_URL`, `EZCHAT_SECRET` (thay `SHOPEE_PARTNER_*`, `TIKTOK_SHOP_APP_*`). Chưa chạy với shop thật; TikTok cần app EzChat được cấp quyền sản phẩm/tồn kho.
+
 ### Đóng gói Docker (2026-11-18)
 - `docker-compose.yml` + `docker/`: một image (Ubuntu 24.04, PHP-FPM 8.3 + Nginx) chạy web, Horizon và scheduler; MySQL 8 và Redis 7 kèm theo. Service `init` tạo APP_KEY/HEALTH_TOKEN trong volume `storage`, migrate, seed, tạo super admin từ `ADMIN_EMAIL`/`ADMIN_PASSWORD`. Hướng dẫn: docs/DOCKER.md.
 - OPcache không kiểm tra lại file + JIT; session, cache, hàng đợi qua Redis; config/route/view/event cache khi khởi động.

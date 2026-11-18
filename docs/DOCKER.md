@@ -24,6 +24,16 @@ docker compose -p banhang up -d --build
 App nghe ở `127.0.0.1:8090` (đổi bằng `HTTP_PORT`). Trên aaPanel: Website → thêm `banhang.ezchat.vn` → Reverse proxy tới
 `http://127.0.0.1:8090`, bật SSL. Giữ `SESSION_SECURE_COOKIE=true` khi chạy HTTPS.
 
+## Shopee và TikTok Shop (qua EzChat)
+
+Banhang gọi Shopee/TikTok qua EzChat, không cần app đối tác riêng. Tạo một chuỗi bí mật dài (ví dụ `openssl rand -hex 32`) rồi:
+
+- `.env` của banhang: `EZCHAT_URL=https://app.ezchat.vn`, `EZCHAT_SECRET=<chuỗi đó>`.
+- `.env` của EzChat: `BANHANG_URL=https://banhang.ezchat.vn`, `BANHANG_SECRET=<cùng chuỗi>`.
+
+Khởi động lại cả hai. Trong banhang: Kết nối sàn → Kết nối Shopee/TikTok → chọn shop trên trang EzChat (shop phải đã kết
+nối trong EzChat) → quay lại banhang.
+
 ## Cập nhật
 
 ```bash

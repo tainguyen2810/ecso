@@ -22,9 +22,10 @@ return [
         'fake' => FakeConnector::class,
         // WooCommerce REST API v3 (see API-CAPABILITY-MATRIX); a store connects with its own API keys (no partner app).
         'woocommerce' => WooCommerceConnector::class,
-        // Skeleton: all capabilities UNKNOWN until verified with official docs and partner credentials.
+        // Shopee and TikTok Shop go through EzChat (see 'ezchat' below): EzChat keeps the partner apps and tokens.
         'shopee' => ShopeeConnector::class,
         'tiktok' => TikTokConnector::class,
+        // Skeleton: all capabilities UNKNOWN until verified with official docs and partner credentials.
         'lazada' => LazadaConnector::class,
         'tiki' => TikiConnector::class,
     ],
@@ -32,13 +33,14 @@ return [
     // App credentials per marketplace (issued by the marketplace's developer portal). Never committed; set on the
     // server / CI secrets. A marketplace whose credentials are empty cannot start a shop authorization.
     'credentials' => [
+        // Shopee and TikTok Shop are reached through EzChat, so what they need is the EzChat link.
         'shopee' => [
-            'partner_id' => env('SHOPEE_PARTNER_ID'),
-            'partner_key' => env('SHOPEE_PARTNER_KEY'),
+            'ezchat_url' => env('EZCHAT_URL'),
+            'ezchat_secret' => env('EZCHAT_SECRET'),
         ],
         'tiktok' => [
-            'app_key' => env('TIKTOK_SHOP_APP_KEY'),
-            'app_secret' => env('TIKTOK_SHOP_APP_SECRET'),
+            'ezchat_url' => env('EZCHAT_URL'),
+            'ezchat_secret' => env('EZCHAT_SECRET'),
         ],
         'lazada' => [
             'app_key' => env('LAZADA_APP_KEY'),
@@ -48,6 +50,15 @@ return [
             'client_id' => env('TIKI_CLIENT_ID'),
             'client_secret' => env('TIKI_CLIENT_SECRET'),
         ],
+    ],
+
+    // EzChat (app.ezchat.vn) as the Shopee / TikTok Shop gateway: EzChat holds the partner apps, the shop tokens and
+    // the one push URL each marketplace allows; ECSO calls the marketplaces through it with a per-shop share token.
+    // EZCHAT_SECRET must equal BANHANG_SECRET on the EzChat server.
+    'ezchat' => [
+        'url' => env('EZCHAT_URL'),
+        'secret' => env('EZCHAT_SECRET'),
+        'timeout' => (int) env('EZCHAT_TIMEOUT', 30),
     ],
 
     // Lifetime of the one-time "state" that links a marketplace callback to the tenant and user who started it.

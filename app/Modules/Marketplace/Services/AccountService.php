@@ -6,6 +6,8 @@ use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Marketplace\Connectors\ConnectorRegistry;
+use App\Modules\Marketplace\Connectors\EzChat\EzChatGateway;
+use App\Modules\Marketplace\Connectors\EzChat\GatewayConnector;
 use App\Modules\Marketplace\Connectors\Fake\FakeConnector;
 use App\Modules\Marketplace\Connectors\Fake\FakeMarketplace;
 use App\Modules\Marketplace\Connectors\WooCommerce\WooCommerceConnector;
@@ -108,6 +110,10 @@ class AccountService
         if ($account->marketplace === WooCommerceConnector::MARKETPLACE) {
             // Stop the store from sending webhooks to us (best effort, before the keys are forgotten).
             app(WooCommerceConnectService::class)->removeWebhooks($account);
+        }
+        if (app(ConnectorRegistry::class)->has($account->marketplace) && app(ConnectorRegistry::class)->for($account->marketplace) instanceof GatewayConnector) {
+            // EzChat forgets the share, so it stops passing this shop's pushes on (best effort).
+            app(EzChatGateway::class)->revoke($account);
         }
 
         DB::transaction(function () use ($account) {

@@ -80,6 +80,14 @@ FAKE chỉ để kiểm thử pipeline nội bộ, **không** chứng minh tích
 
 Từ Phase 4 có thêm `shop.authorize` (kết nối shop qua trang ủy quyền của sàn) và `auth.refresh` (làm mới token): UNKNOWN với mọi sàn thật, `unsupported` với FAKE (shop giả lập kết nối trực tiếp).
 
+### 3.1b Shopee và TikTok Shop qua EzChat (2026-11-18)
+
+- Không tự giữ app đối tác: ECSO gọi sàn qua cổng EzChat (`EZCHAT_URL`, `EZCHAT_SECRET`), xem `app/Modules/Marketplace/Connectors/EzChat/`. EzChat chỉ cho gọi API đơn, sản phẩm, vận chuyển, tài chính, trả hàng (không chat) và tự ký bằng token của shop.
+- `supported` (viết theo tài liệu công khai, **chưa chạy với shop thật**): shop.authorize, orders.webhook, orders.fetch, orders.list, products.list, inventory.update, inventory.get. `unsupported`: auth.refresh (EzChat tự làm mới token). UNKNOWN: thao tác đơn, phiếu giao hàng, trả hàng.
+- Shopee: `get_order_detail`, `get_order_list` (≤ 15 ngày/lần), `get_tracking_number`, `get_item_list` + `get_item_base_info` + `get_model_list`, `update_stock`. SKU = `model_id`, sản phẩm không phân loại = `i{item_id}`.
+- TikTok Shop 202309: `GET /order/202309/orders`, `POST /order/202309/orders/search`, `POST /product/202309/products/search`, `GET /product/202309/products/{id}`, `POST /product/202309/products/{id}/inventory/update`.
+- Mục 3.2, 3.3 dưới đây là lịch sử trước khi có cổng EzChat.
+
 ### 3.2 Shopee — trạng thái Phase 4 (2026-10-31)
 
 - Kiểm tra lại truy cập `open.shopee.com` từ môi trường build: **bị chặn** (proxy trả 403). Không có partner credentials, không có test shop.

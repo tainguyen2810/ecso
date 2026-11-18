@@ -163,7 +163,7 @@ it('maps listings through the API and lets the simulator create orders', functio
     expect(Order::withoutGlobalScopes()->where('tenant_id', $this->tenant->id)->count())->toBe(3);
 
     $api->getJson('/api/v1/marketplaces')->assertOk()->assertJsonPath('data.0.key', 'shopee')->assertJsonPath('data.0.available', true)
-        ->assertJson(fn ($json) => $json->where('data.0.capabilities', fn ($c) => $c['inventory.update'] === 'unknown')->etc());
+        ->assertJson(fn ($json) => $json->where('data.0.capabilities', fn ($c) => $c['inventory.update'] === 'supported')->etc());
     $api->getJson('/api/v1/marketplace-accounts')->assertOk()->assertJsonPath('data.0.stats.mapped', 2);
 });
 
