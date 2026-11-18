@@ -14,7 +14,7 @@
 - `docker-compose.yml` + `docker/`: một image (Ubuntu 24.04, PHP-FPM 8.3 + Nginx) chạy web, Horizon và scheduler; MySQL 8 và Redis 7 kèm theo. Service `init` tạo APP_KEY/HEALTH_TOKEN trong volume `storage`, migrate, seed, tạo super admin từ `ADMIN_EMAIL`/`ADMIN_PASSWORD`. Hướng dẫn: docs/DOCKER.md.
 - OPcache không kiểm tra lại file + JIT; session, cache, hàng đợi qua Redis; config/route/view/event cache khi khởi động.
 - `TRUSTED_PROXIES` (mặc định `127.0.0.1`, Docker `*`) để nhận đúng IP và https sau reverse proxy.
-- Ngoài production, đọc quan hệ chưa eager load (N+1) sẽ báo lỗi để test bắt được; production chỉ ghi log cảnh báo.
+- Đọc quan hệ chưa eager load (N+1) được ghi log cảnh báo để tìm và sửa dần (không làm hỏng request); `LAZY_LOADING_STRICT=true` biến nó thành lỗi khi dò ở máy dev.
 - Xóa `dump.rdb` (bản dump Redis) khỏi repo; `composer.json` đổi license thành proprietary.
 
 ### A1: Admin → Gói dịch vụ (2026-11-14)
