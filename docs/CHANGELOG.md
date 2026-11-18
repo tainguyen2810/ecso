@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Đóng gói Docker (2026-11-18)
+- `docker-compose.yml` + `docker/`: một image (Ubuntu 24.04, PHP-FPM 8.3 + Nginx) chạy web, Horizon và scheduler; MySQL 8 và Redis 7 kèm theo. Service `init` tạo APP_KEY/HEALTH_TOKEN trong volume `storage`, migrate, seed, tạo super admin từ `ADMIN_EMAIL`/`ADMIN_PASSWORD`. Hướng dẫn: docs/DOCKER.md.
+- OPcache không kiểm tra lại file + JIT; session, cache, hàng đợi qua Redis; config/route/view/event cache khi khởi động.
+- `TRUSTED_PROXIES` (mặc định `127.0.0.1`, Docker `*`) để nhận đúng IP và https sau reverse proxy.
+- Ngoài production, đọc quan hệ chưa eager load (N+1) sẽ báo lỗi để test bắt được; production chỉ ghi log cảnh báo.
+- Xóa `dump.rdb` (bản dump Redis) khỏi repo; `composer.json` đổi license thành proprietary.
+
 ### A1: Admin → Gói dịch vụ (2026-11-14)
 - Quản trị tự cài gói sau khi cài đặt: thêm gói, sửa tên, giá tháng/năm, ngày dùng thử, giới hạn (người dùng, shop, kho, đơn/tháng, thời gian lưu dữ liệu; có "Không giới hạn"), tính năng (báo cáo nâng cao, tự động hóa), nhãn nổi bật, mô tả, dòng thêm; ẩn/hiện; sắp xếp thứ tự.
 - Đổi giá áp dụng từ hóa đơn tiếp theo (hóa đơn đã phát hành giữ số tiền); đổi giới hạn áp dụng ngay cho khách đang dùng gói. Gói đang có khách hoặc có hóa đơn không xóa được, chỉ ẩn; gói miễn phí (mặc định khi đăng ký) không xóa được.

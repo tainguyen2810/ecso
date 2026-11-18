@@ -5,6 +5,8 @@ namespace App\Providers;
 use App\Shared\Database\MariaDbConnection;
 use App\Shared\Database\MySqlConnection;
 use Illuminate\Database\Connection;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -24,6 +26,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // Outside production a relation read without eager loading (an N+1 query) throws, so tests catch it.
+        // In production it is only logged, never shown to the user.
+        Model::preventLazyLoading();
+        if ($this->app->isProduction()) {
+            Model::handleLazyLoadingViolationUsing(function (Model $model, string $relation): void {
+                Log::warning('N+1 query: '.$model::class.'::'.$relation);
+            });
+        }
     }
 }

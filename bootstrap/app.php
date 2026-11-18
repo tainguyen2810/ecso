@@ -25,7 +25,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->statefulApi();
         $middleware->append(SecurityHeaders::class);
         $middleware->prepend(RedirectToInstaller::class);
-        $middleware->trustProxies(at: '127.0.0.1');
+        // Docker: TRUSTED_PROXIES=* (only the bundled nginx and the host proxy can reach the app); aaPanel: 127.0.0.1.
+        $middleware->trustProxies(at: env('TRUSTED_PROXIES', '127.0.0.1'));
         $middleware->alias([
             'tenant' => ResolveTenant::class,
             'super-admin' => EnsureSuperAdmin::class,
