@@ -8,6 +8,7 @@ use App\Modules\Marketplace\Connectors\Capability;
 use App\Modules\Marketplace\Connectors\ConnectorRegistry;
 use App\Modules\Marketplace\Connectors\Tiki\TikiConnector;
 use App\Modules\Marketplace\Connectors\WooCommerce\WooCommerceConnector;
+use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Http\Resources\AccountResource;
 use App\Modules\Marketplace\Models\InventorySyncOutbox;
 use App\Modules\Marketplace\Models\ListingVariant;
@@ -25,6 +26,7 @@ use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 
 class MarketplaceAccountController extends Controller
@@ -97,6 +99,10 @@ class MarketplaceAccountController extends Controller
 
         return (new AccountResource($account))->additional(['overview' => [
             'orders_this_week' => Order::query()->where('marketplace_account_id', $account->id)->where('placed_at', '>=', now()->startOfWeek())->count(),
+            'orders_today' => Order::query()->where('marketplace_account_id', $account->id)->where('placed_at', '>=', now()->startOfDay())->count(),
+            'orders_total' => Order::query()->where('marketplace_account_id', $account->id)->count(),
+            'first_order_at' => self::iso(Order::query()->where('marketplace_account_id', $account->id)->min('placed_at')),
+            'last_webhook_at' => self::iso(WebhookEvent::query()->where('marketplace_account_id', $account->id)->max('received_at')),
             'new_products' => $newListings->count($account),
             'pending_prices' => PriceChange::query()->where('marketplace_account_id', $account->id)->where('status', PriceChange::PENDING)->count(),
             'sync_errors' => (int) $account->push_errors + $failedWebhooks
@@ -183,7 +189,9 @@ class MarketplaceAccountController extends Controller
             'settings' => ['sometimes', 'array'],
             ...collect(MarketplaceAccount::SETTING_KEYS)->mapWithKeys(fn ($k) => ["settings.{$k}" => ['sometimes', 'boolean']])->all(),
             'settings.order_sync_interval' => ['sometimes', 'integer', Rule::in(MarketplaceAccount::ORDER_SYNC_INTERVALS)],
-        ]);
+            // "Lấy đơn từ": orders created earlier are not taken in (up to a year back; older ones via "Lấy lại đơn").
+            'orders_since' => ['sometimes', 'nullable', 'date', 'before_or_equal:now', 'after:'.now()->subDays(366)->toDateString()],
+        ], ['orders_since.after' => 'Chỉ chọn được mốc trong vòng 1 năm.', 'orders_since.before_or_equal' => 'Mốc không được ở tương lai.']);
         if (isset($data['warehouse_id'])) {
             $data['warehouse_id'] = Warehouse::query()->where('ulid', $data['warehouse_id'])->where('status', 'active')->where('purpose', Warehouse::PURPOSE_SALE)->firstOrFail()->id;
         }
@@ -203,7 +211,12 @@ class MarketplaceAccountController extends Controller
         $this->authorize('map', MarketplaceAccount::class);
         abort_unless($account->isActive(), 422, 'Shop chưa kết nối.');
 
-        return response()->json(['data' => $listings->sync($account)]);
+        try {
+            return response()->json(['data' => $listings->sync($account)]);
+        } catch (ConnectorException $e) {
+            // The marketplace's own reason (e.g. a missing API scope), not a bare 500.
+            return response()->json(['message' => $e->getMessage(), 'error_code' => $e->errorCode], 422);
+        }
     }
 
     /** Re-computes and queues the published stock of every mapped listing of the shop. */
@@ -234,5 +247,10 @@ class MarketplaceAccountController extends Controller
             'received_at' => $e->received_at->toIso8601String(),
             'processed_at' => $e->processed_at?->toIso8601String(),
         ])]);
+    }
+
+    private static function iso(mixed $at): ?string
+    {
+        return $at ? Carbon::parse($at)->toIso8601String() : null;
     }
 }

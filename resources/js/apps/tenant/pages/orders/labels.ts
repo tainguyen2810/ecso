@@ -118,6 +118,8 @@ export const historySource: Record<string, string> = {
     user: 'Người dùng',
     reconcile: 'Đối soát',
     poll: 'Đối soát',
+    backfill: 'Lấy lại đơn',
+    backfill_stock: 'Lấy lại đơn',
     sync: 'Đồng bộ',
     system: 'Hệ thống',
 };

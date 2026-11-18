@@ -54,7 +54,7 @@ class SyncListingsJob implements ShouldBeUnique, ShouldQueue
             try {
                 $listings->sync($account);
             } catch (ConnectorException $e) {
-                $account->forceFill(['last_error' => mb_substr('Lấy sản phẩm: '.$e->getMessage(), 0, 500)])->save();
+                // ListingService::sync() already saved the message on the shop.
                 if ($e->temporary) {
                     throw $e;
                 }

@@ -84,7 +84,7 @@ const switches: { key: keyof MarketplaceSyncSettings; label: string; hint: strin
     { key: 'push_status', label: 'Trạng thái đơn hai chiều', hint: 'Xác nhận, đóng gói, bàn giao, hủy trong ECSO được ghi lên website. Tắt: chỉ website → ECSO' },
 ];
 
-const intervals = [5, 15, 30].map((m) => ({ value: String(m), label: `${m} phút` }));
+const intervals = [5, 15, 30, 60].map((m) => ({ value: String(m), label: m === 60 ? '1 giờ' : `${m} phút` }));
 const setSyncInterval = (value: string | undefined) => run('interval', async () => {
     const { data } = await api.patch(`/marketplace-accounts/${account.value!.id}`, { settings: { order_sync_interval: Number(value) } });
     account.value = { ...account.value!, order_sync_interval: data.data.order_sync_interval };

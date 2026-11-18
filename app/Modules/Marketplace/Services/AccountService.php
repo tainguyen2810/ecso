@@ -15,6 +15,7 @@ use App\Modules\Marketplace\Jobs\SyncListingsJob;
 use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Tenancy\Support\TenantContext;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -67,7 +68,7 @@ class AccountService
     }
 
     /**
-     * @param  array{shop_name?: string, warehouse_id?: int|null, sync_enabled?: bool, settings?: array<string, bool>}  $data
+     * @param  array{shop_name?: string, warehouse_id?: int|null, sync_enabled?: bool, settings?: array<string, bool|int>, orders_since?: string|null}  $data
      */
     public function update(MarketplaceAccount $account, array $data): MarketplaceAccount
     {
@@ -84,6 +85,11 @@ class AccountService
         // Turning order sync back on starts from now: orders created while it was off stay on the store.
         if (! $ordersWereOn && $account->syncs('sync_orders') && $account->marketplace === WooCommerceConnector::MARKETPLACE) {
             $account->orders_since = now();
+        }
+        if (array_key_exists('orders_since', $data)) {
+            // Only the next passes follow it: orders already in ECSO stay.
+            $account->orders_since = $data['orders_since'] !== null ? Carbon::parse($data['orders_since']) : null;
+            unset($data['orders_since']);
         }
         $account->fill($data)->save();
         $this->audit->record('marketplace.updated', $account, $data + ($changedSettings !== [] ? ['settings' => $changedSettings] : []));

@@ -24,6 +24,10 @@ class OrderStockSync
 
     public function apply(Order $order): void
     {
+        // An old order taken in by "Lấy lại đơn theo ngày" without stock: history only, its goods were handled outside ECSO.
+        if ($order->historical) {
+            return;
+        }
         $warehouse = $this->warehouse($order);
         $items = $order->items()->get();
         // Fixed order (by SKU) so two orders sharing SKUs lock their stock rows in the same sequence: no deadlock.

@@ -56,7 +56,7 @@ const runStatus: Record<string, { label: string; tone: 'success' | 'warning' | '
     running: { label: 'Đang chạy', tone: 'info' },
 };
 const countLabels: Record<string, string> = { created: 'mới', updated: 'cập nhật', unchanged: 'không đổi', skipped: 'bỏ qua', stale: 'cũ', failed: 'lỗi', ignored_transition: 'xung đột', deleted_on_channel: 'đã xóa' };
-const triggerLabels: Record<string, string> = { schedule: 'Tự động', user: 'Bấm tay' };
+const triggerLabels: Record<string, string> = { schedule: 'Tự động', user: 'Bấm tay', backfill: 'Lấy lại đơn' };
 
 async function load(page = 1) {
     loading.value = true;
