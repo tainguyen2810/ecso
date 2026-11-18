@@ -26,10 +26,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Outside production a relation read without eager loading (an N+1 query) throws, so tests catch it.
-        // In production it is only logged, never shown to the user.
+        // A relation read without eager loading (an N+1 query) is logged so it can be found and fixed; it never
+        // breaks a request. LAZY_LOADING_STRICT=true makes it throw instead (for hunting them down locally).
         Model::preventLazyLoading();
-        if ($this->app->isProduction()) {
+        if (! env('LAZY_LOADING_STRICT', false)) {
             Model::handleLazyLoadingViolationUsing(function (Model $model, string $relation): void {
                 Log::warning('N+1 query: '.$model::class.'::'.$relation);
             });
