@@ -1,9 +1,6 @@
 <?php
 
 use App\Modules\Access\Models\Role;
-use App\Modules\Marketplace\Connectors\Capability;
-use App\Modules\Marketplace\Connectors\ConnectorRegistry;
-use App\Modules\Marketplace\Connectors\Shopee\ShopeeConnector;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Models\MarketplaceCredential;
 use App\Modules\Marketplace\Models\WebhookEvent;
@@ -31,34 +28,18 @@ function stateFrom(string $url): string
     return $q['state'];
 }
 
-it('registers Shopee as a skeleton whose capabilities are all UNKNOWN', function () {
-    $connector = app(ConnectorRegistry::class)->for('shopee');
-
-    expect($connector)->toBeInstanceOf(ShopeeConnector::class)
-        ->and(array_unique(array_values($connector->capabilities())))->toBe([Capability::UNKNOWN])
-        ->and($connector->verifyWebhook('{}', []))->toBeFalse();
-
+it('lists Shopee as connectable only once the EzChat link is configured', function () {
     actingInTenant($this->owner, $this->tenant)->getJson('/api/v1/marketplaces')->assertOk()
         ->assertJsonPath('data.0.key', 'shopee')
         ->assertJsonPath('data.0.available', true)
-        ->assertJsonPath('data.0.credentials_configured', false)
-        ->assertJsonPath('data.0.capabilities', fn ($c) => collect($c)->every(fn ($s) => $s === 'unknown'));
-});
-
-it('refuses to connect Shopee without app credentials, then reports UNKNOWN instead of faking OAuth', function () {
-    $api = actingInTenant($this->owner, $this->tenant);
-    $api->postJson('/api/v1/marketplace-accounts/authorize/shopee')->assertStatus(422)->assertJsonPath('code', 'CREDENTIALS_MISSING');
-
-    config(['marketplaces.credentials.shopee' => ['partner_id' => '123', 'partner_key' => 'secret']]);
-    $api->postJson('/api/v1/marketplace-accounts/authorize/shopee')->assertStatus(422)
-        ->assertJsonPath('code', 'UNSUPPORTED_CAPABILITY')
-        ->assertJsonPath('capability', 'shop.authorize')
-        ->assertJsonPath('state', 'unknown');
+        ->assertJsonPath('data.0.credentials_configured', false);
+    actingInTenant($this->owner, $this->tenant)->postJson('/api/v1/marketplace-accounts/authorize/shopee')
+        ->assertStatus(422)->assertJsonPath('code', 'CREDENTIALS_MISSING');
 
     expect(MarketplaceAccount::withoutGlobalScopes()->count())->toBe(0);
 });
 
-it('rejects Shopee webhooks: the signature scheme is not verified, nothing is processed', function () {
+it('rejects Shopee pushes that EzChat did not sign, nothing is processed', function () {
     $this->postJson('/api/v1/webhooks/shopee', ['shop_id' => 1, 'code' => 3])->assertStatus(401);
 
     expect(WebhookEvent::query()->where('marketplace', 'shopee')->value('status'))->toBe(WebhookEvent::REJECTED);
