@@ -123,4 +123,7 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    // N+1 queries (lazy loads) throw instead of only being logged. For hunting them down locally, never production.
+    'lazy_loading_strict' => (bool) env('LAZY_LOADING_STRICT', false),
+
 ];
