@@ -26,8 +26,17 @@ beforeEach(function () {
     foreach (['shopee', 'tiktok'] as $m) {
         config(["marketplaces.credentials.{$m}" => ['ezchat_url' => EZ_URL, 'ezchat_secret' => EZ_SECRET]]);
     }
-    $this->calls = [];
+    $calls = &ezCalls();
+    $calls = [];
 });
+
+/** @return array<int, array<string, mixed>> calls the faked EzChat received in this test */
+function &ezCalls(): array
+{
+    static $calls = [];
+
+    return $calls;
+}
 
 /** EzChat's side: refuses a bad signature, records the call and answers with $answers[path] (or a closure). */
 function fakeEzChat(array $answers): void
@@ -39,7 +48,8 @@ function fakeEzChat(array $answers): void
             return Http::response(['error' => ['code' => 'UNAUTHORIZED', 'message' => 'Invalid signature']], 401);
         }
         $key = $path === '/api/banhang/gw/call' ? $r['method'].' '.$r['path'] : $path;
-        test()->calls[] = ['key' => $key, 'query' => $r['query'] ?? [], 'body' => $r['body'] ?? null, 'token' => $r->header('Authorization')[0] ?? null];
+        $calls = &ezCalls();
+        $calls[] = ['key' => $key, 'query' => $r['query'] ?? [], 'body' => $r['body'] ?? null, 'token' => $r->header('Authorization')[0] ?? null];
         $answer = $answers[$key] ?? ['data' => ['data' => []]];
 
         return $answer instanceof Closure ? $answer($r) : Http::response($answer);
@@ -96,7 +106,7 @@ it('connects a shop shared from EzChat: picker on EzChat, code traded for a shar
 
     $account = MarketplaceAccount::withoutGlobalScopes()->where('marketplace', 'shopee')->sole();
     expect(MarketplaceCredential::withoutGlobalScopes()->where('marketplace_account_id', $account->id)->value('access_token'))->toBe('share-token-xyz')
-        ->and($this->calls[0]['key'])->toBe('/api/banhang/gw/exchange');
+        ->and(ezCalls()[0]['key'])->toBe('/api/banhang/gw/exchange');
 });
 
 it('refuses a shop of the other marketplace and a cancelled pick', function () {
@@ -130,7 +140,7 @@ it('reads a Shopee order through EzChat with the share token', function () {
         ->and($order->items)->toHaveCount(2)
         ->and($order->items[0]->externalSkuId)->toBe('i11')->and($order->items[0]->sellerSku)->toBe('AO-1')->and($order->items[0]->discount)->toBe('20000')
         ->and($order->items[1]->externalSkuId)->toBe('501')->and($order->items[1]->variantName)->toBe('Đen, M');
-    expect($this->calls[0]['token'])->toBe('Bearer share-token-1')->and($this->calls[0]['query']['order_sn_list'])->toBe('2411SN1');
+    expect(ezCalls()[0]['token'])->toBe('Bearer share-token-1')->and(ezCalls()[0]['query']['order_sn_list'])->toBe('2411SN1');
     expect(ShopeeConnector::STATUSES['SHIPPED'])->toBe('IN_TRANSIT');
 });
 
@@ -143,7 +153,7 @@ it('lists Shopee orders in windows of at most 15 days', function () {
     $page = app(ConnectorRegistry::class)->for('shopee')->listOrders($account, $from, $to);
 
     expect($page->orderIds)->toBe(['A', 'B'])->and($page->nextCursor)->toBe(($from->getTimestamp() + 15 * 86400).'|')
-        ->and((int) $this->calls[0]['query']['time_to'] - (int) $this->calls[0]['query']['time_from'])->toBe(15 * 86400);
+        ->and((int) ezCalls()[0]['query']['time_to'] - (int) ezCalls()[0]['query']['time_from'])->toBe(15 * 86400);
 });
 
 it('reads Shopee products with their models and pushes stock per model', function () {
@@ -179,7 +189,7 @@ it('reads Shopee products with their models and pushes stock per model', functio
     expect(array_map(fn ($r) => [$r->externalSkuId, $r->status], $results))->toBe([
         ['501', StockUpdateResult::OK], ['502', StockUpdateResult::REJECTED], ['i11', StockUpdateResult::OK],
     ]);
-    $stock = collect($this->calls)->where('key', 'POST /api/v2/product/update_stock')->values();
+    $stock = collect(ezCalls())->where('key', 'POST /api/v2/product/update_stock')->values();
     expect($stock[0]['body'])->toBe(['item_id' => 12, 'stock_list' => [['model_id' => 501, 'seller_stock' => [['stock' => 4]]], ['model_id' => 502, 'seller_stock' => [['stock' => 1]]]]])
         ->and($stock[1]['body']['stock_list'][0])->toBe(['model_id' => 0, 'seller_stock' => [['stock' => 0]]]);
 });
@@ -217,7 +227,7 @@ it('pushes TikTok Shop stock to the warehouse each SKU uses', function () {
     $results = $tiktok->updateInventory($account, [new StockUpdate('P1', 'S1', 8), new StockUpdate('P1', 'GONE', 1)]);
 
     expect(collect($results)->mapWithKeys(fn ($r) => [$r->externalSkuId => $r->status])->all())->toBe(['GONE' => StockUpdateResult::REJECTED, 'S1' => StockUpdateResult::OK])
-        ->and(collect($this->calls)->firstWhere('key', 'POST /product/202309/products/P1/inventory/update')['body'])
+        ->and(collect(ezCalls())->firstWhere('key', 'POST /product/202309/products/P1/inventory/update')['body'])
         ->toBe(['skus' => [['id' => 'S1', 'inventory' => [['quantity' => 8, 'warehouse_id' => 'W9']]]]])
         ->and($tiktok->getProduct($account, 'P1')->variants[0])->toMatchArray(['external_sku_id' => 'S1', 'price' => '90000', 'stock' => 5]);
 });
@@ -275,6 +285,6 @@ it('tells EzChat to forget the share when the shop is disconnected', function ()
 
     TenantContext::run($this->tenant, fn () => app(AccountService::class)->disconnect($account));
 
-    expect($this->calls[0]['key'])->toBe('/api/banhang/gw/revoke')->and($this->calls[0]['token'])->toBe('Bearer share-token-1')
+    expect(ezCalls()[0]['key'])->toBe('/api/banhang/gw/revoke')->and(ezCalls()[0]['token'])->toBe('Bearer share-token-1')
         ->and($account->refresh()->status)->toBe(MarketplaceAccount::REVOKED);
 });
