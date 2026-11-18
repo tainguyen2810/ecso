@@ -5,6 +5,7 @@ namespace App\Modules\Marketplace\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Marketplace\Connectors\Capability;
+use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Connectors\ConnectorRegistry;
 use App\Modules\Marketplace\Connectors\Tiki\TikiConnector;
 use App\Modules\Marketplace\Connectors\WooCommerce\WooCommerceConnector;
@@ -203,7 +204,12 @@ class MarketplaceAccountController extends Controller
         $this->authorize('map', MarketplaceAccount::class);
         abort_unless($account->isActive(), 422, 'Shop chưa kết nối.');
 
-        return response()->json(['data' => $listings->sync($account)]);
+        try {
+            return response()->json(['data' => $listings->sync($account)]);
+        } catch (ConnectorException $e) {
+            // The marketplace's own reason (e.g. a missing API scope), not a bare 500.
+            return response()->json(['message' => $e->getMessage(), 'error_code' => $e->errorCode], 422);
+        }
     }
 
     /** Re-computes and queues the published stock of every mapped listing of the shop. */

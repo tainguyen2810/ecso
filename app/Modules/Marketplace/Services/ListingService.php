@@ -4,6 +4,7 @@ namespace App\Modules\Marketplace\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Catalog\Models\ProductVariant;
+use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Connectors\ConnectorRegistry;
 use App\Modules\Marketplace\Connectors\Data\ProductData;
 use App\Modules\Marketplace\Connectors\FetchesSingleProduct;
@@ -22,6 +23,8 @@ use Illuminate\Support\Facades\DB;
  */
 class ListingService
 {
+    public const PULL_ERROR = 'Lấy sản phẩm: ';
+
     public function __construct(
         private readonly ConnectorRegistry $connectors,
         private readonly TenantContext $context,
@@ -36,15 +39,25 @@ class ListingService
         $counts = ['listings' => 0, 'variants' => 0, 'suggested' => 0];
         $cursor = null;
 
-        do {
-            $page = $connector->listProducts($account, $cursor);
-            foreach ($page->products as $product) {
-                $this->upsert($account, $product, $counts);
-            }
-            $cursor = $page->nextCursor;
-        } while ($cursor !== null);
+        try {
+            do {
+                $page = $connector->listProducts($account, $cursor);
+                foreach ($page->products as $product) {
+                    $this->upsert($account, $product, $counts);
+                }
+                $cursor = $page->nextCursor;
+            } while ($cursor !== null);
+        } catch (ConnectorException $e) {
+            // Shown on the shop card until the next pull succeeds, whether the pull came from the button or the queue.
+            $account->forceFill(['last_error' => mb_substr(self::PULL_ERROR.$e->getMessage(), 0, 500)])->save();
+            throw $e;
+        }
 
-        $account->forceFill(['last_synced_at' => now()])->save();
+        $fill = ['last_synced_at' => now()];
+        if (str_starts_with((string) $account->last_error, self::PULL_ERROR)) {
+            $fill['last_error'] = null;
+        }
+        $account->forceFill($fill)->save();
 
         return $counts;
     }
