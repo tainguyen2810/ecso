@@ -288,7 +288,7 @@ export interface OrderSummary {
     warehouse?: { id: string; code: string; name: string } | null;
     assignee?: Ref | null;
     items_count?: number;
-    items_preview?: { name: string; variant_name: string | null; quantity: number; sku: string | null }[];
+    items_preview?: { name: string; variant_name: string | null; quantity: number; sku: string | null; image?: string | null }[];
 }
 
 export interface OrderItemDetail {

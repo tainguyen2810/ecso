@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Ban, Banknote, Bookmark, ClipboardList, FilePen, ScanBarcode, Trash2, ChevronDown, ChevronsRight, Clock, Columns3, Download, Filter, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingCart, UserPlus, X } from 'lucide-vue-next';
+import { Ban, Banknote, Bookmark, ClipboardList, FilePen, Package, PackageX, ScanBarcode, Trash2, ChevronDown, ChevronsRight, Clock, Columns3, Download, Filter, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingCart, UserPlus, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
@@ -76,6 +76,7 @@ const filters = reactive({
     q: str('q'),
     account: str('account'),
     source: str('source'),
+    marketplace: str('marketplace'),
     channel: str('channel'),
     warehouse: str('warehouse'),
     assignee: str('assignee'),
@@ -152,6 +153,7 @@ function query() {
         q: filters.q || undefined,
         account: filters.account || undefined,
         source: filters.source || undefined,
+        marketplace: filters.marketplace || undefined,
         channel: filters.channel || undefined,
         warehouse: filters.warehouse || undefined,
         assignee: filters.assignee || undefined,
@@ -220,7 +222,7 @@ watch(() => filters.q, () => {
     searchTimer = setTimeout(() => ((filters.page = 1), load()), 300);
 });
 watch(
-    () => [filters.tab, filters.account, filters.source, filters.channel, filters.warehouse, filters.assignee, filters.status, filters.payment_status, filters.from, filters.to, filters.customer, filters.sku, filters.tag, filters.deliver_from, filters.deliver_to, filters.sort, filters.flags.join()],
+    () => [filters.tab, filters.account, filters.source, filters.marketplace, filters.channel, filters.warehouse, filters.assignee, filters.status, filters.payment_status, filters.from, filters.to, filters.customer, filters.sku, filters.tag, filters.deliver_from, filters.deliver_to, filters.sort, filters.flags.join()],
     () => ((filters.page = 1), (selected.value = new Set()), (expanded.value = new Set()), load()),
 );
 
@@ -275,17 +277,19 @@ function removeView(name: string) {
     savedViews.value = savedViews.value.filter((v) => v.name !== name);
     writeStore('views', savedViews.value);
 }
-const hasFilters = computed(() => filters.tab !== 'all' || !!filters.q || !!filters.source || !!filters.channel || !!filters.warehouse || !!filters.account || !!filters.assignee || filters.flags.length > 0 || advancedCount.value > 0);
+const hasFilters = computed(() => filters.tab !== 'all' || !!filters.q || !!filters.source || !!filters.marketplace || !!filters.channel || !!filters.warehouse || !!filters.account || !!filters.assignee || filters.flags.length > 0 || advancedCount.value > 0);
 
 const columnLabels = { date: 'Ngày tạo đơn', customer: 'Tên khách hàng', products: 'Sản phẩm', status: 'Trạng thái đơn hàng', payment: 'Thanh toán', deadline: 'Hạn giao / hẹn giao', assignee: 'Người xử lý', total: 'Khách phải trả' } as const;
 type ColumnKey = keyof typeof columnLabels;
 // Like Sapo's list: one line per order; products and assignee can be turned on from "Cột".
-const columns = ref<Record<ColumnKey, boolean>>({ date: true, customer: true, products: false, status: true, payment: true, deadline: true, assignee: false, total: true, ...readStore('columns', {}) });
-watch(columns, (v) => writeStore('columns', v), { deep: true });
+// v2: the product column (photo + name) is on by default in the new layout; the order time shows under the code
+// and the payment under the total unless their own columns are turned on. Older saved choices are not reused.
+const columns = ref<Record<ColumnKey, boolean>>({ date: false, customer: true, products: true, status: true, payment: false, deadline: true, assignee: false, total: true, ...readStore('columns-v2', {}) });
+watch(columns, (v) => writeStore('columns-v2', v), { deep: true });
 compact.value = readStore('compact', false);
 watch(compact, (v) => writeStore('compact', v));
 const columnsOpen = ref(false);
-const columnCount = computed(() => 3 + Object.values(columns.value).filter(Boolean).length);
+const columnCount = computed(() => 4 + Object.values(columns.value).filter(Boolean).length);
 
 // Customer filter: a small search box over /customers.
 const customerQuery = ref('');
@@ -446,11 +450,64 @@ async function exportOrders() {
     }
 }
 
+/** Channel buttons above the list: every marketplace with a connected shop, then own sales channels. */
+const channelChips = computed(() => {
+    const keys = [...new Set(accounts.value.map((a) => a.marketplace))];
+    return keys.map((key) => ({ key, label: marketplaceNames[key] ?? accounts.value.find((a) => a.marketplace === key)?.marketplace_name ?? key }));
+});
+function pickChannel(key: string) {
+    filters.account = '';
+    filters.channel = '';
+    if (key === 'manual') {
+        filters.marketplace = '';
+        filters.source = 'manual';
+    } else {
+        filters.source = '';
+        filters.marketplace = key;
+    }
+}
+const channelPicked = (key: string) => (key === '' ? !filters.marketplace && !filters.source : key === 'manual' ? filters.source === 'manual' : filters.marketplace === key);
+
+/** The next step of an order, done from its row (same rules as the bulk actions). */
+const nextAction: Record<string, string> = { PENDING_CONFIRMATION: 'confirm', READY_TO_PACK: 'pack', PACKED: 'handover' };
+const rowAction = (o: OrderSummary) => (tenant.can('orders.update') ? (nextAction[o.status] ?? null) : null);
+async function runRow(o: OrderSummary, action: string) {
+    busy.value = `row-${o.id}`;
+    try {
+        const { data } = await api.post('/orders/bulk', { ids: [o.id], action });
+        const r = (data.data as { ok: boolean; message: string | null }[])[0];
+        if (r?.ok) toast.success(`${actionLabels[action]}: ${o.external_order_id}`);
+        else toast.error(r?.message ?? 'Không xử lý được đơn này.');
+        await refresh();
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    } finally {
+        busy.value = null;
+    }
+}
+
+/** Many orders flagged "Thiếu hàng" usually means the stock was never entered: say so once, with the way out. */
+const shortageCount = ref(0);
+const shortageDismissed = ref(readStore('shortage-hint-dismissed', false));
+async function loadShortage() {
+    try {
+        const { data } = await api.get('/orders', { params: { flags: ['shortage'], per_page: 10 } });
+        shortageCount.value = data.meta.total ?? 0;
+    } catch {
+        shortageCount.value = 0;
+    }
+}
+function dismissShortage() {
+    shortageDismissed.value = true;
+    writeStore('shortage-hint-dismissed', true);
+}
+onMounted(loadShortage);
+
 const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.external_order_id ?? id;
 </script>
 
 <template>
-    <PageHeader title="Đơn hàng" description="Đơn từ các sàn (cập nhật theo webhook, thao tác gửi lên sàn qua API) và đơn của kênh bán riêng (xử lý ngay trên ECSO).">
+    <PageHeader title="Đơn hàng" description="Đơn từ mọi sàn và kênh bán riêng, tự cập nhật khi có đơn mới.">
         <Button variant="outline" :loading="loading" @click="refresh"><RefreshCw /> Làm mới</Button>
         <Button variant="outline" :loading="busy === 'export'" data-testid="export-orders" @click="exportOrders"><Download /> Xuất Excel</Button>
         <Button v-if="tenant.can('orders.pack')" variant="outline" data-testid="open-packing" @click="$router.push('/orders/pack')"><ScanBarcode /> Đóng gói</Button>
@@ -471,6 +528,14 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
         </ul>
     </Dialog>
 
+    <div v-if="shortageCount >= 5 && !shortageDismissed && tenant.can('inventory.view')" class="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm" data-testid="shortage-hint">
+        <PackageX class="size-5 shrink-0 text-amber-600" />
+        <span class="min-w-60 flex-1"><b>{{ formatNumber(shortageCount) }} đơn đang báo "Thiếu hàng".</b> Thường là do kho trong phần mềm chưa có số tồn. Nhập số hàng đang có một lần là hết báo sai.</span>
+        <Button size="sm" variant="outline" class="bg-white" @click="toggleFlag('shortage')">Xem các đơn này</Button>
+        <RouterLink to="/inventory"><Button size="sm" variant="outline" class="bg-white">Nhập tồn kho</Button></RouterLink>
+        <button type="button" class="rounded p-1 text-amber-700 hover:bg-amber-100" aria-label="Ẩn gợi ý" @click="dismissShortage"><X class="size-4" /></button>
+    </div>
+
     <OrderPipeline ref="pipeline" :active="activeQueue" @select="selectQueue" />
 
     <Card>
@@ -482,7 +547,6 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                     <Search class="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
                     <Input v-model="filters.q" class="pl-8" placeholder="Tìm theo mã đơn, mã vận đơn, SKU, tên sản phẩm, tên hoặc SĐT khách…" data-testid="order-search" />
                 </div>
-                <Select v-model="filters.source" class="w-44" :options="[{ value: '', label: 'Mọi nguồn đơn' }, { value: 'manual', label: 'Kênh bán riêng' }, { value: 'marketplace', label: 'Sàn TMĐT' }]" aria-label="Nguồn đơn" data-testid="filter-source" />
                 <Button variant="outline" :class="cn((moreFilters || advancedCount) && 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-50')" :aria-expanded="moreFilters" data-testid="more-filters" @click="moreFilters ? (moreFilters = false) : openFilters()">
                     <Filter /> Bộ lọc khác <span v-if="advancedCount" class="rounded-full bg-primary px-1.5 text-xs text-primary-foreground">{{ advancedCount }}</span>
                 </Button>
@@ -566,6 +630,24 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                 </div>
             </div>
 
+            <!-- One button per marketplace (with its logo) and one for own sales channels, instead of a "source" dropdown. -->
+            <div class="flex flex-wrap items-center gap-1.5" role="group" aria-label="Lọc theo kênh" data-testid="channel-chips">
+                <button type="button" :class="cn('h-8 rounded-lg border px-3 text-sm', channelPicked('') ? 'border-slate-900 bg-slate-900 font-medium text-white' : 'bg-card text-slate-700 hover:bg-muted')" @click="pickChannel('')">Tất cả</button>
+                <button
+                    v-for="c in channelChips"
+                    :key="c.key"
+                    type="button"
+                    :class="cn('flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-sm', channelPicked(c.key) ? 'border-slate-900 bg-slate-900 font-medium text-white' : 'bg-card text-slate-700 hover:bg-muted')"
+                    :data-testid="`channel-${c.key}`"
+                    @click="pickChannel(c.key)"
+                >
+                    <MarketplaceLogo :marketplace="c.key" :name="c.label" size="sm" class="size-4" /> {{ c.label }}
+                </button>
+                <button type="button" :class="cn('flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-sm', channelPicked('manual') ? 'border-slate-900 bg-slate-900 font-medium text-white' : 'bg-card text-slate-700 hover:bg-muted')" data-testid="channel-manual" @click="pickChannel('manual')">
+                    <MarketplaceLogo marketplace="manual" name="Kênh bán riêng" size="sm" class="size-4" /> Kênh bán riêng
+                </button>
+            </div>
+
             <div v-if="savedViews.length" class="flex flex-wrap items-center gap-2 text-xs" data-testid="saved-views">
                 <span class="text-muted-foreground">Bộ lọc đã lưu:</span>
                 <span v-for="v in savedViews" :key="v.name" class="inline-flex items-center gap-1 rounded-full border bg-card pl-2.5 pr-1">
@@ -607,8 +689,9 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
             </label>
         </div>
 
-        <div v-if="selected.size" class="sticky top-14 z-10 flex flex-wrap items-center gap-2 border-b border-blue-100 bg-blue-50 px-4 py-2.5 text-sm" data-testid="bulk-bar">
-            <span class="mr-1 rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">{{ selected.size }}</span><span class="mr-2 font-medium">đơn đã chọn</span>
+        <!-- Floating bar at the bottom while orders are ticked, so the actions stay in reach while scrolling. -->
+        <div v-if="selected.size" class="fixed inset-x-0 bottom-24 z-30 mx-auto flex w-fit max-w-[calc(100vw-2rem)] flex-wrap justify-center items-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm text-white shadow-2xl lg:bottom-6 lg:left-60 lg:max-w-[calc(100vw-19rem)] [&_button:not(.bulk-plain)]:border-white/15 [&_button:not(.bulk-plain)]:bg-white/10 [&_button:not(.bulk-plain)]:text-white [&_button:not(.bulk-plain):hover]:bg-white/20" data-testid="bulk-bar">
+            <span class="mr-2 font-semibold"><span class="tabular-nums">{{ selected.size }}</span> đơn đã chọn</span>
             <template v-if="tenant.can('orders.update')">
                 <Button size="sm" variant="outline" :loading="busy === 'confirm'" @click="bulk('confirm')">{{ actionLabels.confirm }}</Button>
                 <Button size="sm" variant="outline" :loading="busy === 'pack'" @click="bulk('pack')">{{ actionLabels.pack }}</Button>
@@ -619,8 +702,8 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
             <Button size="sm" variant="outline" :loading="busy === 'invoice'" data-testid="bulk-invoice" @click="printInvoices"><ReceiptText /> In hóa đơn</Button>
             <Button v-if="tenant.can('orders.print')" size="sm" :loading="busy === 'print'" data-testid="print-slips" @click="print"><Printer /> In phiếu đóng gói</Button>
             <Button v-if="tenant.can('orders.print')" size="sm" variant="outline" :loading="busy === 'pick'" data-testid="print-picklist" @click="printPickList"><ClipboardList /> In phiếu nhặt hàng</Button>
-            <Button v-if="tenant.can('orders.cancel')" size="sm" variant="outline" class="text-destructive" data-testid="bulk-cancel" @click="cancelOpen = true"><Ban /> Hủy đơn</Button>
-            <button class="ml-auto text-xs text-muted-foreground hover:underline" @click="selected = new Set()">Bỏ chọn</button>
+            <Button v-if="tenant.can('orders.cancel')" size="sm" variant="outline" class="!text-rose-300" data-testid="bulk-cancel" @click="cancelOpen = true"><Ban /> Hủy đơn</Button>
+            <button class="bulk-plain ml-1 rounded-lg p-1.5 text-slate-300 hover:bg-white/10 hover:text-white" aria-label="Bỏ chọn" title="Bỏ chọn" @click="selected = new Set()"><X class="size-4" /></button>
         </div>
 
         <div v-if="loading && !orders.length" class="space-y-3 p-4"><Skeleton v-for="i in 6" :key="i" class="h-14" /></div>
@@ -648,6 +731,7 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                         <th v-if="columns.deadline" class="w-36 px-3 py-3">Hạn giao</th>
                         <th v-if="columns.assignee" class="px-3 py-3">Xử lý</th>
                         <th v-if="columns.total" class="w-36 whitespace-nowrap px-4 py-3 text-right">Khách phải trả</th>
+                        <th class="w-36 px-3 py-3"><span class="sr-only">Thao tác</span></th>
                     </tr>
                 </thead>
                 <tbody class="divide-y">
@@ -670,6 +754,7 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                                     </template>
                                 </div>
                                 <div v-if="!compact" class="mt-0.5 flex flex-wrap items-center gap-1 pl-7 text-[11px] text-muted-foreground">
+                                    <span v-if="!columns.date" class="tabular-nums">{{ formatDateTime(o.placed_at) }} ·</span>
                                     {{ o.shop?.name ?? o.channel?.name ?? marketplaceNames[o.marketplace] }}
                                     <span v-if="o.flags.shortage" class="rounded-full bg-rose-50 px-1.5 text-rose-600" title="Thiếu hàng">Thiếu hàng</span>
                                     <span v-if="o.flags.unmapped" class="rounded-full bg-amber-50 px-1.5 text-amber-700">Chưa map SKU</span>
@@ -684,10 +769,15 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                                 <div class="truncate">{{ o.customer?.name ?? o.buyer_name ?? 'Khách lẻ' }}</div>
                             </td>
                             <td v-if="columns.products" class="max-w-80 px-3 py-3">
-                                <div v-for="(i, idx) in (o.items_preview ?? []).slice(0, compact ? 1 : 3)" :key="idx" class="truncate text-xs">
-                                    <span class="font-medium tabular-nums">{{ i.quantity }}×</span> {{ i.name }}<span v-if="i.variant_name" class="text-muted-foreground"> · {{ i.variant_name }}</span>
+                                <div v-if="o.items_preview?.length" class="flex items-center gap-2.5">
+                                    <img v-if="o.items_preview[0].image" :src="o.items_preview[0].image" alt="" :class="cn('shrink-0 rounded-md border object-cover', compact ? 'size-7' : 'size-10')" loading="lazy" />
+                                    <span v-else :class="cn('grid shrink-0 place-items-center rounded-md bg-slate-100 text-slate-400', compact ? 'size-7' : 'size-10')"><Package class="size-4" :stroke-width="1.75" /></span>
+                                    <div class="min-w-0">
+                                        <div class="truncate">{{ o.items_preview[0].name }}<span v-if="o.items_preview[0].variant_name" class="text-muted-foreground"> · {{ o.items_preview[0].variant_name }}</span> <span class="text-muted-foreground tabular-nums">× {{ o.items_preview[0].quantity }}</span></div>
+                                        <div v-if="!compact && (o.items_count ?? 0) > 1" class="text-xs text-muted-foreground">+{{ (o.items_count ?? 0) - 1 }} sản phẩm khác</div>
+                                    </div>
                                 </div>
-                                <div v-if="!compact && (o.items_count ?? 0) > 3" class="text-xs text-muted-foreground">+{{ (o.items_count ?? 0) - 3 }} sản phẩm khác</div>
+                                <span v-else class="text-muted-foreground">—</span>
                             </td>
                             <td v-if="columns.status" class="px-3 py-3"><Badge :tone="orderStatus[o.status]?.tone">{{ orderStatus[o.status]?.label ?? o.status }}</Badge></td>
                             <td v-if="columns.payment" class="whitespace-nowrap px-3 py-3 text-xs">
@@ -705,7 +795,13 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                                 <div v-if="o.deliver_on" :class="cn('text-foreground', compact ? 'inline ml-1.5' : 'mt-0.5')" data-testid="row-deliver-on">Hẹn {{ formatDate(o.deliver_on) }}</div>
                             </td>
                             <td v-if="columns.assignee" class="px-3 py-3 text-xs text-muted-foreground">{{ o.assignee?.name ?? '—' }}</td>
-                            <td v-if="columns.total" class="px-4 py-3 text-right font-semibold tabular-nums">{{ formatMoney(o.total) }}</td>
+                            <td v-if="columns.total" class="px-4 py-3 text-right">
+                                <div class="font-semibold tabular-nums">{{ formatMoney(o.total) }}</div>
+                                <div v-if="!columns.payment && !compact" class="text-xs text-muted-foreground">{{ o.payment_status && o.status !== 'CANCELLED' ? paymentStatus[o.payment_status]?.label : o.is_cod ? 'COD' : o.source === 'manual' ? '' : 'Sàn thu' }}</div>
+                            </td>
+                            <td class="px-3 py-2 text-right" @click.stop>
+                                <Button v-if="rowAction(o)" size="sm" variant="outline" class="whitespace-nowrap" :loading="busy === `row-${o.id}`" :data-testid="`row-action-${rowAction(o)}`" @click="runRow(o, rowAction(o)!)">{{ actionLabels[rowAction(o)!] }}</Button>
+                            </td>
                         </tr>
                         <tr v-if="expanded.has(o.id)">
                             <td :colspan="columnCount" class="p-0"><OrderQuickView :id="o.id" /></td>
@@ -716,6 +812,9 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
         </div>
         <Pagination :page="meta.current_page" :last-page="meta.last_page" :total="meta.total" @go="(p) => ((filters.page = p), load())" />
     </Card>
+
+    <!-- Room under the list so the floating bulk bar never hides the last rows or the pages. -->
+    <div v-if="selected.size" class="h-20" />
 
     <PrintDialog v-model:open="printOpen" :orders="printOrders" />
 

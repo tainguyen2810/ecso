@@ -91,6 +91,8 @@ class OrderResource extends JsonResource
             'items_count' => $this->whenCounted('items'),
             'items_preview' => $this->whenLoaded('items', fn () => $this->items->take(3)->map(fn ($i) => [
                 'name' => $i->name, 'variant_name' => $i->variant_name, 'quantity' => $i->quantity, 'sku' => $i->variant->sku ?? $i->seller_sku,
+                // First product photo, when the list loaded it (order list); null shows a placeholder.
+                'image' => $i->variant?->relationLoaded('product') && $i->variant->product?->relationLoaded('images') ? $i->variant->product->images->first()?->url() : null,
             ])),
         ];
     }
