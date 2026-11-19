@@ -9,13 +9,14 @@ test('Shopee: connector skeleton is visible, connecting is refused honestly with
     await page.goto('/marketplaces');
     const card = page.getByTestId('real-marketplaces');
     await expect(card).toContainText('Shopee');
-    await expect(card).toContainText('Chưa có credentials');
+    await expect(card).toContainText('Sắp có');
 
     await page.getByTestId('connect-shopee').click();
-    await expect(page.getByTestId('connect-notice-shopee')).toContainText('chưa được cấu hình app credentials');
+    await expect(page.getByTestId('connect-notice-shopee')).toContainText('chưa được mở trên hệ thống');
     await expect(page).toHaveURL(/\/marketplaces$/);
     await shot(page, '01-shopee-connect-refused');
 
+    await page.getByTestId('tech-details').locator('summary').click();
     await page.getByTestId('capability-matrix').scrollIntoViewIfNeeded();
     await expect(page.getByTestId('capability-matrix')).toContainText('Kết nối shop (ủy quyền)');
 });
@@ -32,7 +33,7 @@ test('TikTok Shop: skeleton connector, connect refused without credentials', asy
     await page.goto('/marketplaces');
     await expect(page.getByTestId('real-marketplaces')).toContainText('TikTok Shop');
     await page.getByTestId('connect-tiktok').click();
-    await expect(page.getByTestId('connect-notice-tiktok')).toContainText('chưa được cấu hình app credentials');
+    await expect(page.getByTestId('connect-notice-tiktok')).toContainText('chưa được mở trên hệ thống');
     await page.screenshot({ path: 'docs/screenshots/phase-5/01-tiktok-connect-refused.png', clip: { x: 0, y: 0, width: 1440, height: 640 } });
 });
 
@@ -46,7 +47,7 @@ test('Lazada and Tiki: Lazada refused without credentials, Tiki asks for app key
     await expect(page.getByTestId('stock-note-tiki')).toContainText('cập nhật tay trên Seller Center');
 
     await page.getByTestId('connect-lazada').click();
-    await expect(page.getByTestId('connect-notice-lazada')).toContainText('chưa được cấu hình app credentials');
+    await expect(page.getByTestId('connect-notice-lazada')).toContainText('chưa được mở trên hệ thống');
     // Tiki connects with the shop's own In-house app keys (C8): the dialog asks for them.
     await page.getByTestId('connect-tiki').click();
     await expect(page.getByTestId('tiki-dialog')).toContainText('Inhouse');
