@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
-import { Info } from 'lucide-vue-next';
+import { ArrowRight, Info } from 'lucide-vue-next';
+import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
 import PageHeader from '../../PageHeader.vue';
 import RangePicker from './RangePicker.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -39,6 +40,27 @@ function target(l: ReportLink, by?: string): RouteLocationRaw {
 const overview = ref<any>(null);
 const days = ref<any[]>([]);
 const awaiting = ref<{ orders: number; goods: number } | null>(null);
+const channels = ref<any[]>([]);
+const previous = ref<any>(null);
+const products = ref<any[]>([]);
+
+/** The period of the same length just before this one, to compare with. */
+function previousRange(from?: string, to?: string): { from: string; to: string } | null {
+    if (!from || !to) return null;
+    const day = 86_400_000;
+    const f = new Date(`${from}T00:00:00`);
+    const t = new Date(`${to}T00:00:00`);
+    const len = Math.round((t.getTime() - f.getTime()) / day) + 1;
+    if (!(len > 0)) return null;
+    const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return { from: iso(new Date(f.getTime() - len * day)), to: iso(new Date(f.getTime() - day)) };
+}
+/** "+12,4% so với kỳ trước" (null when there is nothing to compare with). */
+function delta(now: number | null | undefined, before: number | null | undefined): { text: string; up: boolean } | null {
+    if (now == null || before == null || !before) return null;
+    const pct = ((now - before) / Math.abs(before)) * 100;
+    return { text: `${pct >= 0 ? '+' : ''}${pct.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}% so với kỳ trước`, up: pct >= 0 };
+}
 const error = ref<string | null>(null);
 const loading = ref(false);
 async function load() {
@@ -46,10 +68,20 @@ async function load() {
     loading.value = true;
     error.value = null;
     try {
-        const [o, s] = await Promise.all([api.get('/reports/overview', { params: range.value }), api.get('/reports/sales', { params: { ...range.value, by: 'day' } })]);
+        const prev = previousRange(range.value.from, range.value.to);
+        const [o, s, c, p, b] = await Promise.all([
+            api.get('/reports/overview', { params: range.value }),
+            api.get('/reports/sales', { params: { ...range.value, by: 'day' } }),
+            api.get('/reports/sales', { params: { ...range.value, by: 'channel' } }),
+            prev ? api.get('/reports/overview', { params: prev }).catch(() => null) : Promise.resolve(null),
+            api.get('/reports/product-sales', { params: range.value }).catch(() => null),
+        ]);
         overview.value = o.data.data;
         days.value = s.data.data.rows;
         awaiting.value = s.data.data.awaiting ?? null;
+        channels.value = c.data.data.rows ?? [];
+        previous.value = p?.data.data ?? null;
+        products.value = ((b?.data.data.rows ?? []) as any[]).filter((r) => r.net > 0).sort((x, y) => y.net - x.net).slice(0, 8);
     } catch (e) {
         error.value = (e as ApiError).message;
     } finally {
@@ -106,6 +138,13 @@ const basisNote = computed(() =>
         ? 'Tính trên đơn đã hoàn thành trong kỳ (sàn: hoàn thành; kênh riêng: đã giao; POS: lúc bán).'
         : 'Tính trên đơn đặt trong kỳ, trừ đơn hủy và đơn hoàn.',
 );
+const deltas = computed(() => ({
+    revenue: delta(rec.value?.revenue, previous.value?.recognized?.revenue),
+    profit: delta(rec.value?.gross_profit, previous.value?.recognized?.gross_profit),
+    orders: delta(overview.value?.sales.orders, previous.value?.sales.orders),
+}));
+const channelColors: Record<string, string> = { shopee: '#ee4d2d', tiktok: '#111827', lazada: '#1a2a9c', tiki: '#1a94ff', woocommerce: '#7f54b3', pos: '#10b981' };
+const channelTotal = computed(() => channels.value.reduce((s: number, c: any) => s + Number(c.goods), 0));
 const deliveryTotal = computed(() => delivery.value.reduce((s: number, d: any) => s + d.value, 0));
 const byTitle = (t: string) => links.value.find((l) => l.title === t);
 const orderLinks = computed(() => links.value.filter((l) => !['Thanh toán', 'Trả hàng'].includes(l.title)));
@@ -127,6 +166,7 @@ const orderLinks = computed(() => links.value.filter((l) => !['Thanh toán', 'Tr
                         <InfoTip title="Doanh thu thuần = tiền hàng − chiết khấu − hàng trả lại">{{ basisNote }} Cùng con số với trang Tài chính và Báo cáo lãi lỗ. Không gồm phí giao hàng thu của khách.</InfoTip></template
                     >
                     {{ formatNumber(overview.sales.orders) }} đơn<template v-if="rec.returns"> · đã trừ trả hàng {{ formatMoney(rec.returns) }}</template>
+                    <span v-if="deltas.revenue" :class="cn('block font-medium', deltas.revenue.up ? 'text-emerald-600' : 'text-destructive')" data-testid="sales-delta">{{ deltas.revenue.text }}</span>
                 </KpiCard>
                 <KpiCard v-if="rec.cogs != null" label="Giá vốn hàng bán" :value="formatMoney(rec.cogs)">
                     <template #label
@@ -141,6 +181,7 @@ const orderLinks = computed(() => links.value.filter((l) => !['Thanh toán', 'Tr
                         >Lãi gộp <InfoTip title="Lãi gộp = Doanh thu thuần − Giá vốn hàng bán">{{ basisNote }} Chưa trừ phí sàn, phí thanh toán (xem Báo cáo lãi lỗ). Truy xuất ở Bán hàng theo sản phẩm.</InfoTip></template
                     >
                     {{ rec.margin == null ? '—' : `biên ${rec.margin.toLocaleString('vi-VN')}%` }} · chưa trừ phí sàn
+                    <span v-if="deltas.profit" :class="cn('block font-medium', deltas.profit.up ? 'text-emerald-600' : 'text-destructive')">{{ deltas.profit.text }}</span>
                 </KpiCard>
                 <KpiCard label="Phí giao hàng thu khách" :value="formatMoney(rec.shipping ?? 0)">
                     <template #label>Phí giao hàng thu khách <InfoTip title="Phí ship khách trả trên đơn">Dòng riêng, không cộng vào doanh thu thuần.</InfoTip></template>
@@ -156,6 +197,22 @@ const orderLinks = computed(() => links.value.filter((l) => !['Thanh toán', 'Tr
                     <template #actions><span class="text-xl font-semibold text-primary" data-testid="sales-revenue">{{ formatMoney(overview.sales.goods) }}</span></template>
                     <div class="p-5"><StackedBarChart :labels="chart.labels" :series="chart.series" :tips="chart.tips" :height="220" clickable @select="openDay" /></div>
                 </Card>
+                <Card caps title="Theo kênh" description="Tiền hàng trong kỳ theo shop và kênh bán" data-testid="sales-by-channel">
+                    <ul v-if="channels.length" class="space-y-4 p-5 text-sm">
+                        <li v-for="c in channels.slice(0, 6)" :key="`${c.kind}-${c.label}`">
+                            <div class="flex items-center gap-2.5">
+                                <MarketplaceLogo :marketplace="c.kind ?? 'manual'" :name="c.label" size="sm" />
+                                <span class="min-w-0 flex-1 truncate">{{ c.label }}</span>
+                                <span class="font-medium tabular-nums">{{ formatMoney(c.goods) }}</span>
+                                <span class="w-10 text-right text-xs text-muted-foreground tabular-nums">{{ channelTotal ? Math.round((Number(c.goods) / channelTotal) * 100) : 0 }}%</span>
+                            </div>
+                            <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full" :style="{ width: `${channelTotal ? (Number(c.goods) / channelTotal) * 100 : 0}%`, background: channelColors[c.kind] ?? '#94a3b8' }" /></div>
+                        </li>
+                    </ul>
+                    <p v-else class="p-5 text-sm text-muted-foreground">Chưa có đơn ghi nhận doanh thu trong kỳ.</p>
+                </Card>
+            </div>
+            <div class="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-[minmax(0,1.6fr)_1fr_1fr_1fr]">
                 <Card caps title="Thông tin giao hàng" description="Đơn tạo trong kỳ theo tình trạng hiện tại">
                     <template #actions><span class="text-xl font-semibold text-primary">{{ formatNumber(deliveryTotal) }}</span></template>
                     <div class="p-5" data-testid="delivery-status">
@@ -163,8 +220,7 @@ const orderLinks = computed(() => links.value.filter((l) => !['Thanh toán', 'Tr
                         <p class="mt-3 text-[11px] text-muted-foreground">Tổng % luôn bằng 100% · bấm một tình trạng để mở danh sách đơn.</p>
                     </div>
                 </Card>
-            </div>
-            <div class="mt-5 grid gap-5 lg:grid-cols-3">
+
                 <Card caps title="Đơn hàng" :description="rec.gross_profit != null ? `Lãi gộp ${formatMoney(rec.gross_profit)}` : 'Đơn đã ghi nhận doanh thu'">
                     <template #actions><span class="text-xl font-semibold text-primary">{{ formatNumber(overview.sales.orders) }}</span></template>
                     <ul class="space-y-0.5 p-3 text-sm" data-testid="report-group-sales">
@@ -174,7 +230,7 @@ const orderLinks = computed(() => links.value.filter((l) => !['Thanh toán', 'Tr
                     </ul>
                 </Card>
                 <Card v-if="byTitle('Thanh toán')" caps title="Thanh toán" description="Tiền thực thu trong kỳ">
-                    <template #actions><span class="text-xl font-semibold text-primary">{{ formatMoney(overview.finance?.payments.net ?? 0) }}</span></template>
+                    <template #actions><span class="whitespace-nowrap text-xl font-semibold text-primary">{{ formatMoney(overview.finance?.payments.net ?? 0) }}</span></template>
                     <ul class="space-y-0.5 p-3 text-sm">
                         <li v-for="c in byTitle('Thanh toán')!.chips" :key="c.by">
                             <RouterLink :to="target(byTitle('Thanh toán')!, c.by)" class="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-primary hover:bg-muted/50"><component :is="byTitle('Thanh toán')!.icon" class="size-4 text-muted-foreground" />Thanh toán {{ c.label.toLowerCase() }}</RouterLink>
@@ -190,6 +246,31 @@ const orderLinks = computed(() => links.value.filter((l) => !['Thanh toán', 'Tr
                     </ul>
                 </Card>
             </div>
+            <Card v-if="products.length" caps title="Bán chạy theo sản phẩm" class="mt-5" data-testid="sales-top-products">
+                <template #actions><RouterLink :to="{ name: 'report-detail', params: { report: 'product-sales' }, query: { ...range } }" class="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">Xem tất cả <ArrowRight class="size-4" /></RouterLink></template>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="border-b bg-slate-50 text-left text-xs text-muted-foreground">
+                            <tr>
+                                <th class="px-5 py-2.5 font-medium">Sản phẩm</th>
+                                <th class="px-4 py-2.5 text-right font-medium">Đã bán</th>
+                                <th class="px-4 py-2.5 text-right font-medium">Doanh thu</th>
+                                <th v-if="canProfit" class="px-4 py-2.5 text-right font-medium">Lãi gộp</th>
+                                <th v-if="canProfit" class="px-5 py-2.5 text-right font-medium">Biên lãi</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            <tr v-for="p in products" :key="p.variant.sku">
+                                <td class="px-5 py-3"><p class="max-w-md truncate font-medium">{{ p.variant.name }}</p><p class="font-mono text-xs text-muted-foreground">{{ p.variant.sku }}</p></td>
+                                <td class="px-4 py-3 text-right tabular-nums">{{ formatNumber(p.units) }}</td>
+                                <td class="whitespace-nowrap px-4 py-3 text-right tabular-nums">{{ formatMoney(p.net) }}</td>
+                                <td v-if="canProfit" :class="cn('whitespace-nowrap px-4 py-3 text-right font-medium tabular-nums', p.gross_profit < 0 ? 'text-destructive' : 'text-emerald-600')">{{ formatMoney(p.gross_profit) }}</td>
+                                <td v-if="canProfit" class="px-5 py-3 text-right tabular-nums">{{ p.margin == null ? '—' : `${p.margin.toLocaleString('vi-VN')}%` }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </Card>
         </template>
     </template>
 
