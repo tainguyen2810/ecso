@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { Bookmark, Boxes, ChevronDown, ChevronRight, Columns3, Download, FileSpreadsheet, ImageIcon, Package, Plus, Printer, RotateCcw, Search, SlidersHorizontal, Tags, Upload, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
+import StockOverview from '../../components/StockOverview.vue';
 import Tabs from '../../components/Tabs.vue';
 import ImportDialog from './ImportDialog.vue';
 import HeaderLink from '../../components/HeaderLink.vue';
@@ -19,7 +20,7 @@ import { api, ApiError, downloadFile } from '@/shared/lib/api';
 import { cn, formatDate, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
-import type { Product, Ref } from '@/shared/types';
+import type { Product, Ref, StockSummary } from '@/shared/types';
 import DateRangeInput from '@/shared/ui/DateRangeInput.vue';
 
 const tenant = useTenantStore();
@@ -98,6 +99,18 @@ async function load() {
         loading.value = false;
     }
 }
+
+/** Stock at a glance (needs inventory.view); a card filters the list by stock state. */
+const summary = ref<StockSummary | null>(null);
+onMounted(async () => {
+    if (tenant.can('inventory.view')) summary.value = (await api.get('/inventory/summary').catch(() => null))?.data.data ?? null;
+});
+function pickStock(state: string) {
+    filters.stock = state === 'all' ? '' : state;
+    if (filters.stock) moreFilters.value = true;
+}
+/** Category and brand columns only when something on this page has one (many shops leave them empty). */
+const hasTaxonomy = computed(() => products.value.some((p) => p.category || p.brand));
 
 onMounted(async () => {
     const [c, b, t] = await Promise.all([api.get('/categories'), api.get('/brands'), api.get('/products/tags')]);
@@ -207,7 +220,8 @@ type ColumnKey = keyof typeof columnLabels;
 const columns = ref<Record<ColumnKey, boolean>>({ category: true, price: true, on_hand: true, available: true, status: true, created: true, ...readStore('columns', {}) });
 watch(columns, (v) => writeStore('columns', v), { deep: true });
 const columnsOpen = ref(false);
-const visibleCount = computed(() => Object.values(columns.value).filter(Boolean).length + (columns.value.category ? 1 : 0) + 2 + (canManage.value && !trashed.value ? 1 : 0));
+const showTaxonomy = computed(() => columns.value.category && hasTaxonomy.value);
+const visibleCount = computed(() => Object.values(columns.value).filter(Boolean).length - (columns.value.category ? 1 : 0) + (showTaxonomy.value ? 1 : 0) + 2 + (canManage.value && !trashed.value ? 1 : 0));
 
 const allSelected = computed(() => products.value.length > 0 && products.value.every((p) => selected.value.has(p.id)));
 function toggleAll() {
@@ -226,6 +240,8 @@ function toggleAll() {
         </template>
         <RouterLink v-if="canManage" to="/products/new"><Button data-testid="new-product"><Plus /> Thêm sản phẩm</Button></RouterLink>
     </PageHeader>
+
+    <StockOverview v-if="summary" :summary="summary" :active="filters.stock || 'all'" @select="pickStock" />
 
     <Card>
         <div class="border-b px-3">
@@ -246,8 +262,8 @@ function toggleAll() {
                 <Search class="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
                 <Input v-model="filters.q" data-testid="product-search" placeholder="Tìm kiếm theo mã sản phẩm, tên sản phẩm, barcode" class="pl-8" />
             </div>
-            <Select v-model="filters.category" :options="[{ value: '', label: 'Danh mục' }, ...categories.map((c) => ({ value: c.id, label: c.name }))]" class="w-full sm:w-44" aria-label="Danh mục" />
-            <Select v-model="filters.brand" class="w-full sm:w-44" aria-label="Thương hiệu" :options="[{ value: '', label: 'Thương hiệu' }, ...brands.map((b) => ({ value: b.id, label: b.name }))]" />
+            <Select v-if="categories.length" v-model="filters.category" :options="[{ value: '', label: 'Danh mục' }, ...categories.map((c) => ({ value: c.id, label: c.name }))]" class="w-full sm:w-44" aria-label="Danh mục" />
+            <Select v-if="brands.length" v-model="filters.brand" class="w-full sm:w-44" aria-label="Thương hiệu" :options="[{ value: '', label: 'Thương hiệu' }, ...brands.map((b) => ({ value: b.id, label: b.name }))]" />
             <Button variant="outline" size="sm" data-testid="more-filters" :class="cn(moreFilters && 'bg-muted')" @click="moreFilters = !moreFilters">
                 <SlidersHorizontal /> Bộ lọc khác<span v-if="activeExtra" class="rounded-full bg-primary px-1.5 text-xs text-primary-foreground">{{ activeExtra }}</span>
             </Button>
@@ -338,13 +354,12 @@ function toggleAll() {
         </EmptyState>
         <div v-else class="overflow-x-auto" :class="loading && 'opacity-60'">
             <table class="w-full text-sm" data-testid="product-table">
-                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                <thead class="whitespace-nowrap border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                     <tr>
                         <th v-if="canManage && !trashed" class="w-10 px-4 py-2.5"><input type="checkbox" :checked="allSelected" aria-label="Chọn tất cả" @change="toggleAll" /></th>
                         <th class="w-14 py-2.5 pl-4 font-medium">Ảnh</th>
                         <th class="px-4 py-2.5 font-medium">Sản phẩm</th>
-                        <th v-if="columns.category" class="px-4 py-2.5 font-medium">Danh mục</th>
-                        <th v-if="columns.category" class="px-4 py-2.5 font-medium">Thương hiệu</th>
+                        <th v-if="showTaxonomy" class="px-4 py-2.5 font-medium">Danh mục</th>
                         <th v-if="columns.price" class="px-4 py-2.5 text-right font-medium">Giá bán lẻ</th>
                         <th v-if="columns.available" class="px-4 py-2.5 text-center font-medium">Có thể bán</th>
                         <th v-if="columns.on_hand" class="px-4 py-2.5 text-center font-medium">Tồn kho</th>
@@ -377,16 +392,19 @@ function toggleAll() {
                                     </div>
                                 </div>
                             </td>
-                            <td v-if="columns.category" class="px-4 py-3">{{ p.category?.name ?? '—' }}</td>
-                            <td v-if="columns.category" class="px-4 py-3">{{ p.brand?.name ?? '—' }}</td>
-                            <td v-if="columns.price" class="px-4 py-3 text-right tabular-nums">{{ priceRange(p) }}</td>
+                            <td v-if="showTaxonomy" class="px-4 py-3">
+                                {{ p.category?.name ?? '—' }}<span v-if="p.brand" class="block text-xs text-muted-foreground">{{ p.brand.name }}</span>
+                            </td>
+                            <td v-if="columns.price" class="whitespace-nowrap px-4 py-3 text-right tabular-nums">{{ priceRange(p) }}</td>
                             <td v-if="columns.available" :class="cn('px-4 py-3 text-center tabular-nums', (p.stock?.available ?? 0) <= 0 && 'text-destructive')">
-                                {{ formatNumber(p.stock?.available ?? 0) }}<span class="block text-[11px] text-muted-foreground">({{ p.variants_count }} phiên bản)</span>
+                                {{ formatNumber(p.stock?.available ?? 0) }}
+                                <span v-if="(p.stock?.available ?? 0) <= 0" class="block text-[11px] font-medium text-rose-600">Hết hàng</span>
+
                             </td>
                             <td v-if="columns.on_hand" class="px-4 py-3 text-center tabular-nums">
-                                {{ formatNumber(p.stock?.on_hand ?? 0) }}<span class="block text-[11px] text-muted-foreground">({{ p.variants_count }} phiên bản)</span>
+                                {{ formatNumber(p.stock?.on_hand ?? 0) }}
                             </td>
-                            <td v-if="columns.status" class="px-4 py-3">
+                            <td v-if="columns.status" class="whitespace-nowrap px-4 py-3">
                                 <div v-if="trashed" class="flex items-center gap-2">
                                     <Badge tone="danger">Đã xóa</Badge>
                                     <Button v-if="canManage" size="sm" variant="outline" :disabled="restoring === p.id" :data-testid="`restore-${p.id}`" @click="restore(p)"><RotateCcw /> Khôi phục</Button>
