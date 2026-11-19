@@ -3,6 +3,8 @@ import { computed, onMounted, ref, type Component } from 'vue';
 import { ArrowRightLeft, Boxes, Cable, CreditCard, HandCoins, MessageSquareWarning, Percent, Printer, Receipt, ScrollText, Search, SlidersHorizontal, Sparkles, Store, Users, UsersRound, Wallet, Warehouse } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Input from '@/shared/ui/Input.vue';
+import Switch from '@/shared/ui/Switch.vue';
+import { useToast } from '@/shared/composables/useToast';
 import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
 import { api } from '@/shared/lib/api';
 import { useTenantStore } from '@/shared/stores/tenant';
@@ -83,6 +85,25 @@ const marketStatus = (key: string) => {
     if (bad > 0) return { text: `${ok} shop đang chạy · ${bad} shop cần xem lại`, tone: 'text-amber-600', connected: true };
     return { text: ok ? `${ok} shop đang chạy` : 'Đã ngắt kết nối', tone: ok ? 'text-emerald-600' : 'text-muted-foreground', connected: ok > 0 };
 };
+/** Basic or full menu (Đợt 2): saved for the whole business, the sidebar follows at once. */
+const toast = useToast();
+const advanced = ref(tenant.current?.advanced_menu !== false);
+const savingMenu = ref(false);
+async function setAdvanced(on: boolean) {
+    advanced.value = on;
+    savingMenu.value = true;
+    try {
+        await api.put('/tenant/settings/interface', { advanced_menu: on });
+        await tenant.refresh();
+        toast.success(on ? 'Đã hiện tính năng nâng cao trên menu.' : 'Menu đã chuyển sang chế độ cơ bản.');
+    } catch {
+        advanced.value = !on;
+        toast.error('Chưa lưu được, thử lại sau.');
+    } finally {
+        savingMenu.value = false;
+    }
+}
+const showMenu = computed(() => tenant.can('settings.manage') && (!q.value.trim() || plain('giao dien menu tinh nang nang cao co ban an hien').includes(plain(q.value.trim()))));
 const showMarkets = computed(() => canMarket.value && (!q.value.trim() || plain('san thuong mai dien tu shopee tiktok lazada tiki ket noi san').includes(plain(q.value.trim()))));
 </script>
 
@@ -94,6 +115,17 @@ const showMarkets = computed(() => canMarket.value && (!q.value.trim() || plain(
         </div>
     </PageHeader>
     <div class="space-y-5" data-testid="settings-hub">
+        <section v-if="showMenu" class="rounded-xl border bg-card p-5" data-testid="settings-interface">
+            <h2 class="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Giao diện</h2>
+            <Switch
+                :model-value="advanced"
+                label="Hiện tính năng nâng cao"
+                hint="Ca bán hàng, Đặt hàng nhập, Chuyển hàng, Điều chỉnh giá vốn, Đối soát tồn kho, Khách trùng, Loại phiếu. Tắt để menu gọn hơn: dữ liệu không mất, vẫn mở được bằng ô tìm kiếm (Ctrl K)."
+                :disabled="savingMenu"
+                data-testid="advanced-menu"
+                @update:model-value="setAdvanced"
+            />
+        </section>
         <template v-for="(g, gi) in visible" :key="g.title">
             <section class="rounded-xl border bg-card p-5">
                 <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{{ g.title }}</h2>
@@ -130,6 +162,6 @@ const showMarkets = computed(() => canMarket.value && (!q.value.trim() || plain(
                 </div>
             </section>
         </template>
-        <p v-if="!visible.length && !showMarkets" class="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground">Không thấy cài đặt nào khớp “{{ q }}”.</p>
+        <p v-if="!visible.length && !showMarkets && !showMenu" class="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground">Không thấy cài đặt nào khớp “{{ q }}”.</p>
     </div>
 </template>

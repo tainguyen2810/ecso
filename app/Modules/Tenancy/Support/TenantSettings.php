@@ -2,7 +2,9 @@
 
 namespace App\Modules\Tenancy\Support;
 
+use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Tenancy\Models\Tenant;
+use App\Modules\Tenancy\Models\TenantUser;
 
 /**
  * Business configuration ("Cấu hình", like Sapo's settings), stored as JSON on the tenant. Every key has a default,
@@ -20,6 +22,8 @@ class TenantSettings
         'store' => ['phone' => null, 'email' => null, 'website' => null, 'tax_code' => null, 'business_type' => null, 'address' => null, 'province' => null, 'ward' => null, 'province_code' => null, 'ward_code' => null],
         // A2: answers from the setup steps. channels: shopee, tiktok, woocommerce, pos, social, lazada_tiki.
         'setup' => ['industry' => null, 'channels' => null, 'team_size' => null],
+        // Menu: null = automatic (basic for a small shop, full from a second warehouse or 6 members), true/false = chosen.
+        'interface' => ['advanced_menu' => null],
         'tax' => ['sale_rate' => 0, 'purchase_rate' => 0, 'prices_include_tax' => true],
         'pricing' => ['sale_price' => 'retail', 'staff_edit_price' => true],
         'payments' => [
@@ -49,6 +53,28 @@ class TenantSettings
             'footer' => 'Cảm ơn quý khách!',
         ],
     ];
+
+    /**
+     * Whether the sidebar shows the advanced pages (Ca bán hàng, Chuyển hàng, Điều chỉnh giá vốn…). A small shop gets
+     * the basic menu until it opens a second warehouse or has 6 members; the owner can switch either way.
+     */
+    public static function advancedMenu(Tenant $tenant): bool
+    {
+        $chosen = $tenant->settings['interface']['advanced_menu'] ?? null;
+        if ($chosen !== null) {
+            return (bool) $chosen;
+        }
+        if (in_array($tenant->settings['setup']['team_size'] ?? null, ['6-20', '20+'], true)) {
+            return true;
+        }
+        $warehouses = Warehouse::withoutGlobalScopes()->where('tenant_id', $tenant->id)->whereNull('deleted_at')
+            ->where('status', 'active')->where(fn ($q) => $q->whereNull('purpose')->orWhere('purpose', '!=', 'defective'))->count();
+        if ($warehouses >= 2) {
+            return true;
+        }
+
+        return TenantUser::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('status', 'active')->count() >= 6;
+    }
 
     /** @param  array<string, mixed>  $values */
     private function __construct(private array $values) {}

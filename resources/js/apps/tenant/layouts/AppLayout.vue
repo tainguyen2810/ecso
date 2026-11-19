@@ -38,7 +38,7 @@ const visibleGroups = computed(() =>
                 .filter((i) => !i.hidden && canSee(i))
                 .map((i) => {
                     // A2: the POS pages leave the menu when the shop said it does not sell in a store.
-                    const children = i.children?.filter((c) => (!c.permission || tenant.can(c.permission)) && !(c.path.startsWith('/pos') && hidesPos(tenant.current?.channels)));
+                    const children = i.children?.filter((c) => (!c.permission || tenant.can(c.permission)) && !(c.path.startsWith('/pos') && hidesPos(tenant.current?.channels)) && (!c.advanced || tenant.current?.advanced_menu !== false || activeChild.value === c.path));
                     // A member who only sees part of a group lands on the first sub-page they may open.
                     return { ...i, children, path: tenant.can(i.permission) ? i.path : (children?.[0]?.path ?? i.path) };
                 })

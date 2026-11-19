@@ -43,6 +43,8 @@ export interface NavChild {
     label: string;
     path: string;
     permission?: string;
+    /** Hidden in the basic menu (Cấu hình › Hiện tính năng nâng cao is off). */
+    advanced?: boolean;
 }
 
 /** Marketplaces listed one per line under Kênh bán, in this order. */
@@ -67,23 +69,23 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
                     { label: 'Đóng gói', path: '/orders/pack', permission: 'orders.pack' },
                     { label: 'Gửi đơn vị vận chuyển', path: '/shipments' },
                     { label: 'Bán tại quầy', path: '/pos', permission: 'orders.create' },
-                    { label: 'Ca bán hàng', path: '/pos/shifts', permission: 'orders.create' },
+                    { label: 'Ca bán hàng', path: '/pos/shifts', permission: 'orders.create', advanced: true },
                     { label: 'Khách trả hàng', path: '/returns', permission: 'returns.view' },
                 ] },
             { name: 'customers', label: 'Khách hàng', path: '/customers', icon: UsersRound, permission: 'customers.view', shortcut: 'k', description: 'Danh bạ khách mua qua kênh riêng, lịch sử mua và công nợ.',
-                children: [{ label: 'Danh sách khách hàng', path: '/customers' }, { label: 'Nhóm khách hàng', path: '/customers/groups' }, { label: 'Khuyến mãi', path: '/promotions', permission: 'orders.create' }, { label: 'Tích điểm và hạng', path: '/customers/loyalty' }, { label: 'Khách trùng', path: '/customers/duplicates', permission: 'customers.merge' }] },
+                children: [{ label: 'Danh sách khách hàng', path: '/customers' }, { label: 'Nhóm khách hàng', path: '/customers/groups' }, { label: 'Khuyến mãi', path: '/promotions', permission: 'orders.create' }, { label: 'Tích điểm và hạng', path: '/customers/loyalty' }, { label: 'Khách trùng', path: '/customers/duplicates', permission: 'customers.merge', advanced: true }] },
             { name: 'products', label: 'Sản phẩm', path: '/products', icon: Package, permission: 'products.view', anyPermission: ['inventory.view', 'purchasing.view'], shortcut: 'p', description: 'Sản phẩm, tồn kho, nhập hàng, kiểm hàng, chuyển hàng, nhà cung cấp và giá vốn.',
                 alsoActive: ['inventory', 'purchasing'],
                 children: [
                     { label: 'Danh sách sản phẩm', path: '/products', permission: 'products.view' },
                     { label: 'Quản lý kho', path: '/inventory', permission: 'inventory.view' },
-                    { label: 'Đặt hàng nhập', path: '/purchasing/orders', permission: 'purchasing.view' },
+                    { label: 'Đặt hàng nhập', path: '/purchasing/orders', permission: 'purchasing.view', advanced: true },
                     { label: 'Nhập hàng', path: '/purchasing', permission: 'purchasing.view' },
                     { label: 'Kiểm hàng', path: '/inventory/stocktake', permission: 'inventory.view' },
-                    { label: 'Chuyển hàng', path: '/inventory/transfers', permission: 'inventory.view' },
+                    { label: 'Chuyển hàng', path: '/inventory/transfers', permission: 'inventory.view', advanced: true },
                     { label: 'Nhà cung cấp', path: '/purchasing/suppliers', permission: 'purchasing.view' },
-                    { label: 'Điều chỉnh giá vốn', path: '/inventory/cost-adjustments', permission: 'inventory.view' },
-                    { label: 'Đối soát tồn kho', path: '/inventory/reconciliation', permission: 'inventory.view' },
+                    { label: 'Điều chỉnh giá vốn', path: '/inventory/cost-adjustments', permission: 'inventory.view', advanced: true },
+                    { label: 'Đối soát tồn kho', path: '/inventory/reconciliation', permission: 'inventory.view', advanced: true },
                 ] },
         ],
     },
@@ -100,7 +102,7 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
         label: 'Phân tích',
         items: [
             { name: 'cash', label: 'Thu chi', path: '/cash', icon: HandCoins, permission: 'finance.view', shortcut: 'q', description: 'Phiếu thu, phiếu chi, sổ quỹ, đối soát COD và loại phiếu.',
-                children: [{ label: 'Phiếu thu, phiếu chi', path: '/cash' }, { label: 'Sổ quỹ', path: '/reports/cashbook' }, { label: 'Quỹ', path: '/cash/accounts' }, { label: 'Đối soát COD', path: '/cash/cod' }, { label: 'Loại phiếu', path: '/cash/types' }] },
+                children: [{ label: 'Phiếu thu, phiếu chi', path: '/cash' }, { label: 'Sổ quỹ', path: '/reports/cashbook' }, { label: 'Quỹ', path: '/cash/accounts' }, { label: 'Đối soát COD', path: '/cash/cod' }, { label: 'Loại phiếu', path: '/cash/types', advanced: true }] },
             { name: 'finance', label: 'Tài chính', path: '/finance', icon: Wallet, permission: 'finance.view', description: 'Doanh thu, phí sàn, đối soát, lợi nhuận ước tính và đã xác nhận.' },
             { name: 'reports', label: 'Báo cáo', path: '/reports', icon: BarChart3, permission: 'reports.view', description: 'Bán hàng, lãi lỗ, kho, nhập hàng, công nợ và khách hàng.',
                 children: [
