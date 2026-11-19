@@ -446,7 +446,7 @@ class OrderController extends Controller
             'to_process' => Order::query()->whereIn('status', OrderStatus::OPEN)->count(),
             'overdue' => Order::query()->whereIn('status', OrderStatus::OPEN)->where('ship_by_at', '<', now())->count(),
             'shortage' => Order::query()->where('has_shortage', true)->whereIn('status', OrderStatus::OPEN)->count(),
-            'recent' => OrderResource::collection(Order::query()->with(['account', 'channel'])->orderByDesc('placed_at')->orderByDesc('id')->limit(6)->get()),
+            'recent' => OrderResource::collection(Order::query()->with(['account', 'channel', 'items.variant.product.images'])->orderByDesc('placed_at')->orderByDesc('id')->limit(6)->get()),
         ]]);
     }
 
