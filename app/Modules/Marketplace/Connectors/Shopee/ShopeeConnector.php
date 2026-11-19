@@ -485,6 +485,63 @@ class ShopeeConnector extends GatewayConnector
         ];
     }
 
+    // ---- Hàng hoàn ----------------------------------------------------------------------------------------------
+
+    /** @var array<string, string> Shopee return status => normalised */
+    private const RETURN_STATUS = [
+        'REQUESTED' => 'requested', 'JUDGING' => 'requested', 'PROCESSING' => 'requested', 'SELLER_DISPUTE' => 'requested',
+        'ACCEPTED' => 'approved', 'CLOSED' => 'refunded', 'CANCELLED' => 'cancelled',
+    ];
+
+    /** Returns updated since $since (Shopee keeps 15-day windows); cursor = "window start|page". */
+    public function listReturns(MarketplaceAccount $account, CarbonImmutable $since, ?string $cursor = null): array
+    {
+        [$from, $page] = $cursor !== null ? array_map('intval', explode('|', $cursor)) + [0, 0] : [$since->getTimestamp(), 0];
+        $to = min($from + 15 * 86400, now()->getTimestamp());
+        $res = (array) ($this->gateway->call($account, 'GET', '/api/v2/returns/get_return_list', [
+            'page_no' => $page, 'page_size' => 50, 'update_time_from' => $from, 'update_time_to' => $to,
+        ])['response'] ?? []);
+        $returns = [];
+        foreach ((array) ($res['return'] ?? []) as $r) {
+            $raw = strtoupper((string) ($r['status'] ?? ''));
+            $tracking = filled($r['tracking_number'] ?? null) ? (string) $r['tracking_number'] : null;
+            $status = self::RETURN_STATUS[$raw] ?? 'requested';
+            if ($status === 'approved' && $tracking !== null) {
+                $status = 'shipping';
+            }
+            $returns[] = [
+                'id' => (string) $r['return_sn'],
+                'order_id' => (string) $r['order_sn'],
+                'status' => $status,
+                'raw_status' => $raw,
+                'goods' => (bool) ($r['needs_logistics'] ?? true),
+                'reason' => trim(implode(': ', array_filter([self::returnReason((string) ($r['reason'] ?? '')), $r['text_reason'] ?? null], 'filled'))) ?: null,
+                'refund' => is_numeric($r['refund_amount'] ?? null) ? (float) $r['refund_amount'] : null,
+                'tracking_number' => $tracking,
+                'respond_by' => $status === 'requested' ? self::time($r['due_date'] ?? null) : null,
+                'items' => array_map(fn ($i) => [
+                    'external_sku_id' => self::skuId((int) ($i['item_id'] ?? 0), (int) ($i['model_id'] ?? 0)),
+                    'seller_sku' => filled($i['variation_sku'] ?? null) ? (string) $i['variation_sku'] : (filled($i['item_sku'] ?? null) ? (string) $i['item_sku'] : null),
+                    'name' => (string) ($i['name'] ?? ''),
+                    'quantity' => max(1, (int) ($i['amount'] ?? 1)),
+                ], (array) ($r['item'] ?? [])),
+                'images' => array_slice(array_values(array_filter((array) ($r['image'] ?? []), fn ($u) => is_string($u) && str_starts_with($u, 'https://'))), 0, 6),
+            ];
+        }
+        $next = ($res['more'] ?? false) ? "{$from}|".($page + 1) : ($to < now()->getTimestamp() ? "{$to}|0" : null);
+
+        return ['returns' => $returns, 'next' => $next];
+    }
+
+    private static function returnReason(string $code): ?string
+    {
+        return [
+            'NOT_RECEIPT' => 'Chưa nhận được hàng', 'WRONG_ITEM' => 'Giao sai hàng', 'ITEM_DAMAGED' => 'Hàng bị hư hỏng', 'DIFFERENT_DESCRIPTION' => 'Khác mô tả',
+            'MUTUAL_AGREE' => 'Hai bên đồng ý', 'OTHER' => null, 'ITEM_MISSING' => 'Thiếu hàng', 'ITEM_WRONGDAMAGED' => 'Sai hàng hoặc hỏng',
+            'CHANGE_MIND' => 'Đổi ý', 'EXPECTATION_FAILED' => 'Không như mong đợi', 'DAMAGED_PACKAGE' => 'Bao bì hư hỏng', 'FUNCTIONAL_DMG' => 'Hàng không hoạt động',
+        ][$code] ?? ($code !== '' ? $code : null);
+    }
+
     // ---- Helpers ----------------------------------------------------------------------------------------------
 
     public static function skuId(int $itemId, int $modelId): string

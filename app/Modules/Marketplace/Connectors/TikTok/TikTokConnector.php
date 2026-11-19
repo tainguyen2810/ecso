@@ -362,6 +362,63 @@ class TikTokConnector extends GatewayConnector
         return $results;
     }
 
+    // ---- Hàng hoàn ----------------------------------------------------------------------------------------------
+
+    /** @var array<string, string> TikTok return_status => normalised */
+    private const RETURN_STATUS = [
+        'RETURN_OR_REFUND_REQUEST_PENDING' => 'requested', 'AWAITING_BUYER_SHIP' => 'approved', 'AWAITING_BUYER_RESPONSE' => 'approved',
+        'BUYER_SHIPPED_ITEM' => 'shipping', 'RECEIVE_REJECTED' => 'rejected', 'REJECT_RECEIVE_PACKAGE' => 'rejected',
+        'REFUND_OR_RETURN_REQUEST_REJECT' => 'rejected', 'RETURN_OR_REFUND_REQUEST_SUCCESS' => 'refunded',
+        'RETURN_OR_REFUND_REQUEST_COMPLETE' => 'refunded', 'RETURN_OR_REFUND_REQUEST_CANCEL' => 'cancelled',
+    ];
+
+    /** Return and refund requests updated since $since (Return Refund 202309 search); cursor = TikTok's page token. */
+    public function listReturns(MarketplaceAccount $account, CarbonImmutable $since, ?string $cursor = null): array
+    {
+        $d = $this->gateway->call($account, 'POST', '/return_refund/'.self::V.'/returns/search', array_filter(['page_size' => 50, 'page_token' => $cursor]), [
+            'update_time_ge' => $since->getTimestamp(), 'update_time_lt' => now()->getTimestamp(),
+        ]);
+        $returns = [];
+        foreach ((array) ($d['return_orders'] ?? []) as $r) {
+            $raw = strtoupper((string) ($r['return_status'] ?? ''));
+            // One line item per unit: count them per SKU.
+            $items = [];
+            foreach ((array) ($r['return_line_items'] ?? []) as $l) {
+                $key = (string) ($l['sku_id'] ?? $l['seller_sku'] ?? $l['product_name'] ?? '');
+                $items[$key] ??= ['external_sku_id' => filled($l['sku_id'] ?? null) ? (string) $l['sku_id'] : null, 'seller_sku' => filled($l['seller_sku'] ?? null) ? (string) $l['seller_sku'] : null,
+                    'name' => trim(($l['product_name'] ?? '').' '.($l['sku_name'] ?? '')), 'quantity' => 0];
+                $items[$key]['quantity']++;
+            }
+            $deadline = null;
+            foreach ((array) ($r['seller_next_action_response'] ?? []) as $a) {
+                $deadline ??= self::time($a['deadline'] ?? null);
+            }
+            $images = [];
+            foreach ((array) ($r['buyer_proof']['images'] ?? $r['images'] ?? []) as $img) {
+                $url = is_array($img) ? ($img['url'] ?? '') : $img;
+                if (is_string($url) && str_starts_with($url, 'https://')) {
+                    $images[] = $url;
+                }
+            }
+            $returns[] = [
+                'id' => (string) $r['return_id'],
+                'order_id' => (string) $r['order_id'],
+                'status' => self::RETURN_STATUS[$raw] ?? 'requested',
+                'raw_status' => $raw,
+                'goods' => strtoupper((string) ($r['return_type'] ?? '')) !== 'REFUND',
+                'reason' => filled($r['return_reason_text'] ?? null) ? (string) $r['return_reason_text'] : (filled($r['return_reason'] ?? null) ? (string) $r['return_reason'] : null),
+                'refund' => is_numeric($r['refund_amount']['refund_total'] ?? null) ? (float) $r['refund_amount']['refund_total'] : null,
+                'tracking_number' => filled($r['return_tracking_number'] ?? null) ? (string) $r['return_tracking_number'] : null,
+                'respond_by' => $deadline ?? self::time($r['seller_response_deadline'] ?? null),
+                'items' => array_values($items),
+                'images' => array_slice($images, 0, 6),
+            ];
+        }
+        $next = filled($d['next_page_token'] ?? null) && $returns !== [] ? (string) $d['next_page_token'] : null;
+
+        return ['returns' => $returns, 'next' => $next];
+    }
+
     // ---- Tiền thực nhận -----------------------------------------------------------------------------------------
 
     /** TikTok's own totals, summed from the fee lines, not fees of their own. */

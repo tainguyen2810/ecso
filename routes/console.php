@@ -45,6 +45,9 @@ Schedule::command('ecso:woo:check-webhooks')->hourlyAt(17)->withoutOverlapping(5
 // Tiền thực nhận (đợt 5): settlements of delivered marketplace orders, read from the marketplaces' finance APIs.
 Schedule::command('ecso:marketplace:settlements')->everyTwoHours(23)->withoutOverlapping(100)->onOneServer();
 
+// Hàng hoàn (đợt 6): return and refund requests on the marketplaces come into Hoàn/Trả.
+Schedule::command('ecso:marketplace:returns')->everyThirtyMinutes()->withoutOverlapping(25)->onOneServer();
+
 // Fee check: actual marketplace fees vs fee tables, loss orders (round 3 WooCommerce/pricing).
 Schedule::command('ecso:marketplace:check-fees')->dailyAt('06:00')->withoutOverlapping(120)->onOneServer();
 

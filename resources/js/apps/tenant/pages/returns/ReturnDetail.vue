@@ -16,7 +16,7 @@ import { api, ApiError, idempotent, newIdempotencyKey } from '@/shared/lib/api';
 import { formatDateTime, formatMoney } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
-import { orderStatus, paymentMethods, returnStatus, returnTypes } from '../orders/labels';
+import { marketplaceNames, orderStatus, paymentMethods, returnStatus, returnTypes } from '../orders/labels';
 import type { OrderReturnData, Warehouse } from '@/shared/types';
 
 const route = useRoute();
@@ -52,6 +52,22 @@ onMounted(async () => {
     warehouses.value = list.data.data.filter((w: Warehouse) => w.status === 'active' && w.purpose !== 'defective');
     inspect.value.warehouse_id = warehouses.value.find((w) => w.is_default)?.id ?? warehouses.value[0]?.id ?? '';
 });
+
+/** "Còn bán được hết" / "Hỏng hết": everything received goes one way. */
+function fillAll(kind: 'sellable' | 'damaged') {
+    for (const l of Object.values(inspect.value.lines)) {
+        l.sellable_qty = kind === 'sellable' ? Number(l.received_qty) : 0;
+        l.damaged_qty = kind === 'damaged' ? Number(l.received_qty) : 0;
+    }
+}
+
+const sanStatus: Record<string, string> = {
+    REQUESTED: 'Chờ shop trả lời', JUDGING: 'Sàn đang xem xét', PROCESSING: 'Đang xử lý', SELLER_DISPUTE: 'Shop đang khiếu nại', ACCEPTED: 'Đã chấp nhận', CLOSED: 'Đã hoàn tiền, đóng',
+    CANCELLED: 'Người mua đã hủy', RETURN_OR_REFUND_REQUEST_PENDING: 'Chờ shop trả lời', AWAITING_BUYER_SHIP: 'Chờ người mua gửi hàng', AWAITING_BUYER_RESPONSE: 'Chờ người mua phản hồi',
+    BUYER_SHIPPED_ITEM: 'Người mua đã gửi hàng', BUYER_SHIPPED: 'Người mua đã gửi hàng', REJECT_RECEIVE_PACKAGE: 'Shop từ chối nhận hàng', RECEIVE_REJECTED: 'Shop từ chối nhận hàng',
+    REFUND_OR_RETURN_REQUEST_REJECT: 'Đã từ chối yêu cầu', RETURN_OR_REFUND_REQUEST_SUCCESS: 'Đã hoàn tiền', RETURN_OR_REFUND_REQUEST_COMPLETE: 'Hoàn tất', RETURN_OR_REFUND_REQUEST_CANCEL: 'Người mua đã hủy',
+};
+const marketplaceReturnStatus = (s: string | null | undefined) => (s ? (sanStatus[s] ?? s) : '—');
 
 const canInspect = computed(() => ret.value?.status === 'received' && tenant.can('returns.inspect'));
 const lineInvalid = (id: number) => {
@@ -131,7 +147,7 @@ async function submitInspect() {
         <PageHeader :title="`Phiếu ${ret.number}`" :description="`${returnTypes[ret.type]} · tạo ${formatDateTime(ret.created_at)}${ret.created_by ? ' bởi ' + ret.created_by : ''}`">
             <Badge :tone="returnStatus[ret.status]?.tone" data-testid="return-status">{{ returnStatus[ret.status]?.label }}</Badge>
             <template v-if="tenant.can('returns.inspect')">
-                <Button v-for="s in ret.next.filter((n) => n !== 'inspected')" :key="s" :variant="s === 'rejected' ? 'outline' : 'default'" :loading="busy === s" @click="move(s)">{{ moveLabels[s] }}</Button>
+                <Button v-for="s in ret.next.filter((n) => n !== 'inspected' && !(ret!.external_return_id && ret!.status === 'requested'))" :key="s" :variant="s === 'rejected' ? 'outline' : 'default'" :loading="busy === s" @click="move(s)">{{ moveLabels[s] }}</Button>
             </template>
         </PageHeader>
 
@@ -174,6 +190,10 @@ async function submitInspect() {
                             <Select v-model="inspect.warehouse_id" :options="warehouses.map((w) => ({ value: w.id!, label: `${w.code} · ${w.name}` }))" />
                         </FormField>
                         <FormField label="Ghi chú kiểm hàng"><Input v-model="inspect.note" /></FormField>
+                        <div class="flex flex-wrap gap-2 sm:col-span-2">
+                            <Button size="sm" variant="outline" data-testid="inspect-all-sellable" @click="fillAll('sellable')">Còn bán được hết</Button>
+                            <Button size="sm" variant="outline" data-testid="inspect-all-damaged" @click="fillAll('damaged')">Hỏng hết</Button>
+                        </div>
                         <p class="text-xs text-muted-foreground sm:col-span-2">Bán được + Hỏng phải bằng Nhận. Hàng hỏng được nhập vào kho hàng lỗi (tự tạo nếu chưa có), không cộng vào tồn bán được.</p>
                         <p v-if="inspectError" class="text-sm text-destructive sm:col-span-2">{{ inspectError }}</p>
                         <div class="sm:col-span-2">
@@ -185,6 +205,20 @@ async function submitInspect() {
                     <p class="px-5 py-4 text-sm text-muted-foreground">Khách không gửi trả hàng: phiếu này không làm thay đổi tồn kho.</p>
                 </Card>
             </div>
+            <div class="space-y-4">
+            <Card v-if="ret.external_return_id" :title="`Yêu cầu trên ${marketplaceNames[ret.order?.marketplace ?? ''] ?? 'sàn'}`" data-testid="return-marketplace">
+                <dl class="space-y-2 px-5 py-4 text-sm">
+                    <div v-if="ret.respond_by && ret.status === 'requested'" class="rounded-lg bg-amber-50 p-3 text-amber-800">
+                        Người mua đang chờ shop trả lời. Duyệt hoặc từ chối trên ứng dụng {{ marketplaceNames[ret.order?.marketplace ?? ''] ?? 'sàn' }} trước <b>{{ formatDateTime(ret.respond_by) }}</b>, phần mềm sẽ tự cập nhật.
+                    </div>
+                    <div><dt class="text-xs text-muted-foreground">Mã yêu cầu</dt><dd class="font-mono text-xs">{{ ret.external_return_id }}</dd></div>
+                    <div><dt class="text-xs text-muted-foreground">Trạng thái trên sàn</dt><dd>{{ marketplaceReturnStatus(ret.marketplace_status) }}</dd></div>
+                    <div v-if="ret.return_tracking_number"><dt class="text-xs text-muted-foreground">Mã vận đơn hàng hoàn</dt><dd class="font-mono text-xs">{{ ret.return_tracking_number }}</dd></div>
+                    <div v-if="ret.images?.length"><dt class="mb-1 text-xs text-muted-foreground">Ảnh người mua gửi</dt>
+                        <dd class="flex flex-wrap gap-2"><a v-for="u in ret.images" :key="u" :href="u" target="_blank" rel="noopener"><img :src="u" alt="" class="size-16 rounded-lg border object-cover" /></a></dd>
+                    </div>
+                </dl>
+            </Card>
             <Card title="Thông tin">
                 <dl class="space-y-2 px-5 py-4 text-sm">
                     <div><dt class="text-xs text-muted-foreground">Đơn hàng</dt><dd><RouterLink :to="`/orders/${ret.order?.id}`" class="font-mono text-xs hover:underline">{{ ret.order?.external_order_id }}</RouterLink> <Badge class="ml-1" :tone="orderStatus[ret.order?.status ?? '']?.tone">{{ orderStatus[ret.order?.status ?? '']?.label }}</Badge></dd></div>
@@ -207,6 +241,7 @@ async function submitInspect() {
                     <div v-if="ret.note"><dt class="text-xs text-muted-foreground">Ghi chú</dt><dd class="whitespace-pre-line">{{ ret.note }}</dd></div>
                 </dl>
             </Card>
+            </div>
         </div>
 
         <Dialog v-model:open="refundOpen" title="Hoàn tiền cho khách" description="Ghi nhận số tiền trả lại khách cho phiếu này. Sổ quỹ và công nợ được cập nhật theo phương thức đã chọn.">
