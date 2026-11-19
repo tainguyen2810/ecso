@@ -2,8 +2,7 @@
 import DateTimeInput from '@/shared/ui/DateTimeInput.vue';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, Ban, Banknote, CalendarClock, Download, HandCoins, Link2, MapPin, Merge, Pencil, Plus, ShoppingCart, Trash2 } from 'lucide-vue-next';
-import PageHeader from '../../PageHeader.vue';
+import { ArrowLeft, Ban, CalendarClock, Download, HandCoins, Link2, MapPin, Merge, Pencil, Plus, Trash2, TriangleAlert } from 'lucide-vue-next';
 import Tabs from '../../components/Tabs.vue';
 import AddressPicker from '../../components/AddressPicker.vue';
 import { emptyAddress, type AddressParts } from '@/shared/lib/geo';
@@ -18,7 +17,6 @@ import { customerSources, customerStatus, customerTypes, genderLabels, noteKinds
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
-import KpiCard from '@/shared/ui/KpiCard.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import FormField from '@/shared/ui/FormField.vue';
@@ -26,7 +24,7 @@ import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError, downloadFile } from '@/shared/lib/api';
-import { cn, formatDate, formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
+import { cn, formatDate, formatDateTime, formatMoney, formatNumber, initials } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { marketplaceNames, orderStatus, paymentMethodNames, paymentMethods, paymentStatus, returnStatus, returnTypes } from '../orders/labels';
@@ -342,6 +340,14 @@ async function removeNote(n: CustomerNote) {
     }
 }
 
+/** "Hôm nay", "Hôm qua", "5 ngày trước" for the last purchase. */
+const lastOrderLabel = computed(() => {
+    const d = customer.value?.summary?.days_since_last_order;
+    if (d == null) return customer.value?.last_order_at ? formatDate(customer.value.last_order_at) : '—';
+    return d <= 0 ? 'Hôm nay' : d === 1 ? 'Hôm qua' : `${formatNumber(d)} ngày trước`;
+});
+/** The last two parts of the address (district, province) for the header line. */
+const shortAddress = computed(() => (customer.value?.address ?? '').split(',').map((x) => x.trim()).filter(Boolean).slice(-2).join(', '));
 const tabs = computed(() => [
     { value: 'overview', label: 'Tổng quan' },
     { value: 'orders', label: 'Đơn hàng', count: customer.value?.orders_count ?? null },
@@ -359,20 +365,54 @@ const thead = 'border-b bg-slate-50 text-left text-[11px] uppercase tracking-wid
     <div v-if="loading && !customer" class="space-y-4"><Skeleton class="h-10 w-80" /><Skeleton class="h-64" /></div>
     <ErrorState v-else-if="loadError" :message="loadError" @retry="load" />
     <template v-else-if="customer">
-        <RouterLink to="/customers" class="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft class="size-4" /> Khách hàng</RouterLink>
-        <PageHeader :title="customer.name" :description="`${customer.code}${customer.phone ? ' · ' + customer.phone : ''}${customer.group ? ' · nhóm ' + customer.group.name : ''}`">
-            <Badge :tone="customerStatus[customer.status]?.tone" data-testid="customer-status">{{ customerStatus[customer.status]?.label }}</Badge>
-            <Button v-if="tenant.can('orders.create')" @click="$router.push({ path: '/orders/new', query: { customer: customer.id } })"><Plus /> Tạo đơn</Button>
-            <Button v-if="canManage" variant="outline" data-testid="edit-customer" @click="dialog = true"><Pencil /> Sửa</Button>
-            <Button v-if="canMerge" variant="outline" data-testid="merge-customer" @click="pickOpen = true"><Merge /> Gộp khách</Button>
-            <Button v-if="tenant.can('customers.delete') && !customer.orders_count" variant="ghost" title="Xóa" @click="remove"><Trash2 /></Button>
-        </PageHeader>
+        <!-- Header: who the customer is at a glance, the main actions on the right. -->
+        <div class="mb-5 flex flex-wrap items-center gap-4">
+            <RouterLink to="/customers" class="grid size-10 shrink-0 place-items-center rounded-lg border bg-card text-muted-foreground hover:text-foreground" aria-label="Khách hàng" title="Danh sách khách hàng"><ArrowLeft class="size-4" /></RouterLink>
+            <span class="grid size-14 shrink-0 place-items-center rounded-full bg-primary/10 text-lg font-semibold text-primary">{{ initials(customer.name) }}</span>
+            <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                    <h1 class="truncate text-2xl font-semibold tracking-tight">{{ customer.name }}</h1>
+                    <span v-if="customer.group" class="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">{{ customer.group.name }}</span>
+                    <Badge :tone="customerStatus[customer.status]?.tone" data-testid="customer-status">{{ customerStatus[customer.status]?.label }}</Badge>
+                </div>
+                <p class="mt-0.5 truncate text-sm text-muted-foreground">
+                    <span class="font-mono text-xs">{{ customer.code }}</span>
+                    <template v-if="customer.phone"> · {{ customer.phone }}</template>
+                    <template v-if="shortAddress"> · {{ shortAddress }}</template>
+                </p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <Button v-if="tenant.can('customers.delete') && !customer.orders_count" variant="ghost" title="Xóa" @click="remove"><Trash2 /></Button>
+                <Button v-if="canMerge" variant="outline" data-testid="merge-customer" @click="pickOpen = true"><Merge /> Gộp khách</Button>
+                <Button v-if="canManage" variant="outline" data-testid="edit-customer" @click="dialog = true"><Pencil /> Sửa</Button>
+                <Button v-if="tenant.can('orders.create')" @click="$router.push({ path: '/orders/new', query: { customer: customer.id } })"><Plus /> Tạo đơn cho khách</Button>
+            </div>
+        </div>
 
-        <div class="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <KpiCard label="Số đơn" :icon="ShoppingCart" :value="formatNumber(customer.orders_count)" />
-            <KpiCard label="Tổng chi tiêu (không tính đơn hủy/hoàn)" :icon="Banknote" tone="blue" :value="formatMoney(customer.total_spent)" />
-            <KpiCard label="Còn nợ" :icon="HandCoins" :tone="Number(customer.debt) > 0 ? 'red' : 'slate'" :value="formatMoney(customer.debt)"><template #value><span data-testid="customer-debt">{{ formatMoney(customer.debt) }}</span></template><span v-if="Number(customer.overdue) > 0" class="font-medium text-destructive" data-testid="customer-overdue">Quá hạn {{ formatMoney(customer.overdue) }}</span></KpiCard>
-            <KpiCard label="Mua gần nhất" :icon="CalendarClock" :value="customer.last_order_at ? formatDate(customer.last_order_at) : null" />
+        <div class="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" data-testid="customer-kpis">
+            <div class="rounded-xl border bg-card p-4">
+                <p class="text-sm text-muted-foreground">Tổng đã mua</p>
+                <p class="mt-1 text-2xl font-semibold tabular-nums">{{ formatMoney(customer.total_spent) }}</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">{{ formatNumber(customer.orders_count) }} đơn · không tính đơn hủy, hoàn</p>
+            </div>
+            <div class="rounded-xl border bg-card p-4">
+                <p class="text-sm text-muted-foreground">Trung bình / đơn</p>
+                <p class="mt-1 text-2xl font-semibold tabular-nums">{{ customer.summary?.average_order ? formatMoney(customer.summary.average_order) : '—' }}</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">{{ (customer.summary?.purchase_interval_days ?? 0) > 0 ? `khoảng ${formatNumber(customer.summary!.purchase_interval_days!)} ngày mua một lần` : 'chưa đủ đơn để tính chu kỳ' }}</p>
+            </div>
+            <div class="rounded-xl border bg-card p-4">
+                <p class="text-sm text-muted-foreground">Lần mua gần nhất</p>
+                <p class="mt-1 text-2xl font-semibold">{{ lastOrderLabel }}</p>
+                <p class="mt-0.5 truncate text-xs text-muted-foreground">{{ customer.last_order_at ? formatDate(customer.last_order_at) : 'Chưa có đơn' }}<template v-if="customer.orders[0]"> · {{ customer.orders[0].external_order_id }}</template></p>
+            </div>
+            <div :class="cn('rounded-xl border bg-card p-4', Number(customer.debt) > 0 && 'border-red-200')">
+                <p class="text-sm text-muted-foreground">Công nợ</p>
+                <p :class="cn('mt-1 text-2xl font-semibold tabular-nums', Number(customer.debt) > 0 && 'text-destructive')" data-testid="customer-debt">{{ formatMoney(customer.debt) }}</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">
+                    <span v-if="Number(customer.overdue) > 0" class="font-medium text-destructive" data-testid="customer-overdue">Quá hạn {{ formatMoney(customer.overdue) }}</span>
+                    <template v-else>{{ Number(customer.debt) > 0 ? 'Chưa đến hạn' : 'Không nợ' }}</template>
+                </p>
+            </div>
         </div>
 
         <div class="grid gap-4 lg:grid-cols-3">
@@ -584,6 +624,17 @@ const thead = 'border-b bg-slate-50 text-left text-[11px] uppercase tracking-wid
             </div>
 
             <div class="space-y-4">
+                <div v-if="Number(customer.debt) > 0" class="rounded-xl border border-red-200 bg-red-50/60 p-4" data-testid="customer-debt-alert">
+                    <p class="flex items-center gap-2 font-semibold text-destructive"><TriangleAlert class="size-4" /> Công nợ {{ formatMoney(customer.debt) }}</p>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                        <template v-if="Number(customer.overdue) > 0">Quá hạn {{ formatMoney(customer.overdue) }}.</template>
+                        <template v-if="customer.summary?.terms_days != null"> Hạn thanh toán {{ customer.summary.terms_days }} ngày.</template>
+                    </p>
+                    <div class="mt-3 flex gap-2">
+                        <Button variant="outline" size="sm" @click="tab = 'debt'">Xem sổ nợ</Button>
+                        <Button v-if="canCollect" size="sm" data-testid="debt-alert-collect" @click="receiptDialog = true"><HandCoins /> Thu nợ</Button>
+                    </div>
+                </div>
                 <CustomerLoyaltyCard :customer-id="customer.id" />
                 <Card title="Thông tin">
                     <dl class="grid grid-cols-2 gap-x-4 gap-y-3 px-5 py-4 text-sm">
