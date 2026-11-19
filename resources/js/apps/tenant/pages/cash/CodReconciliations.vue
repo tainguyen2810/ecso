@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { FileUp, Truck } from 'lucide-vue-next';
+import { ArrowRight, Banknote, FileUp, Landmark, Smartphone, Truck, Wallet } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import CashNav from './CashNav.vue';
 import CodImportDialog from './CodImportDialog.vue';
@@ -13,7 +13,7 @@ import FormField from '@/shared/ui/FormField.vue';
 import Input from '@/shared/ui/Input.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
-import { formatDateTime, formatMoney } from '@/shared/lib/utils';
+import { cn, formatDate, formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
 import { codStatuses, type CodReconciliation } from './cod';
@@ -38,7 +38,73 @@ async function load() {
         loading.value = false;
     }
 }
-onMounted(load);
+onMounted(() => {
+    load();
+    loadHeld();
+    loadFunds();
+});
+
+/** "Chờ hãng trả": delivered COD parcels whose money the carrier still holds (needs orders.view). */
+interface HeldParcel {
+    id: string;
+    carrier_name: string | null;
+    tracking_number: string | null;
+    cod_amount: string;
+    fee_actual: string | null;
+    fee_estimated: string | null;
+    delivered_at: string | null;
+    order?: { id: string; external_order_id: string; channel: string | null };
+}
+const tab = ref<'waiting' | 'sessions'>('waiting');
+const held = ref<HeldParcel[]>([]);
+const heldTotal = ref(0);
+const heldByCarrier = ref<{ carrier: string; carrier_name: string; amount: string; count: number }[]>([]);
+const carrier = ref('');
+const canSeeParcels = computed(() => tenant.can('orders.view'));
+async function loadHeld() {
+    if (!canSeeParcels.value) return void (tab.value = 'sessions');
+    try {
+        const [list, sum] = await Promise.all([api.get('/shipments', { params: { cod: 'collected', carrier: carrier.value || undefined } }), api.get('/shipments/summary')]);
+        held.value = list.data.data;
+        heldTotal.value = list.data.meta?.total ?? held.value.length;
+        heldByCarrier.value = sum.data.data.cod_held ?? [];
+        if (!heldByCarrier.value.length && !carrier.value) tab.value = 'sessions';
+    } catch {
+        tab.value = 'sessions';
+    }
+}
+function pickCarrier(c: string) {
+    carrier.value = carrier.value === c ? '' : c;
+    loadHeld();
+}
+const heldAmount = computed(() => heldByCarrier.value.reduce((s, c) => s + Number(c.amount), 0));
+const heldCount = computed(() => heldByCarrier.value.reduce((s, c) => s + c.count, 0));
+const feeOf = (p: HeldParcel) => Number(p.fee_actual ?? p.fee_estimated ?? 0);
+const daysSince = (iso: string | null) => (iso ? Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)) : null);
+
+/** This month's statements: money that reached the account, and the carriers' fees. */
+const month = computed(() => {
+    const start = new Date();
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+    const mine = rows.value.filter((r) => !r.voided_at && new Date(r.remitted_at) >= start);
+    const cod = mine.reduce((s, r) => s + Number(r.total_cod), 0);
+    const fee = mine.reduce((s, r) => s + Number(r.total_fee), 0);
+    return { transferred: mine.reduce((s, r) => s + Number(r.transferred), 0), times: mine.length, fee, feeRate: cod > 0 ? (fee / cod) * 100 : null };
+});
+
+/** Quỹ hiện có: the funds and what is in them (when the member may see balances). */
+interface Fund { id: string; kind: string; name: string; account_number?: string | null; balance: number | null; is_active: boolean }
+const funds = ref<Fund[]>([]);
+async function loadFunds() {
+    try {
+        funds.value = ((await api.get('/cash-accounts')).data.data as Fund[]).filter((f) => f.is_active);
+    } catch {
+        funds.value = [];
+    }
+}
+const fundIcon = (kind: string) => (kind === 'cash' ? Banknote : kind === 'bank' ? Landmark : kind === 'ewallet' ? Smartphone : Wallet);
+const fundsTotal = computed(() => (funds.value.some((f) => f.balance === null) ? null : funds.value.reduce((s, f) => s + (f.balance ?? 0), 0)));
 
 async function open(r: CodReconciliation) {
     detail.value = (await api.get(`/cod-reconciliations/${r.id}`)).data.data;
@@ -71,18 +137,115 @@ async function confirmVoid() {
 }
 function saved(r: CodReconciliation) {
     load();
+    loadHeld();
+    loadFunds();
+    tab.value = 'sessions';
     detail.value = r;
 }
 </script>
 
 <template>
-    <PageHeader title="Thu chi" description="Đối soát COD: nhập file đối soát của hãng vận chuyển để ghi tiền thu hộ vào đơn và phí của hãng vào sổ quỹ.">
-        <Button v-if="tenant.can('finance.vouchers')" data-testid="cod-import" @click="importing = true"><FileUp /> Nhập file đối soát</Button>
+    <PageHeader title="Đối soát COD" description="Tiền thu hộ hãng vận chuyển đang giữ, và tiền đã về tài khoản.">
+        <Button v-if="tenant.can('finance.vouchers')" data-testid="cod-import" @click="importing = true"><FileUp /> Nhập file đối soát của hãng</Button>
     </PageHeader>
     <CashNav />
 
+    <div class="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" data-testid="cod-kpis">
+        <div class="rounded-xl border bg-card p-4">
+            <p class="text-sm text-muted-foreground">Hãng đang giữ</p>
+            <p class="mt-1 text-2xl font-semibold tabular-nums">{{ canSeeParcels ? formatMoney(heldAmount) : '—' }}</p>
+            <p class="mt-0.5 text-xs text-muted-foreground">{{ canSeeParcels ? `${formatNumber(heldCount)} đơn đã giao, chưa trả tiền` : 'cần quyền xem đơn hàng' }}</p>
+        </div>
+        <div class="rounded-xl border bg-card p-4">
+            <p class="text-sm text-muted-foreground">Đã về tài khoản tháng này</p>
+            <p class="mt-1 text-2xl font-semibold tabular-nums">{{ formatMoney(month.transferred) }}</p>
+            <p class="mt-0.5 text-xs text-muted-foreground">{{ formatNumber(month.times) }} lần chuyển</p>
+        </div>
+        <div class="rounded-xl border bg-card p-4">
+            <p class="text-sm text-muted-foreground">Phí hãng bị trừ tháng này</p>
+            <p class="mt-1 text-2xl font-semibold tabular-nums">{{ formatMoney(month.fee) }}</p>
+            <p class="mt-0.5 text-xs text-muted-foreground">{{ month.feeRate === null ? 'chưa có đối soát' : `${month.feeRate.toFixed(1).replace('.', ',')}% tiền thu hộ` }}</p>
+        </div>
+        <div class="rounded-xl border bg-card p-4">
+            <p class="text-sm text-muted-foreground">Phiên đối soát</p>
+            <p class="mt-1 text-2xl font-semibold tabular-nums">{{ formatNumber(rows.filter((r) => !r.voided_at).length) }}</p>
+            <p class="mt-0.5 text-xs text-muted-foreground">gần đây nhất {{ rows[0] ? formatDate(rows[0].remitted_at) : '—' }}</p>
+        </div>
+    </div>
+
+    <div class="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
     <ErrorState v-if="loadError" :message="loadError" @retry="load" />
-    <Card v-else>
+    <Card v-else class="min-w-0">
+        <div class="flex flex-wrap items-center gap-2 border-b px-4 py-3">
+            <button
+                v-if="canSeeParcels"
+                type="button"
+                :class="cn('rounded-full px-3.5 py-1.5 text-sm font-medium', tab === 'waiting' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')"
+                data-testid="cod-tab-waiting"
+                @click="tab = 'waiting'"
+            >
+                Chờ hãng trả ({{ formatNumber(heldCount) }})
+            </button>
+            <button
+                type="button"
+                :class="cn('rounded-full px-3.5 py-1.5 text-sm font-medium', tab === 'sessions' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')"
+                data-testid="cod-tab-sessions"
+                @click="tab = 'sessions'"
+            >
+                Phiên đối soát ({{ formatNumber(rows.length) }})
+            </button>
+            <div v-if="tab === 'waiting' && heldByCarrier.length > 1" class="ml-auto flex flex-wrap gap-1.5">
+                <button
+                    v-for="c in heldByCarrier"
+                    :key="c.carrier"
+                    type="button"
+                    :class="cn('rounded-full border px-3 py-1 text-xs font-medium', carrier === c.carrier ? 'border-primary bg-primary/5 text-primary' : 'hover:bg-slate-50')"
+                    @click="pickCarrier(c.carrier)"
+                >
+                    {{ c.carrier_name }} · {{ formatNumber(c.count) }}
+                </button>
+            </div>
+        </div>
+
+        <template v-if="tab === 'waiting'">
+            <div v-if="!held.length" class="flex flex-col items-center gap-2 px-6 py-12 text-center text-sm text-muted-foreground">
+                <Truck class="size-8" />
+                <p>Hãng không còn giữ tiền thu hộ nào của shop.</p>
+            </div>
+            <div v-else class="overflow-x-auto">
+                <table class="w-full text-sm" data-testid="cod-held">
+                    <thead class="border-b bg-slate-50 text-left text-xs text-muted-foreground">
+                        <tr>
+                            <th class="px-4 py-2.5 font-medium">Đơn · vận đơn</th>
+                            <th class="px-4 py-2.5 font-medium">Giao xong</th>
+                            <th class="px-4 py-2.5 text-right font-medium">Thu hộ</th>
+                            <th class="px-4 py-2.5 text-right font-medium">Phí ship</th>
+                            <th class="px-4 py-2.5 text-right font-medium">Sẽ nhận</th>
+                            <th class="px-4 py-2.5 font-medium">Tình trạng</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <tr v-for="p in held" :key="p.id" class="hover:bg-muted/30">
+                            <td class="px-4 py-3">
+                                <RouterLink v-if="p.order" :to="`/orders/${p.order.id}`" class="font-medium text-primary hover:underline">{{ p.order.external_order_id }}</RouterLink>
+                                <p class="text-xs text-muted-foreground">{{ p.carrier_name }}<template v-if="p.tracking_number"> · <span class="font-mono">{{ p.tracking_number }}</span></template></p>
+                            </td>
+                            <td class="whitespace-nowrap px-4 py-3 text-muted-foreground">{{ p.delivered_at ? formatDate(p.delivered_at) : '—' }}</td>
+                            <td class="whitespace-nowrap px-4 py-3 text-right tabular-nums">{{ formatMoney(p.cod_amount) }}</td>
+                            <td class="whitespace-nowrap px-4 py-3 text-right tabular-nums text-muted-foreground">{{ feeOf(p) ? `−${formatMoney(feeOf(p))}` : '—' }}</td>
+                            <td class="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums">{{ formatMoney(Number(p.cod_amount) - feeOf(p)) }}</td>
+                            <td class="px-4 py-3">
+                                <span v-if="(daysSince(p.delivered_at) ?? 0) > 7" class="rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">Quá 7 ngày chưa trả</span>
+                                <span v-else class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">Chờ hãng trả<template v-if="daysSince(p.delivered_at) !== null"> · {{ daysSince(p.delivered_at) }} ngày</template></span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p v-if="heldTotal > held.length" class="border-t px-4 py-2.5 text-xs text-muted-foreground">Đang hiện {{ held.length }} trên {{ formatNumber(heldTotal) }} đơn. Xem đủ ở <RouterLink to="/shipments" class="text-primary hover:underline">Vận chuyển</RouterLink>.</p>
+            </div>
+        </template>
+
+        <template v-else>
         <div v-if="loading && !rows.length" class="space-y-3 p-4"><Skeleton v-for="i in 4" :key="i" class="h-10" /></div>
         <div v-else-if="!rows.length" class="flex flex-col items-center gap-2 px-6 py-12 text-center text-sm text-muted-foreground">
             <Truck class="size-8" />
@@ -91,33 +254,54 @@ function saved(r: CodReconciliation) {
         </div>
         <div v-else class="overflow-x-auto">
             <table class="w-full text-sm" data-testid="cod-table">
-                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                <thead class="border-b bg-slate-50 text-left text-xs text-muted-foreground">
                     <tr>
-                        <th class="px-4 py-2 font-medium">Phiên</th>
-                        <th class="px-4 py-2 font-medium">Hãng</th>
-                        <th class="px-4 py-2 font-medium">Ngày tiền về</th>
-                        <th class="px-4 py-2 font-medium">Vào quỹ</th>
-                        <th class="px-4 py-2 text-right font-medium">Thu hộ</th>
-                        <th class="px-4 py-2 text-right font-medium">Phí hãng</th>
-                        <th class="px-4 py-2 text-right font-medium">Hãng chuyển</th>
-                        <th class="px-4 py-2 text-right font-medium">Khớp</th>
+                        <th class="whitespace-nowrap px-4 py-2 font-medium">Phiên</th>
+                        <th class="whitespace-nowrap px-4 py-2 font-medium">Hãng</th>
+                        <th class="whitespace-nowrap px-4 py-2 font-medium">Ngày tiền về</th>
+                        <th class="whitespace-nowrap px-4 py-2 font-medium">Vào quỹ</th>
+                        <th class="whitespace-nowrap px-4 py-2 text-right font-medium">Thu hộ</th>
+                        <th class="whitespace-nowrap px-4 py-2 text-right font-medium">Phí hãng</th>
+                        <th class="whitespace-nowrap px-4 py-2 text-right font-medium">Hãng chuyển</th>
+                        <th class="whitespace-nowrap px-4 py-2 text-right font-medium">Khớp</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y">
                     <tr v-for="r in rows" :key="r.id" :class="['cursor-pointer hover:bg-muted/30', r.voided_at && 'opacity-60']" @click="open(r)">
                         <td class="px-4 py-2.5"><div class="font-mono text-xs font-medium">{{ r.number }} <Badge v-if="r.voided_at" tone="danger">Đã hủy</Badge></div><div class="max-w-48 truncate text-xs text-muted-foreground">{{ r.file_name }}</div></td>
                         <td class="px-4 py-2.5">{{ r.carrier_name }}</td>
-                        <td class="px-4 py-2.5">{{ formatDateTime(r.remitted_at) }}<div class="text-xs text-muted-foreground">{{ r.created_by }}</div></td>
+                        <td class="whitespace-nowrap px-4 py-2.5">{{ formatDateTime(r.remitted_at) }}<div class="text-xs text-muted-foreground">{{ r.created_by }}</div></td>
                         <td class="px-4 py-2.5">{{ r.account?.name ?? '—' }}</td>
-                        <td class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(r.total_cod) }}</td>
-                        <td class="px-4 py-2.5 text-right tabular-nums text-destructive">−{{ formatMoney(r.total_fee) }}</td>
-                        <td class="px-4 py-2.5 text-right font-medium tabular-nums">{{ formatMoney(r.transferred) }}</td>
-                        <td class="px-4 py-2.5 text-right tabular-nums">{{ r.matched_count }}/{{ r.lines_count }}</td>
+                        <td class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{{ formatMoney(r.total_cod) }}</td>
+                        <td class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-destructive">−{{ formatMoney(r.total_fee) }}</td>
+                        <td class="whitespace-nowrap px-4 py-2.5 text-right font-medium tabular-nums">{{ formatMoney(r.transferred) }}</td>
+                        <td class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{{ r.matched_count }}/{{ r.lines_count }}</td>
                     </tr>
                 </tbody>
             </table>
         </div>
+        </template>
     </Card>
+
+    <!-- Right: what is in each fund now, and the way to the cashbook. -->
+    <div class="space-y-4">
+        <Card v-if="funds.length" :caps="false" title="Quỹ hiện có" data-testid="cod-funds">
+            <ul class="divide-y px-5 text-sm">
+                <li v-for="f in funds" :key="f.id" class="flex items-center gap-3 py-3">
+                    <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-600"><component :is="fundIcon(f.kind)" class="size-4" /></span>
+                    <span class="min-w-0 flex-1 truncate">{{ f.name }}<span v-if="f.account_number" class="block text-xs text-muted-foreground">{{ f.account_number }}</span></span>
+                    <span class="font-medium tabular-nums">{{ f.balance === null ? '—' : formatMoney(f.balance) }}</span>
+                </li>
+            </ul>
+            <div v-if="fundsTotal !== null" class="flex justify-between border-t px-5 py-3 font-semibold"><span>Tổng</span><span class="tabular-nums">{{ formatMoney(fundsTotal) }}</span></div>
+        </Card>
+        <div class="rounded-xl border bg-card p-5 text-sm">
+            <p class="font-medium">Đối soát thế nào?</p>
+            <p class="mt-1 text-muted-foreground">Tải file đối soát của GHN, Viettel Post, SPX hoặc J&amp;T. Hệ thống khớp theo mã vận đơn, ghi tiền thu hộ vào đơn và phí của hãng vào sổ quỹ, cho xem trước rồi mới ghi.</p>
+            <RouterLink to="/reports/cashbook" class="mt-3 inline-flex items-center gap-1 font-medium text-primary hover:underline">Xem sổ quỹ <ArrowRight class="size-4" /></RouterLink>
+        </div>
+    </div>
+    </div>
 
     <CodImportDialog v-model:open="importing" @saved="saved" />
 
