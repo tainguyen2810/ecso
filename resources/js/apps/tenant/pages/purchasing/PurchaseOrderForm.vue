@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ImageIcon, PackageOpen, X } from 'lucide-vue-next';
+import { ArrowLeft, ImageIcon, PackageOpen, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
 import Button from '@/shared/ui/Button.vue';
@@ -201,25 +201,92 @@ function onKey(e: KeyboardEvent) {
 </script>
 
 <template>
-    <PageHeader :title="editId ? 'Sửa đơn nhập' : orderMode ? 'Tạo đơn đặt hàng nhập' : 'Tạo đơn nhập hàng'">
-        <RouterLink :to="backTo"><Button variant="outline">Thoát</Button></RouterLink>
-        <template v-if="editId">
-            <Button :loading="saving === 'place'" :disabled="!ready" data-testid="po-place" @click="submit('place')">Lưu thay đổi (F1)</Button>
-        </template>
-        <template v-else-if="orderMode">
-            <Button variant="outline" :loading="saving === 'draft'" :disabled="!ready" data-testid="po-draft" @click="submit('draft')">Lưu nháp</Button>
-            <Button :loading="saving === 'place'" :disabled="!ready" data-testid="po-place" @click="submit('place')">Đặt hàng (F1)</Button>
-        </template>
-        <template v-else>
-            <Button variant="outline" :loading="saving === 'draft'" :disabled="!ready" data-testid="po-draft" @click="submit('draft')">Lưu nháp</Button>
-            <Button :variant="canReceive ? 'outline' : 'default'" :loading="saving === 'place'" :disabled="!ready" data-testid="po-place" @click="submit('place')">Tạo & chưa nhập</Button>
-            <Button v-if="canReceive" :loading="saving === 'receive'" :disabled="!ready" data-testid="po-create-receive" @click="submit('receive')">Tạo & nhập hàng (F1)</Button>
-        </template>
+    <PageHeader :title="editId ? 'Sửa đơn nhập' : orderMode ? 'Đơn đặt hàng nhập mới' : 'Phiếu nhập mới'" :description="orderMode ? 'Sản phẩm · Đặt hàng nhập' : 'Sản phẩm · Nhập hàng'">
+        <RouterLink :to="backTo"><Button variant="outline"><ArrowLeft /> Thoát</Button></RouterLink>
     </PageHeader>
 
-    <div class="grid gap-5 lg:grid-cols-[1fr_22rem]">
-        <Card :caps="false" title="Thông tin nhà cung cấp">
-            <div class="space-y-3 p-5">
+    <div class="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <!-- Left: scan box and the lines, then the less used options. -->
+        <div class="min-w-0 space-y-5">
+            <div>
+                <SkuPicker stocked :warehouse="form.warehouse_id" :exclude="[]" placeholder="Tìm theo tên, mã SKU, hoặc quét mã barcode… (F3)" @pick="add" />
+                <p v-if="error?.field('lines')" class="mt-2 text-xs text-destructive">{{ error.field('lines') }}</p>
+            </div>
+            <Card :caps="false">
+        <EmptyState v-if="!lines.length" :icon="PackageOpen" title="Chưa có sản phẩm" description="Tìm SKU ở ô phía trên, hoặc dùng Gợi ý nhập hàng để tạo đơn từ tốc độ bán." />
+        <div v-else class="overflow-x-auto">
+            <table class="w-full text-sm" data-testid="po-lines">
+                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                        <th class="w-10 px-4 py-2 font-medium">#</th>
+                        <th class="px-3 py-2 font-medium">Sản phẩm</th>
+                        <th class="px-3 py-2 text-right font-medium">Tồn</th>
+                        <th class="px-3 py-2 text-right font-medium">SL nhập</th>
+                        <th class="px-3 py-2 text-right font-medium">Đơn giá</th>
+                        <th class="px-3 py-2 text-right font-medium">VAT</th>
+                        <th class="px-3 py-2 text-right font-medium">Thành tiền</th>
+                        <th class="px-2 py-2" />
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    <tr v-for="(l, i) in lines" :key="l.id" class="align-top">
+                        <td class="px-4 py-2.5 text-muted-foreground">{{ i + 1 }}</td>
+                        <td class="px-3 py-2">
+                            <div class="flex items-center gap-3">
+                                <img v-if="l.image" :src="l.image" alt="" class="size-10 shrink-0 rounded-lg border object-cover" />
+                                <span v-else class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground"><ImageIcon class="size-4" /></span>
+                                <div class="min-w-0">
+                                    <p class="max-w-56 truncate font-medium">{{ l.name }}</p>
+                                    <p class="font-mono text-xs text-muted-foreground">{{ l.sku }}</p>
+                                    <p v-if="lineError(i, 'variant_id')" class="text-xs text-destructive">{{ lineError(i, 'variant_id') }}</p>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{{ l.stock === null ? '—' : formatNumber(l.stock) }}</td>
+                        <td class="px-3 py-2.5 text-right">
+                            <input v-model="l.quantity" type="number" min="1" class="h-9 w-16 rounded-lg border border-input bg-card px-2 text-right text-sm font-medium tabular-nums" :data-testid="`po-qty-${i}`" />
+                            <p v-if="lineError(i, 'quantity')" class="text-xs text-destructive">{{ lineError(i, 'quantity') }}</p>
+                        </td>
+                        <td class="px-3 py-2.5 text-right">
+                            <input v-model="l.unit_cost" type="number" min="0" class="h-9 w-24 rounded-lg border border-input bg-card px-2 text-right text-sm tabular-nums" :data-testid="`po-cost-${i}`" />
+                            <p v-if="lineError(i, 'unit_cost')" class="text-xs text-destructive">{{ lineError(i, 'unit_cost') }}</p>
+                        </td>
+                        <td class="px-3 py-2.5 text-right">
+                            <select v-model="l.tax_rate" class="h-8 rounded-md border border-input bg-card px-1 text-sm" :data-testid="`po-vat-${i}`" aria-label="Thuế GTGT">
+                                <option v-for="o in vatOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+                            </select>
+                        </td>
+                        <td class="whitespace-nowrap px-3 py-2.5 text-right">
+                            <p class="font-semibold tabular-nums">{{ formatMoney((Number(l.quantity) || 0) * (Number(l.unit_cost) || 0)) }}</p>
+                            <p class="text-xs text-muted-foreground" title="Giá vốn mỗi đơn vị khi nhập kho: đơn giá + phần chi phí nhập − phần chiết khấu (+ VAT nếu tính vào giá vốn)">vốn <span class="tabular-nums" :data-testid="`po-landed-${i}`">{{ formatNumber(costs.landed[i]) }}</span></p>
+                        </td>
+                        <td class="px-2 py-2.5"><button type="button" class="rounded p-1 text-muted-foreground hover:text-destructive" title="Xóa dòng" @click="lines.splice(i, 1)"><X class="size-4" /></button></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+            </Card>
+            <Card :caps="false" title="Ghi chú và tuỳ chọn">
+                <div class="p-5">
+            <div class="space-y-3 text-sm">
+                <FormField label="Ghi chú đơn" for="po-note"><textarea id="po-note" v-model="form.note" rows="3" class="w-full rounded-md border border-input bg-card px-3 py-2 text-sm" /></FormField>
+                <FormField label="Tags" for="po-tags"><Input id="po-tags" v-model="form.tags" placeholder="Cách nhau bằng dấu phẩy" /></FormField>
+                <div class="grid gap-3 sm:grid-cols-2">
+                    <FormField label="VAT mặc định cho dòng mới" for="po-default-vat"><Select id="po-default-vat" v-model="defaultVat" :options="vatOptions" /></FormField>
+                    <FormField label="Diễn giải chi phí nhập" for="po-extra-note"><Input id="po-extra-note" v-model="form.extra_cost_note" placeholder="Phí vận chuyển, bốc xếp…" /></FormField>
+                </div>
+                <label class="flex items-start gap-2"><input v-model="form.vat_in_cost" type="checkbox" class="mt-0.5" data-testid="po-vat-in-cost" /> <span>Tính VAT vào giá vốn <span class="block text-xs text-muted-foreground">Chọn khi không được khấu trừ thuế đầu vào (hộ kinh doanh, phương pháp trực tiếp).</span></span></label>
+                <label class="flex items-start gap-2"><input v-model="form.extra_cost_to_supplier" type="checkbox" class="mt-0.5" data-testid="po-extra-to-supplier" /> <span>Chi phí nhập trả cho nhà cung cấp <span class="block text-xs text-muted-foreground">Có trên hóa đơn NCC, cộng vào công nợ. Bỏ chọn nếu trả cho đơn vị vận chuyển.</span></span></label>
+            </div>
+                </div>
+            </Card>
+        </div>
+
+        <!-- Right (sticky): supplier, warehouse and dates, the money, the buttons. -->
+        <div class="space-y-4">
+            <Card :caps="false">
+                <div class="space-y-3 p-5">
                 <FormField label="Nhà cung cấp" :error="error?.field('supplier_id')">
                     <Select v-model="form.supplier_id" :options="[{ value: '', label: 'Tìm hoặc chọn nhà cung cấp…' }, ...suppliers.map((s) => ({ value: s.id, label: `${s.code} · ${s.name}` }))]" data-testid="po-supplier" />
                 </FormField>
@@ -241,90 +308,21 @@ function onKey(e: KeyboardEvent) {
                         </div>
                     </div>
                 </div>
-            </div>
-        </Card>
-        <Card :caps="false" title="Thông tin đơn nhập hàng">
-            <div class="space-y-3 p-5">
                 <FormField label="Kho nhập" :error="error?.field('warehouse_id')">
                     <Select v-model="form.warehouse_id" :options="warehouses.map((w) => ({ value: w.id, label: `${w.code} · ${w.name}` }))" data-testid="po-warehouse" />
                 </FormField>
+                <div class="grid gap-3 sm:grid-cols-2">
                 <FormField label="Ngày hẹn giao" for="po-expected"><DateInput id="po-expected" v-model="form.expected_at" /></FormField>
                 <FormField label="Ngày hóa đơn" for="po-invoice-date" :error="error?.field('invoice_date')"><DateInput id="po-invoice-date" v-model="form.invoice_date" data-testid="po-invoice-date" /></FormField>
                 <FormField label="Hạn thanh toán" for="po-due-date" :error="error?.field('due_date')"><DateInput id="po-due-date" v-model="form.due_date" data-testid="po-due-date" /></FormField>
                 <FormField label="Tham chiếu" for="po-reference" :error="error?.field('reference')">
-                    <Input id="po-reference" v-model="form.reference" placeholder="Số hóa đơn, mã đơn của NCC" data-testid="po-reference" />
+                    <Input id="po-reference" v-model="form.reference" placeholder="Số HĐ, mã đơn NCC" data-testid="po-reference" />
                 </FormField>
-            </div>
-        </Card>
-    </div>
-
-    <Card :caps="false" title="Thông tin sản phẩm" class="mt-5">
-        <div class="border-b p-4">
-            <SkuPicker stocked :warehouse="form.warehouse_id" :exclude="[]" placeholder="Tìm theo tên, mã SKU, hoặc quét mã barcode… (F3)" @pick="add" />
-            <p v-if="error?.field('lines')" class="mt-2 text-xs text-destructive">{{ error.field('lines') }}</p>
-        </div>
-        <EmptyState v-if="!lines.length" :icon="PackageOpen" title="Chưa có sản phẩm" description="Tìm SKU ở ô phía trên, hoặc dùng Gợi ý nhập hàng để tạo đơn từ tốc độ bán." />
-        <div v-else class="overflow-x-auto">
-            <table class="w-full text-sm" data-testid="po-lines">
-                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                    <tr>
-                        <th class="w-10 px-4 py-2 font-medium">STT</th>
-                        <th class="w-12 py-2 font-medium">Ảnh</th>
-                        <th class="px-3 py-2 font-medium">Tên sản phẩm</th>
-                        <th class="px-3 py-2 text-right font-medium">Tồn</th>
-                        <th class="px-3 py-2 text-right font-medium">SL nhập</th>
-                        <th class="px-3 py-2 text-right font-medium">Đơn giá</th>
-                        <th class="px-3 py-2 text-right font-medium">VAT</th>
-                        <th class="px-3 py-2 text-right font-medium">Thành tiền</th>
-                        <th class="px-3 py-2 text-right font-medium" title="Giá vốn mỗi đơn vị khi nhập kho: đơn giá + phần chi phí nhập − phần chiết khấu (+ VAT nếu tính vào giá vốn)">Giá vốn</th>
-                        <th class="px-2 py-2" />
-                    </tr>
-                </thead>
-                <tbody class="divide-y">
-                    <tr v-for="(l, i) in lines" :key="l.id" class="align-top">
-                        <td class="px-4 py-2.5 text-muted-foreground">{{ i + 1 }}</td>
-                        <td class="py-2">
-                            <img v-if="l.image" :src="l.image" alt="" class="size-9 rounded border object-cover" />
-                            <span v-else class="flex size-9 items-center justify-center rounded border bg-muted/50 text-muted-foreground"><ImageIcon class="size-4" /></span>
-                        </td>
-                        <td class="px-3 py-2.5">
-                            <p class="max-w-72 truncate font-medium text-primary">{{ l.name }}</p>
-                            <p class="font-mono text-xs text-muted-foreground">{{ l.sku }}</p>
-                            <p v-if="lineError(i, 'variant_id')" class="text-xs text-destructive">{{ lineError(i, 'variant_id') }}</p>
-                        </td>
-                        <td class="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{{ l.stock === null ? '—' : formatNumber(l.stock) }}</td>
-                        <td class="px-3 py-2.5 text-right">
-                            <input v-model="l.quantity" type="number" min="1" class="h-8 w-20 rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" :data-testid="`po-qty-${i}`" />
-                            <p v-if="lineError(i, 'quantity')" class="text-xs text-destructive">{{ lineError(i, 'quantity') }}</p>
-                        </td>
-                        <td class="px-3 py-2.5 text-right">
-                            <input v-model="l.unit_cost" type="number" min="0" class="h-8 w-28 rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" :data-testid="`po-cost-${i}`" />
-                            <p v-if="lineError(i, 'unit_cost')" class="text-xs text-destructive">{{ lineError(i, 'unit_cost') }}</p>
-                        </td>
-                        <td class="px-3 py-2.5 text-right">
-                            <select v-model="l.tax_rate" class="h-8 rounded-md border border-input bg-card px-1 text-sm" :data-testid="`po-vat-${i}`" aria-label="Thuế GTGT">
-                                <option v-for="o in vatOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
-                            </select>
-                        </td>
-                        <td class="whitespace-nowrap px-3 py-2.5 text-right font-semibold tabular-nums">{{ formatMoney((Number(l.quantity) || 0) * (Number(l.unit_cost) || 0)) }}</td>
-                        <td class="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-muted-foreground" :data-testid="`po-landed-${i}`">{{ formatNumber(costs.landed[i]) }}</td>
-                        <td class="px-2 py-2.5"><button type="button" class="rounded p-1 text-muted-foreground hover:text-destructive" title="Xóa dòng" @click="lines.splice(i, 1)"><X class="size-4" /></button></td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="grid gap-6 border-t p-5 lg:grid-cols-[1fr_24rem]">
-            <div class="space-y-3 text-sm">
-                <FormField label="Ghi chú đơn" for="po-note"><textarea id="po-note" v-model="form.note" rows="3" class="w-full rounded-md border border-input bg-card px-3 py-2 text-sm" /></FormField>
-                <FormField label="Tags" for="po-tags"><Input id="po-tags" v-model="form.tags" placeholder="Cách nhau bằng dấu phẩy" /></FormField>
-                <div class="grid gap-3 sm:grid-cols-2">
-                    <FormField label="VAT mặc định cho dòng mới" for="po-default-vat"><Select id="po-default-vat" v-model="defaultVat" :options="vatOptions" /></FormField>
-                    <FormField label="Diễn giải chi phí nhập" for="po-extra-note"><Input id="po-extra-note" v-model="form.extra_cost_note" placeholder="Phí vận chuyển, bốc xếp…" /></FormField>
                 </div>
-                <label class="flex items-start gap-2"><input v-model="form.vat_in_cost" type="checkbox" class="mt-0.5" data-testid="po-vat-in-cost" /> <span>Tính VAT vào giá vốn <span class="block text-xs text-muted-foreground">Chọn khi không được khấu trừ thuế đầu vào (hộ kinh doanh, phương pháp trực tiếp).</span></span></label>
-                <label class="flex items-start gap-2"><input v-model="form.extra_cost_to_supplier" type="checkbox" class="mt-0.5" data-testid="po-extra-to-supplier" /> <span>Chi phí nhập trả cho nhà cung cấp <span class="block text-xs text-muted-foreground">Có trên hóa đơn NCC, cộng vào công nợ. Bỏ chọn nếu trả cho đơn vị vận chuyển.</span></span></label>
-            </div>
+                </div>
+            </Card>
+            <Card :caps="false">
+                <div class="p-5">
             <dl class="grid grid-cols-[1fr_9rem] items-center gap-x-3 gap-y-2.5 text-sm">
                 <dt class="text-muted-foreground">Số lượng</dt>
                 <dd class="text-right tabular-nums">{{ formatNumber(costs.quantity) }}</dd>
@@ -355,6 +353,22 @@ function onKey(e: KeyboardEvent) {
                     <dd class="text-right font-semibold tabular-nums" :class="remaining > 0 && 'text-destructive'" data-testid="po-remaining">{{ formatMoney(remaining) }}</dd>
                 </template>
             </dl>
+                </div>
+            </Card>
+            <div class="flex flex-wrap gap-2">
+        <template v-if="editId">
+            <Button class="h-11 flex-1" :loading="saving === 'place'" :disabled="!ready" data-testid="po-place" @click="submit('place')">Lưu thay đổi (F1)</Button>
+        </template>
+        <template v-else-if="orderMode">
+            <Button class="h-11 flex-1" variant="outline" :loading="saving === 'draft'" :disabled="!ready" data-testid="po-draft" @click="submit('draft')">Lưu nháp</Button>
+            <Button class="h-11 flex-1" :loading="saving === 'place'" :disabled="!ready" data-testid="po-place" @click="submit('place')">Đặt hàng (F1)</Button>
+        </template>
+        <template v-else>
+            <Button class="h-11 flex-1" variant="outline" :loading="saving === 'draft'" :disabled="!ready" data-testid="po-draft" @click="submit('draft')">Lưu nháp</Button>
+            <Button class="h-11 flex-1" :variant="canReceive ? 'outline' : 'default'" :loading="saving === 'place'" :disabled="!ready" data-testid="po-place" @click="submit('place')">Tạo & chưa nhập</Button>
+            <Button class="h-11 flex-1" v-if="canReceive" :loading="saving === 'receive'" :disabled="!ready" data-testid="po-create-receive" @click="submit('receive')">Tạo & nhập hàng (F1)</Button>
+        </template>
+            </div>
         </div>
-    </Card>
+    </div>
 </template>
