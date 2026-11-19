@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CameraScanButton from "../../components/CameraScanButton.vue";
 import {
     computed,
     nextTick,
@@ -441,8 +442,14 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
             spellcheck="false"
             aria-label="Mã quét"
             data-testid="pack-scan"
-            class="h-16 w-full rounded-2xl border-2 border-blue-300 bg-card pl-14 pr-36 text-xl shadow-[0_0_0_4px_rgba(37,99,235,0.08)] outline-none focus:border-primary"
+            class="h-16 w-full rounded-2xl border-2 border-blue-300 bg-card pl-14 pr-28 text-xl sm:pr-48 shadow-[0_0_0_4px_rgba(37,99,235,0.08)] outline-none focus:border-primary"
             @blur="focus"
+        />
+        <CameraScanButton
+            continuous
+            label="Quét bằng camera"
+            class="absolute right-14 top-1/2 grid size-10 sm:right-36 -translate-y-1/2 place-items-center rounded-full bg-blue-50 text-blue-700"
+            @scan="(c) => ((code = c), submit())"
         />
         <button
             type="button"
@@ -450,7 +457,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
             @mousedown.prevent
             @click="settings.sound = !settings.sound"
         >
-            <Volume2 v-if="settings.sound" class="size-3.5" /><VolumeX v-else class="size-3.5" />{{ settings.sound ? "Âm thanh bật" : "Âm thanh tắt" }}
+            <Volume2 v-if="settings.sound" class="size-3.5" /><VolumeX v-else class="size-3.5" /><span class="hidden sm:inline">{{ settings.sound ? "Âm thanh bật" : "Âm thanh tắt" }}</span>
         </button>
     </form>
     <p

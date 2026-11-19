@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PushToggle from './PushToggle.vue';
 import { computed, ref, watch, type Component } from 'vue';
 import { useRoute } from 'vue-router';
 import {
@@ -143,6 +144,8 @@ const hidden = computed(() => route.path === '/pos');
                         <li>Chọn <b>Thêm vào MH chính</b>, rồi bấm <b>Thêm</b>.</li>
                     </ol>
                 </div>
+
+                <PushToggle class="mx-4 mt-3" />
 
                 <div class="mx-4 mt-3 rounded-xl bg-slate-50 px-3 py-2.5">
                     <div class="flex items-center gap-3">
