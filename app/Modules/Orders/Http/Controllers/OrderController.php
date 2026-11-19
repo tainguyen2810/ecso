@@ -119,7 +119,7 @@ class OrderController extends Controller
     {
         $this->authorize('view', $order);
         $returnable = $returnService->returnableQuantities($order);
-        $order->load(['account', 'channel', 'customer', 'creator', 'warehouse', 'assignee', 'items.variant.product', 'items.listingVariant', 'payments.creator']);
+        $order->load(['account', 'channel', 'customer', 'creator', 'warehouse', 'assignee', 'items.variant.product.images', 'items.listingVariant', 'payments.creator']);
         $reservations = $ledger->snapshot(Order::STOCK_REFERENCE, $order->items->pluck('id')->all());
         $lots = $ledger->lotsFor(Order::STOCK_REFERENCE, $order->items->pluck('id')->map(fn ($id) => (int) $id)->all());
         $capabilities = $connectors->has($order->marketplace) ? $connectors->for($order->marketplace)->capabilities() : Capability::allUnknown();
@@ -142,6 +142,7 @@ class OrderController extends Controller
                 'mapping_status' => $i->mapping_status,
                 'listing_id' => $i->listingVariant?->ulid,
                 'variant' => $i->variant ? ['id' => $i->variant->ulid, 'sku' => $i->variant->sku, 'name' => $i->variant->displayName()] : null,
+                'image' => $i->variant?->product?->images->first()?->url(),
                 'reservation' => isset($reservations[$i->id]) ? [
                     'quantity' => $reservations[$i->id]['quantity'],
                     'shortage' => $reservations[$i->id]['shortage'],

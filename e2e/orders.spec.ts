@@ -67,6 +67,7 @@ test('order detail: items, reservations, history, actions and notes', async ({ p
     await login(page, 'owner@demo.test');
     await page.goto('/orders?flags=shortage');
     await page.getByTestId('order-table').locator('tbody tr', { hasText: /Chờ (đóng gói|bàn giao)/ }).first().click();
+    await page.getByRole('link', { name: 'Mở trang đầy đủ' }).click();
     await expect(page.getByTestId('order-items')).toContainText('thiếu');
     await expect(page.getByTestId('order-history')).toBeVisible();
     const note = `Gọi khách xác nhận màu trước khi gửi (${Date.now().toString().slice(-4)})`;
@@ -77,6 +78,7 @@ test('order detail: items, reservations, history, actions and notes', async ({ p
 
     await page.goto('/orders?tab=to_handover');
     await page.getByTestId('order-table').locator('tbody tr').first().click();
+    await page.getByRole('link', { name: 'Mở trang đầy đủ' }).click();
     await page.getByTestId('action-handover').click();
     await expect(page.getByTestId('order-status')).toHaveText('Đã bàn giao');
     await shot(page, '08-order-detail-handed-over');

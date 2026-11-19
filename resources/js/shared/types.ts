@@ -309,6 +309,7 @@ export interface OrderItemDetail {
     is_gift?: boolean;
     listing_id: string | null;
     variant: { id: string; sku: string; name: string } | null;
+    image?: string | null;
     reservation: { quantity: number; shortage: number; status: string } | null;
     /** Lot-tracked SKUs: the lots held for or shipped on the line. */
     lots?: { lot_no: string | null; expiry_date: string | null; quantity: number; shipped: boolean }[];

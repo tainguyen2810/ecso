@@ -99,7 +99,13 @@ const skuLabel = ref(str('sku_label'));
 
 const selected = ref<Set<string>>(new Set());
 const allSelected = computed(() => orders.value.length > 0 && orders.value.every((o) => selected.value.has(o.id)));
-const expanded = ref<Set<string>>(new Set());
+/** Order shown in the side panel (row click); the panel steps through the orders of this page. */
+const peek = ref<string | null>(null);
+const peekIndex = computed(() => orders.value.findIndex((o) => o.id === peek.value));
+function peekStep(d: number) {
+    const o = orders.value[peekIndex.value + d];
+    if (o) peek.value = o.id;
+}
 const busy = ref<string | null>(null);
 const assignOpen = ref(false);
 const assignTo = ref('');
@@ -223,7 +229,7 @@ watch(() => filters.q, () => {
 });
 watch(
     () => [filters.tab, filters.account, filters.source, filters.marketplace, filters.channel, filters.warehouse, filters.assignee, filters.status, filters.payment_status, filters.from, filters.to, filters.customer, filters.sku, filters.tag, filters.deliver_from, filters.deliver_to, filters.sort, filters.flags.join()],
-    () => ((filters.page = 1), (selected.value = new Set()), (expanded.value = new Set()), load()),
+    () => ((filters.page = 1), (selected.value = new Set()), (peek.value = null), load()),
 );
 
 function toggleFlag(flag: string) {
@@ -343,12 +349,6 @@ function toggle(id: string) {
 }
 function toggleAll() {
     selected.value = allSelected.value ? new Set() : new Set(orders.value.map((o) => o.id));
-}
-function toggleExpand(id: string) {
-    const next = new Set(expanded.value);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    expanded.value = next;
 }
 
 async function bulk(action: string, extra: Record<string, unknown> = {}) {
@@ -736,11 +736,9 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                 </thead>
                 <tbody class="divide-y">
                     <template v-for="o in orders" :key="o.id">
-                        <tr :class="cn('cursor-pointer hover:bg-blue-50/40', selected.has(o.id) && 'bg-blue-50/70 hover:bg-blue-50/70', expanded.has(o.id) && 'bg-slate-50')" @click="$router.push(`/orders/${o.id}`)">
+                        <tr :class="cn('cursor-pointer hover:bg-blue-50/40', selected.has(o.id) && 'bg-blue-50/70 hover:bg-blue-50/70', peek === o.id && 'bg-blue-50 hover:bg-blue-50')" @click="peek = o.id">
                             <td class="py-3 pl-3" @click.stop>
-                                <button type="button" class="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground" :aria-label="expanded.has(o.id) ? `Thu gọn đơn ${o.external_order_id}` : `Xem nhanh đơn ${o.external_order_id}`" :aria-expanded="expanded.has(o.id)" data-testid="quick-view-toggle" @click="toggleExpand(o.id)">
-                                    <ChevronDown v-if="expanded.has(o.id)" class="size-4" /><ChevronsRight v-else class="size-4" />
-                                </button>
+                                <RouterLink :to="`/orders/${o.id}`" class="block rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground" :aria-label="`Mở trang đơn ${o.external_order_id}`" title="Mở trang đầy đủ"><ChevronsRight class="size-4" /></RouterLink>
                             </td>
                             <td class="py-3" @click.stop><input type="checkbox" :checked="selected.has(o.id)" :aria-label="`Chọn đơn ${o.external_order_id}`" @change="toggle(o.id)" /></td>
                             <td class="px-3 py-3">
@@ -803,15 +801,13 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                                 <Button v-if="rowAction(o)" size="sm" variant="outline" class="whitespace-nowrap" :loading="busy === `row-${o.id}`" :data-testid="`row-action-${rowAction(o)}`" @click="runRow(o, rowAction(o)!)">{{ actionLabels[rowAction(o)!] }}</Button>
                             </td>
                         </tr>
-                        <tr v-if="expanded.has(o.id)">
-                            <td :colspan="columnCount" class="p-0"><OrderQuickView :id="o.id" /></td>
-                        </tr>
                     </template>
                 </tbody>
             </table>
         </div>
         <Pagination :page="meta.current_page" :last-page="meta.last_page" :total="meta.total" @go="(p) => ((filters.page = p), load())" />
     </Card>
+    <OrderQuickView v-if="peek" :id="peek" :position="peekIndex + 1" :total="orders.length" @close="peek = null" @prev="peekStep(-1)" @next="peekStep(1)" @changed="refresh" />
 
     <!-- Room under the list so the floating bulk bar never hides the last rows or the pages. -->
     <div v-if="selected.size" class="h-20" />
