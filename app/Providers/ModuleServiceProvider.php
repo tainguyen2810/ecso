@@ -37,6 +37,7 @@ use App\Modules\Marketplace\Console\CheckWebhooksCommand;
 use App\Modules\Marketplace\Console\PruneSyncLogsCommand;
 use App\Modules\Marketplace\Console\PushDueInventoryCommand;
 use App\Modules\Marketplace\Console\RecoverSyncCommand;
+use App\Modules\Marketplace\Console\SyncReturnsCommand;
 use App\Modules\Marketplace\Console\SyncSettlementsCommand;
 use App\Modules\Marketplace\Events\ListingMappingChanged;
 use App\Modules\Marketplace\Events\WebhookReceived;
@@ -165,7 +166,7 @@ class ModuleServiceProvider extends ServiceProvider
         $this->configureAuthLinks();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([AutoGroupCustomersCommand::class, ZnsPaymentRemindersCommand::class, LoyaltyNightlyCommand::class, CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, VerifyOrderMoneyCommand::class, LowStockDigestCommand::class, LotExpiryCommand::class, PushDueInventoryCommand::class, RecoverSyncCommand::class, PruneSyncLogsCommand::class, CheckFeesCommand::class, SyncSettlementsCommand::class, CheckWebhooksCommand::class, ReconcileOrdersCommand::class, BackfillShipmentsCommand::class, TrackCarrierShipmentsCommand::class, BillingSweepCommand::class, MonitorCommand::class, BackupDatabaseCommand::class, PruneDemoStoresCommand::class, DemoTenantCommand::class]);
+            $this->commands([AutoGroupCustomersCommand::class, ZnsPaymentRemindersCommand::class, LoyaltyNightlyCommand::class, CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, VerifyOrderMoneyCommand::class, LowStockDigestCommand::class, LotExpiryCommand::class, PushDueInventoryCommand::class, RecoverSyncCommand::class, PruneSyncLogsCommand::class, CheckFeesCommand::class, SyncSettlementsCommand::class, SyncReturnsCommand::class, CheckWebhooksCommand::class, ReconcileOrdersCommand::class, BackfillShipmentsCommand::class, TrackCarrierShipmentsCommand::class, BillingSweepCommand::class, MonitorCommand::class, BackupDatabaseCommand::class, PruneDemoStoresCommand::class, DemoTenantCommand::class]);
         }
     }
 

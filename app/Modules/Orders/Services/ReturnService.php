@@ -500,6 +500,121 @@ class ReturnService
     }
 
     /**
+     * Đợt 6: a return or refund request read from the marketplace. Creates the return once (or adopts the one opened
+     * when the order turned "Đã hoàn"), then follows the marketplace's status forward. What happens in the warehouse
+     * (received, inspected, closed) is never undone by the marketplace.
+     *
+     * @param  array{id: string, order_id: string, status: string, raw_status: string, goods: bool, reason: string|null, refund: float|null, tracking_number: string|null, respond_by: \DateTimeInterface|null, items: list<array{external_sku_id: string|null, seller_sku: string|null, name: string, quantity: int}>, images: list<string>}  $r
+     * @return array{0: OrderReturn, 1: bool} the return, and whether it is new
+     */
+    public function syncMarketplace(Order $order, array $r): array
+    {
+        return DB::transaction(function () use ($order, $r) {
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+            $key = 'mp:'.$r['id'];
+            $return = OrderReturn::query()->where('order_id', $order->id)->where(fn ($q) => $q->where('source_key', $key)->orWhere('external_return_id', $r['id']))->first()
+                // The return opened when the order turned "Đã hoàn" is this request.
+                ?? OrderReturn::query()->where('order_id', $order->id)->whereNull('external_return_id')->whereIn('source_key', ['returned', 'cancel-after-ship'])->first();
+            $type = $r['goods'] ? OrderReturn::TYPE_RETURN : OrderReturn::TYPE_REFUND_ONLY;
+            $isNew = $return === null;
+
+            if ($isNew) {
+                $items = $order->items()->get();
+                $left = $this->returnableQuantities($order);
+                $lines = [];
+                foreach ($r['goods'] ? $r['items'] : [] as $want) {
+                    $item = $items->first(fn (OrderItem $i) => ($want['external_sku_id'] !== null && $i->external_sku_id === $want['external_sku_id'])
+                        || ($want['seller_sku'] !== null && strcasecmp((string) $i->seller_sku, $want['seller_sku']) === 0));
+                    if ($item && ($left[$item->id] ?? 0) > 0) {
+                        $qty = min($want['quantity'], $left[$item->id]);
+                        $left[$item->id] -= $qty;
+                        $lines[] = ['item' => $item, 'quantity' => $qty];
+                    }
+                }
+                // The marketplace named no SKU we can match: everything that shipped may come back.
+                if ($r['goods'] && $lines === []) {
+                    foreach ($items as $item) {
+                        if (($left[$item->id] ?? 0) > 0) {
+                            $lines[] = ['item' => $item, 'quantity' => $left[$item->id]];
+                        }
+                    }
+                }
+                if ($r['goods'] && $lines === []) {
+                    // Nothing left the warehouse: the marketplace's request is a refund for the shop's records only.
+                    $type = OrderReturn::TYPE_REFUND_ONLY;
+                }
+                $return = $this->persist($order, [
+                    'type' => $type,
+                    'status' => OrderReturn::REQUESTED,
+                    'source_key' => $key,
+                    'warehouse_id' => $order->warehouse_id,
+                ], $lines);
+            }
+
+            $status = $return->status;
+            $physical = in_array($status, [OrderReturn::RECEIVED, OrderReturn::INSPECTED, OrderReturn::CLOSED], true);
+            if (! $physical) {
+                $status = match ($r['status']) {
+                    'approved' => OrderReturn::APPROVED,
+                    'shipping' => $return->expectsGoods() ? OrderReturn::IN_TRANSIT : OrderReturn::APPROVED,
+                    // Refunded on the sàn: a refund-only request is done; goods may still be on their way back.
+                    'refunded' => $return->expectsGoods() ? ($r['tracking_number'] !== null || $status === OrderReturn::IN_TRANSIT ? OrderReturn::IN_TRANSIT : OrderReturn::APPROVED) : OrderReturn::CLOSED,
+                    'rejected', 'cancelled' => OrderReturn::REJECTED,
+                    default => $status,
+                };
+                // Never back from in transit to approved.
+                if ($return->status === OrderReturn::IN_TRANSIT && $status === OrderReturn::APPROVED) {
+                    $status = OrderReturn::IN_TRANSIT;
+                }
+            }
+            $return->forceFill([
+                'status' => $status,
+                'external_return_id' => $r['id'],
+                'marketplace_status' => mb_substr($r['raw_status'], 0, 50),
+                'reason' => $r['reason'] !== null ? mb_substr($r['reason'], 0, 500) : $return->reason,
+                'refund_amount' => $r['refund'] ?? $return->refund_amount,
+                'return_tracking_number' => $r['tracking_number'] ?? $return->return_tracking_number,
+                'respond_by' => $status === OrderReturn::REQUESTED ? $r['respond_by'] : null,
+                'images' => $r['images'] !== [] ? $r['images'] : $return->images,
+                'closed_at' => in_array($status, [OrderReturn::CLOSED, OrderReturn::REJECTED], true) ? ($return->closed_at ?? now()) : $return->closed_at,
+            ])->save();
+            if ($isNew) {
+                $this->audit->record('return.marketplace', $return, ['order' => $order->external_order_id, 'return' => $r['id']]);
+            }
+
+            return [$return, $isNew];
+        });
+    }
+
+    /**
+     * Đợt 6 "Quét hàng hoàn": the parcel's tracking number (or the order code) finds the return waiting for it, which
+     * is marked received so it can be inspected right away.
+     */
+    public function receiveByCode(string $code): ?OrderReturn
+    {
+        $code = trim($code);
+        if ($code === '') {
+            return null;
+        }
+        $open = [OrderReturn::REQUESTED, OrderReturn::APPROVED, OrderReturn::IN_TRANSIT, OrderReturn::RECEIVED];
+        $return = OrderReturn::query()->whereIn('status', $open)->where('type', '!=', OrderReturn::TYPE_REFUND_ONLY)
+            ->where(fn ($q) => $q->where('return_tracking_number', $code)
+                ->orWhereHas('order', fn ($o) => $o->where('tracking_number', $code)->orWhere('external_order_id', $code)))
+            ->orderByRaw('CASE WHEN return_tracking_number = ? THEN 0 ELSE 1 END', [$code])->latest('id')->first();
+        if ($return === null) {
+            return null;
+        }
+        if (in_array($return->status, [OrderReturn::APPROVED, OrderReturn::IN_TRANSIT], true)) {
+            $return = $this->move($return, OrderReturn::RECEIVED);
+        } elseif ($return->status === OrderReturn::REQUESTED) {
+            // The parcel is here before anyone answered the request: it is accepted by receiving it.
+            $return = $this->move($this->move($return, OrderReturn::APPROVED), OrderReturn::RECEIVED);
+        }
+
+        return $return;
+    }
+
+    /**
      * @param  array<string, mixed>  $attributes
      * @param  array<int, array{item: OrderItem, quantity: int}>  $lines
      */

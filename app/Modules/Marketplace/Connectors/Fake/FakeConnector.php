@@ -11,6 +11,7 @@ use App\Modules\Marketplace\Connectors\Data\ProductPage;
 use App\Modules\Marketplace\Connectors\Data\ShopAuthorization;
 use App\Modules\Marketplace\Connectors\Data\StockUpdateResult;
 use App\Modules\Marketplace\Connectors\Data\WebhookMessage;
+use App\Modules\Marketplace\Connectors\FetchesReturns;
 use App\Modules\Marketplace\Connectors\FetchesSettlement;
 use App\Modules\Marketplace\Connectors\MarketplaceConnector;
 use App\Modules\Marketplace\Exceptions\ConnectorException;
@@ -25,7 +26,7 @@ use Illuminate\Support\Facades\DB;
  * signature, inbox, order fetch, inventory push — without calling any real marketplace. It is not, and must
  * never be presented as, an integration with Shopee, TikTok Shop, Lazada or Tiki.
  */
-class FakeConnector implements FetchesSettlement, MarketplaceConnector
+class FakeConnector implements FetchesReturns, FetchesSettlement, MarketplaceConnector
 {
     public const MARKETPLACE = 'fake';
 
@@ -133,6 +134,36 @@ class FakeConnector implements FetchesSettlement, MarketplaceConnector
                 ['label' => 'Phí thanh toán', 'amount' => -$fees['payment_fee']],
             ],
         ];
+    }
+
+    /**
+     * Demo return requests: an order in fake_return_requested has one request for all its goods; a return tracking
+     * number in the order data (return_tracking) means the buyer sent the parcel back.
+     */
+    public function listReturns(MarketplaceAccount $account, CarbonImmutable $since, ?string $cursor = null): array
+    {
+        $rows = DB::table('fake_marketplace_orders')->where('shop_id', $account->external_shop_id)->where('status', 'fake_return_requested')
+            ->where('update_time', '>=', $since)->orderBy('order_sn')->get();
+        $returns = [];
+        foreach ($rows as $row) {
+            $data = json_decode($row->data, true);
+            $tracking = $data['return_tracking'] ?? null;
+            $returns[] = [
+                'id' => 'R'.$row->order_sn,
+                'order_id' => $row->order_sn,
+                'status' => $tracking ? 'shipping' : 'requested',
+                'raw_status' => $tracking ? 'BUYER_SHIPPED' : 'REQUESTED',
+                'goods' => true,
+                'reason' => $data['return_reason'] ?? 'Khách đổi ý',
+                'refund' => round(array_sum(array_map(fn (array $i) => (float) $i['price'] * (int) $i['quantity'], $data['items'])), 2),
+                'tracking_number' => $tracking,
+                'respond_by' => $tracking ? null : CarbonImmutable::parse($row->update_time)->addDays(2),
+                'items' => array_map(fn (array $i) => ['external_sku_id' => $i['sku_id'] ?? null, 'seller_sku' => $i['seller_sku'] ?? null, 'name' => $i['name'], 'quantity' => (int) $i['quantity']], $data['items']),
+                'images' => [],
+            ];
+        }
+
+        return ['returns' => $returns, 'next' => null];
     }
 
     public function getOrder(MarketplaceAccount $account, string $externalOrderId): OrderData

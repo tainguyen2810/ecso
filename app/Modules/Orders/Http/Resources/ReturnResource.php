@@ -22,6 +22,12 @@ class ReturnResource extends JsonResource
             'exchange_credit' => $this->exchange_credit,
             'exchange_order' => $this->whenLoaded('exchangeOrder', fn () => $this->exchangeOrder ? ['id' => $this->exchangeOrder->ulid, 'external_order_id' => $this->exchangeOrder->external_order_id, 'total' => $this->exchangeOrder->total] : null),
             'note' => $this->note,
+            // Đợt 6: a request read from the marketplace.
+            'external_return_id' => $this->external_return_id,
+            'marketplace_status' => $this->marketplace_status,
+            'return_tracking_number' => $this->return_tracking_number,
+            'respond_by' => $this->respond_by?->toIso8601String(),
+            'images' => $this->images ?? [],
             'expects_goods' => $this->expectsGoods(),
             'next' => OrderReturn::FLOW[$this->status] ?? [],
             'order' => $this->whenLoaded('order', fn () => [

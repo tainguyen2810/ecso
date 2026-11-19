@@ -555,6 +555,12 @@ export interface OrderReturnData {
     note: string | null;
     expects_goods: boolean;
     next: string[];
+    /** Đợt 6: a return or refund request read from the marketplace. */
+    external_return_id?: string | null;
+    marketplace_status?: string | null;
+    return_tracking_number?: string | null;
+    respond_by?: string | null;
+    images?: string[];
     order?: { id: string; external_order_id: string; status: string; marketplace: string; customer?: string | null };
     warehouse?: { id: string; code: string; name: string } | null;
     damaged_warehouse?: { id: string; code: string; name: string } | null;

@@ -43,6 +43,8 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::post('orders/{order}/returns', [ReturnController::class, 'store'])->middleware('idempotent');
 
     Route::get('returns', [ReturnController::class, 'index']);
+    Route::post('returns/scan', [ReturnController::class, 'scan'])->middleware('throttle:120,1,returns.scan');
+    Route::post('returns/sync', [ReturnController::class, 'syncMarketplace'])->middleware('throttle:6,1,returns.sync');
     Route::get('returns/{return}', [ReturnController::class, 'show']);
     Route::post('returns/{return}/status', [ReturnController::class, 'move']);
     Route::post('returns/{return}/inspect', [ReturnController::class, 'inspect']);

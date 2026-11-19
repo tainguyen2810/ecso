@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { Plus, Search, Undo2 } from 'lucide-vue-next';
+import { PackageOpen, Plus, RefreshCw, ScanLine, Search, Undo2 } from 'lucide-vue-next';
+import { useRouter } from 'vue-router';
+import { useToast } from '@/shared/composables/useToast';
 import Button from '@/shared/ui/Button.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
 import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
@@ -21,6 +23,9 @@ import type { OrderReturnData, OrderSummary } from '@/shared/types';
 import { useTenantStore } from '@/shared/stores/tenant';
 
 const tenant = useTenantStore();
+const router = useRouter();
+const toast = useToast();
+const source = ref('');
 
 const rows = ref<OrderReturnData[]>([]);
 const meta = ref({ current_page: 1, last_page: 1, total: 0 });
@@ -37,7 +42,7 @@ async function load() {
     loading.value = true;
     loadError.value = null;
     try {
-        const { data } = await api.get('/returns', { params: { status: status.value === 'all' ? undefined : status.value, type: type.value || undefined, q: q.value || undefined, page: page.value } });
+        const { data } = await api.get('/returns', { params: { status: status.value === 'all' ? undefined : status.value, type: type.value || undefined, source: source.value || undefined, q: q.value || undefined, page: page.value } });
         rows.value = data.data;
         meta.value = data.meta;
     } catch (e) {
@@ -52,7 +57,44 @@ watch(q, () => {
     clearTimeout(timer);
     timer = setTimeout(() => ((page.value = 1), load()), 300);
 });
-watch([status, type], () => ((page.value = 1), load()));
+watch([status, type, source], () => ((page.value = 1), load()));
+
+// Đợt 6 "Quét hàng hoàn": a scanner types the parcel's tracking number and Enter; the return opens, marked received.
+const scanCode = ref('');
+const scanning = ref(false);
+async function scan() {
+    const code = scanCode.value.trim();
+    if (!code) return;
+    scanning.value = true;
+    try {
+        const { data } = await api.post('/returns/scan', { code });
+        scanCode.value = '';
+        toast.success(`Đã nhận hàng hoàn ${data.data.number}. Kiểm hàng để nhập lại kho.`);
+        router.push(`/returns/${data.data.id}`);
+    } catch (e) {
+        toast.error((e as ApiError).message);
+        scanCode.value = '';
+    } finally {
+        scanning.value = false;
+    }
+}
+
+// "Lấy yêu cầu từ sàn": reads Shopee / TikTok return requests now (they also come in by themselves every 30 minutes).
+const syncing = ref(false);
+async function syncSan() {
+    syncing.value = true;
+    try {
+        const { data } = await api.post('/returns/sync');
+        const d = data.data as { read: number; created: number; failed: string[] };
+        if (d.failed.length) toast.error(d.failed.join(' · '));
+        else toast.success(d.created ? `Có ${d.created} yêu cầu trả hàng mới từ sàn.` : 'Không có yêu cầu trả hàng mới trên sàn.');
+        load();
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    } finally {
+        syncing.value = false;
+    }
+}
 
 // "Tạo đơn trả hàng": pick a delivered or completed order, then the return form opens on that order.
 const pickOpen = ref(false);
@@ -78,8 +120,22 @@ watch(pickOpen, (v) => v && loadPick());
 
 <template>
     <PageHeader title="Danh sách đơn trả hàng" description="Hàng hoàn từ khách, đơn hủy sau khi gửi, giao thất bại. Kho chỉ được cộng lại sau khi kiểm hàng, theo số lượng còn bán được.">
+        <Button variant="outline" :loading="syncing" data-testid="returns-sync" @click="syncSan"><RefreshCw /> Lấy yêu cầu từ sàn</Button>
         <Button v-if="tenant.can('returns.inspect')" data-testid="new-return" @click="pickOpen = true"><Plus /> Tạo đơn trả hàng</Button>
     </PageHeader>
+    <Card v-if="tenant.can('returns.inspect')" class="mb-4 p-4" data-testid="return-scan-card">
+        <div class="flex flex-wrap items-center gap-3">
+            <span class="grid size-10 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-600"><PackageOpen class="size-5" /></span>
+            <div class="min-w-48 flex-1">
+                <p class="font-medium">Nhận hàng hoàn</p>
+                <p class="text-xs text-muted-foreground">Quét mã vận đơn trên gói hàng hoàn (hoặc gõ mã đơn), phiếu hoàn mở ra để kiểm hàng: còn bán được thì cộng lại kho.</p>
+            </div>
+            <form class="relative w-full sm:w-80" @submit.prevent="scan">
+                <ScanLine class="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+                <Input v-model="scanCode" class="pl-8" placeholder="Quét mã vận đơn hàng hoàn…" :disabled="scanning" data-testid="return-scan" aria-label="Mã vận đơn hàng hoàn" />
+            </form>
+        </div>
+    </Card>
     <Card>
         <div class="border-b px-3"><Tabs v-model="status" :tabs="tabs" variant="underline" /></div>
         <div class="space-y-3 border-b p-4">
@@ -88,6 +144,7 @@ watch(pickOpen, (v) => v && loadPick());
                     <Search class="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
                     <Input v-model="q" class="pl-8" placeholder="Tìm theo mã đơn trả, mã đơn hàng…" />
                 </div>
+                <Select v-model="source" class="w-40" :options="[{ value: '', label: 'Mọi nguồn' }, { value: 'marketplace', label: 'Yêu cầu từ sàn' }]" aria-label="Nguồn" data-testid="return-source" />
                 <Select v-model="type" class="w-48" :options="[{ value: '', label: 'Mọi loại' }, ...Object.entries(returnTypes).map(([value, label]) => ({ value, label }))]" aria-label="Loại" />
             </div>
         </div>
@@ -113,7 +170,7 @@ watch(pickOpen, (v) => v && loadPick());
                     <tr v-for="r in rows" :key="r.id" class="cursor-pointer hover:bg-blue-50/40" @click="$router.push(`/returns/${r.id}`)">
                         <td class="px-4 py-3">
                             <span class="font-medium text-primary">{{ r.number }}</span>
-                            <div class="text-[11px] text-muted-foreground">{{ returnTypes[r.type] }} · {{ r.lines_count }} dòng</div>
+                            <div class="text-[11px] text-muted-foreground">{{ returnTypes[r.type] }} · {{ r.lines_count }} dòng<span v-if="r.external_return_id" class="ml-1 rounded bg-orange-50 px-1 font-medium text-orange-700">từ sàn</span></div>
                         </td>
                         <td class="px-3 py-3" @click.stop>
                             <RouterLink v-if="r.order" :to="`/orders/${r.order.id}`" class="inline-flex items-center gap-1.5 text-primary hover:underline">
@@ -125,7 +182,10 @@ watch(pickOpen, (v) => v && loadPick());
                             <span v-else class="text-muted-foreground">—</span>
                         </td>
                         <td class="max-w-48 truncate px-3 py-3">{{ r.order?.customer ?? 'Khách lẻ' }}</td>
-                        <td class="whitespace-nowrap px-3 py-3"><Badge :tone="returnStatus[r.status]?.tone">{{ returnStatus[r.status]?.label }}</Badge></td>
+                        <td class="whitespace-nowrap px-3 py-3">
+                            <Badge :tone="returnStatus[r.status]?.tone">{{ returnStatus[r.status]?.label }}</Badge>
+                            <div v-if="r.respond_by && r.status === 'requested'" class="mt-1 text-[11px] font-medium text-amber-700">Trả lời trên sàn trước {{ formatDateTime(r.respond_by) }}</div>
+                        </td>
                         <td class="px-3 py-3 text-xs">
                             <span class="inline-flex items-center gap-1.5" :title="Number(r.refund_amount ?? 0) > 0 ? 'Có hoàn tiền' : 'Không hoàn tiền'">
                                 <span :class="cn('size-2.5 rounded-full border-2', Number(r.refund_amount ?? 0) > 0 ? 'border-emerald-500 bg-emerald-500' : 'border-slate-400')" />

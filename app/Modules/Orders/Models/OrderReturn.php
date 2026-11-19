@@ -19,6 +19,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $received_at
  * @property Carbon|null $inspected_at
  * @property Carbon|null $closed_at
+ * @property Carbon|null $respond_by marketplace request: the seller answers on the sàn before this
+ * @property list<string>|null $images buyer's photos of a marketplace request
  */
 class OrderReturn extends Model
 {
@@ -65,7 +67,7 @@ class OrderReturn extends Model
 
     protected function casts(): array
     {
-        return ['refund_amount' => 'decimal:2', 'exchange_credit' => 'decimal:2', 'received_at' => 'datetime', 'inspected_at' => 'datetime', 'closed_at' => 'datetime'];
+        return ['refund_amount' => 'decimal:2', 'exchange_credit' => 'decimal:2', 'received_at' => 'datetime', 'inspected_at' => 'datetime', 'closed_at' => 'datetime', 'respond_by' => 'datetime', 'images' => 'array'];
     }
 
     public function expectsGoods(): bool

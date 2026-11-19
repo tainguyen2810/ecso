@@ -5,6 +5,9 @@ namespace App\Modules\Orders\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Access\Support\DataAccess;
 use App\Modules\Inventory\Models\Warehouse;
+use App\Modules\Marketplace\Exceptions\ConnectorException;
+use App\Modules\Marketplace\Models\MarketplaceAccount;
+use App\Modules\Marketplace\Services\ReturnSync;
 use App\Modules\Orders\Http\Resources\ReturnResource;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderReturn;
@@ -24,6 +27,8 @@ class ReturnController extends Controller
             // pending_receipt: goods expected back but not received yet (the "Chưa nhận hàng" tab).
             'status' => ['nullable', Rule::in([...array_keys(OrderReturn::FLOW), 'pending_receipt'])],
             'type' => ['nullable', Rule::in(OrderReturn::TYPES)],
+            // marketplace: requests read from Shopee / TikTok.
+            'source' => ['nullable', Rule::in(['marketplace'])],
             'q' => ['nullable', 'string', 'max:64'],
         ]);
 
@@ -32,7 +37,9 @@ class ReturnController extends Controller
                 ? $q->where('type', '!=', OrderReturn::TYPE_REFUND_ONLY)->whereIn('status', [OrderReturn::REQUESTED, OrderReturn::APPROVED, OrderReturn::IN_TRANSIT])
                 : $q->where('status', $s))
             ->when($filters['type'] ?? null, fn ($q, $t) => $q->where('type', $t))
+            ->when($filters['source'] ?? null, fn ($q) => $q->whereNotNull('external_return_id'))
             ->when($filters['q'] ?? null, fn ($q, $term) => $q->where(fn ($w) => $w->where('number', 'like', "%{$term}%")
+                ->orWhere('return_tracking_number', $term)->orWhere('external_return_id', $term)
                 ->orWhereHas('order', fn ($o) => $o->where('external_order_id', 'like', "%{$term}%"))))
             ->orderByRaw("FIELD(status, 'received', 'in_transit', 'requested', 'approved', 'inspected', 'closed', 'rejected')")
             ->orderByDesc('id')->paginate(30));
@@ -102,5 +109,37 @@ class ReturnController extends Controller
         app(DataAccess::class)->assertWarehouse($warehouse);
 
         return new ReturnResource($returns->inspect($return, $warehouse, $data['lines'], $data['note'] ?? null)->load(['order', 'warehouse', 'damagedWarehouse', 'lines.item', 'lines.variant', 'inspector']));
+    }
+
+    /** Đợt 6 "Quét hàng hoàn": the scanned tracking number (or order code) opens its return, marked received. */
+    public function scan(Request $request, ReturnService $returns): ReturnResource
+    {
+        $this->authorize('inspect', OrderReturn::class);
+        $code = (string) $request->validate(['code' => ['required', 'string', 'max:64']])['code'];
+        $return = $returns->receiveByCode($code);
+        abort_if($return === null, 404, "Không có phiếu hoàn nào chờ nhận với mã {$code}.");
+
+        return new ReturnResource($return->load(['order', 'warehouse', 'lines.item', 'lines.variant']));
+    }
+
+    /** Đợt 6: reads the marketplaces' return requests now ("Lấy yêu cầu từ sàn"). */
+    public function syncMarketplace(ReturnSync $sync): JsonResponse
+    {
+        $this->authorize('viewAny', OrderReturn::class);
+        $totals = ['read' => 0, 'created' => 0, 'failed' => []];
+        foreach (MarketplaceAccount::query()->where('status', MarketplaceAccount::CONNECTED)->get() as $account) {
+            if (! $sync->supports($account) || $account->setupPending()) {
+                continue;
+            }
+            try {
+                $c = $sync->syncAccount($account);
+                $totals['read'] += $c['read'];
+                $totals['created'] += $c['created'];
+            } catch (ConnectorException $e) {
+                $totals['failed'][] = "{$account->shop_name}: {$e->getMessage()}";
+            }
+        }
+
+        return response()->json(['data' => $totals]);
     }
 }
