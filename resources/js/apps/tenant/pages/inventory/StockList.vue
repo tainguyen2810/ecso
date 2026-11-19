@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { ArrowLeftRight, Boxes, ClipboardCheck, ImageIcon, List, PackagePlus, Plus, Printer, Search, Warehouse as WarehouseIcon } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import HeaderLink from '../../components/HeaderLink.vue';
 import Pagination from '../../components/Pagination.vue';
+import StockOverview from '../../components/StockOverview.vue';
 import Tabs from '../../components/Tabs.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -13,7 +15,7 @@ import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
-import { cn, formatDate, formatMoney, formatNumber } from '@/shared/lib/utils';
+import { cn, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
 import type { Ref as Named, StockRow, StockSummary, Warehouse } from '@/shared/types';
@@ -32,7 +34,11 @@ const summary = ref<StockSummary | null>(null);
 const meta = ref({ current_page: 1, last_page: 1, total: 0 });
 const loading = ref(true);
 const loadError = ref<string | null>(null);
-const filters = reactive({ warehouse: '', q: '', state: 'all', category: '', brand: '', page: 1 });
+const route = useRoute();
+const initialState = typeof route.query.state === 'string' && ['in', 'low', 'out'].includes(route.query.state) ? route.query.state : 'all';
+const filters = reactive({ warehouse: '', q: '', state: initialState, category: '', brand: '', page: 1 });
+/** Wholesale prices are often unused: the column only shows when a row on this page has one. */
+const showWholesale = computed(() => rows.value.some((r) => Number(r.wholesale_price ?? 0) > 0));
 
 const warehouseOptions = computed(() => [
     { value: '', label: 'Kho: Tất cả' },
@@ -122,6 +128,8 @@ const isLow = (row: StockRow) => row.available > 0 && row.available <= row.safet
         <RouterLink v-else-if="tenant.can('inventory.receive')" to="/inventory/receipts/new"><Button data-testid="new-receipt"><Plus /> Nhập kho</Button></RouterLink>
     </PageHeader>
 
+    <StockOverview :summary="summary" :active="filters.state" @select="(s) => (filters.state = s)" />
+
     <Card>
         <div class="border-b px-3"><Tabs v-model="filters.state" :tabs="tabs" variant="underline" data-testid="stock-tabs" /></div>
         <div class="flex flex-wrap items-center gap-3 border-b px-4 py-3">
@@ -153,10 +161,9 @@ const isLow = (row: StockRow) => row.available > 0 && row.available <= row.safet
                         <th class="px-4 py-2.5 text-right font-medium" title="Tồn kho trừ số đang giữ cho đơn">Có thể bán</th>
                         <th class="px-4 py-2.5 text-right font-medium">Tồn kho</th>
                         <th class="px-4 py-2.5 text-right font-medium" :title="filters.warehouse ? 'Bấm để sửa' : 'Chọn một kho để sửa'">Tồn an toàn</th>
-                        <th class="px-4 py-2.5 font-medium">Ngày khởi tạo</th>
                         <th class="px-4 py-2.5 text-right font-medium">Giá bán lẻ</th>
                         <th v-if="canCost" class="px-4 py-2.5 text-right font-medium">Giá vốn</th>
-                        <th class="px-4 py-2.5 text-right font-medium">Giá bán buôn</th>
+                        <th v-if="showWholesale" class="px-4 py-2.5 text-right font-medium">Giá bán buôn</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y">
@@ -176,6 +183,9 @@ const isLow = (row: StockRow) => row.available > 0 && row.available <= row.safet
                             :title="row.reserved ? `${formatNumber(row.reserved)} đang giữ cho đơn` : undefined"
                         >
                             {{ formatNumber(row.available) }}
+                            <span v-if="row.available <= 0" class="mt-0.5 block text-[11px] font-medium text-rose-600">Hết hàng</span>
+                            <span v-else-if="isLow(row)" class="mt-0.5 block text-[11px] font-medium text-amber-600">Sắp hết</span>
+                            <span v-else-if="row.reserved" class="mt-0.5 block text-[11px] font-normal text-muted-foreground">giữ {{ formatNumber(row.reserved) }}</span>
                         </td>
                         <td class="px-4 py-2.5 text-right tabular-nums">{{ formatNumber(row.on_hand) }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums">
@@ -192,10 +202,9 @@ const isLow = (row: StockRow) => row.available > 0 && row.available <= row.safet
                             />
                             <button v-else :class="cn('rounded px-1.5 py-0.5 text-muted-foreground', canConfigure && filters.warehouse && 'hover:bg-muted')" @click="startEdit(row)">{{ row.safety_stock || '—' }}</button>
                         </td>
-                        <td class="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{{ row.created_at ? formatDate(row.created_at) : '—' }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(row.ref_price ?? 0) }}</td>
                         <td v-if="canCost" class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(row.cost_price) }}</td>
-                        <td class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(row.wholesale_price ?? 0) }}</td>
+                        <td v-if="showWholesale" class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(row.wholesale_price ?? 0) }}</td>
                     </tr>
                 </tbody>
             </table>
