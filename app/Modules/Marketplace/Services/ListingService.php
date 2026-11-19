@@ -18,8 +18,10 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Listings imported from a shop and their mapping to internal SKUs. Names are never used for matching:
- * an exact (case-insensitive) seller SKU = internal SKU match is only a suggestion until a person confirms it.
+ * Listings imported from a shop and their mapping to internal SKUs. Names are never used for matching. An exact
+ * (case-insensitive) seller SKU = internal SKU match is linked as the products come in ("Tự liên kết khi SKU trùng",
+ * on by default, per shop), or only suggested when the shop has it off. A SKU that differs only in spaces, dashes or
+ * dots ("VHN-S" / "vhn s") is a suggestion a person confirms, and only when exactly one internal SKU fits.
  */
 class ListingService
 {
@@ -32,11 +34,11 @@ class ListingService
         private readonly PriceSync $prices,
     ) {}
 
-    /** @return array{listings: int, variants: int, suggested: int} */
+    /** @return array{listings: int, variants: int, suggested: int, linked: int} */
     public function sync(MarketplaceAccount $account): array
     {
         $connector = $this->connectors->for($account->marketplace);
-        $counts = ['listings' => 0, 'variants' => 0, 'suggested' => 0];
+        $counts = ['listings' => 0, 'variants' => 0, 'suggested' => 0, 'linked' => 0];
         $cursor = null;
 
         try {
@@ -66,11 +68,11 @@ class ListingService
      * Re-reads one listing after a product webhook. A product removed from the channel keeps its rows (orders may
      * point at them) but is marked "deleted".
      *
-     * @return array{listings: int, variants: int, suggested: int}
+     * @return array{listings: int, variants: int, suggested: int, linked: int}
      */
     public function syncProduct(MarketplaceAccount $account, string $externalProductId): array
     {
-        $counts = ['listings' => 0, 'variants' => 0, 'suggested' => 0];
+        $counts = ['listings' => 0, 'variants' => 0, 'suggested' => 0, 'linked' => 0];
         $connector = $this->connectors->for($account->marketplace);
         if (! $connector instanceof FetchesSingleProduct) {
             return $this->sync($account);
@@ -90,17 +92,20 @@ class ListingService
     }
 
     /**
-     * @param  array{listings: int, variants: int, suggested: int}  $counts
+     * @param  array{listings: int, variants: int, suggested: int, linked: int}  $counts
      */
     private function upsert(MarketplaceAccount $account, ProductData $product, array &$counts): void
     {
-        DB::transaction(function () use ($account, $product, &$counts) {
+        $linked = [];
+        DB::transaction(function () use ($account, $product, &$counts, &$linked) {
             $listing = MarketplaceListing::query()->updateOrCreate(
                 ['marketplace_account_id' => $account->id, 'external_product_id' => $product->externalProductId],
                 ['title' => $product->title, 'status' => $product->status, 'image_url' => $product->imageUrl, 'synced_at' => now(),
                     // Kept for "approve new products": the ECSO product is created with these.
+                    // details.images and each SKU's image_url: the pictures "Tạo sản phẩm từ sàn" and "Lấy ảnh từ sàn" copy.
                     'raw' => ['details' => $product->details, 'variants' => collect($product->variants)->mapWithKeys(fn ($v) => [$v['external_sku_id'] => array_filter([
                         'options' => $v['options'] ?? [], 'weight_gram' => $v['weight_gram'] ?? null, 'barcode' => $v['barcode'] ?? null,
+                        'image_url' => $v['image_url'] ?? null,
                     ])])->all()]],
             );
             $counts['listings']++;
@@ -117,7 +122,13 @@ class ListingService
                     'marketplace_stock' => $v['stock'],
                 ])->save();
                 $counts['variants']++;
-                $counts['suggested'] += (int) $this->suggest($variant);
+                $match = $this->suggest($variant, $account);
+                if ($match === 'linked') {
+                    $linked[] = $variant->id;
+                    $counts['linked']++;
+                } elseif ($match === 'suggested') {
+                    $counts['suggested']++;
+                }
                 $this->prices->onChannelPrice($account, $variant);
                 // A price waiting in the price file is done once the marketplace shows it.
                 if ($variant->price_push_status === 'export' && $variant->target_price !== null && abs((float) $variant->getAttribute('price') - (float) $variant->target_price) < 1) {
@@ -125,22 +136,75 @@ class ListingService
                 }
             }
         });
+
+        if ($linked !== []) {
+            $this->audit->record('listing.linked_by_sku', $account, ['count' => count($linked)]);
+            ListingMappingChanged::dispatch($this->context->id(), $linked);
+        }
     }
 
-    /** Suggests the internal SKU whose code equals the seller SKU exactly. Never maps by itself. */
-    public function suggest(ListingVariant $listing): bool
+    /**
+     * Links (or suggests) the internal SKU for a SKU not linked yet: "linked" when its seller SKU equals an internal SKU
+     * and the shop links by SKU, "suggested" for an exact match with that switched off or a near match, null otherwise.
+     *
+     * @return 'linked'|'suggested'|null
+     */
+    public function suggest(ListingVariant $listing, ?MarketplaceAccount $account = null): ?string
     {
         if (! in_array($listing->mapping_status, [ListingVariant::UNMAPPED, ListingVariant::SUGGESTED], true) || blank($listing->seller_sku)) {
-            return false;
+            return null;
         }
 
-        $match = ProductVariant::query()->where('sku', ProductVariant::normalizeSku($listing->seller_sku))->value('id');
+        $exact = ProductVariant::query()->where('sku', ProductVariant::normalizeSku($listing->seller_sku))->value('id');
+        // A SKU a person unlinked (mapped_at set, no variant) is never linked again by itself, only suggested.
+        if ($exact !== null && $listing->mapped_at === null && ($account ?? $listing->account)?->linksBySku()) {
+            $listing->forceFill([
+                'product_variant_id' => $exact,
+                'mapping_status' => ListingVariant::MAPPED,
+                'linked_by_sku' => true,
+                'mapped_by' => null,
+                'mapped_at' => now(),
+            ])->save();
+
+            return 'linked';
+        }
+
+        $match = $exact ?? $this->nearSkus()[self::looseSku($listing->seller_sku)] ?? null;
         $listing->forceFill([
             'product_variant_id' => $match,
             'mapping_status' => $match ? ListingVariant::SUGGESTED : ListingVariant::UNMAPPED,
         ])->save();
 
-        return $match !== null;
+        return $match ? 'suggested' : null;
+    }
+
+    /** A SKU without case, spaces and punctuation: "VHN-S", "vhn s" and "VHN.S" are the same. */
+    public static function looseSku(string $sku): string
+    {
+        return (string) preg_replace('/[^a-z0-9]/', '', mb_strtolower($sku));
+    }
+
+    /** @var array<int, array<string, int>> tenant id => loose SKU => variant id, read once per pull */
+    private array $near = [];
+
+    /** @return array<string, int> loose SKUs that belong to exactly one internal SKU */
+    private function nearSkus(): array
+    {
+        $tenant = (int) $this->context->id();
+        if (! isset($this->near[$tenant])) {
+            $index = [];
+            $taken = [];
+            foreach (ProductVariant::query()->pluck('sku', 'id') as $id => $sku) {
+                $key = self::looseSku((string) $sku);
+                if ($key === '') {
+                    continue;
+                }
+                isset($index[$key]) ? $taken[$key] = true : $index[$key] = (int) $id;
+            }
+            $this->near[$tenant] = array_diff_key($index, $taken);
+        }
+
+        return $this->near[$tenant];
     }
 
     public function map(ListingVariant $listing, ProductVariant $variant): ListingVariant
@@ -149,6 +213,7 @@ class ListingService
         $listing->forceFill([
             'product_variant_id' => $variant->id,
             'mapping_status' => ListingVariant::MAPPED,
+            'linked_by_sku' => false,
             'mapped_by' => Auth::id(),
             'mapped_at' => now(),
         ])->save();
@@ -185,6 +250,7 @@ class ListingService
         $listing->forceFill([
             'product_variant_id' => null,
             'mapping_status' => $ignore ? ListingVariant::IGNORED : ListingVariant::UNMAPPED,
+            'linked_by_sku' => false,
             'mapped_by' => Auth::id(),
             'mapped_at' => now(),
             'push_status' => null,

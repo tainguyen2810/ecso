@@ -21,12 +21,37 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class ProductController extends Controller
 {
+    /**
+     * "Bán trên": the marketplace shops each product is linked to (one query for the page).
+     *
+     * @param  Collection<int, Product>  $products
+     */
+    private function withShops(Collection $products): void
+    {
+        if ($products->isEmpty()) {
+            return;
+        }
+        $rows = DB::table('listing_variants')
+            ->join('product_variants', 'product_variants.id', '=', 'listing_variants.product_variant_id')
+            ->join('marketplace_accounts', 'marketplace_accounts.id', '=', 'listing_variants.marketplace_account_id')
+            ->where('listing_variants.tenant_id', app(TenantContext::class)->id())
+            ->where('listing_variants.mapping_status', 'mapped')
+            ->whereIn('product_variants.product_id', $products->pluck('id'))
+            ->distinct()
+            ->get(['product_variants.product_id', 'marketplace_accounts.ulid', 'marketplace_accounts.marketplace', 'marketplace_accounts.shop_name'])
+            ->groupBy('product_id');
+        foreach ($products as $product) {
+            $product->setAttribute('sold_on', ($rows[$product->id] ?? collect())->map(fn ($r) => ['id' => $r->ulid, 'marketplace' => $r->marketplace, 'name' => $r->shop_name])->values()->all());
+        }
+    }
+
     /**
      * A combo has no stock rows: show the number of whole combos its components make as on hand and available.
      *
@@ -63,6 +88,8 @@ class ProductController extends Controller
             'sort' => ['nullable', Rule::in(['newest', 'oldest', 'name', 'available', '-available', 'price', '-price'])],
             // Stock state over all warehouses: out (nothing available), low (at or below the safety stock), in.
             'stock' => ['nullable', Rule::in(['out', 'low', 'in'])],
+            // "Chưa có ảnh": products without a picture of their own.
+            'image' => ['nullable', Rule::in(['none'])],
             // Recycle bin ("Đã xóa"): deleted products, to restore.
             'trashed' => ['nullable', 'boolean'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
@@ -78,7 +105,7 @@ class ProductController extends Controller
         $available = 'COALESCE(s.on_hand, 0) - COALESCE(s.reserved, 0)';
         $trashed = (bool) ($filters['trashed'] ?? false);
         $products = Product::query()
-            ->when($trashed, fn (Builder $q) => $q->onlyTrashed()->with(['category', 'brand', 'variants' => fn ($v) => $v->withTrashed()]), fn (Builder $q) => $q->with(['category', 'brand', 'variants']))
+            ->when($trashed, fn (Builder $q) => $q->onlyTrashed()->with(['category', 'brand', 'variants' => fn ($v) => $v->withTrashed()]), fn (Builder $q) => $q->with(['category', 'brand', 'variants', 'images']))
             ->leftJoinSub($stock, 's', 's.product_id', '=', 'products.id')
             ->select('products.*', 's.on_hand', 's.reserved')
             // After select(): select() replaces the column list, which would drop the count.
@@ -97,6 +124,7 @@ class ProductController extends Controller
             }))
             ->when($filters['category'] ?? null, fn (Builder $q, string $c) => $q->whereIn('category_id', Category::query()->where('ulid', $c)->select('id')))
             ->when($filters['brand'] ?? null, fn (Builder $q, string $b) => $q->whereIn('brand_id', Brand::query()->where('ulid', $b)->select('id')))
+            ->when(($filters['image'] ?? null) === 'none', fn (Builder $q) => $q->whereDoesntHave('images'))
             ->when($filters['tag'] ?? null, fn (Builder $q, string $t) => $q->whereJsonContains('products.tags', $t))
             ->when($filters['type'] ?? null, fn (Builder $q, string $t) => $q->where('products.type', $t))
             ->when($filters['created_from'] ?? null, fn (Builder $q, string $d) => $q->where('products.created_at', '>=', ReportRange::date($d)))
@@ -113,6 +141,7 @@ class ProductController extends Controller
             ->paginate($filters['per_page'] ?? 20);
 
         $this->withComboStock($products->getCollection(), $stockReader);
+        $this->withShops($products->getCollection());
 
         return ProductResource::collection($products);
     }

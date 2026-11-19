@@ -148,7 +148,7 @@ const switchRows = [
             <div class="mb-4 grid gap-3 sm:grid-cols-3">
                 <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><p class="text-xs text-muted-foreground">Khớp mã SKU</p><p class="my-1 text-2xl font-bold">{{ formatNumber(overview.counts.matched) }} SKU</p><p class="text-xs text-muted-foreground">Mã SKU trên sàn trùng mã trong kho EzChat Bán hàng. Sẽ ghép luôn.</p></div>
                 <div class="rounded-xl border border-blue-200 bg-blue-50 p-4"><p class="text-xs text-muted-foreground">Chưa có trong EzChat Bán hàng</p><p class="my-1 text-2xl font-bold">{{ formatNumber(toCreate) }} SKU</p><p class="text-xs text-muted-foreground">Tạo sản phẩm mới, giá = giá đang bán trên sàn, mã = SKU người bán.</p></div>
-                <div class="rounded-xl border border-amber-200 bg-amber-50 p-4"><p class="text-xs text-muted-foreground">Để ghép tay sau</p><p class="my-1 text-2xl font-bold">{{ formatNumber(overview.counts.later + (withoutSku ? 0 : overview.counts.create_without_sku)) }} SKU</p><p class="text-xs text-muted-foreground">Ghép ở trang Liên kết SKU, hoặc bỏ qua.</p></div>
+                <div class="rounded-xl border border-amber-200 bg-amber-50 p-4"><p class="text-xs text-muted-foreground">Để ghép tay sau</p><p class="my-1 text-2xl font-bold">{{ formatNumber(overview.counts.later + (withoutSku ? 0 : overview.counts.create_without_sku)) }} SKU</p><p class="text-xs text-muted-foreground">Ghép ở trang Liên kết sản phẩm, hoặc bỏ qua.</p></div>
             </div>
             <Card>
                 <table class="w-full text-sm">

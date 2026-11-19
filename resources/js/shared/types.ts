@@ -127,6 +127,8 @@ export interface Product {
     variants?: Variant[];
     variants_count?: number;
     images?: { id: number; url: string }[];
+    /** "Bán trên": linked marketplace shops (product list). */
+    sold_on?: { id: string; marketplace: string; name: string }[];
     stock?: StockFigures;
     created_at: string;
     updated_at: string;
@@ -582,6 +584,8 @@ export interface MarketplaceSyncSettings {
     sync_prices: boolean;
     import_new_products: boolean;
     push_status?: boolean;
+    /** "Tự liên kết khi SKU trùng" */
+    auto_link?: boolean;
 }
 
 export interface WebhookHealth {
@@ -779,6 +783,7 @@ export interface MarketplaceAccountData {
 
 export interface ListingVariantData {
     id: string;
+    listing_id?: string | null;
     external_product_id: string | null;
     external_sku_id: string;
     title: string;
@@ -787,6 +792,10 @@ export interface ListingVariantData {
     price: string | null;
     marketplace_stock: number | null;
     mapping_status: string;
+    linked_by_sku?: boolean;
+    near_match?: boolean;
+    image_url?: string | null;
+    creatable?: boolean;
     variant: { id: string; sku: string; name: string } | null;
     last_pushed_qty: number | null;
     last_pushed_at: string | null;
@@ -1069,4 +1078,25 @@ export interface ShipmentSummary {
     late: number;
     late_days: number;
     cod_held: { carrier: string | null; carrier_name: string | null; amount: string; count: number }[];
+}
+
+/** The four numbers on top of Liên kết sản phẩm. */
+export interface ListingSummary {
+    variants: number;
+    products: number;
+    mapped: number;
+    linked_by_sku: number;
+    unmapped: number;
+    suggested: number;
+    ignored: number;
+    push_errors: number;
+    creatable_products: number;
+    creatable_variants: number;
+}
+
+/** What a linked shop has for one product ("Ảnh từ sàn"). */
+export interface MarketplaceImageSource {
+    account: { id: string; name: string; marketplace: string };
+    images: string[];
+    variants: { url: string; label: string; variant_ids: string[] }[];
 }

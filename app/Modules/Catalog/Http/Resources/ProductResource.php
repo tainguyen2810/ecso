@@ -29,6 +29,8 @@ class ProductResource extends JsonResource
             'brand' => $this->brand ? ['id' => $this->brand->ulid, 'name' => $this->brand->name] : null,
             'variants' => VariantResource::collection($this->whenLoaded('variants')),
             'variants_count' => $this->whenCounted('variants'),
+            // "Bán trên": linked marketplace shops (product list only).
+            'sold_on' => $this->when($this->getAttribute('sold_on') !== null, fn () => $this->getAttribute('sold_on')),
             'images' => $this->whenLoaded('images', fn () => $this->images->map(fn ($i) => ['id' => $i->id, 'url' => $i->url()])),
             'stock' => $this->when(isset($this->on_hand), fn () => [
                 'on_hand' => (int) $this->on_hand,

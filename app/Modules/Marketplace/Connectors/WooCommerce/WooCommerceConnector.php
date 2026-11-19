@@ -374,7 +374,8 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
             do {
                 $response = $client->send('GET', "products/{$p['id']}/variations", ['per_page' => self::PAGE, 'page' => $page]);
                 foreach ((array) $response->json() as $v) {
-                    $variants[] = $this->variant($v, collect($v['attributes'] ?? [])->pluck('option')->filter()->implode(' / ') ?: null);
+                    $variants[] = [...$this->variant($v, collect($v['attributes'] ?? [])->pluck('option')->filter()->implode(' / ') ?: null),
+                        'image_url' => is_string($v['image']['src'] ?? null) && $v['image']['src'] !== '' ? $v['image']['src'] : null];
                 }
                 $pages = (int) $response->header('X-WP-TotalPages');
                 $page++;
@@ -393,6 +394,7 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
                 'description' => self::plainText((string) (($p['description'] ?? '') ?: ($p['short_description'] ?? ''))),
                 'categories' => collect($p['categories'] ?? [])->pluck('name')->filter()->map(fn ($n) => html_entity_decode((string) $n, ENT_QUOTES))->values()->all(),
                 'weight_gram' => self::grams($p['weight'] ?? null),
+                'images' => collect($p['images'] ?? [])->pluck('src')->filter(fn ($u) => is_string($u) && $u !== '')->take(9)->values()->all(),
             ],
         );
     }

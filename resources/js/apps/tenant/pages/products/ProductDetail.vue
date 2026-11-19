@@ -297,7 +297,7 @@ async function remove() {
             </Card>
             <Card v-if="showChannelsCard" :caps="false" title="Trên các kênh" data-testid="product-channels">
                 <template #actions><RouterLink to="/marketplaces" class="text-sm font-medium text-primary hover:underline">Kênh bán</RouterLink></template>
-                <p v-if="!onChannels?.length" class="px-5 py-4 text-sm text-muted-foreground">Chưa liên kết với gian hàng nào. Vào Kênh bán › Liên kết SKU để ghép.</p>
+                <p v-if="!onChannels?.length" class="px-5 py-4 text-sm text-muted-foreground">Chưa liên kết với gian hàng nào. Vào Kết nối sàn › Liên kết sản phẩm để ghép.</p>
                 <ul v-else class="divide-y">
                     <li v-for="c in onChannels" :key="c.account?.id" class="flex items-center gap-3 px-5 py-3">
                         <MarketplaceLogo :marketplace="c.account?.marketplace ?? 'manual'" />

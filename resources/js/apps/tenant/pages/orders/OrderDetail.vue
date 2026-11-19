@@ -419,7 +419,7 @@ async function createReturn() {
                 <template v-else>Sàn báo đã giao nhưng kho không đủ hàng cho một phần đơn: phần này chưa được trừ kho (không để âm kho). Hãy kiểm kê và lập phiếu điều chỉnh.</template>
             </Alert>
             <Alert v-if="order.flags.unmapped" :icon="Link2" tone="amber">
-                Có sản phẩm chưa liên kết với SKU nội bộ nên chưa giữ tồn. <RouterLink :to="`/marketplaces/${order.shop?.id}/listings?status=unmapped`" class="font-medium text-primary underline">Liên kết SKU</RouterLink> — đơn sẽ tự cập nhật sau khi map.
+                Có sản phẩm chưa liên kết với SKU nội bộ nên chưa giữ tồn. <RouterLink :to="`/marketplaces/${order.shop?.id}/listings?status=todo`" class="font-medium text-primary underline">Liên kết sản phẩm</RouterLink> — đơn sẽ tự cập nhật sau khi liên kết.
             </Alert>
         </div>
 

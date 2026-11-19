@@ -20,7 +20,10 @@ class AccountResource extends JsonResource
             'status' => $this->status,
             'sync_enabled' => $this->sync_enabled,
             'base_url' => $this->base_url,
-            'settings' => array_merge(MarketplaceAccount::SYNC_DEFAULTS, array_intersect_key((array) $this->settings, MarketplaceAccount::SYNC_DEFAULTS)),
+            'settings' => array_merge(MarketplaceAccount::SYNC_DEFAULTS, array_intersect_key((array) $this->settings, MarketplaceAccount::SYNC_DEFAULTS), [
+                // "Tự liên kết khi SKU trùng" (its default depends on the marketplace).
+                'auto_link' => (bool) ($this->settings['auto_link'] ?? $this->marketplace !== 'woocommerce'),
+            ]),
             'setup_pending' => $this->setupPending(),
             'order_sync_interval' => $this->orderSyncInterval(),
             'webhook_health' => $this->settings['webhook_health'] ?? null,

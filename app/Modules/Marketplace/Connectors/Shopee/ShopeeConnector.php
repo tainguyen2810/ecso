@@ -336,7 +336,7 @@ class ShopeeConnector extends GatewayConnector
                 variants: $variants,
                 status: isset($item['item_status']) ? strtolower((string) $item['item_status']) : null,
                 imageUrl: $item['image']['image_url_list'][0] ?? null,
-                details: ['description' => $item['description'] ?? null, 'weight_gram' => $weight],
+                details: ['description' => $item['description'] ?? null, 'weight_gram' => $weight, 'images' => self::urls($item['image']['image_url_list'] ?? [])],
             );
         }
 
@@ -351,6 +351,9 @@ class ShopeeConnector extends GatewayConnector
         $variants = [];
         foreach ((array) ($res['model'] ?? []) as $model) {
             $options = [];
+            // Shopee gives pictures to the options of the first tier (the colour, usually).
+            $first = (int) (($model['tier_index'] ?? [])[0] ?? -1);
+            $image = $tiers[0]['option_list'][$first]['image']['image_url'] ?? null;
             foreach ((array) ($model['tier_index'] ?? []) as $t => $index) {
                 $tier = (array) ($tiers[$t] ?? []);
                 $value = $tier['option_list'][$index]['option'] ?? null;
@@ -365,6 +368,7 @@ class ShopeeConnector extends GatewayConnector
                 ...self::priceAndStock($model),
                 'options' => $options,
                 'weight_gram' => $weight,
+                'image_url' => is_string($image) && $image !== '' ? $image : null,
             ];
         }
 
@@ -390,6 +394,15 @@ class ShopeeConnector extends GatewayConnector
             'regular_price' => $original !== null ? self::money($original) : null,
             'sale_price' => $current !== null && $original !== null && (float) $current < (float) $original ? self::money($current) : null,
         ];
+    }
+
+    /**
+     * @param  mixed  $list  picture links as Shopee lists them
+     * @return array<int, string> at most 9, cover first
+     */
+    private static function urls(mixed $list): array
+    {
+        return array_slice(array_values(array_filter((array) $list, fn ($u) => is_string($u) && $u !== '')), 0, 9);
     }
 
     // ---- Inventory --------------------------------------------------------------------------------------------

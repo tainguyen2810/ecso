@@ -49,6 +49,8 @@ class VariantResource extends JsonResource
                 // First photo, for the order form's picker (only when the caller loaded product.images).
                 'image' => $this->product->relationLoaded('images') ? $this->product->images->first()?->url() : null,
             ]),
+            // The variant's own picture (a colour from the marketplace), when loaded.
+            'image' => $this->whenLoaded('image', fn () => $this->image?->url()),
             'stock' => $this->when(isset($this->on_hand), fn () => [
                 'on_hand' => (int) $this->on_hand,
                 'reserved' => (int) $this->reserved,

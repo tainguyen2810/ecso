@@ -12,7 +12,9 @@ use Illuminate\Support\Carbon;
 
 /**
  * A SKU of a marketplace listing and its link to an internal SKU.
- * Mapping is never inferred from names: only an exact seller SKU match is *suggested*, a person confirms it.
+ * Mapping is never inferred from names. An exact seller SKU match is linked when the products are pulled
+ * ("Tự liên kết khi SKU trùng", linked_by_sku) or only suggested when the shop has that switched off; a SKU that differs
+ * only in case, spaces or punctuation is always only a suggestion that a person confirms.
  *
  * @property Carbon|null $mapped_at
  * @property Carbon|null $last_pushed_at
@@ -47,6 +49,7 @@ class ListingVariant extends Model
             'marketplace_stock' => 'integer',
             'last_pushed_qty' => 'integer',
             'mapped_at' => 'datetime',
+            'linked_by_sku' => 'boolean',
             'last_pushed_at' => 'datetime',
         ];
     }

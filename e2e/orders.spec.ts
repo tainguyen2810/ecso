@@ -21,17 +21,17 @@ test('marketplaces: capability matrix, fake shop simulator, webhook monitor', as
     await expect(page.getByTestId('webhook-table')).toContainText('processed');
 });
 
-test('listings: SKU mapping with exact-SKU suggestions only', async ({ page }) => {
+test('listings: what is left to link, with the shop\'s pictures and SKUs', async ({ page }) => {
     await login(page, 'owner@demo.test');
     await page.goto('/marketplaces');
-    await page.getByRole('link', { name: /Liên kết SKU/ }).first().click();
+    await page.getByRole('link', { name: /Liên kết sản phẩm/ }).first().click();
+    await expect(page.getByTestId('listing-summary')).toContainText('Mã trên sàn');
+    await page.getByRole('button', { name: /Tất cả/ }).click();
     await expect(page.getByTestId('listing-table')).toBeVisible();
-    await page.getByRole('button', { name: /Chưa map/ }).click();
-    await expect(page.getByTestId('listing-table')).toContainText('Chưa map');
     await shot(page, '02-listing-mapping');
 
-    await page.getByRole('button', { name: 'Chọn SKU' }).first().click();
-    await expect(page.getByRole('dialog')).toContainText('Chọn SKU nội bộ');
+    await page.getByTestId('listing-table').getByRole('button', { name: /Đổi|Chọn có sẵn|Chọn khác|Liên kết/ }).first().click();
+    await expect(page.getByRole('dialog')).toContainText('Chọn mã trong kho');
     await page.getByRole('dialog').getByPlaceholder(/Tìm SKU/).fill('ATC');
     await expect(page.getByRole('dialog').getByRole('button', { name: /ATC/ }).first()).toBeVisible();
     await shot(page, '03-sku-picker');

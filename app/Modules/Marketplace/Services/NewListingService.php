@@ -26,12 +26,25 @@ class NewListingService
         private readonly ProductService $products,
         private readonly TenantContext $context,
         private readonly AuditLogger $audit,
+        private readonly MarketplaceImages $images,
     ) {}
 
     /** @return Collection<int, MarketplaceListing> */
     public function pending(MarketplaceAccount $account, int $limit = 200): Collection
     {
         return $this->query($account)->with(['variants' => fn ($q) => $q->orderBy('id')])->orderByDesc('id')->limit($limit)->get();
+    }
+
+    /**
+     * Products on the store that are not in the warehouse at all ("Tạo sản phẩm từ sàn"), whatever import_new_products says.
+     *
+     * @return array{products: int, variants: int}
+     */
+    public function creatable(MarketplaceAccount $account): array
+    {
+        $ids = $this->query($account)->pluck('id');
+
+        return ['products' => $ids->count(), 'variants' => $ids->isEmpty() ? 0 : ListingVariant::query()->whereIn('listing_id', $ids)->count()];
     }
 
     public function count(MarketplaceAccount $account): int
@@ -41,18 +54,20 @@ class NewListingService
 
     /**
      * @param  array<int, string>|null  $listingUlids  null = all pending
+     * @param  bool  $withImages  also copy the store's pictures (in the background) into the new products
      * @return array{created: int, linked: int}
      */
-    public function approve(MarketplaceAccount $account, ?array $listingUlids): array
+    public function approve(MarketplaceAccount $account, ?array $listingUlids, bool $withImages = false): array
     {
         $result = ['created' => 0, 'linked' => 0];
+        $created = [];
         $this->prefix = $account->marketplace === 'woocommerce' ? 'WOO-' : 'MP-';
         $mapped = [];
         $listings = $this->query($account)->when($listingUlids !== null, fn ($q) => $q->whereIn('ulid', $listingUlids))
             ->with('variants')->get();
 
         foreach ($listings as $listing) {
-            DB::transaction(function () use ($listing, &$result, &$mapped) {
+            DB::transaction(function () use ($listing, &$result, &$mapped, &$created) {
                 $variants = $listing->variants->where('mapping_status', ListingVariant::UNMAPPED)->values();
                 if ($variants->isEmpty()) {
                     return;
@@ -87,6 +102,7 @@ class NewListingService
                             ];
                         })->all(),
                     ]);
+                    $created[] = $product;
                     $existing = $existing->merge($product->variants()->pluck('id', 'sku')->mapWithKeys(fn ($id, $sku) => [mb_strtolower($sku) => $id]));
                     $result['created']++;
                 } else {
@@ -108,6 +124,9 @@ class NewListingService
         if ($mapped !== []) {
             $this->audit->record('listing.new_products_approved', $account, $result);
             ListingMappingChanged::dispatch($this->context->id(), $mapped);
+        }
+        if ($withImages && $created !== []) {
+            $this->images->queue($created);
         }
 
         return $result;
