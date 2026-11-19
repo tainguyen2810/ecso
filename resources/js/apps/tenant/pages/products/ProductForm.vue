@@ -145,6 +145,11 @@ function emptyRow(): VariantRow {
 
 const money = (value: string | number | null | undefined) => (Number(value) ? String(Math.round(Number(value))) : '');
 
+/** Unsaved changes: what the form holds now against what was loaded, shown in the save bar at the bottom. */
+const snapshot = () => JSON.stringify([form, lots, tags.value, variants.value, components.value, productType.value]);
+const baseline = ref<string | null>(null);
+const dirty = computed(() => baseline.value !== null && snapshot() !== baseline.value);
+
 onMounted(async () => {
     // Set the first row before awaiting: rows generated while the lookups load must not be overwritten.
     if (isNew.value && !copyFrom.value) variants.value = [emptyRow()];
@@ -214,6 +219,7 @@ onMounted(async () => {
         loadError.value = (e as ApiError).message;
     } finally {
         loading.value = false;
+        baseline.value = snapshot();
     }
 });
 
@@ -708,6 +714,12 @@ async function removeImage(id: number) {
                     </div>
                 </Card>
             </div>
+        </div>
+
+        <div v-if="canManage && !isNew && dirty" class="sticky bottom-4 z-20 mt-6 flex items-center gap-3 rounded-xl border bg-card px-5 py-3 shadow-lg" data-testid="save-bar">
+            <span class="inline-flex items-center gap-2 text-sm font-medium text-amber-600"><i class="size-2 rounded-full bg-amber-500" />Có thay đổi chưa lưu</span>
+            <RouterLink :to="productId ? `/products/${productId}` : '/products'" class="ml-auto"><Button variant="outline" type="button">Hủy</Button></RouterLink>
+            <Button type="submit" :loading="saving">Lưu</Button>
         </div>
     </form>
 </template>

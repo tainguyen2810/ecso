@@ -97,6 +97,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     });
 
     Route::get('marketplace-accounts/{account}/listings', [ListingController::class, 'index']);
+    Route::get('products/{product}/listings', [ListingController::class, 'forProduct']);
     Route::post('marketplace-accounts/{account}/listings/confirm-suggestions', [ListingController::class, 'confirmSuggestions']);
     Route::put('listings/{listing}/mapping', [ListingController::class, 'map']);
     Route::delete('listings/{listing}/mapping', [ListingController::class, 'unmap']);
