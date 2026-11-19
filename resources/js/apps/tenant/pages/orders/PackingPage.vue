@@ -13,9 +13,14 @@ import {
     Check,
     CircleAlert,
     ClipboardList,
-    ListChecks,
+    CircleCheck,
     ScanBarcode,
+    Settings2,
+    Volume2,
+    VolumeX,
 } from "lucide-vue-next";
+import MarketplaceLogo from "@/shared/ui/MarketplaceLogo.vue";
+import type { OrderSummary } from "@/shared/types";
 import PageHeader from "../../PageHeader.vue";
 import Badge from "@/shared/ui/Badge.vue";
 import Button from "@/shared/ui/Button.vue";
@@ -105,7 +110,39 @@ async function loadStats() {
     } catch {
         // The side panel is a convenience; packing still works.
     }
+    loadQueue();
 }
+
+/** "Chờ đóng gói": the next orders to pack, soonest ship-by first. Clicking one opens it as if scanned. */
+const queue = ref<OrderSummary[]>([]);
+async function loadQueue() {
+    try {
+        const { data } = await api.get("/orders", { params: { tab: "to_pack", per_page: 10, sort: "ship_by" } });
+        queue.value = data.data.slice(0, 8);
+    } catch {
+        queue.value = [];
+    }
+}
+function dueLabel(o: OrderSummary): { text: string; tone: string } {
+    if (!o.ship_by_at) return { text: "", tone: "" };
+    const h = (new Date(o.ship_by_at).getTime() - Date.now()) / 3600000;
+    if (h < 0) return { text: "Quá hạn", tone: "text-rose-600" };
+    if (h < 24) return { text: `Còn ${Math.max(1, Math.round(h))} giờ`, tone: h < 6 ? "text-rose-600" : "text-amber-600" };
+    const d = new Date(o.ship_by_at);
+    return { text: h < 48 ? "Ngày mai" : `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`, tone: "text-muted-foreground" };
+}
+const itemsLine = (o: OrderSummary) => {
+    const p = o.items_preview ?? [];
+    if (!p.length) return "";
+    const first = `${p[0]!.name} × ${p[0]!.quantity}`;
+    return p.length > 1 ? `${first} +${p.length - 1}` : first;
+};
+async function pick(o: OrderSummary) {
+    if (order.value) return say("info", "Đang đóng đơn khác: hoàn tất hoặc bỏ đơn đó trước.");
+    code.value = o.external_order_id;
+    await submit();
+}
+const settingsOpen = ref(false);
 
 function say(tone: "ok" | "error" | "info", text: string) {
     flash.value = { tone, text };
@@ -352,8 +389,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 
 <template>
     <PageHeader
-        title="Đóng gói"
-        description='Dùng máy quét mã vạch hoặc gõ mã. Mỗi lần quét đúng nghe "tít", sai nghe "bíp bíp".'
+        title="Quét đóng gói"
+        description='Quét mã đơn, rồi quét từng sản phẩm. Đúng nghe "tít", sai nghe "bíp bíp".'
     >
         <Button
             v-if="tenant.can('orders.print')"
@@ -363,16 +400,22 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
             @click="printPickList"
             ><ClipboardList /> In phiếu nhặt hàng</Button
         >
-        <Button variant="outline" @click="router.push('/orders?tab=to_pack')"
-            ><ListChecks /> Danh sách chờ đóng gói<template v-if="stats">
-                ({{ stats.remaining }})</template
-            ></Button
-        >
+        <div class="relative">
+            <Button variant="outline" size="icon" aria-label="Tùy chọn đóng gói" title="Tùy chọn" data-testid="pack-settings" @click="settingsOpen = !settingsOpen"><Settings2 /></Button>
+            <template v-if="settingsOpen">
+                <div class="fixed inset-0 z-30" @click="(settingsOpen = false), focus()" />
+                <div class="absolute right-0 top-full z-40 mt-1 w-80 rounded-xl border bg-card px-4 py-2 shadow-lg">
+                    <Switch v-if="tenant.can('orders.print')" v-model="settings.autoPrint" label="Tự in phiếu đóng gói khi đủ hàng" />
+                    <Switch v-model="settings.sound" label="Âm thanh khi quét" />
+                    <Switch v-model="settings.allowShort" label="Cho phép đóng thiếu (cần ghi lý do)" />
+                </div>
+            </template>
+        </div>
     </PageHeader>
 
     <form class="relative mb-2" @submit.prevent="submit">
         <ScanBarcode
-            class="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-slate-500"
+            class="pointer-events-none absolute left-5 top-1/2 size-6 -translate-y-1/2 text-primary"
         />
         <input
             ref="input"
@@ -382,9 +425,17 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
             spellcheck="false"
             aria-label="Mã quét"
             data-testid="pack-scan"
-            class="h-14 w-full rounded-xl border-2 border-blue-300 bg-card pl-12 pr-4 text-lg shadow-[0_0_0_4px_rgba(37,99,235,0.08)] outline-none focus:border-primary"
+            class="h-16 w-full rounded-2xl border-2 border-blue-300 bg-card pl-14 pr-36 text-xl shadow-[0_0_0_4px_rgba(37,99,235,0.08)] outline-none focus:border-primary"
             @blur="focus"
         />
+        <button
+            type="button"
+            :class="cn('absolute right-4 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium', settings.sound ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500')"
+            @mousedown.prevent
+            @click="settings.sound = !settings.sound"
+        >
+            <Volume2 v-if="settings.sound" class="size-3.5" /><VolumeX v-else class="size-3.5" />{{ settings.sound ? "Âm thanh bật" : "Âm thanh tắt" }}
+        </button>
     </form>
     <p
         v-if="flash"
@@ -409,7 +460,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
     </p>
     <div v-else class="mb-4" />
 
-    <div class="grid gap-4 lg:grid-cols-[1fr_300px]">
+    <div class="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <Card class="overflow-hidden p-0">
             <template v-if="order">
                 <div
@@ -571,69 +622,42 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
         </Card>
 
         <div class="space-y-4">
-            <Card
-                class="grid grid-cols-3 gap-2 p-3 text-center"
-                data-testid="pack-stats"
-            >
-                <div>
-                    <p class="text-xs text-muted-foreground">Đã đóng hôm nay</p>
-                    <p class="text-2xl font-bold tabular-nums">
-                        {{ stats?.packed_today ?? "—" }}
-                    </p>
+            <Card class="grid grid-cols-3 divide-x overflow-hidden p-0 text-center" data-testid="pack-stats">
+                <div class="px-2 py-4">
+                    <p class="text-3xl font-bold tabular-nums text-emerald-600">{{ stats?.packed_today ?? "—" }}</p>
+                    <p class="mt-1 text-xs text-muted-foreground">Đã đóng hôm nay</p>
                 </div>
-                <div>
-                    <p class="text-xs text-muted-foreground">Quét sai</p>
-                    <p
-                        :class="
-                            cn(
-                                'text-2xl font-bold tabular-nums',
-                                stats?.errors_today && 'text-red-600',
-                            )
-                        "
-                    >
-                        {{ stats?.errors_today ?? "—" }}
-                    </p>
+                <div class="px-2 py-4">
+                    <p :class="cn('text-3xl font-bold tabular-nums', stats?.errors_today ? 'text-rose-600' : '')">{{ stats?.errors_today ?? "—" }}</p>
+                    <p class="mt-1 text-xs text-muted-foreground">Quét sai</p>
                 </div>
-                <div>
-                    <p class="text-xs text-muted-foreground">Còn chờ</p>
-                    <p class="text-2xl font-bold tabular-nums">
-                        {{ stats?.remaining ?? "—" }}
-                    </p>
+                <div class="px-2 py-4">
+                    <p class="text-3xl font-bold tabular-nums">{{ stats?.remaining ?? "—" }}</p>
+                    <p class="mt-1 text-xs text-muted-foreground">Còn chờ</p>
                 </div>
             </Card>
-            <Card class="px-4 py-3">
-                <p class="mb-1 text-sm font-semibold">Tùy chọn</p>
-                <Switch
-                    v-if="tenant.can('orders.print')"
-                    v-model="settings.autoPrint"
-                    label="Tự in phiếu đóng gói khi đủ hàng"
-                />
-                <Switch v-model="settings.sound" label="Âm thanh khi quét" />
-                <Switch
-                    v-model="settings.allowShort"
-                    label="Cho phép đóng thiếu (cần ghi lý do)"
-                />
+            <Card :caps="false" title="Chờ đóng gói" data-testid="pack-queue">
+                <template #actions><RouterLink to="/orders?tab=to_pack" class="text-sm font-medium text-primary hover:underline">Xem hết</RouterLink></template>
+                <p v-if="!queue.length" class="px-5 py-6 text-center text-sm text-muted-foreground">Không còn đơn chờ đóng gói.</p>
+                <ul v-else class="divide-y">
+                    <li v-for="o in queue" :key="o.id">
+                        <button type="button" :class="cn('flex w-full items-center gap-3 px-5 py-2.5 text-left hover:bg-muted/40', order?.id === o.id && 'bg-blue-50')" @mousedown.prevent @click="pick(o)">
+                            <MarketplaceLogo :marketplace="o.marketplace" size="sm" />
+                            <span class="min-w-0 flex-1">
+                                <span class="block truncate font-mono text-sm font-medium">{{ o.external_order_id }}</span>
+                                <span class="block truncate text-xs text-muted-foreground">{{ itemsLine(o) }}</span>
+                            </span>
+                            <span :class="cn('shrink-0 text-xs font-medium', dueLabel(o).tone)">{{ dueLabel(o).text }}</span>
+                        </button>
+                    </li>
+                </ul>
             </Card>
-            <Card class="px-4 py-3">
-                <p class="mb-1 text-sm font-semibold">Vừa đóng xong</p>
-                <p
-                    v-if="!stats?.recent.length"
-                    class="py-2 text-sm text-muted-foreground"
-                >
-                    Chưa có đơn nào hôm nay.
-                </p>
-                <RouterLink
-                    v-for="r in stats?.recent ?? []"
-                    :key="r.id + r.at"
-                    :to="`/orders/${r.id}`"
-                    class="flex items-center justify-between border-t py-2 text-sm first:border-t-0"
-                >
-                    <span class="font-semibold text-primary">{{
-                        r.external_order_id
-                    }}</span
-                    ><span class="text-xs text-muted-foreground"
-                        >{{ r.items }} SP · {{ time(r.at) }}</span
-                    >
+            <Card :caps="false" title="Vừa đóng xong">
+                <p v-if="!stats?.recent.length" class="px-5 py-4 text-sm text-muted-foreground">Chưa có đơn nào hôm nay.</p>
+                <RouterLink v-for="r in stats?.recent ?? []" :key="r.id + r.at" :to="`/orders/${r.id}`" class="flex items-center gap-2 border-t px-5 py-2.5 text-sm first:border-t-0 hover:bg-muted/40">
+                    <CircleCheck class="size-4 shrink-0 text-emerald-500" />
+                    <span class="flex-1 truncate font-mono font-medium">{{ r.external_order_id }}</span>
+                    <span class="text-xs text-muted-foreground">{{ r.items }} SP · {{ time(r.at) }}</span>
                 </RouterLink>
             </Card>
         </div>
