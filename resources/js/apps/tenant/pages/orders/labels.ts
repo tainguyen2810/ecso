@@ -158,9 +158,9 @@ export const marketplaceNames: Record<string, string> = {
 };
 
 export const mappingStatus: Record<string, { label: string; tone: Tone }> = {
-    mapped: { label: 'Đã map', tone: 'success' },
-    suggested: { label: 'Gợi ý', tone: 'warning' },
-    unmapped: { label: 'Chưa map', tone: 'danger' },
+    mapped: { label: 'Đã liên kết', tone: 'success' },
+    suggested: { label: 'Cần xác nhận', tone: 'warning' },
+    unmapped: { label: 'Chưa liên kết', tone: 'danger' },
     ignored: { label: 'Bỏ qua', tone: 'muted' },
 };
 

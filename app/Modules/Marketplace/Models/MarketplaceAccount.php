@@ -60,7 +60,7 @@ class MarketplaceAccount extends Model
     public const SYNC_DEFAULTS = ['sync_orders' => true, 'sync_stock' => true, 'sync_prices' => false, 'import_new_products' => true, 'push_status' => true];
 
     /** @var array<int, string> */
-    public const SETTING_KEYS = ['sync_orders', 'sync_stock', 'sync_prices', 'import_new_products', 'push_status'];
+    public const SETTING_KEYS = ['sync_orders', 'sync_stock', 'sync_prices', 'import_new_products', 'push_status', 'auto_link'];
 
     /** Minutes between two reconcile passes of this shop's orders. */
     public const ORDER_SYNC_INTERVALS = [5, 15, 30, 60];
@@ -76,6 +76,15 @@ class MarketplaceAccount extends Model
         $minutes = (int) ($this->settings['order_sync_interval'] ?? 15);
 
         return in_array($minutes, self::ORDER_SYNC_INTERVALS, true) ? $minutes : 15;
+    }
+
+    /**
+     * "Tự liên kết khi SKU trùng": on by default for Shopee and TikTok shops, off for websites (their store page has
+     * its own review of suggestions), and never while the shop is still in its setup steps (step 2 links them).
+     */
+    public function linksBySku(): bool
+    {
+        return ! $this->setupPending() && (bool) ($this->settings['auto_link'] ?? $this->marketplace !== 'woocommerce');
     }
 
     public function syncs(string $what): bool

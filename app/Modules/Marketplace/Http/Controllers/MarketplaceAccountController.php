@@ -19,6 +19,7 @@ use App\Modules\Marketplace\Models\WebhookEvent;
 use App\Modules\Marketplace\Services\AccountService;
 use App\Modules\Marketplace\Services\InventorySyncPlanner;
 use App\Modules\Marketplace\Services\ListingService;
+use App\Modules\Marketplace\Services\MarketplaceImages;
 use App\Modules\Marketplace\Services\NewListingService;
 use App\Modules\Marketplace\Services\ShopAuthorizationService;
 use App\Modules\Orders\Models\Order;
@@ -115,16 +116,22 @@ class MarketplaceAccountController extends Controller
     {
         $this->authorize('viewAny', MarketplaceAccount::class);
 
+        $prefix = $account->marketplace === 'woocommerce' ? 'WOO-' : 'MP-';
+
         return response()->json(['data' => $newListings->pending($account)->map(fn ($l) => [
             'id' => $l->ulid,
             'title' => $l->title,
             'image_url' => $l->image_url,
+            'images' => count(MarketplaceImages::listingImages($l->raw, $l->image_url)),
             'variants' => $l->variants->map(fn (ListingVariant $v) => [
                 'name' => $v->name,
                 'seller_sku' => $v->seller_sku,
+                // The SKU the new product gets: the seller's, else one made from the marketplace id.
+                'sku' => $v->seller_sku ?: $prefix.$v->external_sku_id,
                 'price' => $v->price,
                 'regular_price' => $v->regular_price,
                 'sale_price' => $v->sale_price,
+                'image_url' => $l->raw['variants'][$v->external_sku_id]['image_url'] ?? null,
             ])->values(),
         ])->values()]);
     }
@@ -132,10 +139,10 @@ class MarketplaceAccountController extends Controller
     public function approveNewProducts(Request $request, MarketplaceAccount $account, NewListingService $newListings): JsonResponse
     {
         $this->authorize('map', MarketplaceAccount::class);
-        $data = $request->validate(['listing_ids' => ['nullable', 'array', 'max:500'], 'listing_ids.*' => ['string'], 'all' => ['boolean']]);
+        $data = $request->validate(['listing_ids' => ['nullable', 'array', 'max:500'], 'listing_ids.*' => ['string'], 'all' => ['boolean'], 'images' => ['boolean']]);
         abort_if(empty($data['all']) && empty($data['listing_ids']), 422, 'Chọn sản phẩm cần duyệt.');
 
-        return response()->json(['data' => $newListings->approve($account, ! empty($data['all']) ? null : $data['listing_ids'])]);
+        return response()->json(['data' => $newListings->approve($account, ! empty($data['all']) ? null : $data['listing_ids'], (bool) ($data['images'] ?? false))]);
     }
 
     public function skipNewProducts(Request $request, MarketplaceAccount $account, NewListingService $newListings): JsonResponse

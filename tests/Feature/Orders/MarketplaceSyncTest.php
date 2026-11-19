@@ -12,6 +12,7 @@ use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Models\WebhookEvent;
 use App\Modules\Marketplace\Services\AccountService;
+use App\Modules\Marketplace\Services\ListingService;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Support\Facades\Cache;
@@ -32,14 +33,34 @@ function remoteStock($shop, $variant): ?int
     return $v === null ? null : (int) $v;
 }
 
-it('only suggests exact SKU matches and never maps by name', function () {
+it('links exact seller SKU matches as products come in, only suggests near ones, and never maps by name', function () {
     TenantContext::run($this->tenant, fn () => Subscription::query()->update(['plan_id' => Plan::query()->where('key', 'pro')->value('id')]));
     $fresh = fakeShop($this->tenant, map: false, name: 'Shop 2');
     $rows = ListingVariant::withoutGlobalScopes()->where('marketplace_account_id', $fresh->id)->get()->keyBy('seller_sku');
 
-    expect($rows['AO-001']->mapping_status)->toBe(ListingVariant::SUGGESTED)
-        ->and($rows['AO-001']->isMapped())->toBeFalse()
+    expect($rows['AO-001']->mapping_status)->toBe(ListingVariant::MAPPED)
+        ->and($rows['AO-001']->linked_by_sku)->toBeTrue()
+        ->and($rows['AO-001']->product_variant_id)->toBe($this->shirt->id)
         ->and(ListingVariant::withoutGlobalScopes()->where('marketplace_account_id', $fresh->id)->whereNull('seller_sku')->value('mapping_status'))->toBe('unmapped');
+
+    TenantContext::run($this->tenant, function () use ($fresh, $rows) {
+        $listings = app(ListingService::class);
+        // A person unlinks it: the next pull only suggests it again.
+        $listings->unmap($rows['AO-001']);
+        expect($listings->suggest($rows['AO-001']->refresh(), $fresh))->toBe('suggested')
+            ->and($rows['AO-001']->mapping_status)->toBe(ListingVariant::SUGGESTED);
+
+        // "VHN-S" against "vhn s": a near SKU is a suggestion, never a link.
+        $other = ListingVariant::query()->where('marketplace_account_id', $fresh->id)->whereNull('seller_sku')->firstOrFail();
+        $other->forceFill(['seller_sku' => 'ao 001'])->save();
+        expect($listings->suggest($other, $fresh))->toBe('suggested')
+            ->and($other->product_variant_id)->toBe($this->shirt->id);
+
+        // With "Tự liên kết khi SKU trùng" off, an exact match is only suggested too.
+        $fresh->forceFill(['settings' => ['auto_link' => false]])->save();
+        $other->forceFill(['seller_sku' => 'AO-001', 'mapping_status' => ListingVariant::UNMAPPED, 'product_variant_id' => null])->save();
+        expect($listings->suggest($other, $fresh))->toBe('suggested');
+    });
 });
 
 it('pushes the published stock to the marketplace after mapping and after each change', function () {

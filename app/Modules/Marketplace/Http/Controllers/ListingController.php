@@ -9,6 +9,8 @@ use App\Modules\Marketplace\Http\Resources\ListingVariantResource;
 use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Services\ListingService;
+use App\Modules\Marketplace\Services\MarketplaceImages;
+use App\Modules\Marketplace\Services\NewListingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -16,24 +18,94 @@ use Illuminate\Validation\Rule;
 
 class ListingController extends Controller
 {
-    public function index(Request $request, MarketplaceAccount $account): AnonymousResourceCollection
+    public function index(Request $request, MarketplaceAccount $account, NewListingService $newListings): AnonymousResourceCollection
     {
         $this->authorize('viewAny', MarketplaceAccount::class);
         $filters = $request->validate([
-            'status' => ['nullable', Rule::in([ListingVariant::UNMAPPED, ListingVariant::SUGGESTED, ListingVariant::MAPPED, ListingVariant::IGNORED, 'push_error'])],
+            // todo = "Cần xử lý": not linked and not ignored (no internal SKU, or a suggestion to confirm).
+            'status' => ['nullable', Rule::in([ListingVariant::UNMAPPED, ListingVariant::SUGGESTED, ListingVariant::MAPPED, ListingVariant::IGNORED, 'push_error', 'todo'])],
             'q' => ['nullable', 'string', 'max:100'],
         ]);
 
-        $query = $account->listingVariants()->with(['listing', 'variant.product'])
-            ->when($filters['status'] ?? null, fn ($q, $status) => $status === 'push_error'
-                ? $q->whereIn('push_status', ['rejected', 'failed', 'retrying', 'unsupported'])
-                : $q->where('mapping_status', $status))
+        // linked_count: SKUs of the same product already linked; a product with none can be created from the store.
+        $query = $account->listingVariants()->with(['listing' => fn ($l) => $l->withCount(['variants as linked_count' => fn ($v) => $v->where('mapping_status', '!=', ListingVariant::UNMAPPED)]), 'variant.product'])
+            ->when($filters['status'] ?? null, fn ($q, $status) => match ($status) {
+                'push_error' => $q->whereIn('push_status', ['rejected', 'failed', 'retrying', 'unsupported']),
+                'todo' => $q->whereIn('mapping_status', [ListingVariant::UNMAPPED, ListingVariant::SUGGESTED]),
+                default => $q->where('mapping_status', $status),
+            })
             ->when($filters['q'] ?? null, fn ($q, $term) => $q->where(fn ($w) => $w->where('seller_sku', 'like', "%{$term}%")
                 ->orWhere('name', 'like', "%{$term}%")->orWhere('external_sku_id', $term)
                 ->orWhereHas('listing', fn ($l) => $l->where('title', 'like', "%{$term}%"))))
             ->orderByRaw("FIELD(mapping_status, 'suggested', 'unmapped', 'mapped', 'ignored')")->orderBy('id');
 
-        return ListingVariantResource::collection($query->paginate(50));
+        return ListingVariantResource::collection($query->paginate(50))->additional(['summary' => $this->summary($account, $newListings)]);
+    }
+
+    /**
+     * The four numbers on top of Liên kết sản phẩm.
+     *
+     * @return array<string, int>
+     */
+    private function summary(MarketplaceAccount $account, NewListingService $newListings): array
+    {
+        $counts = $account->listingVariants()->selectRaw('mapping_status, linked_by_sku, COUNT(*) as n')->groupBy('mapping_status', 'linked_by_sku')->get();
+        $by = fn (string $status) => (int) $counts->where('mapping_status', $status)->sum('n');
+
+        return [
+            'variants' => (int) $counts->sum('n'),
+            'products' => $account->listingVariants()->distinct()->count('listing_id'),
+            'mapped' => $by(ListingVariant::MAPPED),
+            'linked_by_sku' => (int) $counts->where('mapping_status', ListingVariant::MAPPED)->where('linked_by_sku', true)->sum('n'),
+            'unmapped' => $by(ListingVariant::UNMAPPED),
+            'suggested' => $by(ListingVariant::SUGGESTED),
+            'ignored' => $by(ListingVariant::IGNORED),
+            'push_errors' => $account->listingVariants()->whereIn('push_status', ['rejected', 'failed', 'retrying', 'unsupported'])->count(),
+            ...collect($newListings->creatable($account))->mapWithKeys(fn ($n, $k) => ["creatable_{$k}" => $n])->all(),
+        ];
+    }
+
+    /** "Ảnh từ sàn" on the product page: the pictures each linked shop has for this product. */
+    public function productImages(Product $product, MarketplaceImages $images): JsonResponse
+    {
+        $this->authorize('view', $product);
+
+        return response()->json(['data' => $images->forProduct($product)]);
+    }
+
+    /** Copies the chosen marketplace pictures into the product (now: a handful of pictures). */
+    public function copyProductImages(Request $request, Product $product, MarketplaceImages $images): JsonResponse
+    {
+        $this->authorize('update', $product);
+        $data = $request->validate([
+            'urls' => ['array', 'max:9'],
+            'urls.*' => ['string', 'max:1000'],
+            'variant_images' => ['array', 'max:30'],
+            'variant_images.*.url' => ['required', 'string', 'max:1000'],
+            'variant_images.*.variant_ids' => ['required', 'array', 'max:100'],
+            'variant_images.*.variant_ids.*' => ['string'],
+        ]);
+        $result = $images->copy($product, array_values($data['urls'] ?? []), array_values($data['variant_images'] ?? []));
+        abort_if($result['added'] === 0 && $result['failed'] > 0, 422, 'Không tải được ảnh từ sàn. Thử lại sau.');
+
+        return response()->json(['data' => $result + ['images' => $product->images()->get()->map(fn ($i) => ['id' => $i->id, 'url' => $i->url()])]]);
+    }
+
+    /** How many products have no picture but a linked shop has one (the banner on the product list). */
+    public function missingImages(MarketplaceImages $images): JsonResponse
+    {
+        $this->authorize('viewAny', Product::class);
+
+        return response()->json(['data' => ['count' => $images->missingCount()]]);
+    }
+
+    /** "Lấy ảnh từ sàn" for products without a picture: downloaded in the background. */
+    public function queueMissingImages(Request $request, MarketplaceImages $images): JsonResponse
+    {
+        $this->authorize('update', Product::class);
+        $data = $request->validate(['product_ids' => ['nullable', 'array', 'max:500'], 'product_ids.*' => ['string']]);
+
+        return response()->json(['data' => $images->queueMissing($data['product_ids'] ?? null)]);
     }
 
     /** Where one product is sold: its linked listings on every connected shop, for "Trên các kênh" on the product page. */

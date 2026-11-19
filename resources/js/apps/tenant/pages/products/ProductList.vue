@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Bookmark, Boxes, ChevronDown, ChevronRight, Columns3, Download, FileSpreadsheet, ImageIcon, Package, Plus, Printer, RotateCcw, Search, SlidersHorizontal, Tags, Upload, X } from 'lucide-vue-next';
+import { Bookmark, Boxes, ChevronDown, ChevronRight, Columns3, Download, FileSpreadsheet, ImageIcon, ImageOff, Images, Package, Plus, Printer, RotateCcw, Search, SlidersHorizontal, Tags, Upload, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import StockOverview from '../../components/StockOverview.vue';
@@ -9,6 +9,7 @@ import Tabs from '../../components/Tabs.vue';
 import ImportDialog from './ImportDialog.vue';
 import HeaderLink from '../../components/HeaderLink.vue';
 import Badge from '@/shared/ui/Badge.vue';
+import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
@@ -48,15 +49,16 @@ const filters = reactive({
     created_from: q('created_from'),
     created_to: q('created_to'),
     stock: q('stock'),
+    image: q('image'),
     sort: q('sort') || 'newest',
     page: 1,
 });
-const moreFilters = ref(!!(filters.type || filters.tag || filters.stock || filters.created_from || filters.created_to));
-const activeExtra = computed(() => [filters.type, filters.tag, filters.stock, filters.created_from, filters.created_to].filter(Boolean).length);
+const moreFilters = ref(!!(filters.type || filters.tag || filters.stock || filters.image || filters.created_from || filters.created_to));
+const activeExtra = computed(() => [filters.type, filters.tag, filters.stock, filters.image, filters.created_from, filters.created_to].filter(Boolean).length);
 /** "Đã xóa" tab: deleted products, which can be restored. */
 const trashed = computed(() => filters.status === 'trashed');
 function clearExtra() {
-    Object.assign(filters, { type: '', tag: '', stock: '', created_from: '', created_to: '' });
+    Object.assign(filters, { type: '', tag: '', stock: '', image: '', created_from: '', created_to: '' });
 }
 const expanded = ref<Set<string>>(new Set());
 const selected = ref<Set<string>>(new Set());
@@ -126,7 +128,7 @@ watch(() => filters.q, () => {
     timer = setTimeout(() => ((filters.page = 1), load()), 250);
 });
 watch(
-    () => [filters.status, filters.category, filters.type, filters.brand, filters.tag, filters.created_from, filters.created_to, filters.stock, filters.sort],
+    () => [filters.status, filters.category, filters.type, filters.brand, filters.tag, filters.created_from, filters.created_to, filters.stock, filters.image, filters.sort],
     () => ((filters.page = 1), load()),
 );
 
@@ -215,13 +217,48 @@ function removeView(name: string) {
     savedViews.value = savedViews.value.filter((v) => v.name !== name);
     writeStore('views', savedViews.value);
 }
-const columnLabels = { category: 'Danh mục, thương hiệu', price: 'Giá bán lẻ', available: 'Có thể bán', on_hand: 'Tồn kho', status: 'Trạng thái', created: 'Ngày tạo' } as const;
+const columnLabels = { category: 'Danh mục, thương hiệu', channels: 'Bán trên', price: 'Giá bán lẻ', available: 'Có thể bán', on_hand: 'Tồn kho', status: 'Trạng thái', created: 'Ngày tạo' } as const;
 type ColumnKey = keyof typeof columnLabels;
-const columns = ref<Record<ColumnKey, boolean>>({ category: true, price: true, on_hand: true, available: true, status: true, created: true, ...readStore('columns', {}) });
+const columns = ref<Record<ColumnKey, boolean>>({ category: true, channels: true, price: true, on_hand: true, available: true, status: true, created: true, ...readStore('columns', {}) });
 watch(columns, (v) => writeStore('columns', v), { deep: true });
 const columnsOpen = ref(false);
 const showTaxonomy = computed(() => columns.value.category && hasTaxonomy.value);
-const visibleCount = computed(() => Object.values(columns.value).filter(Boolean).length - (columns.value.category ? 1 : 0) + (showTaxonomy.value ? 1 : 0) + 2 + (canManage.value && !trashed.value ? 1 : 0));
+/** "Bán trên" only when something on this page is linked to a marketplace shop. */
+const showChannels = computed(() => columns.value.channels && products.value.some((p) => p.sold_on?.length));
+const visibleCount = computed(
+    () =>
+        Object.values(columns.value).filter(Boolean).length -
+        (columns.value.category ? 1 : 0) +
+        (showTaxonomy.value ? 1 : 0) -
+        (columns.value.channels ? 1 : 0) +
+        (showChannels.value ? 1 : 0) +
+        2 +
+        (canManage.value && !trashed.value ? 1 : 0),
+);
+
+/** "Lấy ảnh từ sàn": products without a picture that a linked shop has pictures for. Hidden per browser with ✕. */
+const missingImages = ref(0);
+const imagesHidden = ref(readStore('images-banner-hidden', false));
+const fetchingImages = ref(false);
+onMounted(async () => {
+    if (canManage.value && tenant.can('marketplace.view')) missingImages.value = (await api.get('/marketplace-images/missing').catch(() => null))?.data.data.count ?? 0;
+});
+function hideImagesBanner() {
+    imagesHidden.value = true;
+    writeStore('images-banner-hidden', true);
+}
+async function fetchImages() {
+    fetchingImages.value = true;
+    try {
+        const { data } = await api.post('/marketplace-images/queue');
+        toast.success(`Đang lấy ảnh cho ${formatNumber(data.data.queued)} sản phẩm từ sàn. Vài phút sẽ xong, tải lại trang để xem.`);
+        missingImages.value = 0;
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    } finally {
+        fetchingImages.value = false;
+    }
+}
 
 const allSelected = computed(() => products.value.length > 0 && products.value.every((p) => selected.value.has(p.id)));
 function toggleAll() {
@@ -242,6 +279,16 @@ function toggleAll() {
     </PageHeader>
 
     <StockOverview v-if="summary" :summary="summary" :active="filters.stock || 'all'" @select="pickStock" />
+
+    <Card v-if="missingImages && !imagesHidden && !trashed" class="mb-4 flex flex-wrap items-center gap-4 border-primary/20 bg-primary/5 p-4" data-testid="images-banner">
+        <span class="grid size-10 shrink-0 place-items-center rounded-lg border border-dashed bg-card text-slate-400"><ImageOff class="size-5" /></span>
+        <div class="min-w-0 flex-1">
+            <p class="font-medium">{{ formatNumber(missingImages) }} sản phẩm chưa có ảnh nhưng đang bán trên sàn</p>
+            <p class="text-sm text-muted-foreground">Lấy ảnh từ các shop đã liên kết. Sản phẩm đã có ảnh thì giữ nguyên.</p>
+        </div>
+        <Button :loading="fetchingImages" data-testid="images-fetch" @click="fetchImages"><Images /> Lấy ảnh từ sàn</Button>
+        <button type="button" class="rounded p-1 text-muted-foreground hover:bg-muted" aria-label="Ẩn" @click="hideImagesBanner"><X class="size-4" /></button>
+    </Card>
 
     <Card>
         <div class="border-b px-3">
@@ -322,6 +369,10 @@ function toggleAll() {
                     ]"
                 />
             </label>
+            <label class="grid gap-1">
+                <span class="text-xs text-muted-foreground">Ảnh</span>
+                <Select v-model="filters.image" class="w-40" aria-label="Ảnh" data-testid="image-filter" :options="[{ value: '', label: 'Mọi sản phẩm' }, { value: 'none', label: 'Chưa có ảnh' }]" />
+            </label>
             <div class="grid gap-1">
                 <span class="text-xs text-muted-foreground">Ngày tạo</span>
                 <DateRangeInput v-model:from="filters.created_from" v-model:to="filters.created_to" clearable placeholder="Mọi ngày" aria-label="Ngày tạo" />
@@ -359,6 +410,7 @@ function toggleAll() {
                         <th v-if="canManage && !trashed" class="w-10 px-4 py-2.5"><input type="checkbox" :checked="allSelected" aria-label="Chọn tất cả" @change="toggleAll" /></th>
                         <th class="w-14 py-2.5 pl-4 font-medium">Ảnh</th>
                         <th class="px-4 py-2.5 font-medium">Sản phẩm</th>
+                        <th v-if="showChannels" class="px-4 py-2.5 font-medium">Bán trên</th>
                         <th v-if="showTaxonomy" class="px-4 py-2.5 font-medium">Danh mục</th>
                         <th v-if="columns.price" class="px-4 py-2.5 text-right font-medium">Giá bán lẻ</th>
                         <th v-if="columns.available" class="px-4 py-2.5 text-center font-medium">Có thể bán</th>
@@ -391,6 +443,9 @@ function toggleAll() {
                                         </p>
                                     </div>
                                 </div>
+                            </td>
+                            <td v-if="showChannels" class="px-4 py-3">
+                                <div class="flex gap-1"><MarketplaceLogo v-for="s in p.sold_on" :key="s.id" :marketplace="s.marketplace" :name="s.name" size="sm" :title="s.name" /></div>
                             </td>
                             <td v-if="showTaxonomy" class="px-4 py-3">
                                 {{ p.category?.name ?? '—' }}<span v-if="p.brand" class="block text-xs text-muted-foreground">{{ p.brand.name }}</span>

@@ -271,10 +271,12 @@ class TikTokConnector extends GatewayConnector
         $variants = [];
         foreach ((array) ($p['skus'] ?? []) as $sku) {
             $options = [];
+            $image = null;
             foreach ((array) ($sku['sales_attributes'] ?? []) as $attr) {
                 if (filled($attr['value_name'] ?? null)) {
                     $options[(string) ($attr['name'] ?? 'Phân loại')] = (string) $attr['value_name'];
                 }
+                $image ??= $attr['sku_img']['urls'][0] ?? null;
             }
             $price = (array) ($sku['price'] ?? []);
             $inventory = $sku['inventory'] ?? null;
@@ -285,6 +287,7 @@ class TikTokConnector extends GatewayConnector
                 'price' => self::money($price['sale_price'] ?? $price['tax_exclusive_price'] ?? 0),
                 'stock' => is_array($inventory) ? array_sum(array_map(fn ($i) => (int) ($i['quantity'] ?? 0), $inventory)) : null,
                 'options' => $options,
+                'image_url' => is_string($image) && $image !== '' ? $image : null,
             ];
         }
         $weight = (array) ($p['package_weight'] ?? []);
@@ -298,7 +301,11 @@ class TikTokConnector extends GatewayConnector
             variants: $variants,
             status: isset($p['status']) ? strtolower((string) $p['status']) : null,
             imageUrl: $p['main_images'][0]['urls'][0] ?? null,
-            details: ['description' => $p['description'] ?? null, 'weight_gram' => $grams],
+            details: [
+                'description' => $p['description'] ?? null,
+                'weight_gram' => $grams,
+                'images' => array_slice(array_values(array_filter(array_map(fn ($i) => $i['urls'][0] ?? null, (array) ($p['main_images'] ?? [])), fn ($u) => is_string($u) && $u !== '')), 0, 9),
+            ],
         );
     }
 

@@ -7,6 +7,13 @@ use App\Shared\Concerns\HasPublicUlid;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * A product on a marketplace. raw keeps what a new ECSO product is made from: details (description, categories,
+ * weight, images) and per SKU its options, weight, barcode and picture (image_url).
+ *
+ * @property array{details?: array<string, mixed>, variants?: array<string, array<string, mixed>>}|null $raw
+ * @property string|null $image_url
+ */
 class MarketplaceListing extends Model
 {
     use BelongsToTenant, HasPublicUlid;

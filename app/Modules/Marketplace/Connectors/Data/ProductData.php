@@ -6,8 +6,8 @@ namespace App\Modules\Marketplace\Connectors\Data;
 final class ProductData
 {
     /**
-     * @param  array<int, array{external_sku_id: string, seller_sku: ?string, name: ?string, price: string, stock: ?int, regular_price?: ?string, sale_price?: ?string, options?: array<string, string>, weight_gram?: ?int, barcode?: ?string}>  $variants
-     * @param  array{description?: ?string, categories?: array<int, string>, weight_gram?: ?int}  $details  what a new ECSO product is created with
+     * @param  array<int, array{external_sku_id: string, seller_sku: ?string, name: ?string, price: string, stock: ?int, regular_price?: ?string, sale_price?: ?string, options?: array<string, string>, weight_gram?: ?int, barcode?: ?string, image_url?: ?string}>  $variants
+     * @param  array{description?: ?string, categories?: array<int, string>, weight_gram?: ?int, images?: array<int, string>}  $details  what a new ECSO product is created with (images: the product's pictures, cover first)
      */
     public function __construct(
         public readonly string $externalProductId,

@@ -7,6 +7,7 @@ use App\Shared\Concerns\HasPublicUlid;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -36,6 +37,16 @@ class ProductVariant extends Model
             'wholesale_price' => 'decimal:2',
             'weight_gram' => 'integer',
         ];
+    }
+
+    /**
+     * The picture of this variant (a colour), taken from a marketplace; the product's pictures otherwise.
+     *
+     * @return HasOne<ProductImage, $this>
+     */
+    public function image(): HasOne
+    {
+        return $this->hasOne(ProductImage::class)->latestOfMany();
     }
 
     /** @return BelongsTo<Product, $this> */

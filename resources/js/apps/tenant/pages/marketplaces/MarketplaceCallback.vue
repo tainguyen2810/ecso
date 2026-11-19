@@ -67,7 +67,7 @@ onMounted(async () => {
                     </template>
                     <template v-else>
                         <p class="mt-1 text-sm text-muted-foreground">Hãy liên kết SKU để bắt đầu giữ tồn và đồng bộ tồn kho.</p>
-                        <Button class="mt-4" @click="router.push(`/marketplaces/${result.account.id}/listings`)">Liên kết SKU</Button>
+                        <Button class="mt-4" @click="router.push(`/marketplaces/${result.account.id}/listings`)">Liên kết sản phẩm</Button>
                     </template>
                 </div>
                 <div v-else class="text-center">

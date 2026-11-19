@@ -93,7 +93,7 @@ class ShopSetupService
         $ulids = $this->newListingQuery($account)
             ->when(! $withoutSku, fn ($q) => $q->whereDoesntHave('variants', fn ($v) => $v->whereNull('seller_sku')->orWhere('seller_sku', '')))
             ->pluck('ulid')->all();
-        $made = $ulids === [] ? ['created' => 0, 'linked' => 0] : $this->newListings->approve($account, $ulids);
+        $made = $ulids === [] ? ['created' => 0, 'linked' => 0] : $this->newListings->approve($account, $ulids, true);
         $this->audit->record('marketplace.setup_linked', $account, ['linked' => $linked, 'created' => $made['created']]);
 
         return ['linked' => $linked + $made['linked'], 'created' => $made['created']];

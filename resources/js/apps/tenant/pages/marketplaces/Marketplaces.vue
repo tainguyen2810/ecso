@@ -282,7 +282,7 @@ function sinceLabel(a: MarketplaceAccountData) {
                         <div v-if="a.status === 'connected'" class="relative ml-auto flex items-center gap-2">
                             <RouterLink v-if="a.marketplace === 'woocommerce'" :to="`/marketplaces/${a.id}/store`"><Button variant="outline" :data-testid="`woo-settings-${a.id}`"><Settings2 /> Cài đặt đồng bộ</Button></RouterLink>
                             <RouterLink v-else-if="a.marketplace !== 'fake'" :to="`/marketplaces/${a.id}/shop`"><Button variant="outline" :data-testid="`shop-settings-${a.id}`"><Settings2 /> Cài đặt đồng bộ</Button></RouterLink>
-                            <RouterLink :to="`/marketplaces/${a.id}/listings`"><Button variant="outline"><Link2 /> Liên kết SKU</Button></RouterLink>
+                            <RouterLink :to="`/marketplaces/${a.id}/listings`"><Button variant="outline"><Link2 /> Liên kết sản phẩm</Button></RouterLink>
                             <Button variant="outline" size="icon" aria-label="Thêm thao tác" :data-testid="`account-menu-${a.id}`" @click="menuFor = menuFor === a.id ? null : a.id"><MoreHorizontal /></Button>
                             <template v-if="menuFor === a.id">
                                 <div class="fixed inset-0 z-30" @click="menuFor = null" />

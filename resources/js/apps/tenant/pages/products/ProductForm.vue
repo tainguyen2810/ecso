@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, ImagePlus, Plus, ScanBarcode, Sparkles, Tags, Trash2, X } from 'lucide-vue-next';
+import { ArrowLeft, ImagePlus, Images, Plus, ScanBarcode, Sparkles, Tags, Trash2, X } from 'lucide-vue-next';
+import MarketplaceImagePicker from './MarketplaceImagePicker.vue';
 import PageHeader from '../../PageHeader.vue';
 import Alert from '@/shared/ui/Alert.vue';
 import Button from '@/shared/ui/Button.vue';
@@ -190,6 +191,9 @@ onMounted(async () => {
         });
         lotsWasOn.value = !copying && !!p.track_lots;
         images.value = copying ? [] : (p.images ?? []);
+        if (!copying && tenant.can('marketplace.view')) {
+            api.get(`/products/${p.id}/listings`).then((r) => (linkedShops.value = r.data.data.length)).catch(() => undefined);
+        }
         productType.value = p.type ?? 'standard';
         components.value = (p.variants?.[0]?.components ?? []).map((c) => ({ variant: { ...c.variant }, quantity: c.quantity }));
         // A copy keeps names, options and prices; SKU and barcode must be new (unique per business).
@@ -353,6 +357,10 @@ async function upload(e: Event) {
         toast.error((err as ApiError).field('image') ?? (err as ApiError).message);
     }
 }
+
+/** "Lấy từ sàn": only for a product linked to a marketplace shop. */
+const linkedShops = ref(0);
+const pickingImages = ref(false);
 
 async function removeImage(id: number) {
     await api.delete(`/products/${productId.value}/images/${id}`);
@@ -711,7 +719,11 @@ async function removeImage(id: number) {
                             <ImagePlus class="size-5" /> Thêm ảnh
                             <input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="upload" />
                         </label>
+                        <button v-if="!isNew && canManage && linkedShops" type="button" class="flex aspect-square flex-col items-center justify-center gap-1 rounded-md border border-dashed border-primary/30 bg-primary/5 text-xs font-medium text-primary hover:bg-primary/10" data-testid="images-from-marketplace" @click="pickingImages = true">
+                            <Images class="size-5" /> Lấy từ sàn
+                        </button>
                     </div>
+                    <MarketplaceImagePicker v-if="productId && linkedShops" v-model:open="pickingImages" :product-id="productId" :room="9 - images.length" @added="(list) => (images = list)" />
                 </Card>
             </div>
         </div>

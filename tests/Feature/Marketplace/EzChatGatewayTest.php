@@ -1,5 +1,8 @@
 <?php
 
+use App\Modules\Catalog\Models\Product;
+use App\Modules\Catalog\Models\ProductImage;
+use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Marketplace\Connectors\Capability;
 use App\Modules\Marketplace\Connectors\ConnectorRegistry;
 use App\Modules\Marketplace\Connectors\Data\StockUpdate;
@@ -16,9 +19,11 @@ use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
 use App\Modules\Orders\Services\OrderSync;
 use App\Modules\Tenancy\Support\TenantContext;
+use App\Shared\Support\RemoteImage;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 
 /** Shopee and TikTok Shop through EzChat: a faked EzChat gateway that checks the signature like EzChat does. */
 const EZ_URL = 'https://app.ezchat.test';
@@ -48,8 +53,10 @@ function fakeEzChat(array $answers): void
     Http::fake(function (Request $r) use ($answers) {
         $path = (string) parse_url($r->url(), PHP_URL_PATH);
         if (! str_starts_with($r->url(), EZ_URL)) {
-            // A file the marketplace links to (TikTok's label PDF): not EzChat, no signature.
-            return Http::response($answers[$r->url()] ?? '', isset($answers[$r->url()]) ? 200 : 404);
+            // A file the marketplace links to (TikTok's label PDF, a product picture): not EzChat, no signature.
+            $file = $answers[$r->url()] ?? null;
+
+            return $file instanceof Closure ? $file($r) : Http::response($file ?? '', $file !== null ? 200 : 404);
         }
         $ts = $r->header('X-Banhang-Timestamp')[0] ?? '';
         if (! hash_equals(hash_hmac('sha256', "{$ts}.{$path}.{$r->body()}", EZ_SECRET), $r->header('X-Banhang-Signature')[0] ?? '')) {
@@ -424,4 +431,61 @@ it('prepares a TikTok Shop package for drop-off and prints its label from TikTok
 
     $labels = $api->postJson('/api/v1/orders/shipping-labels', ['ids' => [$order->ulid]])->assertOk()->json('data');
     expect(base64_decode($labels['files'][0]['pdf']))->toBe('%PDF-1.4 tiktok label');
+});
+
+it('takes Shopee pictures: links the same SKU by itself, makes new products with their pictures, fills products without one', function () {
+    Storage::fake('public');
+    RemoteImage::$resolver = fn (string $host) => ['93.184.216.34'];
+    $png = fn () => Http::response(base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='), 200, ['Content-Type' => 'image/png']);
+    $img = fn (string $n) => "https://cf.shopee.vn/file/{$n}";
+    fakeEzChat([
+        'GET /api/v2/product/get_item_list' => ['data' => ['data' => ['response' => ['item' => [['item_id' => 21], ['item_id' => 22]], 'has_next_page' => false]]]],
+        'GET /api/v2/product/get_item_base_info' => ['data' => ['data' => ['response' => ['item_list' => [
+            ['item_id' => 21, 'item_name' => 'Áo polo', 'item_status' => 'NORMAL', 'has_model' => true, 'image' => ['image_url_list' => [$img('a'), $img('b')]]],
+            ['item_id' => 22, 'item_name' => 'Áo thun', 'item_sku' => 'AO-1', 'item_status' => 'NORMAL', 'has_model' => false,
+                'price_info' => [['current_price' => 90000]], 'image' => ['image_url_list' => [$img('d')]]],
+        ]]]]],
+        'GET /api/v2/product/get_model_list' => ['data' => ['data' => ['response' => [
+            'tier_variation' => [['name' => 'Màu', 'option_list' => [['option' => 'Đen', 'image' => ['image_url' => $img('c')]], ['option' => 'Trắng']]]],
+            'model' => [
+                ['model_id' => 601, 'model_sku' => 'POLO-DEN', 'tier_index' => [0], 'price_info' => [['current_price' => 129000]]],
+                ['model_id' => 602, 'model_sku' => 'POLO-TRANG', 'tier_index' => [1], 'price_info' => [['current_price' => 129000]]],
+            ],
+        ]]]],
+        $img('a') => $png, $img('b') => $png, $img('c') => $png, $img('d') => $png,
+    ]);
+    $shirt = makeVariant($this->tenant, 'AO-1', ['product_name' => 'Áo thun']);
+    $account = gatewayShop($this->tenant, 'shopee');
+    $api = actingInTenant($this->owner, $this->tenant);
+
+    // The same SKU links as the products come in; the polo is not in the warehouse yet.
+    $api->postJson("/api/v1/marketplace-accounts/{$account->ulid}/sync-products")->assertOk()->assertJsonPath('data.linked', 1);
+    $list = $api->getJson("/api/v1/marketplace-accounts/{$account->ulid}/listings?status=todo")->assertOk();
+    expect($list->json('summary'))->toMatchArray(['variants' => 3, 'products' => 2, 'mapped' => 1, 'linked_by_sku' => 1, 'unmapped' => 2, 'creatable_products' => 1, 'creatable_variants' => 2])
+        ->and($list->json('data'))->toHaveCount(2)
+        ->and($list->json('data.0'))->toMatchArray(['creatable' => true, 'image_url' => $img('c')]);
+
+    // "Tạo sản phẩm từ sàn": previewed with its pictures, then made with them.
+    $preview = $api->getJson("/api/v1/marketplace-accounts/{$account->ulid}/new-products")->assertOk()->json('data.0');
+    expect($preview['images'])->toBe(2)->and($preview['variants'][0])->toMatchArray(['sku' => 'POLO-DEN', 'image_url' => $img('c')]);
+    $api->postJson("/api/v1/marketplace-accounts/{$account->ulid}/new-products/approve", ['listing_ids' => [$preview['id']], 'images' => true])
+        ->assertOk()->assertJsonPath('data.created', 1);
+    $polo = TenantContext::run($this->tenant, fn () => Product::query()->where('name', 'Áo polo')->sole());
+    $den = TenantContext::run($this->tenant, fn () => ProductVariant::query()->where('sku', 'POLO-DEN')->sole());
+    expect(ProductImage::withoutGlobalScopes()->where('product_id', $polo->id)->whereNull('product_variant_id')->count())->toBe(2)
+        ->and(ProductImage::withoutGlobalScopes()->where('product_variant_id', $den->id)->count())->toBe(1);
+
+    // "Lấy ảnh từ sàn" for the product that had none.
+    $api->getJson('/api/v1/marketplace-images/missing')->assertOk()->assertJsonPath('data.count', 1);
+    $api->getJson('/api/v1/products?image=none')->assertOk()->assertJsonPath('data.0.name', 'Áo thun')->assertJsonPath('data.0.sold_on.0.marketplace', 'shopee');
+    $api->postJson('/api/v1/marketplace-images/queue')->assertOk()->assertJsonPath('data.queued', 1);
+    expect(ProductImage::withoutGlobalScopes()->where('product_id', $shirt->product_id)->count())->toBe(1);
+    $api->getJson('/api/v1/marketplace-images/missing')->assertJsonPath('data.count', 0);
+
+    // The product page's picker: what the shop has, and only those links can be copied.
+    $sources = $api->getJson("/api/v1/products/{$polo->ulid}/marketplace-images")->assertOk()->json('data.0');
+    expect($sources['images'])->toBe([$img('a'), $img('b')])->and($sources['variants'][0])->toMatchArray(['url' => $img('c'), 'label' => 'Đen', 'variant_ids' => [$den->ulid]]);
+    $api->postJson("/api/v1/products/{$polo->ulid}/marketplace-images", ['urls' => [$img('b'), 'https://evil.test/x.png']])
+        ->assertOk()->assertJsonPath('data.added', 1)->assertJsonCount(3, 'data.images');
+    RemoteImage::$resolver = null;
 });

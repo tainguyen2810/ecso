@@ -73,9 +73,13 @@ class Product extends Model
         return $this->hasMany(ProductVariant::class)->orderBy('id');
     }
 
-    /** @return HasMany<ProductImage, $this> */
+    /**
+     * The product's own pictures (at most 9); a variant's picture (product_variant_id set) is not one of them.
+     *
+     * @return HasMany<ProductImage, $this>
+     */
     public function images(): HasMany
     {
-        return $this->hasMany(ProductImage::class)->orderBy('sort');
+        return $this->hasMany(ProductImage::class)->whereNull('product_variant_id')->orderBy('sort');
     }
 }

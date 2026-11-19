@@ -98,6 +98,10 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
 
     Route::get('marketplace-accounts/{account}/listings', [ListingController::class, 'index']);
     Route::get('products/{product}/listings', [ListingController::class, 'forProduct']);
+    Route::get('products/{product}/marketplace-images', [ListingController::class, 'productImages']);
+    Route::post('products/{product}/marketplace-images', [ListingController::class, 'copyProductImages'])->middleware('throttle:20,1,marketplace.products.x.marketplace-images');
+    Route::get('marketplace-images/missing', [ListingController::class, 'missingImages']);
+    Route::post('marketplace-images/queue', [ListingController::class, 'queueMissingImages'])->middleware('throttle:6,1,marketplace.marketplace-images.queue');
     Route::post('marketplace-accounts/{account}/listings/confirm-suggestions', [ListingController::class, 'confirmSuggestions']);
     Route::put('listings/{listing}/mapping', [ListingController::class, 'map']);
     Route::delete('listings/{listing}/mapping', [ListingController::class, 'unmap']);
