@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { AlertTriangle, BadgePercent, FlaskConical, Link2, PlugZap, RefreshCw, Send, Settings2, Unplug, Zap, History } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Badge from '@/shared/ui/Badge.vue';
@@ -21,11 +21,18 @@ import { useTenantStore } from '@/shared/stores/tenant';
 import { capabilityLabels, capabilityNames, orderStatus } from '../orders/labels';
 import TikiConnectDialog from './TikiConnectDialog.vue';
 import WooConnectDialog from './WooConnectDialog.vue';
+import { marketplaceLines } from '../../navigation';
 import type { MarketplaceAccountData, MarketplaceCatalogEntry, OrderSummary, Warehouse } from '@/shared/types';
 
 const tenant = useTenantStore();
 const toast = useToast();
 const router = useRouter();
+const route = useRoute();
+
+/** One marketplace's own page from the sidebar (?san=shopee); without it, every channel. */
+const san = computed(() => (typeof route.query.san === 'string' ? route.query.san : null));
+const sanName = computed(() => marketplaceLines.find(([k]) => k === san.value)?.[1] ?? null);
+const shownAccounts = computed(() => (san.value ? accounts.value.filter((a) => a.marketplace === san.value) : accounts.value));
 
 const catalog = ref<MarketplaceCatalogEntry[]>([]);
 const accounts = ref<MarketplaceAccountData[]>([]);
@@ -43,7 +50,7 @@ const connectError = ref<ApiError | null>(null);
 const sim = ref<{ account: MarketplaceAccountData; failing: boolean; statuses: string[]; orders: OrderSummary[] } | null>(null);
 const simForm = ref({ count: 3, status: 'fake_ready', max_items: 2, order: '', to: 'fake_packed' });
 
-const realMarketplaces = computed(() => catalog.value.filter((c) => !c.is_fake));
+const realMarketplaces = computed(() => catalog.value.filter((c) => !c.is_fake && (!san.value || c.key === san.value)));
 const connectNotice = ref<{ key: string; message: string } | null>(null);
 
 const wooOpen = ref(false);
@@ -195,7 +202,7 @@ const accountLabel = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 
 </script>
 
 <template>
-    <PageHeader title="Kết nối sàn" description="Chỉ dùng API chính thức của sàn. Thao tác nào chưa được xác minh với tài liệu và credentials thật được đánh dấu UNKNOWN và không được giả lập.">
+    <PageHeader :title="sanName ?? 'Kết nối sàn'" description="Chỉ dùng API chính thức của sàn. Thao tác nào chưa được xác minh với tài liệu và credentials thật được đánh dấu UNKNOWN và không được giả lập.">
         <RouterLink v-if="tenant.can('sync.view')" to="/marketplaces/sync"><Button variant="outline" data-testid="sync-log-link"><History /> Trung tâm đồng bộ</Button></RouterLink>
         <RouterLink to="/marketplaces/prices"><Button variant="outline" data-testid="price-board-link"><BadgePercent /> Bảng giá sàn</Button></RouterLink>
         <Button variant="outline" :loading="loading" @click="load"><RefreshCw /> Làm mới</Button>
@@ -208,9 +215,9 @@ const accountLabel = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 
             <template v-if="tenant.can('marketplace.connect') && catalog.some((c) => c.is_fake)" #actions>
                 <Button size="sm" data-testid="connect-fake" @click="connectOpen = true"><FlaskConical /> Kết nối shop giả lập</Button>
             </template>
-            <EmptyState v-if="!accounts.length" :icon="PlugZap" title="Chưa kết nối gian hàng nào" description="Website WooCommerce kết nối được ngay. Tiki kết nối bằng ứng dụng riêng của shop. Shopee, TikTok Shop, Lazada cần app credentials của sàn (chưa có)." />
+            <EmptyState v-if="!shownAccounts.length" :icon="PlugZap" title="Chưa kết nối gian hàng nào" description="Website WooCommerce kết nối được ngay. Tiki kết nối bằng ứng dụng riêng của shop. Shopee, TikTok Shop, Lazada cần app credentials của sàn (chưa có)." />
             <ul v-else class="divide-y" data-testid="account-list">
-                <li v-for="a in accounts" :key="a.id" class="flex flex-wrap items-center gap-4 px-5 py-4">
+                <li v-for="a in shownAccounts" :key="a.id" class="flex flex-wrap items-center gap-4 px-5 py-4">
                     <MarketplaceLogo :marketplace="a.marketplace" :name="a.marketplace_name" size="lg" />
                     <div class="min-w-56 flex-1">
                         <div class="flex items-center gap-2">
