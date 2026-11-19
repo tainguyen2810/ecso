@@ -3,8 +3,9 @@ import {
     CreditCard,
     HandCoins,
     LayoutDashboard,
+    LayoutGrid,
+    RefreshCw,
     Package,
-    PlugZap,
     ReceiptText,
     ScrollText,
     Settings,
@@ -34,6 +35,8 @@ export interface NavItem {
     anyPermission?: string[];
     /** Other route `meta.nav` values that belong to this item (e.g. returns under orders). */
     alsoActive?: string[];
+    /** One marketplace's own line under Kênh bán (shows its logo and how many shops are connected). */
+    marketplace?: string;
 }
 
 export interface NavChild {
@@ -41,6 +44,15 @@ export interface NavChild {
     path: string;
     permission?: string;
 }
+
+/** Marketplaces listed one per line under Kênh bán, in this order. */
+export const marketplaceLines: [string, string][] = [
+    ['shopee', 'Shopee'],
+    ['tiktok', 'TikTok Shop'],
+    ['lazada', 'Lazada'],
+    ['tiki', 'Tiki'],
+    ['woocommerce', 'Website'],
+];
 
 export const navGroups: { label: string; items: NavItem[] }[] = [
     {
@@ -76,6 +88,15 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
         ],
     },
     {
+        // Each marketplace has its own line (Tai: do not group the marketplaces into one item).
+        label: 'Kênh bán',
+        items: [
+            { name: 'marketplaces', label: 'Tất cả kênh', path: '/marketplaces', icon: LayoutGrid, permission: 'marketplace.view', description: 'Kết nối Shopee, TikTok Shop, Lazada, Tiki và website bằng API chính thức.' },
+            ...marketplaceLines.map(([key, label]) => ({ name: `marketplace-${key}`, label, path: `/marketplaces?san=${key}`, icon: Store, permission: 'marketplace.view', marketplace: key })),
+            { name: 'marketplace-sync', label: 'Trung tâm đồng bộ', path: '/marketplaces/sync', icon: RefreshCw, permission: 'sync.view' },
+        ],
+    },
+    {
         label: 'Phân tích',
         items: [
             { name: 'cash', label: 'Thu chi', path: '/cash', icon: HandCoins, permission: 'finance.view', shortcut: 'q', description: 'Phiếu thu, phiếu chi, sổ quỹ, đối soát COD và loại phiếu.',
@@ -94,8 +115,6 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
     {
         label: 'Thiết lập',
         items: [
-            { name: 'marketplaces', label: 'Kết nối sàn', path: '/marketplaces', icon: PlugZap, permission: 'marketplace.view', description: 'Kết nối Shopee, TikTok Shop, Lazada, Tiki bằng API chính thức.',
-                children: [{ label: 'Shop & tài khoản', path: '/marketplaces' }, { label: 'Trung tâm đồng bộ', path: '/marketplaces/sync', permission: 'sync.view' }] },
             { name: 'settings', label: 'Cấu hình', path: '/settings', icon: Settings, permission: 'settings.manage', anyPermission: ['members.view', 'billing.view', 'audit.view'], shortcut: 's', alsoActive: ['members', 'subscription', 'audit', 'sales-channels'] },
             // Reached from Cấu hình like Sapo; kept here for their shortcuts and access checks.
             { name: 'sales-channels', label: 'Kênh bán riêng', path: '/sales-channels', icon: Store, permission: 'orders.view', hidden: true, description: 'Quầy, cửa hàng, Facebook, Zalo, website.' },

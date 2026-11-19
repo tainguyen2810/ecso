@@ -4,7 +4,7 @@ Chốt ngày 03/11/2026 cùng màn Tổng quan mới (tham khảo bố cục T�
 
 ## Nguyên tắc
 
-1. **Nền xám nhạt, thẻ trắng, sidebar xanh đậm.** Trang `bg-background`, mỗi khối là `Card` trắng viền mảnh, bo `rounded-lg`.
+1. **Nền xám nhạt, thẻ trắng, sidebar trắng.** Trang `bg-background`, mỗi khối là `Card` trắng viền mảnh, bo `rounded-lg`.
 2. **Màu nhạt theo bảng Tailwind.** Nền tô màu dùng tông 50 (`bg-blue-50`), icon tông 500, con số tông 600. Không dùng màu đặc cho mảng lớn.
 3. **Màu phải có nghĩa.** Icon mặc định đơn sắc (nét lucide, `stroke-width` 1.75). Chỉ tô màu khi màu nói lên điều gì:
 
@@ -66,7 +66,7 @@ Mẫu hay dùng (viết trực tiếp bằng Tailwind, không cần component ri
 - Trang: `PageHeader` (tiêu đề + mô tả, nút/bộ lọc bên phải), rồi các `Card` cách nhau `gap-5`. Thao tác phụ (Xuất file, Nhập file, Danh mục, In tem…) đặt ở slot `#links` bằng `HeaderLink` (icon + chữ xám, như Sapo); nút chính giữ bên phải. Không dùng thanh tab điều hướng riêng cho từng nhóm: menu con ở sidebar đã làm việc đó.
 - Nhóm Sản phẩm (như Sapo): Danh sách sản phẩm, Quản lý kho, Đặt hàng nhập, Nhập hàng, Kiểm hàng, Chuyển hàng, Nhà cung cấp, Điều chỉnh giá vốn. Bán tại quầy nằm trong Đơn hàng.
 - Tổng quan: lưới hai cột `xl:grid-cols-[minmax(0,1fr)_320px]`; cột phải cho khối phụ (tỷ trọng, gian hàng, hoạt động). Dưới `xl` thành một cột; mobile mọi khối xếp dọc.
-- Sidebar: nhóm menu in hoa đậm, ngăn bằng đường kẻ `border-sidebar-border`; mục đang chọn nền `sidebar-active` chữ trắng.
+- Sidebar (app bán hàng): nền trắng, nút "Tạo đơn" trên cùng; tên nhóm chữ nhỏ in hoa màu xám; mục đang chọn nền `primary/10` chữ `primary`; menu con thụt vào với đường kẻ dọc. Mỗi sàn TMĐT là một dòng riêng dưới "Kênh bán" (logo + số shop), không gom chung. Token `sidebar-*` vẫn dùng cho trang quản trị.
 
 
 ## Điện thoại
