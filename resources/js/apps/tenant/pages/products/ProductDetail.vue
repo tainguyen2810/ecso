@@ -8,6 +8,7 @@ import Tabs from '../../components/Tabs.vue';
 import ProductLots from './ProductLots.vue';
 import { movementLabels, referenceLabels } from '../inventory/labels';
 import Badge from '@/shared/ui/Badge.vue';
+import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
 import FormField from '@/shared/ui/FormField.vue';
 import Input from '@/shared/ui/Input.vue';
@@ -160,6 +161,12 @@ async function reloadStock() {
 // ?tab=lots opens the lot tab straight away (links from the expiry report).
 if (route.query.tab === 'lots') tab.value = 'lots';
 
+/** "Trên các kênh": the shops this product is linked to (one row per shop). */
+type ChannelRow = { account: { id: string; shop_name: string; marketplace: string; status: string } | null; linked: number; variants: string[]; last_pushed_at: string | null; push_error: string | null; push_errors: number };
+const onChannels = ref<ChannelRow[] | null>(null);
+const shopsOf = (variantId?: string) => (onChannels.value ?? []).filter((c) => c.account && variantId && c.variants.includes(variantId));
+const variantCount = computed(() => product.value?.variants?.length ?? 0);
+
 onMounted(async () => {
     try {
         product.value = (await api.get(`/products/${id.value}`)).data.data;
@@ -168,6 +175,7 @@ onMounted(async () => {
         return;
     }
     api.get(`/products/${id.value}/prices`).then(({ data }) => (prices.value = data.data)).catch(() => (prices.value = null));
+    if (tenant.can('marketplace.view')) api.get(`/products/${id.value}/listings`).then(({ data }) => (onChannels.value = data.data)).catch(() => (onChannels.value = null));
     if (canStock.value) {
         const { data } = await api.get(`/inventory/products/${id.value}/stock`);
         stock.value = data.data;
@@ -232,7 +240,7 @@ async function remove() {
             <RouterLink v-if="canManage" :to="`/products/${product.id}/edit`"><Button data-testid="edit-product"><Pencil /> Sửa sản phẩm</Button></RouterLink>
         </PageHeader>
 
-        <div class="grid gap-5 lg:grid-cols-3">
+        <div class="grid items-start gap-5 lg:grid-cols-3">
             <Card title="Thông tin sản phẩm" class="lg:col-span-2">
                 <template #actions><Badge :tone="statusTone[product.status]">{{ statusLabels[product.status] }}</Badge></template>
                 <div class="grid gap-5 p-5 sm:grid-cols-[1fr_9rem]">
@@ -257,6 +265,7 @@ async function remove() {
                 <p v-if="product.description" class="whitespace-pre-line border-t px-5 py-4 text-sm text-muted-foreground">{{ product.description }}</p>
             </Card>
 
+            <div class="space-y-5">
             <Card title="Tổng quan tồn kho" description="Cộng mọi kho đang hoạt động.">
                 <dl v-if="canStock" class="grid grid-cols-2 gap-4 p-5 text-sm">
                     <div><dt class="text-muted-foreground">Tồn thực tế</dt><dd class="text-lg font-semibold tabular-nums">{{ formatNumber(stockTotals.on_hand) }}</dd></div>
@@ -267,6 +276,22 @@ async function remove() {
                 </dl>
                 <p v-else class="p-5 text-sm text-muted-foreground">Bạn không có quyền xem tồn kho.</p>
             </Card>
+            <Card v-if="onChannels" :caps="false" title="Trên các kênh" data-testid="product-channels">
+                <template #actions><RouterLink to="/marketplaces" class="text-sm font-medium text-primary hover:underline">Kênh bán</RouterLink></template>
+                <p v-if="!onChannels.length" class="px-5 py-4 text-sm text-muted-foreground">Chưa liên kết với gian hàng nào. Vào Kênh bán › Liên kết SKU để ghép.</p>
+                <ul v-else class="divide-y">
+                    <li v-for="c in onChannels" :key="c.account?.id" class="flex items-center gap-3 px-5 py-3">
+                        <MarketplaceLogo :marketplace="c.account?.marketplace ?? 'manual'" />
+                        <div class="min-w-0 flex-1">
+                            <p class="truncate text-sm font-medium">{{ c.account?.shop_name ?? 'Gian hàng đã xóa' }}</p>
+                            <p class="truncate text-xs text-muted-foreground">{{ c.push_error ? c.push_error : c.last_pushed_at ? `Đẩy tồn ${formatDateTime(c.last_pushed_at)}` : 'Chưa đẩy tồn' }}</p>
+                        </div>
+                        <span v-if="c.push_errors" class="shrink-0 text-xs font-medium text-rose-600">Lỗi đẩy tồn</span>
+                        <span v-else class="shrink-0 text-xs font-medium text-emerald-600">Đã liên kết {{ c.variants.length }}/{{ variantCount }}</span>
+                    </li>
+                </ul>
+            </Card>
+            </div>
         </div>
 
         <Card v-if="product.type === 'combo'" title="Thành phần combo" class="mt-5">
@@ -304,6 +329,7 @@ async function remove() {
                             <th v-if="canStock" class="px-4 py-2.5 text-right font-medium">Có thể bán</th>
                             <th v-if="showPrices" class="px-4 py-2.5 font-medium">Nguồn giá</th>
                             <th v-if="showPrices" class="px-4 py-2.5 font-medium">Giá trên {{ channelNames.length === 1 ? channelNames[0] : 'website' }}</th>
+                            <th v-if="onChannels?.length" class="px-4 py-2.5 font-medium">Trên sàn</th>
                             <th class="px-4 py-2.5" />
                         </tr>
                     </thead>
@@ -335,6 +361,10 @@ async function remove() {
                                     <span :class="cn('block text-xs', pushText(c).tone)">{{ pushText(c).text }}</span>
                                 </div>
                                 <span v-if="!pricesOf(v.id)?.channels.length" class="text-muted-foreground">—</span>
+                            </td>
+                            <td v-if="onChannels?.length" class="px-4 py-2.5">
+                                <span class="flex gap-1"><MarketplaceLogo v-for="c in shopsOf(v.id)" :key="c.account!.id" :marketplace="c.account!.marketplace" :name="c.account!.shop_name" size="sm" /></span>
+                                <span v-if="!shopsOf(v.id).length" class="text-xs text-amber-600">Chưa liên kết</span>
                             </td>
                             <td class="whitespace-nowrap px-4 py-2.5 text-right"><RouterLink v-if="canStock" :to="`/inventory/sku/${v.id}`" class="text-xs text-primary hover:underline">Thẻ kho</RouterLink></td>
                         </tr>

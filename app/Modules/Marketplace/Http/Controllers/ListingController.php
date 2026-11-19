@@ -3,6 +3,7 @@
 namespace App\Modules\Marketplace\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Catalog\Models\Product;
 use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Marketplace\Http\Resources\ListingVariantResource;
 use App\Modules\Marketplace\Models\ListingVariant;
@@ -33,6 +34,30 @@ class ListingController extends Controller
             ->orderByRaw("FIELD(mapping_status, 'suggested', 'unmapped', 'mapped', 'ignored')")->orderBy('id');
 
         return ListingVariantResource::collection($query->paginate(50));
+    }
+
+    /** Where one product is sold: its linked listings on every connected shop, for "Trên các kênh" on the product page. */
+    public function forProduct(Product $product): JsonResponse
+    {
+        $this->authorize('viewAny', MarketplaceAccount::class);
+        $rows = ListingVariant::query()->with(['account', 'variant'])
+            ->where('mapping_status', ListingVariant::MAPPED)
+            ->whereIn('product_variant_id', $product->variants()->withTrashed()->pluck('id'))
+            ->get();
+
+        return response()->json(['data' => $rows->groupBy('marketplace_account_id')->map(function ($group) {
+            $account = $group->first()->account;
+            $errors = $group->whereIn('push_status', ['rejected', 'failed', 'retrying', 'unsupported']);
+
+            return [
+                'account' => $account ? ['id' => $account->ulid, 'shop_name' => $account->shop_name, 'marketplace' => $account->marketplace, 'status' => $account->status] : null,
+                'linked' => $group->count(),
+                'variants' => $group->pluck('variant.ulid')->filter()->unique()->values(),
+                'last_pushed_at' => $group->max('last_pushed_at')?->toIso8601String(),
+                'push_error' => $errors->first()?->push_error,
+                'push_errors' => $errors->count(),
+            ];
+        })->values()]);
     }
 
     public function map(Request $request, ListingVariant $listing, ListingService $listings): ListingVariantResource
