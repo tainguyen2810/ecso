@@ -48,8 +48,15 @@ class PackingController extends Controller
             'scanned' => ['present', 'array'],
             'scanned.*' => ['integer', 'min:0', 'max:100000'],
             'reason' => ['nullable', 'string', 'max:255'],
+            // Marketplace order: how the parcel reaches the carrier, chosen by the packer ("Chuẩn bị hàng").
+            'shipping' => ['nullable', 'array', 'max:5'],
+            'shipping.*.method' => ['required', 'in:pickup,dropoff'],
+            'shipping.*.address_id' => ['nullable', 'string', 'max:64'],
+            'shipping.*.slot_id' => ['nullable', 'string', 'max:64'],
+            'shipping.*.slot_label' => ['nullable', 'string', 'max:100'],
+            'shipping.*.address_label' => ['nullable', 'string', 'max:255'],
         ]);
-        $order = $packing->finish($order, $data['scanned'], $data['reason'] ?? null);
+        $order = $packing->finish($order, $data['scanned'], $data['reason'] ?? null, $data['shipping'] ?? null);
 
         return response()->json(['data' => ['id' => $order->ulid, 'external_order_id' => $order->external_order_id, 'status' => $order->status]]);
     }

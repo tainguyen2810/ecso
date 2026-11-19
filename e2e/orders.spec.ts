@@ -72,7 +72,7 @@ test('order detail: items, reservations, history, actions and notes', async ({ p
     await expect(page.getByTestId('order-history')).toBeVisible();
     const note = `Gọi khách xác nhận màu trước khi gửi (${Date.now().toString().slice(-4)})`;
     await page.getByTestId('note-input').fill(note);
-    await page.getByRole('button', { name: 'Thêm' }).click();
+    await page.getByRole('button', { name: 'Thêm', exact: true }).click();
     await expect(page.getByText(note)).toBeVisible();
     await shot(page, '07-order-detail-shortage');
 

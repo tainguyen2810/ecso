@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { AlertTriangle, ArrowLeft, Ban, Banknote, Check, Clock, Copy, Link2, Mail, MapPin, MessageSquare, Pencil, Printer, ReceiptText, RefreshCw, Repeat, Truck, Undo2, UserRound, Wallet, Warehouse, X } from 'lucide-vue-next';
+import { AlertTriangle, ArrowLeft, Ban, Banknote, Check, Clock, Copy, Link2, Mail, MapPin, MessageSquare, PackageCheck, Pencil, Printer, ReceiptText, RefreshCw, Repeat, Tag, Truck, Undo2, UserRound, Wallet, Warehouse, X } from 'lucide-vue-next';
 import TagInput from '../../components/TagInput.vue';
 import Alert from '@/shared/ui/Alert.vue';
 import Badge from '@/shared/ui/Badge.vue';
@@ -20,8 +20,10 @@ import { useToast } from '@/shared/composables/useToast';
 import OrderShipmentsCard from '../shipments/OrderShipmentsCard.vue';
 import OrderEInvoiceCard from './OrderEInvoiceCard.vue';
 import { useTenantStore } from '@/shared/stores/tenant';
-import { actionLabels, capabilityLabels, deadlineLabel, historySource, manualActionOrder, mappingStatus, marketplaceNames, orderStatus, paymentMethodNames, paymentMethods, paymentStatus, refundStatus, returnState, returnStatus, returnTypes } from './labels';
+import { actionLabel, actionLabels, capabilityLabels, deadlineLabel, historySource, manualActionOrder, mappingStatus, marketplaceNames, orderStatus, paymentMethodNames, paymentMethods, paymentStatus, refundStatus, returnState, returnStatus, returnTypes } from './labels';
 import PrintDialog from './PrintDialog.vue';
+import ShipDialog from './ShipDialog.vue';
+import LabelPrint from './LabelPrint.vue';
 import OrderLotsDialog from './OrderLotsDialog.vue';
 import { lotLabel } from '../inventory/lots';
 import { displayDate } from '@/shared/lib/dates';
@@ -143,8 +145,11 @@ const funds = ref<Fund[]>([]);
 const confirmedAmount = computed(() => (order.value?.payments ?? []).filter((p) => !p.voided_at && p.kind === 'payment').reduce((sum, p) => sum + Number(p.amount), 0));
 const payError = ref<ApiError | null>(null);
 
+const shipOpen = ref(false);
+const labelOpen = ref(false);
 function startAction(action: string) {
-    if (action === 'cancel') cancelOpen.value = true;
+    if (action === 'pack' && order.value?.marketplace_shipping) shipOpen.value = true;
+    else if (action === 'cancel') cancelOpen.value = true;
     else if (action === 'handover' && shipsItself.value) {
         handover.value = { carrier: order.value!.carrier ?? '', tracking_number: order.value!.tracking_number ?? '' };
         handoverOpen.value = true;
@@ -394,6 +399,17 @@ async function createReturn() {
         </section>
 
         <div class="mb-5 space-y-3 empty:hidden">
+            <div v-if="order.marketplace_shipping && order.status === 'READY_TO_PACK' && tenant.can('orders.update')" class="flex flex-wrap items-center gap-3 rounded-lg border border-blue-200 bg-card px-4 py-3 shadow-xs" data-testid="next-step">
+                <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-600"><PackageCheck class="size-5" /></span>
+                <div class="min-w-0 flex-1">
+                    <p class="font-semibold">Bước tiếp theo: Chuẩn bị hàng</p>
+                    <p v-if="order.ship_by_at" :class="cn('flex items-center gap-1 text-sm', order.flags.overdue ? 'text-rose-700' : order.flags.due_soon ? 'text-rose-700' : 'text-muted-foreground')">
+                        <Clock class="size-3.5" /> {{ marketplaceNames[order.marketplace] }} yêu cầu trước {{ formatDateTime(order.ship_by_at) }} ({{ deadlineLabel(order.ship_by_at) }})
+                    </p>
+                    <p v-else class="text-sm text-muted-foreground">Sàn gọi đơn vị vận chuyển và cấp mã vận đơn.</p>
+                </div>
+                <Button data-testid="next-step-ship" @click="shipOpen = true"><PackageCheck /> Chuẩn bị hàng</Button>
+            </div>
             <Alert v-for="x in order.exchanged_from ?? []" :key="x.id" :icon="Repeat" tone="blue" data-testid="exchanged-from">
                 Đơn đổi hàng từ phiếu trả <RouterLink :to="`/returns/${x.id}`" class="font-mono font-medium hover:underline">{{ x.number }}</RouterLink> của đơn <RouterLink :to="`/orders/${x.order.id}`" class="font-mono font-medium hover:underline">{{ x.order.external_order_id }}</RouterLink><template v-if="Number(x.credit) > 0">: hàng trả được trừ {{ formatMoney(x.credit) }} vào đơn này</template>.
             </Alert>
@@ -558,7 +574,7 @@ async function createReturn() {
                                 :data-testid="`action-${action}`"
                                 @click="startAction(action)"
                             >
-                                {{ actionLabels[action] }}
+                                {{ actionLabel(action, order) }}
                             </Button>
                             <Badge v-if="a.capability !== 'supported'" :tone="capabilityLabels[a.capability]?.tone" :title="'Sàn chưa hỗ trợ hoặc chưa xác minh thao tác này qua API'">{{ capabilityLabels[a.capability]?.label }}</Badge>
                         </div>
@@ -572,6 +588,18 @@ async function createReturn() {
                                 aria-label="Người xử lý"
                                 @update:model-value="assign"
                             />
+                        </div>
+                        <div v-if="order.marketplace_shipping && (order.ship_arrangement || ['PACKED', 'HANDED_OVER', 'IN_TRANSIT', 'FAILED_DELIVERY'].includes(order.status))" class="space-y-1.5 rounded-md bg-slate-50 px-3 py-2.5 text-sm" data-testid="marketplace-shipping">
+                            <p v-if="order.ship_arrangement" class="flex items-start gap-2">
+                                <Truck class="mt-0.5 size-4 shrink-0 text-sky-600" />
+                                <span v-if="order.ship_arrangement.method === 'pickup'">Shipper đến lấy <b>{{ order.ship_arrangement.slot }}</b><span v-if="order.ship_arrangement.address" class="block text-xs text-muted-foreground">{{ order.ship_arrangement.address }}</span></span>
+                                <span v-else>Tự mang ra bưu cục</span>
+                            </p>
+                            <p v-if="order.tracking_number" class="text-xs text-muted-foreground">Mã vận đơn <b class="font-mono text-foreground">{{ order.tracking_number }}</b><template v-if="order.carrier"> · {{ order.carrier }}</template></p>
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="text-xs text-muted-foreground" data-testid="label-count">{{ order.label_print_count ? `Phiếu sàn đã in ${order.label_print_count} lần` : 'Phiếu sàn chưa in' }}</span>
+                                <Button v-if="tenant.can('orders.print') && order.status !== 'READY_TO_PACK'" size="sm" variant="outline" data-testid="print-label" @click="labelOpen = true"><Tag /> In phiếu sàn</Button>
+                            </div>
                         </div>
                         <div v-if="order.ship_by_at" :class="cn('flex items-center gap-2 rounded-md px-3 py-2 text-sm', order.flags.overdue ? 'bg-rose-50 text-rose-700' : order.flags.due_soon ? 'bg-amber-50 text-amber-800' : 'bg-slate-50')">
                             <Clock class="size-4 shrink-0" />
@@ -731,6 +759,10 @@ async function createReturn() {
 
         <OrderLotsDialog v-if="lotItem" :open="!!lotItem" :order-id="order.id" :item-id="lotItem.id" :title="lotItem.title" @update:open="(v: boolean) => !v && (lotItem = null)" @saved="load" />
         <PrintDialog v-model:open="printOpen" :orders="[order]" />
+        <ShipDialog v-if="shipOpen" v-model:open="shipOpen" :ids="[order.id]" @done="load" />
+        <Dialog v-model:open="labelOpen" title="In phiếu sàn" size="lg">
+            <LabelPrint v-if="labelOpen" :ids="[order.id]" @printed="load" />
+        </Dialog>
 
         <Dialog v-model:open="cancelOpen" title="Hủy đơn" :description="isManual ? 'Hàng đang giữ được nhả lại kho ngay. Nếu khách đã trả tiền, hãy ghi nhận hoàn tiền sau khi hủy.' : 'Yêu cầu hủy được gửi lên sàn. Hàng đang giữ sẽ được nhả khi sàn xác nhận hủy.'">
             <FormField label="Lý do"><Input v-model="cancelReason" placeholder="Chọn bên dưới hoặc gõ lý do khác" data-testid="cancel-reason" /></FormField>

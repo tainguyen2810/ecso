@@ -174,6 +174,7 @@ class SettingsController extends Controller
                 'pos_require_cash' => ['sometimes', 'boolean'],
                 'pos_require_shift' => ['sometimes', 'boolean'],
                 'pos_auto_print' => ['sometimes', 'boolean'],
+                'marketplace_auto_arrange' => ['sometimes', 'boolean'],
             ],
             'reasons' => [
                 'reasons' => ['present', 'array', 'max:30'],

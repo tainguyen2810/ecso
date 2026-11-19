@@ -97,6 +97,9 @@ class OrderQuery
                 'due_soon' => $query->whereIn('status', OrderStatus::OPEN)->whereBetween('ship_by_at', [now(), now()->addHours(config('ecso.orders.due_soon_hours'))]),
                 'warning' => $query->whereNotNull('sync_warning'),
                 'not_printed' => $query->whereNull('packing_slip_printed_at'),
+                // Shopee / TikTok orders: "Chuẩn bị hàng" not done yet; arranged but the marketplace label never printed.
+                'not_arranged' => $query->whereIn('marketplace', MarketplaceShipping::marketplaces())->where('status', OrderStatus::READY_TO_PACK),
+                'label_unprinted' => $query->whereIn('marketplace', MarketplaceShipping::marketplaces())->whereIn('status', MarketplaceShipping::LABEL_FROM)->where('label_print_count', 0),
                 'payment_due' => $query->where('marketplace', Order::SOURCE_MANUAL)->where('status', '!=', OrderStatus::CANCELLED)
                     ->where('payment_status', '!=', Order::PAYMENT_PAID),
                 default => null,

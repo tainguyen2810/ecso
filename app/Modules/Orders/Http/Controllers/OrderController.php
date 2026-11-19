@@ -22,6 +22,7 @@ use App\Modules\Orders\Models\OrderRefund;
 use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Orders\Models\OrderStatusHistory;
 use App\Modules\Orders\Models\Shipment;
+use App\Modules\Orders\Services\MarketplaceShipping;
 use App\Modules\Orders\Services\OrderActions;
 use App\Modules\Orders\Services\OrderExporter;
 use App\Modules\Orders\Services\OrderQuery;
@@ -224,6 +225,13 @@ class OrderController extends Controller
             // Kept for orders the shop ships itself (own channels, website); a marketplace books its own carrier.
             'carrier' => ['nullable', 'string', 'max:100'],
             'tracking_number' => ['nullable', 'string', 'max:100'],
+            // "Chuẩn bị hàng" of marketplace orders: per shop (id), how the parcel reaches the carrier.
+            'shipping' => ['nullable', 'array', 'max:50'],
+            'shipping.*.method' => ['required', Rule::in(['pickup', 'dropoff'])],
+            'shipping.*.address_id' => ['nullable', 'string', 'max:64'],
+            'shipping.*.slot_id' => ['nullable', 'string', 'max:64'],
+            'shipping.*.slot_label' => ['nullable', 'string', 'max:100'],
+            'shipping.*.address_label' => ['nullable', 'string', 'max:255'],
         ]);
 
         return new OrderResource($actions->perform($order, $action, $params)->load(['account', 'channel', 'assignee']));
@@ -238,6 +246,13 @@ class OrderController extends Controller
             'user_id' => ['nullable', 'string'],
             'reason' => ['nullable', 'string', 'max:255'],
             'method' => [Rule::requiredIf($request->input('action') === 'pay'), Rule::in(OrderPayment::METHODS)],
+            // "Chuẩn bị hàng" of marketplace orders: per shop (id), how the parcel reaches the carrier.
+            'shipping' => ['nullable', 'array', 'max:50'],
+            'shipping.*.method' => ['required', Rule::in(['pickup', 'dropoff'])],
+            'shipping.*.address_id' => ['nullable', 'string', 'max:64'],
+            'shipping.*.slot_id' => ['nullable', 'string', 'max:64'],
+            'shipping.*.slot_label' => ['nullable', 'string', 'max:100'],
+            'shipping.*.address_label' => ['nullable', 'string', 'max:255'],
         ]);
         $this->authorize(match ($data['action']) {
             'assign' => 'assign',
@@ -262,7 +277,7 @@ class OrderController extends Controller
             return response()->json(['data' => $this->payInFull($orders, $data['method'], $payments)]);
         }
 
-        return response()->json(['data' => $actions->bulk($orders, $data['action'], ['reason' => $data['reason'] ?? null])]);
+        return response()->json(['data' => $actions->bulk($orders, $data['action'], ['reason' => $data['reason'] ?? null, 'shipping' => $data['shipping'] ?? null])]);
     }
 
     public function assign(Request $request, Order $order, OrderActions $actions): OrderResource
@@ -350,6 +365,33 @@ class OrderController extends Controller
         }
 
         return response()->json(['data' => ['result' => $result['result']]]);
+    }
+
+    /** "Chuẩn bị hàng": the ways each shop of the ticked orders can hand them to the carrier. */
+    public function shipOptions(Request $request, MarketplaceShipping $shipping): JsonResponse
+    {
+        $this->authorize('update', Order::class);
+        $data = $request->validate(['ids' => ['required', 'array', 'min:1', 'max:200'], 'ids.*' => ['string']]);
+        $orders = Order::query()->with('account')->whereIn('ulid', $data['ids'])->orderBy('ship_by_at')->get();
+
+        return response()->json(['data' => $shipping->options($orders)]);
+    }
+
+    /** "In phiếu sàn": the marketplace's shipping labels (PDF, base64), merged into one file in the browser. */
+    public function shippingLabels(Request $request, MarketplaceShipping $shipping): JsonResponse
+    {
+        $this->authorize('print', Order::class);
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:'.MarketplaceShipping::MAX_LABELS], 'ids.*' => ['string'],
+            // "product": orders of the same product next to each other, so the parcels are picked in one walk.
+            'sort' => ['nullable', 'in:product'],
+        ]);
+        $orders = Order::query()->with(['account', 'items'])->whereIn('ulid', $data['ids'])->get();
+        $orders = ($data['sort'] ?? null) === 'product'
+            ? $orders->sortBy(fn (Order $o) => [mb_strtolower((string) $o->items->sortBy('id')->first()?->name), $o->ship_by_at?->getTimestamp() ?? PHP_INT_MAX])->values()
+            : $orders->sortBy(fn (Order $o) => array_search($o->ulid, $data['ids'], true))->values();
+
+        return response()->json(['data' => $shipping->labels($orders)]);
     }
 
     /** Data for packing slips (rendered to PDF in the browser) and marks the orders as printed. */
@@ -548,7 +590,7 @@ class OrderController extends Controller
             'deliver_to' => ['nullable', 'date'],
             'assignee' => ['nullable', 'string'],
             'flags' => ['nullable', 'array'],
-            'flags.*' => [Rule::in(['shortage', 'unmapped', 'overdue', 'due_soon', 'warning', 'not_printed', 'payment_due'])],
+            'flags.*' => [Rule::in(['shortage', 'unmapped', 'overdue', 'due_soon', 'warning', 'not_printed', 'payment_due', 'not_arranged', 'label_unprinted'])],
             'sort' => ['nullable', Rule::in(['newest', 'oldest', 'ship_by'])],
             'per_page' => ['nullable', 'integer', 'min:10', 'max:100'],
         ]);

@@ -61,6 +61,17 @@ function cancel() {
                     <Switch v-model="sales.form.value.pos_auto_print" label="Tự in hóa đơn sau khi thanh toán" hint="In theo khổ mặc định ở Mẫu in." data-testid="pos-auto-print" />
                 </div>
             </SettingsSection>
+            <SettingsSection id="marketplace-orders" title="Đơn Shopee, TikTok Shop" description="Chuẩn bị hàng và in phiếu sàn ngay trong EzChat Bán hàng.">
+                <div class="divide-y">
+                    <Switch
+                        :model-value="sales.form.value.marketplace_auto_arrange ?? false"
+                        label="Đóng gói xong thì tự chuẩn bị hàng trên sàn"
+                        hint="Quét đóng gói xong, phần mềm báo sàn gọi shipper theo cách giao đã chọn lần trước của từng shop (khung giờ lấy hàng sớm nhất). Tắt: hỏi cách giao mỗi lần."
+                        data-testid="marketplace-auto-arrange"
+                        @update:model-value="(v: boolean) => (sales.form.value!.marketplace_auto_arrange = v)"
+                    />
+                </div>
+            </SettingsSection>
             <SettingsSection id="reasons" title="Lý do hủy, trả hàng" description="Hiện trong hộp chọn khi hủy đơn hoặc nhận hàng khách trả. Vẫn gõ được lý do khác.">
                 <table class="w-full text-sm" data-testid="reasons-table">
                     <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">

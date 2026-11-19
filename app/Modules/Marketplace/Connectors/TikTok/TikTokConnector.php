@@ -14,6 +14,7 @@ use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Orders\Domain\OrderStatus;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Http;
 
 /**
  * TikTok Shop Partner API (version 202309) through EzChat (EzChat holds the app key/secret, the shop token and
@@ -161,6 +162,71 @@ class TikTokConnector extends GatewayConnector
             raw: ['status' => $status],
             buyerAccountId: filled($o['user_id'] ?? null) ? (string) $o['user_id'] : null,
         );
+    }
+
+    // ---- Chuẩn bị hàng, shipping label ----------------------------------------------------------------------
+
+    public function shipOptions(MarketplaceAccount $account, string $externalOrderId): array
+    {
+        $package = $this->packageId($account, $externalOrderId);
+        $d = $this->gateway->call($account, 'GET', '/fulfillment/'.self::V.'/packages/'.rawurlencode($package).'/handover_time_slots');
+        $slots = [];
+        foreach ((array) ($d['pickup_slots'] ?? []) as $slot) {
+            // TikTok spells it "avaliable" in this answer.
+            if (($slot['avaliable'] ?? $slot['available'] ?? true) === false || ! isset($slot['start_time'])) {
+                continue;
+            }
+            $slots[] = ['id' => $slot['start_time'].'-'.($slot['end_time'] ?? $slot['start_time']), 'label' => self::slotLabel((int) $slot['start_time'], isset($slot['end_time']) ? (int) $slot['end_time'] : null)];
+        }
+
+        return [
+            // TikTok picks up at the shop's own pickup address (set in Seller Center): no address to choose.
+            'pickup' => ['available' => ($d['can_pickup'] ?? true) !== false && $slots !== [], 'addresses' => [['id' => '', 'label' => 'Địa chỉ lấy hàng của shop trên TikTok', 'slots' => $slots]]],
+            'dropoff' => ['available' => ($d['can_drop_off'] ?? true) !== false],
+            'carrier' => null,
+        ];
+    }
+
+    protected function arrange(MarketplaceAccount $account, string $externalOrderId, string $method, ?string $addressId, ?string $slotId): void
+    {
+        $package = $this->packageId($account, $externalOrderId);
+        $body = ['handover_method' => $method === 'pickup' ? 'PICKUP' : 'DROP_OFF'];
+        if ($method === 'pickup') {
+            [$start, $end] = array_pad(explode('-', (string) $slotId, 2), 2, null);
+            $body['pickup_slot'] = ['start_time' => (int) $start, 'end_time' => (int) ($end ?? $start)];
+        }
+        $this->gateway->call($account, 'POST', '/fulfillment/'.self::V.'/packages/'.rawurlencode($package).'/ship', [], $body);
+    }
+
+    /** The label is a link to a PDF on TikTok's file server. */
+    public function shippingLabel(MarketplaceAccount $account, string $externalOrderId): string
+    {
+        $package = $this->packageId($account, $externalOrderId);
+        $d = $this->gateway->call($account, 'GET', '/fulfillment/'.self::V.'/packages/'.rawurlencode($package).'/shipping_documents', [
+            'document_type' => 'SHIPPING_LABEL', 'document_size' => 'A6',
+        ]);
+        $url = (string) ($d['doc_url'] ?? '');
+        if ($url === '' || ! str_starts_with($url, 'https://')) {
+            throw new ConnectorException('TikTok Shop chưa có phiếu giao cho đơn này. Thử lại sau ít phút.', temporary: true);
+        }
+        $response = Http::timeout(30)->get($url);
+        if (! $response->successful() || ! str_starts_with($response->body(), '%PDF')) {
+            throw new ConnectorException('Không tải được phiếu giao từ TikTok Shop. Thử lại sau ít phút.', temporary: true);
+        }
+
+        return $response->body();
+    }
+
+    /** "Chuẩn bị hàng" and labels work on the order's package. */
+    private function packageId(MarketplaceAccount $account, string $externalOrderId): string
+    {
+        $data = $this->gateway->call($account, 'GET', '/order/'.self::V.'/orders', ['ids' => $externalOrderId]);
+        $package = $data['orders'][0]['packages'][0]['id'] ?? null;
+        if (blank($package)) {
+            throw new ConnectorException('TikTok Shop chưa tạo kiện hàng cho đơn này.', temporary: false);
+        }
+
+        return (string) $package;
     }
 
     // ---- Products ---------------------------------------------------------------------------------------------

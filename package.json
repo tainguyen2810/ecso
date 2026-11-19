@@ -32,5 +32,8 @@
         "vue": "^3.5.44",
         "vue-router": "^4.6.4",
         "vue-tsc": "^3.3.14"
+    },
+    "dependencies": {
+        "pdf-lib": "^1.17.1"
     }
 }
