@@ -7,6 +7,9 @@ export interface CountRow {
     on_hand: number;
     /** Stock now, when it differs from on_hand (goods sold or received since the line was counted). */
     on_hand_now?: number;
+    /** Cost price (null when the member may not see costs), for the value of the variance. */
+    cost?: number | null;
+    image?: string | null;
 }
 
 type Counts = Record<string, number | ''>;
