@@ -5,6 +5,7 @@ namespace App\Modules\Marketplace\Connectors\EzChat;
 use App\Modules\Marketplace\Connectors\ArrangesShipment;
 use App\Modules\Marketplace\Connectors\Capability;
 use App\Modules\Marketplace\Connectors\Data\ShopAuthorization;
+use App\Modules\Marketplace\Connectors\FetchesSettlement;
 use App\Modules\Marketplace\Connectors\FetchesSingleProduct;
 use App\Modules\Marketplace\Connectors\MarketplaceConnector;
 use App\Modules\Marketplace\Exceptions\ConnectorException;
@@ -18,7 +19,7 @@ use Carbon\CarbonImmutable;
  * already connected in EzChat; the share token stands in for the marketplace tokens and never expires on its own
  * (EzChat refreshes the real ones).
  */
-abstract class GatewayConnector implements ArrangesShipment, FetchesSingleProduct, MarketplaceConnector
+abstract class GatewayConnector implements ArrangesShipment, FetchesSettlement, FetchesSingleProduct, MarketplaceConnector
 {
     public function __construct(protected readonly EzChatGateway $gateway) {}
 

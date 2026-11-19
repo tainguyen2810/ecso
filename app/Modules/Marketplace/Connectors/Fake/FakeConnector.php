@@ -11,6 +11,7 @@ use App\Modules\Marketplace\Connectors\Data\ProductPage;
 use App\Modules\Marketplace\Connectors\Data\ShopAuthorization;
 use App\Modules\Marketplace\Connectors\Data\StockUpdateResult;
 use App\Modules\Marketplace\Connectors\Data\WebhookMessage;
+use App\Modules\Marketplace\Connectors\FetchesSettlement;
 use App\Modules\Marketplace\Connectors\MarketplaceConnector;
 use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Exceptions\UnsupportedCapability;
@@ -24,7 +25,7 @@ use Illuminate\Support\Facades\DB;
  * signature, inbox, order fetch, inventory push — without calling any real marketplace. It is not, and must
  * never be presented as, an integration with Shopee, TikTok Shop, Lazada or Tiki.
  */
-class FakeConnector implements MarketplaceConnector
+class FakeConnector implements FetchesSettlement, MarketplaceConnector
 {
     public const MARKETPLACE = 'fake';
 
@@ -103,6 +104,35 @@ class FakeConnector implements MarketplaceConnector
             orderId: isset($data['order_sn']) ? (string) $data['order_sn'] : null,
             timestamp: isset($data['timestamp']) ? (int) $data['timestamp'] : null,
         );
+    }
+
+    /**
+     * Demo settlement: 4% commission, 2.5% service, 2% payment on the goods, the money released once the order is
+     * completed. Nothing before delivery.
+     */
+    public function settlement(MarketplaceAccount $account, string $externalOrderId): ?array
+    {
+        $row = DB::table('fake_marketplace_orders')->where('shop_id', $account->external_shop_id)->where('order_sn', $externalOrderId)->first();
+        if (! $row || ! in_array($row->status, ['fake_delivered', 'fake_completed'], true)) {
+            return null;
+        }
+        $data = json_decode($row->data, true);
+        $goods = round(array_sum(array_map(fn (array $i) => (float) $i['price'] * (int) $i['quantity'] - (float) ($i['discount'] ?? 0), $data['items'])), 2);
+        $fees = ['commission_fee' => round($goods * 0.04), 'service_fee' => round($goods * 0.025), 'payment_fee' => round($goods * 0.02)];
+        $final = $row->status === 'fake_completed';
+
+        return [
+            'order_amount' => $goods, ...$fees, 'fixed_fee' => 0.0, 'shipping_fee' => 0.0,
+            'net_amount' => $goods - array_sum($fees),
+            'final' => $final,
+            'settled_at' => $final ? CarbonImmutable::parse($row->update_time) : null,
+            'lines' => [
+                ['label' => 'Tiền hàng', 'amount' => $goods],
+                ['label' => 'Phí cố định (hoa hồng)', 'amount' => -$fees['commission_fee']],
+                ['label' => 'Phí dịch vụ', 'amount' => -$fees['service_fee']],
+                ['label' => 'Phí thanh toán', 'amount' => -$fees['payment_fee']],
+            ],
+        ];
     }
 
     public function getOrder(MarketplaceAccount $account, string $externalOrderId): OrderData
