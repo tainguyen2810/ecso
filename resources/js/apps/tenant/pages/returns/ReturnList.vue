@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CameraScanButton from '../../components/CameraScanButton.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import { PackageOpen, Plus, RefreshCw, ScanLine, Search, Undo2 } from 'lucide-vue-next';
 import { useRouter } from 'vue-router';
@@ -132,7 +133,8 @@ watch(pickOpen, (v) => v && loadPick());
             </div>
             <form class="relative w-full sm:w-80" @submit.prevent="scan">
                 <ScanLine class="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                <Input v-model="scanCode" class="pl-8" placeholder="Quét mã vận đơn hàng hoàn…" :disabled="scanning" data-testid="return-scan" aria-label="Mã vận đơn hàng hoàn" />
+                <Input v-model="scanCode" class="pl-8 pr-11" placeholder="Quét mã vận đơn hàng hoàn…" :disabled="scanning" data-testid="return-scan" aria-label="Mã vận đơn hàng hoàn" />
+                <CameraScanButton label="Quét mã hàng hoàn bằng camera" class="absolute right-1 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-md text-blue-600 hover:bg-blue-50" @scan="(c) => ((scanCode = c), scan())" />
             </form>
         </div>
     </Card>

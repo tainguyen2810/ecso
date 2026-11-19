@@ -9,6 +9,8 @@ use App\Modules\Sales\Http\Controllers\CustomerMergeController;
 use App\Modules\Sales\Http\Controllers\CustomerProfileController;
 use App\Modules\Sales\Http\Controllers\CustomerTaskController;
 use App\Modules\Sales\Http\Controllers\CustomerTransferController;
+use App\Modules\Sales\Http\Controllers\EzChatLinkController;
+use App\Modules\Sales\Http\Controllers\EzChatStoreController;
 use App\Modules\Sales\Http\Controllers\LoyaltyController;
 use App\Modules\Sales\Http\Controllers\OrderDraftController;
 use App\Modules\Sales\Http\Controllers\PosController;
@@ -18,7 +20,24 @@ use App\Modules\Sales\Http\Controllers\SalesOrderController;
 use App\Modules\Sales\Services\ManualOrderService;
 use Illuminate\Support\Facades\Route;
 
+// Đợt 7 "Nối với EzChat": EzChat's server-to-server calls, signed (no session).
+Route::post('ezchat-link/exchange', [EzChatLinkController::class, 'exchange'])->middleware('throttle:30,1,sales.ezchat-link.exchange');
+Route::prefix('ezchat-store/{link}')->middleware('throttle:600,1,sales.ezchat-store')->group(function () {
+    Route::get('products', [EzChatStoreController::class, 'products']);
+    Route::get('stock', [EzChatStoreController::class, 'stock']);
+    Route::get('orders', [EzChatStoreController::class, 'orders']);
+    Route::get('orders/lookup', [EzChatStoreController::class, 'lookup']);
+    Route::post('orders', [EzChatStoreController::class, 'createOrder']);
+    Route::post('orders/{number}/cancel', [EzChatStoreController::class, 'cancel']);
+    Route::post('shipping', [EzChatStoreController::class, 'shipping']);
+    Route::post('unlink', [EzChatStoreController::class, 'unlink']);
+});
+
 Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
+    Route::get('ezchat-link', [EzChatLinkController::class, 'show']);
+    Route::put('ezchat-link', [EzChatLinkController::class, 'update']);
+    Route::delete('ezchat-link', [EzChatLinkController::class, 'destroy']);
+    Route::post('ezchat-link/grant', [EzChatLinkController::class, 'grant'])->middleware('throttle:20,1,sales.ezchat-link.grant');
     Route::apiResource('sales-channels', SalesChannelController::class)->except('show');
 
     Route::apiResource('customer-groups', CustomerGroupController::class)->except('show');

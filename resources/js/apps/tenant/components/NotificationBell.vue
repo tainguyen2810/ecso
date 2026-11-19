@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PushToggle from './PushToggle.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch, type Component } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { AlertTriangle, Bell, ChevronRight, CircleCheck, Clock, FileText, KeyRound, Package, PackageX, PlugZap, Settings2, ShoppingCart, Unplug, Wallet } from 'lucide-vue-next';
@@ -129,6 +130,7 @@ const tone = (t: InboxItem['tone']): Tone => t;
                 </div>
 
                 <div v-if="settings" class="min-h-0 flex-1 overflow-y-auto p-2">
+                    <PushToggle class="mb-2" />
                     <p class="px-2 pb-2 text-xs text-muted-foreground">Bỏ chọn loại nào thì chuông không báo loại đó nữa (chỉ trên trình duyệt này).</p>
                     <label v-for="k in inboxKinds" :key="k.key" class="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm hover:bg-slate-50">
                         <input type="checkbox" class="size-4" :checked="!off.includes(k.key)" @change="toggleKind(k.key)" />

@@ -2,6 +2,11 @@
 
 return [
 
+    // Đợt 8: Web Push keys for "Báo đơn mới" (PEM). Empty: made once and kept in storage/app/vapid.json.
+    'vapid' => [
+        'private_key' => env('VAPID_PRIVATE_KEY'),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Third Party Services

@@ -48,6 +48,7 @@ use App\Modules\Marketplace\Policies\MarketplacePolicy;
 use App\Modules\Marketplace\Services\MarketplacePriceBoard;
 use App\Modules\Marketplace\Services\PriceSync;
 use App\Modules\Messaging\Console\ZnsPaymentRemindersCommand;
+use App\Modules\Messaging\Listeners\QueueNewOrderPush;
 use App\Modules\Messaging\Zalo\QueueOrderZns;
 use App\Modules\Orders\Console\BackfillShipmentsCommand;
 use App\Modules\Orders\Console\ReconcileOrdersCommand;
@@ -143,6 +144,7 @@ class ModuleServiceProvider extends ServiceProvider
         Event::listen(TenantCreated::class, CreateDefaultWarehouse::class);
         Event::listen(TenantCreated::class, CreateDefaultSalesChannel::class);
         Event::listen(OrderImported::class, CountOrderUsage::class);
+        Event::listen(OrderImported::class, QueueNewOrderPush::class);
         Event::listen(WebhookReceived::class, QueueWebhookProcessing::class);
         // Order shortages are filled first, then the marketplaces get the resulting published stock.
         Event::listen(AvailableStockChanged::class, FillOrderShortages::class);
