@@ -43,11 +43,11 @@ const loading = ref(true);
 const busy = ref<string | null>(null);
 
 const categories: Record<string, { label: string; hint: string }> = {
-    api: { label: 'Website không trả lời', hint: 'Quá thời gian, quá tải (429) hoặc lỗi máy chủ (5xx). ECSO tự thử lại ở lượt sau.' },
+    api: { label: 'Website không trả lời', hint: 'Quá thời gian, quá tải (429) hoặc lỗi máy chủ (5xx). EzChat Bán hàng tự thử lại ở lượt sau.' },
     auth: { label: 'Khóa API bị từ chối', hint: 'Khóa API bị thu hồi hoặc hết quyền. Kết nối lại website.' },
     not_found: { label: 'Không tìm thấy', hint: 'Đơn không còn trên website.' },
-    data: { label: 'Dữ liệu không đọc được', hint: 'Website trả dữ liệu ECSO không nhận được.' },
-    conflict: { label: 'Xung đột trạng thái', hint: 'Trạng thái trên website không đi tiếp được từ trạng thái trong ECSO (ví dụ lùi lại).' },
+    data: { label: 'Dữ liệu không đọc được', hint: 'Website trả dữ liệu EzChat Bán hàng không nhận được.' },
+    conflict: { label: 'Xung đột trạng thái', hint: 'Trạng thái trên website không đi tiếp được từ trạng thái trong EzChat Bán hàng (ví dụ lùi lại).' },
 };
 const runStatus: Record<string, { label: string; tone: 'success' | 'warning' | 'danger' | 'info' }> = {
     ok: { label: 'Thành công', tone: 'success' },
@@ -116,7 +116,7 @@ const duration = (ms: number | null) => (ms === null ? '—' : ms < 1000 ? `${ms
 </script>
 
 <template>
-    <PageHeader v-if="!embedded" title="Lịch sử và lỗi đồng bộ" description="Đơn website chưa đồng bộ được, và từng lượt ECSO đối soát đơn với website." :back="{ to: '/marketplaces', label: 'Kết nối sàn' }">
+    <PageHeader v-if="!embedded" title="Lịch sử và lỗi đồng bộ" description="Đơn website chưa đồng bộ được, và từng lượt EzChat Bán hàng đối soát đơn với website." :back="{ to: '/marketplaces', label: 'Kết nối sàn' }">
         <div class="w-64"><Select v-model="account" :options="[{ value: '', label: 'Mọi website và gian hàng' }, ...accounts.map((a) => ({ value: a.id, label: a.shop_name }))]" data-testid="sync-account" /></div>
     </PageHeader>
     <div v-else class="mb-4 flex flex-wrap items-end justify-between gap-4">
@@ -146,7 +146,7 @@ const duration = (ms: number | null) => (ms === null ? '—' : ms < 1000 ? `${ms
         <div v-if="loading" class="space-y-2 p-4"><Skeleton v-for="i in 4" :key="i" class="h-12" /></div>
 
         <template v-else-if="tab === 'runs'">
-            <EmptyState v-if="!runs.length" :icon="History" title="Chưa có lượt đồng bộ" description="ECSO đối soát đơn theo chu kỳ đặt ở trang từng website." />
+            <EmptyState v-if="!runs.length" :icon="History" title="Chưa có lượt đồng bộ" description="EzChat Bán hàng đối soát đơn theo chu kỳ đặt ở trang từng website." />
             <div v-else class="overflow-x-auto">
                 <table class="w-full text-sm" data-testid="sync-runs">
                     <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">

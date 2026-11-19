@@ -65,7 +65,7 @@ async function syncNow(s: SyncShopData) {
             <KpiCard :icon="Unplug" label="Mất kết nối" :value="formatNumber(data.accounts.disconnected)" :tone="data.accounts.disconnected ? 'red' : 'slate'">
                 {{ data.accounts.circuit_open ? `${data.accounts.circuit_open} shop đang tạm ngừng đẩy do lỗi liên tiếp` : 'cần kết nối lại' }}
             </KpiCard>
-            <KpiCard :icon="KeyRound" label="Token sắp hết hạn" :value="formatNumber(data.accounts.token_expiring)" :tone="data.accounts.token_expiring ? 'amber' : 'slate'">trong 7 ngày tới</KpiCard>
+            <KpiCard :icon="KeyRound" label="Kết nối sắp hết hạn" :value="formatNumber(data.accounts.token_expiring)" :tone="data.accounts.token_expiring ? 'amber' : 'slate'">trong 7 ngày tới</KpiCard>
             <KpiCard :icon="Clock" label="Quá hạn đối soát đơn" :value="formatNumber(data.accounts.reconcile_overdue)" :tone="data.accounts.reconcile_overdue ? 'amber' : 'slate'">shop lâu chưa đọc lại đơn</KpiCard>
         </div>
 
@@ -111,11 +111,11 @@ async function syncNow(s: SyncShopData) {
                                 <td class="px-4 py-3">
                                     <Badge v-if="!s.sync_enabled && s.status === 'connected'" tone="muted">Tắt đồng bộ</Badge>
                                     <Badge v-else-if="s.circuit_open" tone="warning">Tạm ngừng đẩy</Badge>
-                                    <Badge v-else-if="s.token_expires_at && s.status === 'connected'" tone="warning">Token hết hạn {{ formatDate(s.token_expires_at) }}</Badge>
+                                    <Badge v-else-if="s.token_expires_at && s.status === 'connected'" tone="warning">Kết nối hết hạn {{ formatDate(s.token_expires_at) }}</Badge>
                                     <Badge v-else :tone="shopStatus[s.status]?.tone ?? 'muted'">{{ shopStatus[s.status]?.label ?? s.status }}</Badge>
                                 </td>
                                 <td class="px-4 py-3 text-xs">
-                                    <span class="block">Webhook {{ timeOnly(s.last_webhook_at) }}</span>
+                                    <span class="block">Nhận đơn {{ timeOnly(s.last_webhook_at) }}</span>
                                     <span class="text-muted-foreground">Đối soát {{ timeOnly(s.last_order_poll_at) }}</span>
                                 </td>
                                 <td class="px-4 py-3 text-xs">
@@ -126,7 +126,7 @@ async function syncNow(s: SyncShopData) {
                                     <RouterLink v-if="s.open_errors" :to="{ query: { tab: 'log', account: s.id } }" class="font-medium text-rose-600 hover:underline">{{ formatNumber(s.open_errors) }}</RouterLink>
                                     <span v-else class="text-muted-foreground">0</span>
                                 </td>
-                                <td class="px-4 py-3 text-right tabular-nums" :title="s.stock_drift ? 'Số SKU mà sàn báo khác số EzSell đã đẩy lên gần nhất' : ''">
+                                <td class="px-4 py-3 text-right tabular-nums" :title="s.stock_drift ? 'Số SKU mà sàn báo khác số EzChat Bán hàng đã đẩy lên gần nhất' : ''">
                                     <span :class="s.stock_drift ? 'font-medium text-amber-600' : 'text-muted-foreground'">{{ formatNumber(s.stock_drift) }}</span>
                                 </td>
                                 <td class="px-5 py-3 text-right">
@@ -140,7 +140,7 @@ async function syncNow(s: SyncShopData) {
                 </div>
             </Card>
             <p class="mt-2 text-xs text-muted-foreground">
-                Tồn lệch là số SKU mà sàn báo khác số EzSell đã đẩy lên gần nhất, thường do ai đó sửa tồn trực tiếp trên sàn. EzSell không cộng hay ghi đè tồn kho nội bộ theo số này; lần đẩy tồn sau sẽ đặt lại số trên sàn.
+                Tồn lệch là số SKU mà sàn báo khác số EzChat Bán hàng đã đẩy lên gần nhất, thường do ai đó sửa tồn trực tiếp trên sàn. EzChat Bán hàng không cộng hay ghi đè tồn kho nội bộ theo số này; lần đẩy tồn sau sẽ đặt lại số trên sàn.
             </p>
         </div>
     </div>

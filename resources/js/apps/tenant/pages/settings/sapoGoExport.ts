@@ -1,7 +1,7 @@
 /**
  * The "Lấy dữ liệu Sapo" bookmark. Sapo GO gives shops no API key, so this runs inside the Sapo admin page the user
  * is signed in to: it reads the same product list the page loads (/admin/products.json, /admin/locations.json) and
- * saves it as a file the user uploads to EzSell (read by SapoGoReader). Nothing is sent anywhere else and EzSell
+ * saves it as a file the user uploads to EzChat Bán hàng (read by SapoGoReader). Nothing is sent anywhere else and EzChat Bán hàng
  * never sees the Sapo password.
  *
  * The function is turned into a bookmark with its own source, so it must not use anything from outside its body.
@@ -11,7 +11,7 @@ export async function sapoGoExport(): Promise<void> {
     box.setAttribute('style', 'position:fixed;z-index:2147483647;top:16px;right:16px;max-width:420px;background:#1e293b;color:#fff;padding:12px 16px;border-radius:8px;font:14px/1.5 sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.3)');
     document.body.appendChild(box);
     const say = (text: string) => {
-        box.textContent = 'EzSell: ' + text;
+        box.textContent = 'EzChat Bán hàng: ' + text;
     };
     if (!/\/admin/.test(location.pathname)) {
         say('hãy mở trang quản trị Sapo (…mysapogo.com/admin/products) rồi bấm lại.');
@@ -91,7 +91,7 @@ export async function sapoGoExport(): Promise<void> {
         document.body.appendChild(link);
         link.click();
         link.remove();
-        say('đã lưu file ' + link.download + ' (' + products.length + ' sản phẩm). Quay lại EzSell và tải file này lên.');
+        say('đã lưu file ' + link.download + ' (' + products.length + ' sản phẩm). Quay lại EzChat Bán hàng và tải file này lên.');
         setTimeout(() => box.remove(), 20000);
     } catch (error) {
         say('chưa lấy được dữ liệu (' + (error as Error).message + '). Hãy đăng nhập Sapo, mở trang Sản phẩm rồi bấm lại.');

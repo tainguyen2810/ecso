@@ -246,7 +246,7 @@ const total = (c: Record<string, number>) => Object.entries(c).reduce((s, [k, v]
                 </div>
                 <div class="divide-y border-t px-5 py-2">
                     <Switch v-model="syncOrders" label="Lấy đơn hàng" hint="Đơn mới và đơn đổi trạng thái" :disabled="!canEdit" data-testid="shop-switch-orders" />
-                    <Switch v-model="syncStock" label="Tự đẩy tồn kho lên sàn" hint="Khi tồn trong kho thay đổi" :disabled="!canEdit" data-testid="shop-switch-stock" />
+                    <Switch v-model="syncStock" label="Tự cập nhật tồn kho lên sàn" hint="Khi tồn trong kho thay đổi" :disabled="!canEdit" data-testid="shop-switch-stock" />
                 </div>
                 <div v-if="canEdit" class="flex justify-end border-t px-5 py-3">
                     <Button :loading="busy === 'save'" data-testid="shop-save" @click="save">Lưu</Button>

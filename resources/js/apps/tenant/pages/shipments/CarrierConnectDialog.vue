@@ -14,7 +14,7 @@ import { cn, formatDateTime } from '@/shared/lib/utils';
 import { carrierMarks, type CarrierAccountData, type CarrierCatalogItem } from './carriers';
 
 /**
- * "Kết nối hãng vận chuyển": one step. The shop pastes its own token from the carrier's site; ECSO checks it, lists the
+ * "Kết nối hãng vận chuyển": one step. The shop pastes its own token from the carrier's site; EzChat Bán hàng checks it, lists the
  * shop's pickup points and matches them to warehouses. Free: the shop keeps its own account, price and COD.
  */
 const open = defineModel<boolean>('open', { required: true });
@@ -48,9 +48,9 @@ watch(open, async (v) => {
 
 const current = computed(() => catalog.value.find((c) => c.carrier === picked.value) ?? null);
 const help: Record<string, string> = {
-    jt: 'Liên hệ nhân viên kinh doanh J&T (1900 1088) xin mở API cho tài khoản shop; J&T gửi 4 thông tin trên. Mật khẩu API là mật khẩu J&T cấp cho API, không phải mật khẩu đăng nhập. J&T không có danh sách điểm lấy hàng: EzSell gửi địa chỉ kho của shop. Lần đầu nên bật sandbox và tạo 1 vận đơn thử.',
+    jt: 'Liên hệ nhân viên kinh doanh J&T (1900 1088) xin mở API cho tài khoản shop; J&T gửi 4 thông tin trên. Mật khẩu API là mật khẩu J&T cấp cho API, không phải mật khẩu đăng nhập. J&T không có danh sách điểm lấy hàng: EzChat Bán hàng gửi địa chỉ kho của shop. Lần đầu nên bật sandbox và tạo 1 vận đơn thử.',
     viettelpost:
-        'Dùng số điện thoại và mật khẩu đăng nhập viettelpost.vn (hoặc app Viettel Post). EzSell chỉ dùng để lấy token kết nối dài hạn, không lưu mật khẩu. Địa chỉ lấy hàng lấy từ mục Kho hàng của tài khoản.',
+        'Dùng số điện thoại và mật khẩu đăng nhập viettelpost.vn (hoặc app Viettel Post). EzChat Bán hàng chỉ dùng để lấy token kết nối dài hạn, không lưu mật khẩu. Địa chỉ lấy hàng lấy từ mục Kho hàng của tài khoản.',
     ghn: 'Đăng nhập khachhang.ghn.vn (tài khoản thử: 5sao.ghn.dev, bật ô sandbox) → bấm vào tài khoản ở góc trên trái → tab Bảo mật → Token API & IP tin cậy → Quản lý → bấm hình con mắt rồi chép token.',
     fake: 'Hãng giả lập để thử quy trình (chỉ có ở bản thử). Nhập bất kỳ mã nào trừ "bad".',
 };

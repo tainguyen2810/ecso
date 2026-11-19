@@ -16,7 +16,7 @@ export const statusInfo = Object.fromEntries(taskStatuses.map((s) => [s.value, s
 
 export const taskTypes: Record<SyncTaskType, string> = {
     webhook: 'Webhook',
-    stock_push: 'Đẩy tồn',
+    stock_push: 'Cập nhật tồn',
     order_poll: 'Đọc đơn',
     price_push: 'Đẩy giá',
 };

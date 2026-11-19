@@ -15,7 +15,7 @@ export type ChannelOption = { value: string; label: string; detail: string; logo
 export const CHANNELS: ChannelOption[] = [
     { value: 'shopee', label: 'Shopee', detail: 'Kết nối shop để kéo đơn và đồng bộ tồn.', logo: 'shopee' },
     { value: 'tiktok', label: 'TikTok Shop', detail: 'Kết nối shop để kéo đơn và đồng bộ tồn.', logo: 'tiktok' },
-    { value: 'woocommerce', label: 'Website WooCommerce', detail: 'Đơn web về EzSell, tồn đẩy ngược lên web.', logo: 'woocommerce' },
+    { value: 'woocommerce', label: 'Website WooCommerce', detail: 'Đơn web về EzChat Bán hàng, tồn đẩy ngược lên web.', logo: 'woocommerce' },
     { value: 'pos', label: 'Bán tại cửa hàng', detail: 'Màn hình bán quầy, in hóa đơn, ca thu ngân.', logo: 'manual' },
     { value: 'social', label: 'Facebook, Zalo, điện thoại', detail: 'Tạo đơn tay, gửi tin Zalo cho khách.', logo: 'zalo' },
     { value: 'lazada_tiki', label: 'Lazada, Tiki', detail: 'Kết nối khi sàn mở API cho shop.', logo: 'lazada' },

@@ -9,7 +9,7 @@ defineProps<{ title: string; subtitle?: string }>();
         <aside class="relative hidden flex-col justify-between overflow-hidden bg-sidebar p-10 text-white lg:flex">
             <div class="flex items-center gap-2 text-lg font-semibold">
                 <span class="flex size-8 items-center justify-center rounded-md bg-white/15">E</span>
-                ECSO
+                EzChat Bán hàng
             </div>
             <div class="max-w-md space-y-6">
                 <h2 class="text-3xl font-semibold leading-tight">Một nơi quản lý đơn hàng và tồn kho cho mọi sàn.</h2>
@@ -19,7 +19,7 @@ defineProps<{ title: string; subtitle?: string }>();
                     <li class="flex gap-3"><ShieldCheck class="size-5 shrink-0 text-white" /> Phân quyền theo vai trò, nhật ký thao tác đầy đủ.</li>
                 </ul>
             </div>
-            <p class="text-xs text-white/50">© {{ new Date().getFullYear() }} ECSO</p>
+            <p class="text-xs text-white/50">© {{ new Date().getFullYear() }} EzChat Bán hàng</p>
         </aside>
         <main class="flex items-center justify-center px-6 py-12">
             <div class="w-full max-w-sm">

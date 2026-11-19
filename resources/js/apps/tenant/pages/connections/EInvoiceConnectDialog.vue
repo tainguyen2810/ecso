@@ -96,7 +96,7 @@ async function save() {
 }
 
 async function disconnect() {
-    if (!window.confirm('Ngắt kết nối hóa đơn điện tử? Hóa đơn đã xuất vẫn giữ trên đơn; EzSell không xuất thêm hóa đơn nào.')) return;
+    if (!window.confirm('Ngắt kết nối hóa đơn điện tử? Hóa đơn đã xuất vẫn giữ trên đơn; EzChat Bán hàng không xuất thêm hóa đơn nào.')) return;
     busy.value = 'disconnect';
     try {
         await api.delete('/einvoice/account');
@@ -111,7 +111,7 @@ async function disconnect() {
 </script>
 
 <template>
-    <Dialog v-model:open="open" title="Hóa đơn điện tử" description="Shop cần đăng ký dịch vụ hóa đơn với nhà cung cấp trước. EzSell chỉ gửi dữ liệu đơn sang để xuất." size="lg">
+    <Dialog v-model:open="open" title="Hóa đơn điện tử" description="Shop cần đăng ký dịch vụ hóa đơn với nhà cung cấp trước. EzChat Bán hàng chỉ gửi dữ liệu đơn sang để xuất." size="lg">
         <div class="space-y-4" data-testid="einvoice-dialog">
             <div>
                 <p class="mb-1.5 text-sm text-muted-foreground">Nhà cung cấp</p>

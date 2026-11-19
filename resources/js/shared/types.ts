@@ -695,7 +695,7 @@ export interface NewListingData {
     variants: { name: string | null; seller_sku: string | null; price: string | null; regular_price: string | null; sale_price: string | null }[];
 }
 
-/** A website price waiting for approval (0, or more than 50% away from ECSO's). */
+/** A website price waiting for approval (0, or more than 50% away from EzChat Bán hàng's). */
 export interface PendingPriceChange {
     id: string;
     product_id: string | null;

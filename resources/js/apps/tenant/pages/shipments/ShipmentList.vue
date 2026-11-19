@@ -30,7 +30,7 @@ import { carrierKeys, carrierText, shipmentTabs, shipmentTone, statusText, type 
 import DateRangeInput from '@/shared/ui/DateRangeInput.vue';
 
 /**
- * "Đẩy qua vận chuyển": orders waiting for a carrier (compare prices, push in bulk), then every shipment, what needs
+ * "Gửi đơn vị vận chuyển": orders waiting for a carrier (compare prices, push in bulk), then every shipment, what needs
  * the shop's attention, and the COD carriers hold.
  */
 const route = useRoute();
@@ -179,7 +179,7 @@ const isLate = (s: ShipmentData) => ['picked_up', 'in_transit', 'out_for_deliver
 </script>
 
 <template>
-    <PageHeader title="Đẩy qua vận chuyển" description="So sánh giá, đẩy đơn qua tài khoản hãng của shop, rồi theo dõi từng vận đơn và tiền COD hãng đang giữ.">
+    <PageHeader title="Gửi đơn vị vận chuyển" description="So sánh giá, đẩy đơn qua tài khoản hãng của shop, rồi theo dõi từng vận đơn và tiền COD hãng đang giữ.">
         <template #default>
             <div class="flex flex-wrap items-center gap-2" data-testid="carrier-chips">
                 <button v-for="a in accounts" :key="a.id" class="inline-flex items-center gap-1.5 rounded-full border bg-card px-2.5 py-1 text-xs" :title="a.last_error ?? a.name" @click="connectOpen = true">

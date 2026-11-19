@@ -75,7 +75,7 @@ const zaloRules = computed(() => Object.values(zalo.value?.account?.rules ?? {})
 </script>
 
 <template>
-    <PageHeader title="Kết nối dịch vụ" description="Nhập khóa API do hãng cấp cho shop. Shop dùng tài khoản của chính mình, EzSell không thu thêm phí." :back="{ to: '/settings', label: 'Cấu hình' }" />
+    <PageHeader title="Kết nối dịch vụ" description="Nhập khóa API do hãng cấp cho shop. Shop dùng tài khoản của chính mình, EzChat Bán hàng không thu thêm phí." :back="{ to: '/settings', label: 'Cấu hình' }" />
     <ErrorState v-if="error" :message="error" @retry="load" />
     <div v-else-if="loading" class="space-y-4"><Skeleton class="h-40" /><Skeleton class="h-40" /></div>
     <div v-else class="space-y-5" data-testid="service-connections">

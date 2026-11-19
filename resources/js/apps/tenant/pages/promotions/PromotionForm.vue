@@ -318,7 +318,7 @@ async function save(status: 'active' | 'paused') {
                 <div class="space-y-2 p-5 text-sm" data-testid="promotion-summary">
                     <p v-for="(line, i) in summary" :key="i">{{ line }}</p>
                     <p class="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                        Nếu đơn đủ điều kiện nhiều khuyến mãi giảm tiền tự động, EzSell chọn cái giảm nhiều nhất. Quà tặng và mã giảm giá cộng thêm. Người có quyền sửa giá có thể bỏ khuyến mãi tự động trên một đơn.
+                        Nếu đơn đủ điều kiện nhiều khuyến mãi giảm tiền tự động, EzChat Bán hàng chọn cái giảm nhiều nhất. Quà tặng và mã giảm giá cộng thêm. Người có quyền sửa giá có thể bỏ khuyến mãi tự động trên một đơn.
                     </p>
                 </div>
             </Card>

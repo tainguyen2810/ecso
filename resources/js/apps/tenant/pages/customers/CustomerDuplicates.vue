@@ -47,7 +47,7 @@ function startMerge(keep: DuplicateCard, source: DuplicateCard) {
 </script>
 
 <template>
-    <PageHeader title="Khách hàng" description="Các thẻ khách có thể là cùng một người. ECSO không tự gộp: bạn kiểm tra rồi chọn gộp từng cặp." />
+    <PageHeader title="Khách hàng" description="Các thẻ khách có thể là cùng một người. EzChat Bán hàng không tự gộp: bạn kiểm tra rồi chọn gộp từng cặp." />
     <CustomersNav />
     <div v-if="groups === null && !error" class="space-y-3"><Skeleton v-for="i in 3" :key="i" class="h-28" /></div>
     <ErrorState v-else-if="error" :message="error" @retry="load" />

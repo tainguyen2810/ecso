@@ -94,7 +94,7 @@ async function retryAll() {
                 <Scale class="mt-0.5 size-5 shrink-0 text-muted-foreground" />
                 <div class="flex-1 text-sm">
                     <p class="font-medium">SKU tồn lệch trên sàn: {{ formatNumber(overview.problems.stock_drift) }}</p>
-                    <p class="text-muted-foreground">Sàn báo số tồn khác số EzSell đã đẩy lên, thường do sửa trực tiếp trên sàn. EzSell không tự sửa tồn nội bộ theo số này; lần đẩy tồn sau đặt lại số trên sàn.</p>
+                    <p class="text-muted-foreground">Sàn báo số tồn khác số EzChat Bán hàng đã đẩy lên, thường do sửa trực tiếp trên sàn. EzChat Bán hàng không tự sửa tồn nội bộ theo số này; lần đẩy tồn sau đặt lại số trên sàn.</p>
                 </div>
             </Card>
         </div>
@@ -102,7 +102,7 @@ async function retryAll() {
 
     <Dialog :open="!!confirm" :title="`Thử lại ${confirm ? formatNumber(confirm.count) : ''} tác vụ “${confirm?.label ?? ''}”?`" @update:open="(v) => !v && (confirm = null)">
         <p class="text-sm">
-            Mỗi tác vụ được chạy lại an toàn: đơn được đọc lại từ sàn, tồn được tính lại từ kho hiện tại, giá đặt theo giá EzSell. Tác vụ của shop đang mất kết nối hoặc tắt đồng bộ sẽ được bỏ qua. Tối đa 100 tác vụ mỗi lần.
+            Mỗi tác vụ được chạy lại an toàn: đơn được đọc lại từ sàn, tồn được tính lại từ kho hiện tại, giá đặt theo giá EzChat Bán hàng. Tác vụ của shop đang mất kết nối hoặc tắt đồng bộ sẽ được bỏ qua. Tối đa 100 tác vụ mỗi lần.
         </p>
         <template #footer>
             <Button variant="outline" @click="confirm = null">Để sau</Button>

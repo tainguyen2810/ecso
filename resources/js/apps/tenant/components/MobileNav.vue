@@ -132,11 +132,11 @@ const hidden = computed(() => route.path === '/pos');
                 </template>
 
                 <button v-if="pwa.canInstall.value" type="button" class="mx-4 mt-3 flex w-[calc(100%-2rem)] items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5 text-left text-sm" data-testid="pwa-install" @click="pwa.install()">
-                    <Smartphone class="size-5 text-blue-600" /><span class="flex-1"><b>Cài lên màn hình chính</b><span class="block text-xs text-muted-foreground">Mở EzSell nhanh như một app.</span></span>
+                    <Smartphone class="size-5 text-blue-600" /><span class="flex-1"><b>Cài lên màn hình chính</b><span class="block text-xs text-muted-foreground">Mở EzChat Bán hàng nhanh như một app.</span></span>
                 </button>
                 <div v-else-if="pwa.isIos.value && !pwa.standalone.value" class="mx-4 mt-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5 text-sm">
                     <button type="button" class="flex w-full items-center gap-3 text-left" @click="iosHelp = !iosHelp">
-                        <Smartphone class="size-5 text-blue-600" /><span class="flex-1"><b>Cài lên màn hình chính</b><span class="block text-xs text-muted-foreground">Mở EzSell nhanh như một app.</span></span>
+                        <Smartphone class="size-5 text-blue-600" /><span class="flex-1"><b>Cài lên màn hình chính</b><span class="block text-xs text-muted-foreground">Mở EzChat Bán hàng nhanh như một app.</span></span>
                     </button>
                     <ol v-if="iosHelp" class="mt-2 list-decimal space-y-1 pl-9 text-xs text-slate-700">
                         <li>Bấm nút <b>Chia sẻ</b> (ô vuông có mũi tên lên) ở thanh dưới của Safari.</li>

@@ -116,7 +116,7 @@ async function refresh() {
                     <div>Số hóa đơn <b class="tabular-nums">{{ invoice.invoice_number }}</b> · ký hiệu {{ invoice.invoice_series }}</div>
                     <div class="text-xs">Ngày {{ invoice.issued_at ? formatDateTime(invoice.issued_at) : '—' }} · {{ formatMoney(invoice.total) }}</div>
                 </div>
-                <Alert v-else-if="invoice?.status === 'pending'" tone="amber">Đã gửi sang nhà cung cấp, đang chờ cấp số hóa đơn. EzSell tự kiểm tra lại.</Alert>
+                <Alert v-else-if="invoice?.status === 'pending'" tone="amber">Đã gửi sang nhà cung cấp, đang chờ cấp số hóa đơn. EzChat Bán hàng tự kiểm tra lại.</Alert>
                 <Alert v-else-if="invoice?.status === 'failed'" tone="red" data-testid="einvoice-error">{{ invoice.message ?? 'Nhà cung cấp từ chối hóa đơn.' }} Sửa thông tin rồi xuất lại.</Alert>
 
                 <div class="flex flex-wrap gap-2">

@@ -136,7 +136,7 @@ const steps = computed(() => {
         </Alert>
         <Alert v-if="isPending && movedSince.length" :icon="History" tone="amber" class="mb-5" data-testid="moved-since-count">
             <p class="font-medium">{{ formatNumber(movedSince.length) }} SKU đã có nhập hoặc xuất sau khi đếm{{ doc.counted_at ? ` (${formatDateTime(doc.counted_at)})` : '' }}.</p>
-            <p class="mt-0.5 text-muted-foreground">Khi duyệt, ECSO chỉ cộng hoặc trừ phần lệch tìm thấy lúc đếm và giữ nguyên các giao dịch đó. Cột "Tồn sau duyệt" là tồn kho sau khi phiếu được áp dụng.</p>
+            <p class="mt-0.5 text-muted-foreground">Khi duyệt, EzChat Bán hàng chỉ cộng hoặc trừ phần lệch tìm thấy lúc đếm và giữ nguyên các giao dịch đó. Cột "Tồn sau duyệt" là tồn kho sau khi phiếu được áp dụng.</p>
         </Alert>
 
         <div class="grid gap-5 lg:grid-cols-3">
@@ -234,7 +234,7 @@ const steps = computed(() => {
                     <input v-model.number="received[l.line_id!]" type="number" min="0" :max="l.quantity" :data-testid="`received-${l.variant.sku}`" aria-label="Thực nhận" class="h-8 w-20 rounded-md border border-input bg-card px-2 text-right tabular-nums" />
                 </div>
             </div>
-            <Alert v-if="receiveShort" tone="amber" data-testid="receive-short">Thiếu {{ formatNumber(receiveShort) }} so với số đã xuất. ECSO vẫn nhận đủ vào kho rồi tạo phiếu thất lạc chờ duyệt để trừ phần thiếu.</Alert>
+            <Alert v-if="receiveShort" tone="amber" data-testid="receive-short">Thiếu {{ formatNumber(receiveShort) }} so với số đã xuất. EzChat Bán hàng vẫn nhận đủ vào kho rồi tạo phiếu thất lạc chờ duyệt để trừ phần thiếu.</Alert>
             <FormField v-if="receiveShort" label="Ghi chú" for="receive-note"><Input id="receive-note" v-model="receiveNote" maxlength="500" placeholder="Rách thùng, giao thiếu…" /></FormField>
         </form>
         <template #footer>

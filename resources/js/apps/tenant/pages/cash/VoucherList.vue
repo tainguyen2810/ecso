@@ -189,7 +189,7 @@ async function exportCsv() {
         data-testid="pending-banner"
         @click="status = 'pending'"
     >
-        <span><b>{{ pending }}</b> phiếu chi đang chờ anh/chị duyệt (từ {{ formatMoney(Number(threshold ?? 0)) }} trở lên).</span><span class="font-medium">Xem và duyệt →</span>
+        <span><b>{{ pending }}</b> phiếu chi đang chờ bạn duyệt (từ {{ formatMoney(Number(threshold ?? 0)) }} trở lên).</span><span class="font-medium">Xem và duyệt →</span>
     </button>
     <div class="mb-4 grid gap-3 sm:grid-cols-3" data-testid="voucher-totals">
         <Card><div class="p-4"><p class="text-xs text-muted-foreground">Tổng thu (đang lọc)</p><p class="mt-1 text-xl font-semibold tabular-nums text-success">+{{ formatMoney(totals.in) }}</p></div></Card>

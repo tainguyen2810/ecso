@@ -70,7 +70,7 @@ const connect = () =>
 const reloadTemplates = () => run('templates', async () => fill((await api.post('/zalo/templates/refresh')).data.data), 'Đã tải lại mẫu từ Zalo.');
 const saveRules = () => run('rules', async () => fill((await api.put('/zalo/rules', { rules: rules.value })).data.data), 'Đã lưu.');
 const disconnect = () => {
-    if (!window.confirm('Ngắt kết nối Zalo? EzSell sẽ ngừng gửi tin.')) return;
+    if (!window.confirm('Ngắt kết nối Zalo? EzChat Bán hàng sẽ ngừng gửi tin.')) return;
     void run('disconnect', async () => fill((await api.delete('/zalo/account')).data.data), 'Đã ngắt kết nối Zalo.');
 };
 const firstError = computed(() => (error.value ? (Object.values(error.value.body.errors ?? {})[0]?.[0] ?? error.value.message) : null));
@@ -96,7 +96,7 @@ const firstError = computed(() => (error.value ? (Object.values(error.value.body
                 <FormField label="Secret key của app" for="z-secret"><Input id="z-secret" v-model="keys.secret_key" type="password" autocomplete="off" data-testid="zalo-secret" /></FormField>
                 <FormField label="Refresh token của OA" for="z-rt"><Input id="z-rt" v-model="keys.refresh_token" type="password" autocomplete="off" data-testid="zalo-refresh" /></FormField>
                 <div class="text-xs text-muted-foreground md:col-span-3">
-                    Cách lấy: tạo ứng dụng ở developers.zalo.me, liên kết với OA đã xác thực và bật quyền gửi ZNS; App ID và Secret key nằm ở trang ứng dụng. Refresh token lấy ở công cụ API Explorer của Zalo (chọn OA, loại token "OA Access Token"). EzSell tự gia hạn token sau đó.
+                    Cách lấy: tạo ứng dụng ở developers.zalo.me, liên kết với OA đã xác thực và bật quyền gửi ZNS; App ID và Secret key nằm ở trang ứng dụng. Refresh token lấy ở công cụ API Explorer của Zalo (chọn OA, loại token "OA Access Token"). EzChat Bán hàng tự gia hạn token sau đó.
                 </div>
                 <div class="md:col-span-3"><Button type="submit" :loading="busy === 'connect'" data-testid="zalo-connect">Kết nối</Button></div>
             </form>

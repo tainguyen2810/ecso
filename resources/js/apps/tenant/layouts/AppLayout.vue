@@ -13,6 +13,7 @@ import { api } from '@/shared/lib/api';
 import { allNavItems, navGroups, type NavItem } from '../navigation';
 import GlobalSearch from '../components/GlobalSearch.vue';
 import NotificationBell from '../components/NotificationBell.vue';
+import ConnectChannelDialog from '../components/ConnectChannelDialog.vue';
 import MobileNav from '../components/MobileNav.vue';
 import InstallBanner from '../components/InstallBanner.vue';
 import DemoBanner from '../components/DemoBanner.vue';
@@ -40,7 +41,8 @@ const visibleGroups = computed(() =>
                     const children = i.children?.filter((c) => (!c.permission || tenant.can(c.permission)) && !(c.path.startsWith('/pos') && hidesPos(tenant.current?.channels)));
                     // A member who only sees part of a group lands on the first sub-page they may open.
                     return { ...i, children, path: tenant.can(i.permission) ? i.path : (children?.[0]?.path ?? i.path) };
-                }),
+                })
+                .flatMap((i) => channelLine(i)),
         }))
         .filter((g) => g.items.length > 0),
 );
@@ -56,14 +58,17 @@ const isActive = (item: NavItem) => {
 
 /** Connected shops per marketplace, shown beside each marketplace line. */
 const shopCounts = ref<Record<string, number>>({});
+const countsLoaded = ref(false);
 async function loadShopCounts() {
     shopCounts.value = {};
+    countsLoaded.value = false;
     if (!tenant.can('marketplace.view')) return;
     try {
         const { data } = await api.get('/marketplace-accounts');
         const counts: Record<string, number> = {};
         for (const a of data.data as { marketplace: string; status: string }[]) if (a.status === 'connected') counts[a.marketplace] = (counts[a.marketplace] ?? 0) + 1;
         shopCounts.value = counts;
+        countsLoaded.value = true;
     } catch {
         // The menu still works without the counts.
     }
@@ -73,6 +78,19 @@ const shopCountLabel = (key: string) => {
     const n = shopCounts.value[key] ?? 0;
     return n ? `${n} ${key === 'woocommerce' ? 'web' : 'shop'}` : 'Chưa kết nối';
 };
+const hasChannel = computed(() => Object.values(shopCounts.value).some((n) => n > 0));
+/**
+ * Kênh bán lists only the marketplaces that have a shop (each on its own line, Tai's rule); the others sit behind
+ * one "Kết nối thêm kênh" line that opens a dialog. A shop with no channel yet sees only that line.
+ */
+function channelLine(i: NavItem): NavItem[] {
+    if (i.marketplace) return countsLoaded.value && (shopCounts.value[i.marketplace] || isActive(i)) ? [i] : [];
+    if (i.name === 'marketplaces' && countsLoaded.value && !hasChannel.value && !isActive(i)) return [];
+    if (i.name !== 'marketplace-sync') return [i];
+    const add = tenant.can('marketplace.connect') && countsLoaded.value ? [{ name: 'connect-channel', label: '', path: '', icon: Plus } as unknown as NavItem] : [];
+    return [...add, ...(countsLoaded.value && !hasChannel.value && !isActive(i) ? [] : [i])];
+}
+const connectOpen = ref(false);
 const open = ref<Set<string>>(new Set());
 watch(
     () => route.meta.nav,
@@ -176,7 +194,18 @@ useGoShortcuts(
                 <div v-for="(group, i) in visibleGroups" :key="group.label" :class="i > 0 && 'mt-4'">
                     <p v-if="i > 0" class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{{ group.label }}</p>
                     <div v-for="item in group.items" :key="item.name">
+                        <button
+                            v-if="item.name === 'connect-channel'"
+                            type="button"
+                            class="mt-1 flex w-full items-center gap-3 rounded-lg border border-dashed border-primary/30 bg-primary/5 px-3 py-2 text-left text-sm font-medium text-primary hover:bg-primary/10"
+                            data-testid="nav-connect-channel"
+                            @click="connectOpen = true; mobileOpen = false"
+                        >
+                            <Plus class="size-[18px] shrink-0" :stroke-width="1.75" />
+                            <span class="flex-1 truncate">{{ hasChannel ? 'Kết nối thêm kênh' : 'Kết nối kênh bán đầu tiên' }}</span>
+                        </button>
                         <div
+                            v-else
                             :class="
                                 cn(
                                     'group flex items-center rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900',
@@ -261,6 +290,7 @@ useGoShortcuts(
             </header>
             <DemoBanner />
             <GlobalSearch v-model:open="searchOpen" />
+            <ConnectChannelDialog v-model:open="connectOpen" :counts="shopCounts" @connected="loadShopCounts" />
             <main :class="'mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 pb-28 sm:px-6 lg:px-8 lg:pb-6'">
                 <RouterView :key="tenant.current?.id" />
             </main>

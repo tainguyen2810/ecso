@@ -22,7 +22,7 @@ const warehouses = ref<Warehouse[]>([]);
 onMounted(async () => {
     const { state, ...rest } = route.query as Record<string, string>;
     if (isWoo && rest.success === '0') {
-        result.value = { ok: false, message: 'Anh đã bấm Từ chối trên website, ECSO chưa được cấp quyền. Có thể kết nối lại bất cứ lúc nào.' };
+        result.value = { ok: false, message: 'Bạn đã bấm Từ chối trên website, EzChat Bán hàng chưa được cấp quyền. Có thể kết nối lại bất cứ lúc nào.' };
         return;
     }
     try {
@@ -48,7 +48,7 @@ onMounted(async () => {
                         <CheckCircle2 class="size-8 shrink-0 text-success" />
                         <div>
                             <h2 class="font-semibold">Đã kết nối {{ result.account.shop_name }}</h2>
-                            <p class="text-sm text-muted-foreground">ECSO đang lấy dữ liệu, anh có thể chuyển sang việc khác.</p>
+                            <p class="text-sm text-muted-foreground">EzChat Bán hàng đang lấy dữ liệu, bạn có thể chuyển sang việc khác.</p>
                         </div>
                     </div>
                     <WooConnectResult :account="result.account" :checks="result.checks" :warehouses="warehouses" />
@@ -62,7 +62,7 @@ onMounted(async () => {
                     <CheckCircle2 class="mx-auto size-10 text-success" />
                     <h2 class="mt-3 font-semibold">Đã kết nối {{ result.account.shop_name }}</h2>
                     <template v-if="result.account.setup_pending">
-                        <p class="mt-1 text-sm text-muted-foreground">Còn vài bước: ghép SKU, chọn tồn ban đầu rồi bật đồng bộ. EzSell chưa đẩy tồn lên shop cho tới khi xong.</p>
+                        <p class="mt-1 text-sm text-muted-foreground">Còn vài bước: ghép SKU, chọn tồn ban đầu rồi bật đồng bộ. EzChat Bán hàng chưa cập nhật tồn lên shop cho tới khi xong.</p>
                         <Button class="mt-4" data-testid="go-setup" @click="router.push(`/marketplaces/${result.account.id}/setup`)">Thiết lập shop</Button>
                     </template>
                     <template v-else>

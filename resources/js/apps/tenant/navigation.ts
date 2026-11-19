@@ -65,7 +65,7 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
                     { label: 'Tạo đơn và giao hàng', path: '/orders/new', permission: 'orders.create' },
                     { label: 'Danh sách đơn hàng', path: '/orders' },
                     { label: 'Đóng gói', path: '/orders/pack', permission: 'orders.pack' },
-                    { label: 'Đẩy qua vận chuyển', path: '/shipments' },
+                    { label: 'Gửi đơn vị vận chuyển', path: '/shipments' },
                     { label: 'Bán tại quầy', path: '/pos', permission: 'orders.create' },
                     { label: 'Ca bán hàng', path: '/pos/shifts', permission: 'orders.create' },
                     { label: 'Khách trả hàng', path: '/returns', permission: 'returns.view' },

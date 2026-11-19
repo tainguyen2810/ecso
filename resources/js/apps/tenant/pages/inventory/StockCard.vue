@@ -71,7 +71,7 @@ function delta(n: number): string {
     <ErrorState v-if="loadError && !variant" :message="loadError" @retry="load" />
     <template v-else>
         <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <KpiCard label="Tổng tồn thực tế" :icon="Boxes" :value="formatNumber(totals.on_hand)"><template v-if="variant?.cost_price != null">Giá vốn BQ {{ formatMoney(variant.cost_price) }}</template></KpiCard>
+            <KpiCard label="Tổng tồn thực tế" :icon="Boxes" :value="formatNumber(totals.on_hand)"><template v-if="variant?.cost_price != null">Giá vốn {{ formatMoney(variant.cost_price) }}</template></KpiCard>
             <KpiCard label="Khả dụng" :icon="PackageCheck" :tone="totals.available <= 0 ? 'red' : 'green'" :value="formatNumber(totals.available)">
                 <span class="inline-flex items-center gap-1"><Lock class="size-3" /> {{ formatNumber(totals.reserved) }} đang giữ cho {{ reservations }} đơn</span>
             </KpiCard>

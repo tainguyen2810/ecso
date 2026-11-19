@@ -77,18 +77,18 @@ async function run(key: string, fn: () => Promise<string | void>) {
 }
 
 const switches: { key: keyof MarketplaceSyncSettings; label: string; hint: string }[] = [
-    { key: 'sync_orders', label: 'Đơn hàng Woo về ECSO', hint: 'Vào Danh sách đơn hàng, nguồn WooCommerce, giữ hàng ngay' },
-    { key: 'sync_stock', label: 'Tồn kho ECSO lên Woo', hint: 'Số có thể bán của kho bên dưới' },
+    { key: 'sync_orders', label: 'Đơn hàng Woo về EzChat Bán hàng', hint: 'Vào Danh sách đơn hàng, nguồn WooCommerce, giữ hàng ngay' },
+    { key: 'sync_stock', label: 'Tồn kho EzChat Bán hàng lên Woo', hint: 'Số có thể bán của kho bên dưới' },
     { key: 'sync_prices', label: 'Giá hai chiều', hint: 'Theo nguồn giá từng sản phẩm; giá khuyến mãi Woo là giá bán thực tế' },
     { key: 'import_new_products', label: 'Sản phẩm mới trên Woo', hint: 'Vào danh sách chờ duyệt' },
-    { key: 'push_status', label: 'Trạng thái đơn hai chiều', hint: 'Xác nhận, đóng gói, bàn giao, hủy trong ECSO được ghi lên website. Tắt: chỉ website → ECSO' },
+    { key: 'push_status', label: 'Trạng thái đơn hai chiều', hint: 'Xác nhận, đóng gói, bàn giao, hủy trong EzChat Bán hàng được ghi lên website. Tắt: chỉ website → EzChat Bán hàng' },
 ];
 
 const intervals = [5, 15, 30, 60].map((m) => ({ value: String(m), label: m === 60 ? '1 giờ' : `${m} phút` }));
 const setSyncInterval = (value: string | undefined) => run('interval', async () => {
     const { data } = await api.patch(`/marketplace-accounts/${account.value!.id}`, { settings: { order_sync_interval: Number(value) } });
     account.value = { ...account.value!, order_sync_interval: data.data.order_sync_interval };
-    return `ECSO sẽ đối soát đơn với website mỗi ${data.data.order_sync_interval} phút.`;
+    return `EzChat Bán hàng sẽ đối soát đơn với website mỗi ${data.data.order_sync_interval} phút.`;
 });
 const syncOrders = () => run('sync-orders', async () => {
     const { data } = await api.post(`/marketplace-accounts/${account.value!.id}/sync-orders`);
@@ -99,7 +99,7 @@ const syncOrders = () => run('sync-orders', async () => {
 const checkWebhooks = () => run('webhooks', async () => {
     const { data } = await api.post(`/marketplace-accounts/${account.value!.id}/check-webhooks`);
     account.value = { ...account.value!, webhook_health: data.data };
-    return data.data.ok ? 'Webhook trên website đang hoạt động.' : undefined;
+    return data.data.ok ? 'Nhận đơn tức thì từ website đang hoạt động.' : undefined;
 });
 const topicLabels: Record<string, string> = {
     'order.created': 'Đơn mới', 'order.updated': 'Đơn cập nhật', 'order.deleted': 'Đơn bị xóa', 'order.restored': 'Đơn khôi phục',
@@ -141,7 +141,7 @@ function addRaw() {
 const setSwitch = (key: keyof MarketplaceSyncSettings, value: boolean) => run(`set-${key}`, async () => {
     const { data } = await api.patch(`/marketplace-accounts/${account.value!.id}`, { settings: { [key]: value } });
     account.value = { ...account.value!, settings: data.data.settings };
-    if (key === 'sync_prices' && value) return 'Đã bật giá hai chiều. ECSO đang đọc lại giá trên website.';
+    if (key === 'sync_prices' && value) return 'Đã bật giá hai chiều. EzChat Bán hàng đang đọc lại giá trên website.';
 });
 const setWarehouse = (id: string | undefined) => run('warehouse', async () => {
     const { data } = await api.patch(`/marketplace-accounts/${account.value!.id}`, { warehouse_id: id });
@@ -158,7 +158,7 @@ const pushStock = () => run('push', async () => {
     return `Đã xếp hàng đẩy tồn cho ${formatNumber(data.data.queued)} SKU.`;
 });
 const disconnect = () => run('disconnect', async () => {
-    if (!window.confirm('Ngắt kết nối website? Đơn cũ được giữ, ECSO gỡ webhook trên website.')) return;
+    if (!window.confirm('Ngắt kết nối website? Đơn cũ được giữ, EzChat Bán hàng gỡ webhook trên website.')) return;
     await api.post(`/marketplace-accounts/${account.value!.id}/disconnect`);
     await router.push('/marketplaces');
     return 'Đã ngắt kết nối website.';
@@ -166,7 +166,7 @@ const disconnect = () => run('disconnect', async () => {
 const approve = (ids: string[] | null) => run(ids ? `approve-${ids[0]}` : 'approve-all', async () => {
     const { data } = await api.post(`/marketplace-accounts/${account.value!.id}/new-products/approve`, ids ? { listing_ids: ids } : { all: true });
     await load();
-    return `Đã tạo ${formatNumber(data.data.created)} sản phẩm trong ECSO và liên kết với website.`;
+    return `Đã tạo ${formatNumber(data.data.created)} sản phẩm trong EzChat Bán hàng và liên kết với website.`;
 });
 const skip = (id: string) => run(`skip-${id}`, async () => {
     await api.post(`/marketplace-accounts/${account.value!.id}/new-products/skip`, { listing_ids: [id] });
@@ -178,7 +178,7 @@ const decidePrice = (id: string, action: 'approve' | 'reject') => run(`price-${a
     await api.post(`/price-changes/${id}/${action}`);
     prices.value = prices.value.filter((p) => p.id !== id);
     overview.value.pending_prices = prices.value.length;
-    return action === 'approve' ? 'Đã áp dụng giá website vào ECSO.' : undefined;
+    return action === 'approve' ? 'Đã áp dụng giá website vào EzChat Bán hàng.' : undefined;
 });
 const approveAllPrices = () => run('price-all', async () => {
     const { data } = await api.post(`/marketplace-accounts/${account.value!.id}/price-changes/approve-all`);
@@ -249,7 +249,7 @@ const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].
                     <div class="text-sm">
                         <p class="mb-1.5 font-medium">Đồng bộ đơn từ</p>
                         <p class="text-muted-foreground" data-testid="woo-orders-since">{{ account.orders_since ? formatDateTime(account.orders_since) : '—' }}</p>
-                        <p class="text-xs text-muted-foreground">Đơn tạo trước mốc này không vào ECSO.</p>
+                        <p class="text-xs text-muted-foreground">Đơn tạo trước mốc này không vào EzChat Bán hàng.</p>
                     </div>
                 </div>
                 <div class="border-t px-5 py-4">
@@ -263,8 +263,8 @@ const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].
                 <template v-if="canEdit && pending.length" #actions>
                     <Button size="sm" :loading="busy === 'approve-all'" data-testid="woo-approve-all" @click="approve(null)">Duyệt tất cả</Button>
                 </template>
-                <EmptyState v-if="!account.settings?.import_new_products" :icon="PackagePlus" title="Đang tắt" description="Bật “Sản phẩm mới trên Woo” để xem sản phẩm chưa có trong ECSO." />
-                <EmptyState v-else-if="!pending.length" :icon="PackagePlus" title="Không có sản phẩm mới" description="Mọi sản phẩm trên website đã có trong ECSO hoặc đã được bỏ qua." />
+                <EmptyState v-if="!account.settings?.import_new_products" :icon="PackagePlus" title="Đang tắt" description="Bật “Sản phẩm mới trên Woo” để xem sản phẩm chưa có trong EzChat Bán hàng." />
+                <EmptyState v-else-if="!pending.length" :icon="PackagePlus" title="Không có sản phẩm mới" description="Mọi sản phẩm trên website đã có trong EzChat Bán hàng hoặc đã được bỏ qua." />
                 <ul v-else class="max-h-[28rem] divide-y overflow-y-auto">
                     <li v-for="p in pending" :key="p.id" class="flex items-center gap-4 px-5 py-3">
                         <div class="min-w-0 flex-1">
@@ -289,7 +289,7 @@ const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].
         </div>
 
         <div class="mt-4 grid gap-4 lg:grid-cols-2">
-            <Card title="Webhook trên website" description="Woo tự tắt webhook sau nhiều lần gửi lỗi; ECSO kiểm tra mỗi giờ và bật lại." data-testid="woo-webhooks">
+            <Card title="Nhận đơn tức thì từ website" description="Woo tự tắt webhook sau nhiều lần gửi lỗi; EzChat Bán hàng kiểm tra mỗi giờ và bật lại." data-testid="woo-webhooks">
                 <template v-if="canEdit && account.status === 'connected'" #actions>
                     <Button size="sm" variant="outline" :loading="busy === 'webhooks'" data-testid="woo-check-webhooks" @click="checkWebhooks"><Webhook /> Kiểm tra ngay</Button>
                 </template>
@@ -305,14 +305,14 @@ const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].
                         <p v-if="account.webhook_health.reactivated.length" class="text-amber-700">Đã bật lại: {{ account.webhook_health.reactivated.map((t) => topicLabels[t] ?? t).join(', ') }}</p>
                         <p v-if="account.webhook_health.missing.length" class="text-amber-700">Đã tạo lại: {{ account.webhook_health.missing.map((t) => topicLabels[t] ?? t).join(', ') }}</p>
                     </template>
-                    <p class="text-xs text-muted-foreground">Dù webhook lỗi, ECSO vẫn đối soát đơn theo chu kỳ ở trên nên không mất đơn.</p>
+                    <p class="text-xs text-muted-foreground">Dù webhook lỗi, EzChat Bán hàng vẫn đối soát đơn theo chu kỳ ở trên nên không mất đơn.</p>
                 </div>
                 <div class="flex gap-2 border-t px-5 py-3 text-sm">
                     <RouterLink :to="`/marketplaces/sync?tab=log&account=${account.id}`" class="inline-flex items-center gap-1 text-primary hover:underline"><History class="size-4" /> Lịch sử và lỗi đồng bộ</RouterLink>
                 </div>
             </Card>
 
-            <Card title="Ánh xạ trạng thái" description="Trạng thái đơn trên website (kể cả trạng thái do plugin thêm) tương ứng trạng thái nào trong ECSO." data-testid="woo-status-map">
+            <Card title="Ánh xạ trạng thái" description="Trạng thái đơn trên website (kể cả trạng thái do plugin thêm) tương ứng trạng thái nào trong EzChat Bán hàng." data-testid="woo-status-map">
                 <template v-if="canEdit" #actions>
                     <Button size="sm" :loading="busy === 'status-map'" data-testid="woo-save-status-map" @click="saveMap"><ListChecks /> Lưu</Button>
                 </template>
@@ -320,7 +320,7 @@ const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].
                 <div v-else class="max-h-[26rem] overflow-y-auto">
                     <table class="w-full text-sm">
                         <thead class="sticky top-0 border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                            <tr><th class="px-5 py-2 font-medium">Trên website</th><th class="px-4 py-2 font-medium">Trong ECSO</th><th class="px-5 py-2 text-right font-medium">Đơn</th></tr>
+                            <tr><th class="px-5 py-2 font-medium">Trên website</th><th class="px-4 py-2 font-medium">Trong EzChat Bán hàng</th><th class="px-5 py-2 text-right font-medium">Đơn</th></tr>
                         </thead>
                         <tbody class="divide-y">
                             <tr v-for="r in mapRows" :key="r.raw" :data-testid="`status-row-${r.raw}`">
@@ -348,7 +348,7 @@ const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].
             </Card>
         </div>
 
-        <Card v-if="account.settings?.sync_prices || prices.length" title="Giá từ website chờ duyệt" description="Giá bằng 0 hoặc lệch quá 50% so với giá ECSO thì không tự áp dụng." class="mt-4" data-testid="woo-pending-prices">
+        <Card v-if="account.settings?.sync_prices || prices.length" title="Giá từ website chờ duyệt" description="Giá bằng 0 hoặc lệch quá 50% so với giá EzChat Bán hàng thì không tự áp dụng." class="mt-4" data-testid="woo-pending-prices">
             <template v-if="canEdit && prices.length" #actions>
                 <Button size="sm" :loading="busy === 'price-all'" data-testid="woo-prices-approve-all" @click="approveAllPrices">Áp dụng tất cả</Button>
             </template>
@@ -358,7 +358,7 @@ const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].
                     <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                         <tr>
                             <th class="px-5 py-2.5 font-medium">Sản phẩm</th>
-                            <th class="px-4 py-2.5 text-right font-medium">Giá ECSO</th>
+                            <th class="px-4 py-2.5 text-right font-medium">Giá EzChat Bán hàng</th>
                             <th class="px-4 py-2.5 text-right font-medium">Giá trên website</th>
                             <th class="px-4 py-2.5 text-right font-medium">Lệch</th>
                             <th class="px-4 py-2.5 font-medium">Lý do chờ</th>

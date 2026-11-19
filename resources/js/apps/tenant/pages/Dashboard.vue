@@ -237,7 +237,7 @@ const showStart = computed(() => !startHidden.value && !progress.value.finished)
         <div class="flex flex-wrap items-center gap-5 bg-gradient-to-r from-blue-50 to-card to-70% px-5 py-5">
             <IconBubble :icon="Rocket" tone="blue" class="size-12" />
             <div class="min-w-0 flex-1">
-                <p class="text-base font-bold">Bắt đầu bán hàng với EzSell</p>
+                <p class="text-base font-bold">Bắt đầu bán hàng với EzChat Bán hàng</p>
                 <p class="mt-0.5 text-sm text-muted-foreground">Làm 3 bước đầu là đã tạo đơn và in phiếu được. Các bước còn lại làm khi cần.</p>
                 <div class="mt-2 h-1.5 w-full max-w-72 overflow-hidden rounded-full bg-slate-100"><i class="block h-full bg-emerald-500" :style="{ width: `${(progress.done / progress.total) * 100}%` }" /></div>
                 <p class="mt-1 text-xs text-muted-foreground">Đã xong {{ progress.done }}/{{ progress.total }} bước</p>

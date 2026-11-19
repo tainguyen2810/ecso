@@ -100,14 +100,14 @@ const steps = ['Lấy sản phẩm', 'Ghép sản phẩm', 'Tồn kho ban đầu
 const name = computed(() => account.value?.marketplace_name ?? 'sàn');
 const toCreate = computed(() => (overview.value ? overview.value.counts.create + (withoutSku.value ? overview.value.counts.create_without_sku : 0) : 0));
 const stockOptions = computed(() => [
-    { value: 'marketplace' as const, title: `Lấy tồn trên ${name.value} làm tồn ban đầu`, text: `Hợp với shop mới dùng EzSell. Tạo 1 phiếu nhập tồn đầu kỳ cho ${formatNumber(overview.value?.stock.from_shop_lines ?? 0)} SKU đang có 0 trong kho, tổng ${formatNumber(overview.value?.stock.from_shop_quantity ?? 0)} cái. SKU đã có tồn giữ nguyên.` },
-    { value: 'ezsell' as const, title: `Giữ tồn EzSell, đẩy lên ${name.value}`, text: `Hợp khi đã nhập kho trong EzSell (hoặc đã chuyển từ Sapo, KiotViet). Tồn trên sàn sẽ đổi theo EzSell (${formatNumber(overview.value?.stock.ezsell_quantity ?? 0)} cái).` },
+    { value: 'marketplace' as const, title: `Lấy tồn trên ${name.value} làm tồn ban đầu`, text: `Hợp với shop mới dùng EzChat Bán hàng. Tạo 1 phiếu nhập tồn đầu kỳ cho ${formatNumber(overview.value?.stock.from_shop_lines ?? 0)} SKU đang có 0 trong kho, tổng ${formatNumber(overview.value?.stock.from_shop_quantity ?? 0)} cái. SKU đã có tồn giữ nguyên.` },
+    { value: 'ezsell' as const, title: `Giữ tồn EzChat Bán hàng, đẩy lên ${name.value}`, text: `Hợp khi đã nhập kho trong EzChat Bán hàng (hoặc đã chuyển từ Sapo, KiotViet). Tồn trên sàn sẽ đổi theo EzChat Bán hàng (${formatNumber(overview.value?.stock.ezsell_quantity ?? 0)} cái).` },
     { value: 'none' as const, title: 'Chưa đồng bộ tồn', text: 'Chỉ kéo đơn. Bật đẩy tồn sau ở trang Kết nối sàn khi đã kiểm kho xong.' },
 ]);
 const switchRows = [
-    { key: 'sync_orders', title: 'Kéo đơn tự động', text: 'Đơn mới về EzSell, đối soát lại định kỳ.' },
-    { key: 'sync_stock', title: 'Đẩy tồn lên sàn', text: 'Mỗi khi tồn EzSell đổi: bán ở kênh khác, nhập hàng, kiểm kho.' },
-    { key: 'push_status', title: 'Đẩy trạng thái đơn', text: 'Xác nhận, chuẩn bị hàng, in vận đơn từ EzSell.' },
+    { key: 'sync_orders', title: 'Kéo đơn tự động', text: 'Đơn mới về EzChat Bán hàng, đối soát lại định kỳ.' },
+    { key: 'sync_stock', title: 'Cập nhật tồn lên sàn', text: 'Mỗi khi tồn EzChat Bán hàng đổi: bán ở kênh khác, nhập hàng, kiểm kho.' },
+    { key: 'push_status', title: 'Đẩy trạng thái đơn', text: 'Xác nhận, chuẩn bị hàng, in vận đơn từ EzChat Bán hàng.' },
     { key: 'import_new_products', title: 'Tự tạo sản phẩm khi shop đăng sản phẩm mới', text: 'Tắt: vào "Sản phẩm mới chờ duyệt" để xem trước.' },
     { key: 'sync_prices', title: 'Đồng bộ giá', text: 'Giữ tắt nếu bạn chỉnh giá trên sàn.' },
 ] as const;
@@ -138,7 +138,7 @@ const switchRows = [
             <div class="p-5">
                 <div v-if="!overview.listings_synced" class="flex items-center gap-3"><Loader2 class="size-5 animate-spin text-primary" /> <b>Đang lấy sản phẩm từ {{ name }}…</b></div>
                 <div v-else class="flex items-center gap-3"><Check class="size-5 text-success" /> <b>Đã lấy {{ formatNumber(overview.counts.total) }} SKU từ {{ name }}.</b></div>
-                <p class="mt-2 text-sm text-muted-foreground">Trong lúc chưa thiết lập xong, EzSell <b>chưa đẩy tồn</b> lên shop, nên tồn trên sàn không bị ghi đè. Đơn vẫn được kéo về bình thường.</p>
+                <p class="mt-2 text-sm text-muted-foreground">Trong lúc chưa thiết lập xong, EzChat Bán hàng <b>chưa cập nhật tồn</b> lên shop, nên tồn trên sàn không bị ghi đè. Đơn vẫn được kéo về bình thường.</p>
             </div>
             <div class="flex justify-end border-t bg-slate-50 px-5 py-3"><Button :disabled="!overview.listings_synced" data-testid="shop-setup-next" @click="step = 1">Tiếp tục</Button></div>
         </Card>
@@ -146,13 +146,13 @@ const switchRows = [
         <!-- 2. Link -->
         <template v-else-if="step === 1">
             <div class="mb-4 grid gap-3 sm:grid-cols-3">
-                <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><p class="text-xs text-muted-foreground">Khớp mã SKU</p><p class="my-1 text-2xl font-bold">{{ formatNumber(overview.counts.matched) }} SKU</p><p class="text-xs text-muted-foreground">Mã SKU trên sàn trùng mã trong kho EzSell. Sẽ ghép luôn.</p></div>
-                <div class="rounded-xl border border-blue-200 bg-blue-50 p-4"><p class="text-xs text-muted-foreground">Chưa có trong EzSell</p><p class="my-1 text-2xl font-bold">{{ formatNumber(toCreate) }} SKU</p><p class="text-xs text-muted-foreground">Tạo sản phẩm mới, giá = giá đang bán trên sàn, mã = SKU người bán.</p></div>
+                <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><p class="text-xs text-muted-foreground">Khớp mã SKU</p><p class="my-1 text-2xl font-bold">{{ formatNumber(overview.counts.matched) }} SKU</p><p class="text-xs text-muted-foreground">Mã SKU trên sàn trùng mã trong kho EzChat Bán hàng. Sẽ ghép luôn.</p></div>
+                <div class="rounded-xl border border-blue-200 bg-blue-50 p-4"><p class="text-xs text-muted-foreground">Chưa có trong EzChat Bán hàng</p><p class="my-1 text-2xl font-bold">{{ formatNumber(toCreate) }} SKU</p><p class="text-xs text-muted-foreground">Tạo sản phẩm mới, giá = giá đang bán trên sàn, mã = SKU người bán.</p></div>
                 <div class="rounded-xl border border-amber-200 bg-amber-50 p-4"><p class="text-xs text-muted-foreground">Để ghép tay sau</p><p class="my-1 text-2xl font-bold">{{ formatNumber(overview.counts.later + (withoutSku ? 0 : overview.counts.create_without_sku)) }} SKU</p><p class="text-xs text-muted-foreground">Ghép ở trang Liên kết SKU, hoặc bỏ qua.</p></div>
             </div>
             <Card>
                 <table class="w-full text-sm">
-                    <thead class="bg-slate-50 text-left text-xs uppercase text-muted-foreground"><tr><th class="px-4 py-2.5">Sản phẩm trên sàn</th><th class="px-4 py-2.5">SKU người bán</th><th class="px-4 py-2.5">Trong EzSell</th><th class="px-4 py-2.5">Sẽ làm</th></tr></thead>
+                    <thead class="bg-slate-50 text-left text-xs uppercase text-muted-foreground"><tr><th class="px-4 py-2.5">Sản phẩm trên sàn</th><th class="px-4 py-2.5">SKU người bán</th><th class="px-4 py-2.5">Trong EzChat Bán hàng</th><th class="px-4 py-2.5">Sẽ làm</th></tr></thead>
                     <tbody>
                         <tr v-for="(r, i) in overview.preview" :key="i" class="border-t">
                             <td class="px-4 py-2.5">{{ r.title }}</td>
@@ -164,7 +164,7 @@ const switchRows = [
                 </table>
             </Card>
             <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
-                <label v-if="overview.counts.create_without_sku" class="flex items-center gap-2 text-sm"><input v-model="withoutSku" type="checkbox" data-testid="shop-setup-without-sku" /> Tạo luôn {{ overview.counts.create_without_sku }} SKU không có mã (EzSell đặt mã theo ID trên sàn)</label>
+                <label v-if="overview.counts.create_without_sku" class="flex items-center gap-2 text-sm"><input v-model="withoutSku" type="checkbox" data-testid="shop-setup-without-sku" /> Tạo luôn {{ overview.counts.create_without_sku }} SKU không có mã (EzChat Bán hàng đặt mã theo ID trên sàn)</label>
                 <span v-else />
                 <Button :loading="busy" data-testid="shop-setup-link" @click="link">Ghép {{ formatNumber(overview.counts.matched) }}, tạo {{ formatNumber(toCreate) }} SKU</Button>
             </div>
@@ -191,7 +191,7 @@ const switchRows = [
             </div>
             <Card v-if="overview.stock.rows.length" class="mt-4">
                 <table class="w-full text-sm">
-                    <thead class="bg-slate-50 text-left text-xs uppercase text-muted-foreground"><tr><th class="px-4 py-2.5">SKU</th><th class="px-4 py-2.5 text-right">Tồn trên sàn</th><th class="px-4 py-2.5 text-right">Tồn EzSell hiện tại</th><th class="px-4 py-2.5 text-right">Sau khi làm</th></tr></thead>
+                    <thead class="bg-slate-50 text-left text-xs uppercase text-muted-foreground"><tr><th class="px-4 py-2.5">SKU</th><th class="px-4 py-2.5 text-right">Tồn trên sàn</th><th class="px-4 py-2.5 text-right">Tồn EzChat Bán hàng hiện tại</th><th class="px-4 py-2.5 text-right">Sau khi làm</th></tr></thead>
                     <tbody>
                         <tr v-for="r in overview.stock.rows" :key="r.sku" class="border-t">
                             <td class="px-4 py-2.5 font-semibold text-primary">{{ r.sku }}</td>

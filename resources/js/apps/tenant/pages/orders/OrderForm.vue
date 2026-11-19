@@ -624,7 +624,7 @@ async function pushNew(orderId: string) {
 
 async function submit() {
     if (!editId.value && delivery.value === 'api' && !carrierChoice.value) {
-        pushError.value = hasCarrierAccount.value ? 'Chọn hãng và dịch vụ trong bảng giá trước khi lưu.' : 'Chưa kết nối hãng vận chuyển nào. Chọn "Đẩy vận chuyển ngoài" hoặc kết nối hãng ở trang Đẩy qua vận chuyển.';
+        pushError.value = hasCarrierAccount.value ? 'Chọn hãng và dịch vụ trong bảng giá trước khi lưu.' : 'Chưa kết nối hãng vận chuyển nào. Chọn "Đẩy vận chuyển ngoài" hoặc kết nối hãng ở trang Gửi đơn vị vận chuyển.';
         return;
     }
     pushError.value = null;
@@ -685,7 +685,7 @@ const deliveries = [
     { value: 'api', label: 'Đẩy qua hãng vận chuyển', icon: Truck, hint: 'So sánh giá các hãng đã kết nối; lưu đơn là đẩy sang hãng, hãng cấp mã và đến lấy hàng.' },
     { value: 'ext', label: 'Đẩy vận chuyển ngoài', icon: Send, hint: 'Hãng chưa kết nối hoặc shipper riêng: chọn hãng, nhập mã vận đơn ở trang đơn sau.' },
     { value: 'completed', label: 'Khách nhận tại cửa hàng', icon: Store, hint: 'Khách lấy hàng ngay: trừ kho và hoàn tất đơn khi lưu.' },
-    { value: 'later', label: 'Giao hàng sau', icon: Clock, hint: 'Đơn giữ hàng trong kho, chọn cách giao sau (ở trang đơn hoặc "Đẩy qua vận chuyển").' },
+    { value: 'later', label: 'Giao hàng sau', icon: Clock, hint: 'Đơn giữ hàng trong kho, chọn cách giao sau (ở trang đơn hoặc "Gửi đơn vị vận chuyển").' },
 ] as const;
 type Delivery = (typeof deliveries)[number]['value'];
 const delivery = ref<Delivery>('later');

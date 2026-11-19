@@ -42,7 +42,7 @@ interface Result {
     queued?: boolean;
 }
 
-const SOURCES = { ezsell: 'EzSell', sapo: 'Sapo', kiotviet: 'KiotViet' } as const;
+const SOURCES = { ezsell: 'EzChat Bán hàng', sapo: 'Sapo', kiotviet: 'KiotViet' } as const;
 const KEYS: Record<string, string> = {
     product_key: 'Nhóm biến thể', product_name: 'Tên sản phẩm', sku: 'SKU', variant_name: 'Tên phiên bản', barcode: 'Barcode', category: 'Danh mục', brand: 'Thương hiệu',
     ref_price: 'Giá bán lẻ', wholesale_price: 'Giá bán buôn', weight_gram: 'Khối lượng', status: 'Trạng thái', opening_qty: 'Tồn đầu kỳ', opening_cost: 'Giá vốn đầu kỳ', unit: 'Đơn vị tính',
@@ -63,7 +63,7 @@ const warehouse = ref('');
 const warehouses = ref<Warehouse[]>([]);
 const skipInvalid = ref(false);
 const withImages = ref(true);
-/** Sapo branch name → EzSell warehouse id ('' = not brought over); filled from the first check. */
+/** Sapo branch name → EzChat Bán hàng warehouse id ('' = not brought over); filled from the first check. */
 const branchChoice = ref<Record<string, string>>({});
 /** How the user gets the Sapo data: the Excel export or the bookmark (Sapo GO has no API key). */
 const how = ref<'file' | 'sapo'>('file');
@@ -162,7 +162,7 @@ function downloadProblems() {
 </script>
 
 <template>
-    <PageHeader title="Chuyển dữ liệu" description="Chuyển sản phẩm, tồn kho, khách hàng và công nợ từ Sapo hoặc KiotViet sang EzSell bằng chính file xuất từ phần mềm cũ, không cần sửa cột." :back="{ to: '/settings', label: 'Cấu hình' }" />
+    <PageHeader title="Chuyển dữ liệu" description="Chuyển sản phẩm, tồn kho, khách hàng và công nợ từ Sapo hoặc KiotViet sang EzChat Bán hàng bằng chính file xuất từ phần mềm cũ, không cần sửa cột." :back="{ to: '/settings', label: 'Cấu hình' }" />
 
     <div class="grid gap-4 lg:grid-cols-[1fr_320px]">
         <div class="space-y-4">
@@ -191,7 +191,7 @@ function downloadProblems() {
                         Trên Sapo: <b>Sản phẩm → Xuất file → Tất cả sản phẩm</b>. Trên KiotViet: <b>Hàng hóa → Xuất file</b>. Tải nguyên file đó lên đây, không cần sửa cột.
                     </p>
                     <div v-else class="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm" data-testid="migrate-sapo-steps">
-                        <p>Sapo GO không cấp khóa API cho cửa hàng, nên EzSell dùng một nút chạy ngay trong trang Sapo của bạn. Cách này lấy được tồn thực tế và giá vốn bình quân của từng chi nhánh, ảnh và combo. EzSell không cần mật khẩu Sapo.</p>
+                        <p>Sapo GO không cấp khóa API cho cửa hàng, nên EzChat Bán hàng dùng một nút chạy ngay trong trang Sapo của bạn. Cách này lấy được tồn thực tế và giá vốn bình quân của từng chi nhánh, ảnh và combo. EzChat Bán hàng không cần mật khẩu Sapo.</p>
                         <ol class="list-decimal space-y-1.5 pl-5">
                             <li>
                                 Kéo nút này lên thanh dấu trang của Chrome (làm một lần):
@@ -209,7 +209,7 @@ function downloadProblems() {
                     <Upload class="size-6 text-muted-foreground" />
                     <span v-if="file" class="font-medium"><FileSpreadsheet class="inline size-4" /> {{ file.name }}</span>
                     <span v-else-if="kind === 'products' && how === 'sapo'">Chọn file sapo-du-lieu-….json vừa lưu từ Sapo</span>
-                    <span v-else>Chọn file Excel (.xlsx) hoặc CSV xuất từ Sapo, KiotViet hoặc file mẫu EzSell</span>
+                    <span v-else>Chọn file Excel (.xlsx) hoặc CSV xuất từ Sapo, KiotViet hoặc file mẫu EzChat Bán hàng</span>
                     <input type="file" :accept="kind === 'products' ? '.xlsx,.csv,.json' : '.xlsx,.csv'" class="sr-only" data-testid="migrate-file" @change="onFile" />
                 </label>
                 <div class="grid gap-3 sm:grid-cols-2">
@@ -236,11 +236,11 @@ function downloadProblems() {
                             <span v-if="check.skipped?.length" class="text-amber-700">· bỏ qua {{ check.skipped.length }} lỗi</span>
                         </div>
                         <div v-if="kind === 'products' && branches.length" class="text-sm" data-testid="migrate-branches">
-                            <div class="mb-1 text-muted-foreground">Tồn kho theo chi nhánh: chọn kho EzSell nhận tồn và giá vốn của từng chi nhánh</div>
+                            <div class="mb-1 text-muted-foreground">Tồn kho theo chi nhánh: chọn kho EzChat Bán hàng nhận tồn và giá vốn của từng chi nhánh</div>
                             <div class="overflow-x-auto rounded border">
                                 <table class="w-full">
                                     <thead class="bg-muted/40 text-left text-xs text-muted-foreground">
-                                        <tr><th class="px-2 py-1.5 font-medium">Chi nhánh trong file</th><th class="px-2 py-1.5 text-right font-medium">Tổng tồn</th><th class="px-2 py-1.5 font-medium">Đưa vào kho EzSell</th></tr>
+                                        <tr><th class="px-2 py-1.5 font-medium">Chi nhánh trong file</th><th class="px-2 py-1.5 text-right font-medium">Tổng tồn</th><th class="px-2 py-1.5 font-medium">Đưa vào kho EzChat Bán hàng</th></tr>
                                     </thead>
                                     <tbody>
                                         <tr v-for="b in branches" :key="b.name" class="border-t">
@@ -255,7 +255,7 @@ function downloadProblems() {
                                     </tbody>
                                 </table>
                             </div>
-                            <p class="mt-1 text-xs text-muted-foreground">SKU đã có trong EzSell chỉ được cập nhật thông tin, không cộng thêm tồn.</p>
+                            <p class="mt-1 text-xs text-muted-foreground">SKU đã có trong EzChat Bán hàng chỉ được cập nhật thông tin, không cộng thêm tồn.</p>
                         </div>
                         <div v-if="recognised.length" class="text-sm">
                             <div class="mb-1 text-muted-foreground">Cột đã nhận ra</div>
@@ -283,7 +283,7 @@ function downloadProblems() {
 
             <Card class="flex flex-wrap items-center justify-between gap-3 p-4">
                 <div>
-                    <h2 class="font-semibold">3. Nhập vào EzSell</h2>
+                    <h2 class="font-semibold">3. Nhập vào EzChat Bán hàng</h2>
                     <p class="text-sm text-muted-foreground">SKU, mã khách hoặc số điện thoại đã có sẽ được cập nhật, không tạo trùng. Tồn đầu kỳ và nợ đầu kỳ chỉ ghi một lần.</p>
                 </div>
                 <Button :disabled="!ready" :loading="busy" data-testid="migrate-run" @click="send(false)">Nhập {{ check && ready ? formatNumber(check.created + check.updated) : '' }} dòng</Button>
@@ -303,7 +303,7 @@ function downloadProblems() {
                 <li>Kiểm tra lại vài sản phẩm, vài khách rồi mới bán.</li>
             </ol>
             <p class="text-muted-foreground">Phiên bản cùng tên sản phẩm được gộp làm một sản phẩm; giá trị thuộc tính thành tên phiên bản.</p>
-            <p class="text-muted-foreground">Mỗi chi nhánh Sapo vào một kho EzSell bạn chọn. SKU có dấu cách được đổi dấu cách thành gạch nối; mã vạch trùng chỉ giữ ở SKU đầu tiên. Mọi thay đổi đều được báo trước khi nhập.</p>
+            <p class="text-muted-foreground">Mỗi chi nhánh Sapo vào một kho EzChat Bán hàng bạn chọn. SKU có dấu cách được đổi dấu cách thành gạch nối; mã vạch trùng chỉ giữ ở SKU đầu tiên. Mọi thay đổi đều được báo trước khi nhập.</p>
             <p class="text-muted-foreground">Chưa hỗ trợ: nhà cung cấp, lịch sử đơn hàng, điểm tích lũy (tạo lại bằng cộng điểm tay).</p>
         </Card>
     </div>

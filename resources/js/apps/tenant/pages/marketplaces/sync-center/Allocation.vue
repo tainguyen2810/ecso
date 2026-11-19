@@ -15,7 +15,7 @@ import { useToast } from '@/shared/composables/useToast';
 import AllocationDialog, { type AllocationTarget } from './AllocationDialog.vue';
 import { publish, ruleLabel, type AllocationRule } from './labels';
 
-/** Phân bổ tồn: how much of each SKU's sellable stock every shop publishes (shop default + SKU overrides). */
+/** Chia tồn cho từng shop: how much of each SKU's sellable stock every shop publishes (shop default + SKU overrides). */
 interface Shop {
     id: string;
     name: string;
@@ -93,7 +93,7 @@ function onSaved() {
     <div v-else class="space-y-5">
         <Alert :icon="Layers" tone="blue">
             <b>Số tồn đẩy lên mỗi shop</b> = tồn bán được ở kho nguồn (tồn thực − đang giữ cho đơn − tồn an toàn) − <b>giữ lại</b>, rồi lấy <b>toàn bộ / theo % / số cố định</b>, không vượt <b>tối đa</b>.
-            Phân bổ chỉ đổi con số công bố trên sàn; tồn kho EzSell không bao giờ bị cộng hay ghi đè theo số trên sàn.
+            Phân bổ chỉ đổi con số công bố trên sàn; tồn kho EzChat Bán hàng không bao giờ bị cộng hay ghi đè theo số trên sàn.
         </Alert>
 
         <div>
