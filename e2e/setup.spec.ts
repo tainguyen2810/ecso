@@ -41,11 +41,11 @@ test('a new business goes through the setup steps, then tries the sample store a
 
     await expect(page.getByTestId('tenant-switcher')).toContainText('Zz Thời Trang Thiết Lập');
     await expect(page.getByRole('heading', { name: /^Chào buổi/ })).toBeVisible();
-    // No shop counter: the POS pages leave the menu; Shopee comes right after the products in "Bắt đầu".
+    // No shop counter: the POS pages leave the menu. A Shopee seller gets the 4 seller steps, connecting the shop first.
     await page.getByRole('button', { name: 'Đơn hàng', exact: true }).click();
     await expect(page.getByRole('link', { name: 'Bán tại quầy' })).toHaveCount(0);
-    const steps = page.getByText('Kết nối sàn TMĐT');
-    await expect(steps.first()).toBeVisible();
+    await expect(page.getByTestId('seller-step-shop')).toContainText('Kết nối shop');
+    await expect(page.getByTestId('dashboard-seller-start').locator('li')).toHaveCount(4);
     await expect(page.getByText('Mời nhân viên và phân quyền')).toHaveCount(0);
     await shot(page, '04-tong-quan-moi');
 
