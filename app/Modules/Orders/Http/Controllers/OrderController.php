@@ -53,7 +53,7 @@ class OrderController extends Controller
         $filters = $this->filters($request);
 
         $page = $orders->build($filters, $request->user()->id)
-            ->with(['account', 'channel', 'customer', 'assignee', 'items.variant'])->withCount('items')
+            ->with(['account', 'channel', 'customer', 'assignee', 'items.variant.product.images'])->withCount('items')
             ->orderBy(match ($filters['sort'] ?? 'newest') {
                 'ship_by' => 'ship_by_at',
                 'oldest', 'newest' => 'placed_at',
