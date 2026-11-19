@@ -29,7 +29,7 @@ test('new user registers, must verify email, then creates a tenant', async ({ pa
 
 test('owner works in the tenant dashboard', async ({ page }) => {
     await login(page, 'owner@demo.test');
-    await expect(page.getByRole('heading', { name: /Xin chào/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^Chào buổi/ })).toBeVisible();
     await shot(page, '05-dashboard');
 
     await page.getByTestId('tenant-switcher').click();
@@ -80,7 +80,7 @@ test('owner works in the tenant dashboard', async ({ page }) => {
 
 test('warehouse staff only sees what their role allows', async ({ page }) => {
     await login(page, 'staff@demo.test');
-    await expect(page.getByRole('heading', { name: /Xin chào/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^Chào buổi/ })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sản phẩm', exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Nhân viên' })).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Cấu hình', exact: true })).toHaveCount(0);
@@ -94,7 +94,7 @@ test('warehouse staff only sees what their role allows', async ({ page }) => {
 test('dashboard is usable on mobile', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page, 'owner@demo.test');
-    await expect(page.getByRole('heading', { name: /Xin chào/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^Chào buổi/ })).toBeVisible();
     await shot(page, '16-mobile-dashboard');
     // Phone menu at the bottom (B6): "Thêm" opens the other pages as large tiles.
     const nav = page.getByTestId('mobile-nav');
