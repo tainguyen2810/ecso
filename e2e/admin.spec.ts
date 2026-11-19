@@ -14,7 +14,7 @@ test('super admin uses the admin console', async ({ page }) => {
 
 test('tenant users are sent away from the admin console', async ({ page }) => {
     await login(page, 'owner@demo.test');
-    await expect(page.getByRole('heading', { name: /Xin chào/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^Chào buổi/ })).toBeVisible();
     await page.goto('/admin');
     await expect(page).not.toHaveURL(/\/admin/);
 });
