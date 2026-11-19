@@ -63,6 +63,7 @@ const routes: RouteRecordRaw[] = [
             { path: 'pos/shifts', name: 'pos-shifts', component: () => import('./pages/sales/Shifts.vue'), meta: { anyPermission: ['orders.create', 'orders.shifts'], nav: 'pos' } },
             { path: 'pos', name: 'pos', component: () => import('./pages/sales/Pos.vue'), meta: { permission: 'orders.create', nav: 'pos', fullscreen: true } },
             { path: 'sales-channels', name: 'sales-channels', component: () => import('./pages/sales/SalesChannels.vue'), meta: { permission: 'orders.view', nav: 'sales-channels' } },
+            { path: 'ezchat/lien-ket', name: 'ezchat-connect', component: () => import('./pages/sales/EzChatConnect.vue'), meta: { nav: 'sales-channels' } },
             { path: 'orders/:id', name: 'order-show', component: () => import('./pages/orders/OrderDetail.vue'), meta: { permission: 'orders.view', nav: 'orders' } },
             { path: 'purchasing', name: 'purchasing', component: () => import('./pages/purchasing/PurchaseOrderList.vue'), meta: { permission: 'purchasing.view', nav: 'purchasing' } },
             { path: 'purchasing/orders', name: 'purchase-orders-ordering', component: () => import('./pages/purchasing/PurchaseOrderList.vue'), meta: { permission: 'purchasing.view', nav: 'purchasing', mode: 'ordering' } },

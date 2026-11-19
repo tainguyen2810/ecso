@@ -16,6 +16,7 @@ import { formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { channelTypes } from '../orders/labels';
+import EzChatLinkCard from './EzChatLinkCard.vue';
 import type { SalesChannel, Warehouse } from '@/shared/types';
 
 const tenant = useTenantStore();
@@ -80,6 +81,7 @@ async function remove(c: SalesChannel) {
     <PageHeader title="Kênh bán riêng" description="Nơi bạn tự bán ngoài sàn: quầy, cửa hàng, Facebook, Zalo, website. Mỗi kênh có thể xuất từ một kho riêng.">
         <Button v-if="tenant.can('settings.manage')" data-testid="add-channel" @click="edit(null)"><Plus /> Thêm kênh</Button>
     </PageHeader>
+    <EzChatLinkCard :channels="rows" @changed="load" />
     <Card>
         <div v-if="loading" class="space-y-3 p-4"><Skeleton v-for="i in 3" :key="i" class="h-10" /></div>
         <EmptyState v-else-if="!rows.length" :icon="Store" title="Chưa có kênh bán" description="Thêm kênh để tạo đơn bán ngoài sàn." />

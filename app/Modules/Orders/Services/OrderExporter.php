@@ -23,7 +23,7 @@ class OrderExporter
         'Trạng thái', 'Đơn vị vận chuyển', 'Mã vận đơn', 'Người xử lý', 'Lý do hủy', 'Tags', 'Ngày hẹn giao',
     ];
 
-    private const STATUS = [
+    public const STATUS = [
         'UNPAID' => 'Chờ thanh toán', 'PENDING_CONFIRMATION' => 'Chờ xác nhận', 'READY_TO_PACK' => 'Chờ đóng gói',
         'PACKED' => 'Chờ bàn giao', 'HANDED_OVER' => 'Đã bàn giao', 'IN_TRANSIT' => 'Đang giao', 'DELIVERED' => 'Đã giao',
         'COMPLETED' => 'Hoàn tất', 'CANCELLED' => 'Đã hủy', 'FAILED_DELIVERY' => 'Giao thất bại',
