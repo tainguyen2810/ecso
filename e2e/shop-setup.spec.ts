@@ -46,5 +46,7 @@ test('a newly connected shop goes through linking, opening stock and switching s
     // The shop leaves the setup state; disconnect it so later tests see the shops they expect.
     const row = page.getByTestId('account-list').getByRole('listitem').filter({ hasText: 'Zz Shop Thiết Lập' });
     await expect(row).not.toContainText('Chưa thiết lập xong');
-    await row.getByRole('button', { name: 'Ngắt' }).click();
+    await row.getByRole('button', { name: 'Thêm thao tác' }).click();
+    await row.getByRole('menuitem', { name: 'Ngắt kết nối' }).click();
+    await expect(page.getByText('Đã ngắt kết nối. Dữ liệu đơn cũ được giữ nguyên.')).toBeVisible();
 });

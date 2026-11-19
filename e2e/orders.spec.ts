@@ -11,7 +11,7 @@ test('marketplaces: capability matrix, fake shop simulator, webhook monitor', as
     // Kênh bán: "Tất cả kênh" lists every shop; each marketplace also has its own line.
     await page.getByRole('link', { name: 'Tất cả kênh' }).click();
     await expect(page.getByTestId('account-list')).toContainText('Shop Demo');
-    await expect(page.getByTestId('capability-matrix')).toContainText('UNKNOWN');
+    await expect(page.getByTestId('capability-matrix')).toContainText('Chưa xác minh');
     await shot(page, '01-marketplaces');
 
     // The simulator plays the marketplace: new orders arrive through signed webhooks.

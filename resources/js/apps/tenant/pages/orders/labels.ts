@@ -93,7 +93,7 @@ export const returnState: Record<string, { label: string; tone: Tone }> = {
 export const capabilityLabels: Record<string, { label: string; tone: Tone }> = {
     supported: { label: 'Hỗ trợ', tone: 'success' },
     unsupported: { label: 'Không hỗ trợ', tone: 'danger' },
-    unknown: { label: 'UNKNOWN', tone: 'muted' },
+    unknown: { label: 'Chưa xác minh', tone: 'muted' },
 };
 
 export const capabilityNames: Record<string, string> = {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { AlertTriangle, BadgePercent, FlaskConical, Link2, PlugZap, RefreshCw, Send, Settings2, Unplug, Zap, History } from 'lucide-vue-next';
+import { AlertTriangle, BadgePercent, ChevronDown, CircleCheck, FlaskConical, Link2, Link2Off, MoreHorizontal, PlugZap, Plus, RefreshCw, Send, Settings2, ShieldCheck, Unplug, Wrench, Zap, History } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
@@ -76,9 +76,9 @@ async function connectReal(c: MarketplaceCatalogEntry) {
             key: c.key,
             message:
                 err.body.code === 'CREDENTIALS_MISSING'
-                    ? `Nền tảng chưa được cấu hình app credentials cho ${c.name}. Quản trị viên cần đăng ký ứng dụng trên cổng nhà phát triển của sàn và khai báo trong cấu hình máy chủ.`
+                    ? `Kết nối ${c.name} chưa được mở trên hệ thống. Liên hệ hỗ trợ để bật.`
                     : err.body.code === 'UNSUPPORTED_CAPABILITY'
-                      ? `Kết nối ${c.name} chưa được xác minh với tài liệu chính thức (UNKNOWN). Hệ thống không giả lập đăng nhập hay kết nối.`
+                      ? `Kết nối ${c.name} sắp có.`
                       : err.message,
         };
     } finally {
@@ -197,97 +197,171 @@ const simFailure = () => run('sim-fail', async () => {
     return data.data.failing ? 'API sàn giả lập sẽ trả lỗi 503 (kiểm tra retry và circuit breaker).' : 'API sàn giả lập hoạt động lại.';
 });
 
-const accountTone = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 'muted' : a.circuit_open || a.last_error ? 'danger' : 'success');
-const accountLabel = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 'Đã ngắt' : a.circuit_open ? 'Tạm dừng do lỗi' : a.last_error ? 'Có lỗi' : 'Đang hoạt động');
+/** Products on the shop that are not linked to a warehouse SKU yet (their stock is not deducted automatically). */
+const unlinked = (a: MarketplaceAccountData) => Math.max(0, (a.stats?.listings ?? 0) - (a.stats?.mapped ?? 0));
+const linkedPct = (a: MarketplaceAccountData) => (a.stats?.listings ? Math.round((a.stats.mapped / a.stats.listings) * 100) : 0);
+type Health = 'off' | 'error' | 'todo' | 'ok';
+const health = (a: MarketplaceAccountData): Health => (a.status !== 'connected' ? 'off' : a.circuit_open || a.last_error ? 'error' : a.setup_pending || unlinked(a) ? 'todo' : 'ok');
+const healthLabel: Record<Health, string> = { off: 'Đã ngắt', error: 'Mất kết nối', todo: 'Cần làm thêm', ok: 'Đang chạy' };
+const healthClass: Record<Health, string> = { off: 'text-slate-500', error: 'text-rose-600', todo: 'text-amber-600', ok: 'text-emerald-600' };
+const healthDot: Record<Health, string> = { off: 'bg-slate-400', error: 'bg-rose-500', todo: 'bg-amber-500', ok: 'bg-emerald-500' };
+
+/** What each marketplace syncs, in one line for the "Thêm kênh bán" cards. */
+const syncs = (c: MarketplaceCatalogEntry) => {
+    if (c.key === 'woocommerce') return 'Đơn, tồn kho, giá hai chiều';
+    return c.capabilities['inventory.update'] === 'supported' ? 'Đơn, tồn kho, giá' : 'Đơn';
+};
+const ready = (c: MarketplaceCatalogEntry) => c.connect_mode === 'store' || c.connect_mode === 'app_keys' || (c.available && c.credentials_configured && c.capabilities['shop.authorize'] === 'supported');
+
+const menuFor = ref<string | null>(null);
+const shownWebhooks = computed(() => (san.value ? webhooks.value.filter((w) => w.marketplace === san.value) : webhooks.value));
+
+function reconnect(a: MarketplaceAccountData) {
+    if (a.marketplace === 'woocommerce') return router.push(`/marketplaces/${a.id}/store`);
+    const c = catalog.value.find((x) => x.key === a.marketplace);
+    if (c) connectReal(c);
+}
+function sinceLabel(a: MarketplaceAccountData) {
+    if (a.last_synced_at) return `Đồng bộ lần cuối ${formatDateTime(a.last_synced_at)}`;
+    return a.connected_at ? `Kết nối ${formatDateTime(a.connected_at)}` : '';
+}
 </script>
 
 <template>
-    <PageHeader :title="sanName ?? 'Kết nối sàn'" description="Chỉ dùng API chính thức của sàn. Thao tác nào chưa được xác minh với tài liệu và credentials thật được đánh dấu UNKNOWN và không được giả lập.">
-        <RouterLink v-if="tenant.can('sync.view')" to="/marketplaces/sync"><Button variant="outline" data-testid="sync-log-link"><History /> Trung tâm đồng bộ</Button></RouterLink>
+    <PageHeader :title="sanName ?? 'Kênh bán'" description="Đơn, tồn kho và giá tự đồng bộ với từng gian hàng.">
         <RouterLink to="/marketplaces/prices"><Button variant="outline" data-testid="price-board-link"><BadgePercent /> Bảng giá sàn</Button></RouterLink>
-        <Button variant="outline" :loading="loading" @click="load"><RefreshCw /> Làm mới</Button>
+        <RouterLink v-if="tenant.can('sync.view')" to="/marketplaces/sync"><Button variant="outline" data-testid="sync-log-link"><History /> Nhật ký đồng bộ</Button></RouterLink>
+        <Button v-if="tenant.can('marketplace.connect') && catalog.some((c) => c.is_fake)" variant="outline" data-testid="connect-fake" @click="connectOpen = true"><FlaskConical /> Shop giả lập</Button>
+        <Button variant="outline" size="icon" :loading="loading" aria-label="Làm mới" title="Làm mới" @click="load"><RefreshCw /></Button>
     </PageHeader>
 
     <div v-if="loading && !catalog.length" class="space-y-4"><Skeleton class="h-40" /><Skeleton class="h-64" /></div>
     <ErrorState v-else-if="loadError" :message="loadError" @retry="load" />
-    <div v-else class="space-y-4">
-        <Card title="Gian hàng đã kết nối">
-            <template v-if="tenant.can('marketplace.connect') && catalog.some((c) => c.is_fake)" #actions>
-                <Button size="sm" data-testid="connect-fake" @click="connectOpen = true"><FlaskConical /> Kết nối shop giả lập</Button>
-            </template>
-            <EmptyState v-if="!shownAccounts.length" :icon="PlugZap" title="Chưa kết nối gian hàng nào" description="Website WooCommerce kết nối được ngay. Tiki kết nối bằng ứng dụng riêng của shop. Shopee, TikTok Shop, Lazada cần app credentials của sàn (chưa có)." />
-            <ul v-else class="divide-y" data-testid="account-list">
-                <li v-for="a in shownAccounts" :key="a.id" class="flex flex-wrap items-center gap-4 px-5 py-4">
-                    <MarketplaceLogo :marketplace="a.marketplace" :name="a.marketplace_name" size="lg" />
-                    <div class="min-w-56 flex-1">
-                        <div class="flex items-center gap-2">
-                            <span class="font-medium">{{ a.shop_name }}</span>
-                            <Badge :tone="accountTone(a)">{{ accountLabel(a) }}</Badge>
-                            <Badge v-if="a.marketplace === 'fake'" tone="warning">Giả lập</Badge>
-                            <Badge v-if="a.setup_pending" tone="info">Chưa thiết lập xong</Badge>
+    <div v-else class="space-y-8">
+        <section>
+            <div v-if="!shownAccounts.length" class="rounded-xl border bg-card shadow-xs">
+                <EmptyState :icon="PlugZap" :title="sanName ? `Chưa kết nối ${sanName}` : 'Chưa kết nối gian hàng nào'" description="Kết nối gian hàng ở phần bên dưới để đơn, tồn kho và giá tự đồng bộ." />
+            </div>
+            <ul v-else class="space-y-3" data-testid="account-list">
+                <li v-for="a in shownAccounts" :key="a.id" class="overflow-hidden rounded-xl border bg-card shadow-xs">
+                    <div class="flex flex-wrap items-center gap-x-6 gap-y-4 px-5 py-4">
+                        <div class="flex min-w-60 flex-1 items-center gap-4">
+                            <MarketplaceLogo :marketplace="a.marketplace" :name="a.marketplace_name" size="lg" class="size-11" />
+                            <div class="min-w-0">
+                                <p class="truncate text-base font-semibold">{{ a.shop_name }} <Badge v-if="a.marketplace === 'fake'" tone="warning" class="ml-1 align-middle">Giả lập</Badge></p>
+                                <p class="text-sm text-muted-foreground">
+                                    {{ a.marketplace_name }} ·
+                                    <span :class="['inline-flex items-center gap-1 font-medium', healthClass[health(a)]]"><i :class="['size-1.5 rounded-full', healthDot[health(a)]]" />{{ healthLabel[health(a)] }}</span>
+                                </p>
+                                <p class="text-xs text-muted-foreground">{{ sinceLabel(a) }}<template v-if="a.warehouse"> · Xuất từ {{ a.warehouse.name }}</template></p>
+                            </div>
                         </div>
-                        <div class="mt-0.5 text-xs text-muted-foreground">{{ a.marketplace_name }} · {{ a.base_url ?? `Shop ID ${a.external_shop_id}` }} · kết nối {{ formatDateTime(a.connected_at) }}</div>
-                        <div v-if="a.last_error" class="mt-1 flex items-center gap-1 text-xs text-destructive"><AlertTriangle class="size-3" /> {{ a.last_error }}</div>
+                        <div v-if="a.stats" class="w-44">
+                            <p class="text-xs text-muted-foreground">Sản phẩm đã liên kết</p>
+                            <p class="text-base font-semibold tabular-nums">{{ formatNumber(a.stats.mapped) }} / {{ formatNumber(a.stats.listings) }}</p>
+                            <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                <i :class="['block h-full rounded-full', linkedPct(a) >= 100 ? 'bg-emerald-500' : linkedPct(a) >= 50 ? 'bg-amber-500' : 'bg-orange-500']" :style="{ width: `${Math.max(linkedPct(a), a.stats.listings ? 2 : 0)}%` }" />
+                            </div>
+                            <p v-if="a.stats.push_errors" class="mt-1 text-xs text-rose-600">{{ formatNumber(a.stats.push_errors) }} sản phẩm đẩy tồn bị lỗi</p>
+                        </div>
+                        <div v-if="a.status === 'connected'" class="w-32">
+                            <p class="text-xs text-muted-foreground">Tự đẩy tồn lên sàn</p>
+                            <button
+                                type="button"
+                                role="switch"
+                                :aria-checked="a.sync_enabled"
+                                aria-label="Tự đẩy tồn kho lên sàn"
+                                :disabled="!tenant.can('marketplace.connect') || busy === `toggle-${a.id}`"
+                                :class="['relative mt-1.5 h-5 w-9 rounded-full transition-colors disabled:opacity-60', a.sync_enabled ? 'bg-primary' : 'bg-slate-300']"
+                                :data-testid="`sync-toggle-${a.id}`"
+                                @click="toggleSync(a)"
+                            >
+                                <span :class="['absolute top-0.5 size-4 rounded-full bg-white shadow transition-all', a.sync_enabled ? 'left-[18px]' : 'left-0.5']" />
+                            </button>
+                        </div>
+                        <div v-if="a.status === 'connected'" class="relative ml-auto flex items-center gap-2">
+                            <RouterLink v-if="a.marketplace === 'woocommerce'" :to="`/marketplaces/${a.id}/store`"><Button variant="outline" :data-testid="`woo-settings-${a.id}`"><Settings2 /> Cài đặt đồng bộ</Button></RouterLink>
+                            <RouterLink v-else-if="a.marketplace !== 'fake'" :to="`/marketplaces/${a.id}/shop`"><Button variant="outline" :data-testid="`shop-settings-${a.id}`"><Settings2 /> Cài đặt đồng bộ</Button></RouterLink>
+                            <RouterLink :to="`/marketplaces/${a.id}/listings`"><Button variant="outline"><Link2 /> Liên kết SKU</Button></RouterLink>
+                            <Button variant="outline" size="icon" aria-label="Thêm thao tác" :data-testid="`account-menu-${a.id}`" @click="menuFor = menuFor === a.id ? null : a.id"><MoreHorizontal /></Button>
+                            <template v-if="menuFor === a.id">
+                                <div class="fixed inset-0 z-30" @click="menuFor = null" />
+                                <div class="absolute right-0 top-full z-40 mt-1 w-64 rounded-lg border bg-card p-1.5 text-sm shadow-lg" role="menu">
+                                    <div v-if="tenant.can('marketplace.connect')" class="px-2 pb-2 pt-1">
+                                        <p class="mb-1 text-xs text-muted-foreground">Kho xuất hàng</p>
+                                        <Select :model-value="a.warehouse?.id ?? ''" :options="warehouses.map((w) => ({ value: w.id, label: w.name }))" aria-label="Kho xuất" @update:model-value="(v) => changeWarehouse(a, v)" />
+                                    </div>
+                                    <template v-if="tenant.can('marketplace.connect')">
+                                        <button type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-muted" :disabled="busy === `sync-${a.id}`" @click="menuFor = null; syncProducts(a)"><RefreshCw class="size-4 text-muted-foreground" /> Tải lại sản phẩm từ sàn</button>
+                                        <button type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-muted" :disabled="busy === `push-${a.id}`" @click="menuFor = null; pushStock(a)"><Send class="size-4 text-muted-foreground" /> Đẩy tồn kho ngay</button>
+                                        <div class="my-1 border-t" />
+                                        <button type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-rose-600 hover:bg-rose-50" @click="menuFor = null; disconnect(a)"><Unplug class="size-4" /> Ngắt kết nối</button>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
                     </div>
-                    <div v-if="a.stats" class="grid grid-cols-4 gap-4 text-center text-xs">
-                        <div><div class="text-base font-semibold tabular-nums">{{ formatNumber(a.stats.listings) }}</div><div class="text-muted-foreground">Listing</div></div>
-                        <div><div class="text-base font-semibold tabular-nums text-success">{{ formatNumber(a.stats.mapped) }}</div><div class="text-muted-foreground">Đã map</div></div>
-                        <div><div class="text-base font-semibold tabular-nums">{{ formatNumber(a.stats.pending_push) }}</div><div class="text-muted-foreground">Chờ đẩy tồn</div></div>
-                        <div><div :class="['text-base font-semibold tabular-nums', a.stats.push_errors && 'text-destructive']">{{ formatNumber(a.stats.push_errors) }}</div><div class="text-muted-foreground">Lỗi đẩy tồn</div></div>
+
+                    <div v-if="a.setup_pending && a.status === 'connected'" class="flex flex-wrap items-center gap-3 border-t bg-blue-50/60 px-5 py-3 text-sm">
+                        <Wrench class="size-4 text-blue-600" />
+                        <span class="flex-1">Chưa thiết lập xong: ghép sản phẩm, nhập tồn ban đầu rồi bật đồng bộ.</span>
+                        <RouterLink v-if="tenant.can('marketplace.connect')" :to="`/marketplaces/${a.id}/setup`"><Button size="sm" :data-testid="`setup-${a.id}`">Thiết lập shop</Button></RouterLink>
                     </div>
-                    <div v-if="a.status === 'connected'" class="flex flex-wrap items-center gap-2">
-                        <Select class="w-44" :model-value="a.warehouse?.id ?? ''" :disabled="!tenant.can('marketplace.connect')" :options="warehouses.map((w) => ({ value: w.id, label: `Kho: ${w.code}` }))" aria-label="Kho xuất" @update:model-value="(v) => changeWarehouse(a, v)" />
-                        <RouterLink v-if="a.setup_pending && tenant.can('marketplace.connect')" :to="`/marketplaces/${a.id}/setup`"><Button size="sm" :data-testid="`setup-${a.id}`">Thiết lập shop</Button></RouterLink>
-                        <RouterLink v-if="a.marketplace === 'woocommerce'" :to="`/marketplaces/${a.id}/store`"><Button size="sm" variant="outline" :data-testid="`woo-settings-${a.id}`"><Settings2 /> Cài đặt đồng bộ</Button></RouterLink>
-                        <RouterLink v-else-if="a.marketplace !== 'fake'" :to="`/marketplaces/${a.id}/shop`"><Button size="sm" variant="outline" :data-testid="`shop-settings-${a.id}`"><Settings2 /> Cài đặt đồng bộ</Button></RouterLink>
-                        <RouterLink :to="`/marketplaces/${a.id}/listings`"><Button size="sm" variant="outline"><Link2 /> Liên kết SKU <Badge v-if="a.stats?.suggested" tone="warning" class="ml-1">{{ a.stats.suggested }}</Badge></Button></RouterLink>
-                        <template v-if="tenant.can('marketplace.connect')">
-                            <Button size="sm" variant="outline" :loading="busy === `sync-${a.id}`" @click="syncProducts(a)"><RefreshCw /> Tải sản phẩm</Button>
-                            <Button size="sm" variant="outline" :loading="busy === `push-${a.id}`" @click="pushStock(a)"><Send /> Đẩy tồn</Button>
-                            <label class="flex items-center gap-1.5 text-xs"><input type="checkbox" :checked="a.sync_enabled" @change="toggleSync(a)" /> Tự đồng bộ tồn</label>
-                            <Button size="sm" variant="ghost" :loading="busy === `disc-${a.id}`" @click="disconnect(a)"><Unplug /> Ngắt</Button>
-                        </template>
+                    <div v-else-if="health(a) === 'error'" class="flex flex-wrap items-center gap-3 border-t bg-rose-50/70 px-5 py-3 text-sm">
+                        <AlertTriangle class="size-4 shrink-0 text-rose-600" />
+                        <div class="min-w-0 flex-1">
+                            <p>{{ a.circuit_open ? `${a.marketplace_name} báo lỗi nhiều lần nên đồng bộ đang tạm dừng.` : `Không đồng bộ được với ${a.marketplace_name}.` }} Đơn mới có thể chưa về.</p>
+                            <p v-if="a.last_error" class="mt-0.5 truncate text-xs text-muted-foreground" :title="a.last_error">Chi tiết: {{ a.last_error }}</p>
+                        </div>
+                        <Button v-if="tenant.can('marketplace.connect') && a.marketplace !== 'fake'" size="sm" variant="destructive" @click="reconnect(a)">Kết nối lại</Button>
+                    </div>
+                    <div v-else-if="a.status === 'connected' && unlinked(a)" class="flex flex-wrap items-center gap-3 border-t bg-amber-50/70 px-5 py-3 text-sm">
+                        <Link2Off class="size-4 shrink-0 text-amber-600" />
+                        <span class="flex-1">{{ formatNumber(unlinked(a)) }} sản phẩm chưa liên kết với kho nên chưa tự trừ tồn.<template v-if="a.stats?.suggested"> Có {{ formatNumber(a.stats.suggested) }} gợi ý ghép sẵn.</template></span>
+                        <RouterLink :to="`/marketplaces/${a.id}/listings`"><Button size="sm" class="bg-amber-500 text-white hover:bg-amber-600">Liên kết {{ formatNumber(unlinked(a)) }} sản phẩm</Button></RouterLink>
+                    </div>
+                    <div v-else-if="a.status !== 'connected'" class="flex flex-wrap items-center gap-3 border-t bg-slate-50 px-5 py-3 text-sm text-muted-foreground">
+                        <Unplug class="size-4 shrink-0" />
+                        <span class="flex-1">Đã ngắt kết nối. Đơn cũ vẫn được giữ.</span>
+                        <Button v-if="tenant.can('marketplace.connect') && a.marketplace !== 'fake'" size="sm" variant="outline" @click="reconnect(a)">Kết nối lại</Button>
                     </div>
                 </li>
             </ul>
-        </Card>
+        </section>
 
-        <Card title="Kết nối sàn thương mại điện tử" description="Kết nối qua trang ủy quyền chính thức của sàn. Không dùng mật khẩu, cookie hay giả lập đăng nhập.">
-            <div class="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4" data-testid="real-marketplaces">
-                <div v-for="c in realMarketplaces" :key="c.key" class="flex flex-col rounded-md border p-4">
-                    <div class="flex items-center justify-between">
-                        <span class="flex items-center gap-2 font-medium"><MarketplaceLogo :marketplace="c.key" :name="c.name" />{{ c.name }}</span>
-                        <Badge v-if="c.connect_mode === 'store' || c.connect_mode === 'app_keys'" tone="success">Sẵn sàng</Badge>
-                        <Badge v-else-if="!c.available" tone="muted">Chưa có connector</Badge>
-                        <Badge v-else-if="!c.credentials_configured" tone="warning">Chưa có credentials</Badge>
-                        <Badge v-else-if="c.capabilities['shop.authorize'] !== 'supported'" tone="muted">UNKNOWN</Badge>
-                        <Badge v-else tone="success">Sẵn sàng</Badge>
+        <section>
+            <h2 class="mb-3 text-base font-semibold">{{ sanName ? `Thêm gian hàng ${sanName}` : 'Thêm kênh bán' }}</h2>
+            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5" data-testid="real-marketplaces">
+                <div v-for="c in realMarketplaces" :key="c.key" :class="['flex flex-col rounded-xl border p-4 shadow-xs', ready(c) ? 'bg-card' : 'bg-slate-50/70']">
+                    <div class="flex items-center gap-3">
+                        <MarketplaceLogo :marketplace="c.key" :name="c.name" size="lg" />
+                        <div class="min-w-0">
+                            <p class="truncate font-semibold">{{ c.name }}</p>
+                            <p class="text-xs text-muted-foreground">{{ ready(c) ? syncs(c) : 'Sắp có' }}</p>
+                        </div>
                     </div>
-                    <p class="mt-1 text-xs text-muted-foreground">
-                        {{ Object.values(c.capabilities).filter((s) => s === 'supported').length }}/{{ Object.keys(c.capabilities).length }} thao tác đã xác minh
-                    </p>
-                    <p v-if="c.capabilities['inventory.update'] !== 'supported'" class="mt-1 flex-1 text-xs text-muted-foreground" :data-testid="`stock-note-${c.key}`">
-                        Cập nhật tồn qua API: {{ c.capabilities['inventory.update'] === 'unsupported' ? 'sàn không hỗ trợ' : 'chưa xác minh' }} — cập nhật tay trên Seller Center.
+                    <p v-if="c.capabilities['inventory.update'] !== 'supported'" class="mt-2 flex-1 text-xs text-muted-foreground" :data-testid="`stock-note-${c.key}`">
+                        Tồn kho trên sàn: {{ c.capabilities['inventory.update'] === 'unsupported' ? 'sàn không cho cập nhật tự động' : 'chưa tự cập nhật được' }}, cập nhật tay trên Seller Center.
                     </p>
                     <span v-else class="flex-1" />
                     <Button
                         v-if="tenant.can('marketplace.connect')"
-                        class="mt-3"
-                        size="sm"
+                        class="mt-3 w-full"
                         variant="outline"
                         :disabled="!c.available"
                         :loading="busy === `real-${c.key}`"
                         :data-testid="`connect-${c.key}`"
                         @click="connectReal(c)"
                     >
-                        <PlugZap /> Kết nối {{ c.name }}
+                        <Plus /> Kết nối
                     </Button>
                     <p v-if="connectNotice?.key === c.key" class="mt-2 text-xs text-destructive" :data-testid="`connect-notice-${c.key}`">{{ connectNotice.message }}</p>
                 </div>
             </div>
-        </Card>
+            <p class="mt-3 flex items-center gap-1.5 text-sm text-muted-foreground"><ShieldCheck class="size-4 text-emerald-600" /> Kết nối qua trang đăng nhập chính thức của sàn, không cần mật khẩu.</p>
+        </section>
 
-        <Card v-if="sim" title="Bảng điều khiển sàn giả lập" :description="`Đóng vai sàn TMĐT cho shop “${sim.account.shop_name}”: tạo đơn, đổi trạng thái, gửi lại webhook, giả lập sàn lỗi. Mọi thay đổi đi qua đúng pipeline thật (webhook có chữ ký → hàng đợi → gọi API lấy đơn → xử lý tồn).`" data-testid="simulator">
+        <Card v-if="sim" title="Bảng điều khiển sàn giả lập" :description="`Đóng vai sàn cho shop “${sim.account.shop_name}” để chạy thử: tạo đơn, đổi trạng thái, giả lập sàn lỗi.`" data-testid="simulator">
             <template v-if="fakeAccounts.length > 1" #actions>
                 <Select class="w-48" :model-value="sim.account.id" :options="fakeAccounts.map((a) => ({ value: a.id, label: a.shop_name }))" @update:model-value="(id) => openSimulator(fakeAccounts.find((a) => a.id === id)!)" />
             </template>
@@ -314,52 +388,63 @@ const accountLabel = (a: MarketplaceAccountData) => (a.status !== 'connected' ? 
                 </div>
                 <div class="space-y-3">
                     <h4 class="text-sm font-medium">Sự cố</h4>
-                    <p class="text-xs text-muted-foreground">Bật để API sàn giả lập trả lỗi 503: webhook vẫn được nhận và lưu, job xử lý sẽ thử lại; đẩy tồn thử lại theo backoff, lỗi liên tiếp sẽ mở circuit breaker.</p>
+                    <p class="text-xs text-muted-foreground">Bật để API sàn giả lập trả lỗi 503: hệ thống thử lại, lỗi liên tiếp sẽ tạm dừng đồng bộ.</p>
                     <Button :variant="sim.failing ? 'destructive' : 'outline'" :loading="busy === 'sim-fail'" data-testid="sim-failure" @click="simFailure">{{ sim.failing ? 'Đang giả lập lỗi — Tắt' : 'Giả lập sàn lỗi' }}</Button>
                 </div>
             </div>
         </Card>
 
-        <Card title="Webhook gần đây" description="Webhook được xác thực chữ ký, lưu lại rồi trả 200 ngay; xử lý chạy ở hàng đợi. Webhook trùng được nhận diện và bỏ qua.">
-            <template #actions><Button size="sm" variant="ghost" @click="refreshSim"><RefreshCw /></Button></template>
-            <div v-if="!webhooks.length" class="px-5 py-6 text-sm text-muted-foreground">Chưa nhận webhook nào.</div>
-            <div v-else class="max-h-80 overflow-y-auto">
-                <table class="w-full text-sm" data-testid="webhook-table">
-                    <thead class="sticky top-0 border-b bg-muted/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                        <tr><th class="px-4 py-2 font-medium">Nhận lúc</th><th class="px-4 py-2 font-medium">Loại</th><th class="px-4 py-2 font-medium">Đơn</th><th class="px-4 py-2 font-medium">Trạng thái</th><th class="px-4 py-2 font-medium">Kết quả</th><th class="px-4 py-2 text-right font-medium">Lần thử</th></tr>
-                    </thead>
-                    <tbody class="divide-y">
-                        <tr v-for="w in webhooks" :key="w.id">
-                            <td class="px-4 py-2 text-xs text-muted-foreground">{{ formatDateTime(w.received_at) }}</td>
-                            <td class="px-4 py-2 font-mono text-xs">{{ w.type }}</td>
-                            <td class="px-4 py-2 font-mono text-xs">{{ w.order }}</td>
-                            <td class="px-4 py-2"><Badge :tone="w.status === 'processed' ? 'success' : w.status === 'failed' ? 'danger' : 'warning'">{{ w.status }}</Badge></td>
-                            <td class="px-4 py-2 text-xs">{{ w.result }}</td>
-                            <td class="px-4 py-2 text-right tabular-nums">{{ w.attempts }}</td>
-                        </tr>
-                    </tbody>
-                </table>
+        <details class="group rounded-xl border bg-card shadow-xs" data-testid="tech-details">
+            <summary class="flex cursor-pointer list-none items-center gap-2 px-5 py-3.5 text-sm font-medium text-muted-foreground hover:text-foreground">
+                <Wrench class="size-4" /> Thông tin kỹ thuật (tin báo từ sàn, khả năng từng sàn)
+                <ChevronDown class="ml-auto size-4 transition group-open:rotate-180" />
+            </summary>
+            <div class="space-y-5 border-t p-5">
+                <div>
+                    <div class="mb-2 flex items-center justify-between">
+                        <h4 class="text-sm font-semibold">Tin báo gần đây từ sàn</h4>
+                        <Button size="sm" variant="ghost" aria-label="Làm mới" @click="refreshSim"><RefreshCw /></Button>
+                    </div>
+                    <div v-if="!shownWebhooks.length" class="py-4 text-sm text-muted-foreground">Chưa nhận tin báo nào.</div>
+                    <div v-else class="max-h-80 overflow-y-auto rounded-lg border">
+                        <table class="w-full text-sm" data-testid="webhook-table">
+                            <thead class="sticky top-0 border-b bg-slate-50 text-left text-xs text-muted-foreground">
+                                <tr><th class="px-4 py-2 font-medium">Nhận lúc</th><th class="px-4 py-2 font-medium">Loại</th><th class="px-4 py-2 font-medium">Đơn</th><th class="px-4 py-2 font-medium">Trạng thái</th><th class="px-4 py-2 font-medium">Kết quả</th><th class="px-4 py-2 text-right font-medium">Lần thử</th></tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                <tr v-for="w in shownWebhooks" :key="w.id">
+                                    <td class="px-4 py-2 text-xs text-muted-foreground">{{ formatDateTime(w.received_at) }}</td>
+                                    <td class="px-4 py-2 font-mono text-xs">{{ w.type }}</td>
+                                    <td class="px-4 py-2 font-mono text-xs">{{ w.order }}</td>
+                                    <td class="px-4 py-2"><Badge :tone="w.status === 'processed' ? 'success' : w.status === 'failed' ? 'danger' : 'warning'">{{ w.status }}</Badge></td>
+                                    <td class="px-4 py-2 text-xs">{{ w.result }}</td>
+                                    <td class="px-4 py-2 text-right tabular-nums">{{ w.attempts }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div>
+                    <h4 class="mb-2 text-sm font-semibold">Khả năng từng sàn</h4>
+                    <div class="overflow-x-auto rounded-lg border">
+                        <table class="w-full text-sm" data-testid="capability-matrix">
+                            <thead class="border-b bg-slate-50 text-left text-xs text-muted-foreground">
+                                <tr>
+                                    <th class="px-4 py-2.5 font-medium">Thao tác</th>
+                                    <th v-for="c in catalog" :key="c.key" class="px-4 py-2.5 text-center font-medium">{{ c.name }}</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                <tr v-for="k in capabilityKeys" :key="k">
+                                    <td class="px-4 py-2">{{ capabilityNames[k] ?? k }}</td>
+                                    <td v-for="c in catalog" :key="c.key" class="px-4 py-2 text-center"><Badge :tone="capabilityLabels[c.capabilities[k] ?? 'unknown']?.tone">{{ capabilityLabels[c.capabilities[k] ?? 'unknown']?.label }}</Badge></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
-        </Card>
-
-        <Card title="Khả năng tích hợp theo sàn" description="Chỉ đánh dấu “Hỗ trợ” khi đã kiểm chứng với tài liệu chính thức và credentials. UNKNOWN = chưa có tài liệu/credentials để xác minh, hệ thống coi là không khả dụng.">
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm" data-testid="capability-matrix">
-                    <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                        <tr>
-                            <th class="px-4 py-2.5 font-medium">Thao tác</th>
-                            <th v-for="c in catalog" :key="c.key" class="px-4 py-2.5 text-center font-medium">{{ c.name }}</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y">
-                        <tr v-for="k in capabilityKeys" :key="k">
-                            <td class="px-4 py-2">{{ capabilityNames[k] ?? k }}</td>
-                            <td v-for="c in catalog" :key="c.key" class="px-4 py-2 text-center"><Badge :tone="capabilityLabels[c.capabilities[k] ?? 'unknown']?.tone">{{ capabilityLabels[c.capabilities[k] ?? 'unknown']?.label }}</Badge></td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </Card>
+        </details>
     </div>
 
     <WooConnectDialog v-model:open="wooOpen" :warehouses="warehouses" @connected="load" />
