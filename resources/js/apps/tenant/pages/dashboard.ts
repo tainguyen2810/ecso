@@ -57,3 +57,33 @@ export function arrangeStartSteps(steps: StartStep[], channels: string[] | null 
     }
     return out;
 }
+
+/** Order statuses that mean the shop has handled an order all the way to packing or beyond. */
+const HANDLED = ['PACKED', 'HANDED_OVER', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'];
+
+export type SellerStartInput = {
+    accounts: { id: string; shop_name: string; marketplace: string; status: string; stats?: { listings: number; mapped: number } }[];
+    marketplaceNames: Record<string, string>;
+    onHand: number;
+    recentStatuses: string[];
+    can: (permission: string) => boolean;
+};
+
+/**
+ * Đợt 2: the 4 steps of a shop that sells on Shopee, TikTok or a website: connect a shop, link its products to the
+ * stock, enter the opening stock, handle a first order. Each one ticks itself from what the shop already has.
+ */
+export function sellerStartSteps(i: SellerStartInput): StartStep[] {
+    const live = i.accounts.filter((a) => a.status === 'connected');
+    const first = live[0];
+    const unlinkedOf = (a: SellerStartInput['accounts'][number]) => Math.max(0, (a.stats?.listings ?? 0) - (a.stats?.mapped ?? 0));
+    const unlinked = live.reduce((s, a) => s + unlinkedOf(a), 0);
+    const todoShop = live.find((a) => unlinkedOf(a) > 0);
+    const name = (a: { marketplace: string; shop_name: string }) => `${i.marketplaceNames[a.marketplace] ?? a.marketplace} "${a.shop_name}"`;
+    return [
+        { key: 'shop', label: 'Kết nối shop', detail: first ? `Đã kết nối ${name(first)}${live.length > 1 ? ` và ${live.length - 1} shop khác` : ''}` : 'Kết nối Shopee, TikTok Shop hoặc website để đơn tự về đây', done: !!first, to: i.can('marketplace.connect') ? '/marketplaces' : null, action: 'Kết nối kênh bán' },
+        { key: 'link', label: 'Liên kết sản phẩm', detail: !first ? 'Ghép sản phẩm trên sàn với sản phẩm trong kho' : unlinked ? `${unlinked} mã trên sàn chưa liên kết với sản phẩm trong kho` : 'Mọi mã trên sàn đã liên kết', done: !!first && unlinked === 0 && live.some((a) => (a.stats?.listings ?? 0) > 0), to: todoShop && i.can('marketplace.view') ? `/marketplaces/${todoShop.id}/listings` : null, action: 'Liên kết ngay' },
+        { key: 'stock', label: 'Nhập tồn đầu kỳ', detail: 'Nhập số lượng đang có để đơn không báo "Thiếu hàng"', done: i.onHand > 0, to: first && i.can('marketplace.connect') ? `/marketplaces/${first.id}/setup` : i.can('inventory.adjust') ? '/inventory/stocktake/new' : null, action: 'Nhập tồn' },
+        { key: 'order', label: 'Xử lý đơn đầu tiên', detail: 'Xác nhận, đóng gói và giao 1 đơn', done: i.recentStatuses.some((s) => HANDLED.includes(s)), to: i.can('orders.view') ? '/orders?tab=to_pack' : null, action: 'Xem đơn chờ xử lý' },
+    ];
+}

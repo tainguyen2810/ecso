@@ -4,6 +4,7 @@ import {
     AlarmClock,
     ArrowRight,
     BarChart3,
+    Check,
     CheckCircle2,
     ChevronRight,
     Circle,
@@ -19,6 +20,7 @@ import {
     TrendingDown,
     TrendingUp,
     TriangleAlert,
+    X,
 } from 'lucide-vue-next';
 import type { Component } from 'vue';
 import PageHeader from '../PageHeader.vue';
@@ -31,7 +33,7 @@ import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
 import StackedBarChart from '@/shared/ui/charts/StackedBarChart.vue';
 import { api } from '@/shared/lib/api';
 import { toneClasses, type Tone } from '@/shared/lib/tones';
-import { arrangeStartSteps, channelColors, channelLabel, startProgress, type RevenueChannel, type StartStep } from './dashboard';
+import { arrangeStartSteps, channelColors, channelLabel, MARKETPLACE_CHANNELS, sellerStartSteps, startProgress, type RevenueChannel, type StartStep } from './dashboard';
 import { formatMoney, formatNumber } from '@/shared/lib/utils';
 import { marketplaceNames, orderStatus } from './orders/labels';
 import type { MarketplaceAccountData, OrderSummary } from '@/shared/types';
@@ -218,9 +220,23 @@ function hideStart() {
         // Private mode: hidden for this visit only.
     }
 }
+/**
+ * Đợt 2: a shop that sells on Shopee, TikTok or a website gets 4 steps of its own (kết nối shop → liên kết sản phẩm
+ * → nhập tồn đầu kỳ → xử lý đơn đầu tiên) at the top of the page instead of the general list.
+ */
+const sellerPath = computed(() => connected.value || !!tenant.current?.channels?.some((c) => MARKETPLACE_CHANNELS.includes(c)));
+const sellerSteps = computed(() => sellerStartSteps({
+    accounts: accounts.value ?? [],
+    marketplaceNames,
+    onHand: stock.value?.on_hand ?? 0,
+    recentStatuses: (orders.value?.recent ?? []).map((o) => o.status),
+    can: (p) => tenant.can(p),
+}));
+const sellerProgress = computed(() => startProgress(sellerSteps.value));
+const showSeller = computed(() => sellerPath.value && !startHidden.value && accounts.value !== null && !!orders.value && !sellerProgress.value.finished);
 /** A shop without any order yet: the page leads with the setup steps instead of empty charts. */
 const isNew = computed(() => !!orders.value && !orders.value.recent.length);
-const showStart = computed(() => !startHidden.value && !progress.value.finished);
+const showStart = computed(() => !sellerPath.value && !startHidden.value && !progress.value.finished);
 </script>
 
 <template>
@@ -232,6 +248,32 @@ const showStart = computed(() => !startHidden.value && !progress.value.finished)
             <button v-for="d in [7, 30]" :key="d" type="button" :class="['h-7 rounded-md px-3 text-xs font-medium', days === d ? 'bg-slate-900 text-white' : 'text-muted-foreground hover:text-foreground']" @click="days = d">{{ d }} ngày</button>
         </div>
     </PageHeader>
+
+    <Card v-if="showSeller" class="mb-5 overflow-hidden" data-testid="dashboard-seller-start">
+        <div class="flex flex-wrap items-center gap-4 px-5 py-4">
+            <div class="min-w-0 flex-1">
+                <p class="text-base font-semibold">Bắt đầu với EzChat Bán hàng</p>
+                <p class="text-sm text-muted-foreground">Xong 4 bước này là đơn và tồn kho tự chạy.</p>
+            </div>
+            <div class="w-48">
+                <div class="mb-1 flex justify-between text-xs"><span class="text-muted-foreground">Đã xong</span><b>{{ sellerProgress.done }}/{{ sellerProgress.total }}</b></div>
+                <div class="h-2 overflow-hidden rounded-full bg-slate-100"><i class="block h-full rounded-full bg-emerald-500" :style="{ width: `${(sellerProgress.done / sellerProgress.total) * 100}%` }" /></div>
+            </div>
+            <button type="button" class="rounded p-1 text-muted-foreground hover:bg-muted" aria-label="Ẩn" title="Ẩn" @click="hideStart"><X class="size-4" /></button>
+        </div>
+        <ul class="divide-y border-t">
+            <li v-for="(st, n) in sellerSteps" :key="st.key" class="flex items-center gap-4 px-5 py-3.5" :data-testid="`seller-step-${st.key}`">
+                <span v-if="st.done" class="grid size-7 shrink-0 place-items-center rounded-full bg-emerald-500 text-white"><Check class="size-4" /></span>
+                <span v-else class="grid size-7 shrink-0 place-items-center rounded-full border-2 border-slate-300 text-xs font-semibold text-slate-500">{{ n + 1 }}</span>
+                <div class="min-w-0 flex-1">
+                    <p :class="['font-medium', st.done && 'text-muted-foreground line-through']">{{ st.label }}</p>
+                    <p class="text-[13px] text-muted-foreground">{{ st.detail }}</p>
+                </div>
+                <span v-if="st.done" class="shrink-0 text-[13px] font-medium text-emerald-600">Đã xong</span>
+                <RouterLink v-else-if="st.to" :to="st.to"><Button size="sm" :variant="sellerSteps.find((x) => !x.done)?.key === st.key ? 'default' : 'outline'">{{ st.action }}</Button></RouterLink>
+            </li>
+        </ul>
+    </Card>
 
     <Card v-if="isNew && showStart" class="mb-5 overflow-hidden" data-testid="dashboard-welcome">
         <div class="flex flex-wrap items-center gap-5 bg-gradient-to-r from-blue-50 to-card to-70% px-5 py-5">

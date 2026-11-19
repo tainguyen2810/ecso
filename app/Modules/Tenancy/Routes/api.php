@@ -22,7 +22,7 @@ Route::middleware(['auth:sanctum', 'verified'])->group(function () {
         Route::patch('tenant', [TenantController::class, 'update']);
         Route::put('tenant/setup', [SetupController::class, 'update']);
         Route::get('tenant/settings', [SettingsController::class, 'show']);
-        Route::put('tenant/settings/{section}', [SettingsController::class, 'update'])->whereIn('section', ['store', 'tax', 'pricing', 'payments', 'sales', 'reasons', 'print']);
+        Route::put('tenant/settings/{section}', [SettingsController::class, 'update'])->whereIn('section', ['store', 'tax', 'pricing', 'payments', 'sales', 'reasons', 'print', 'interface']);
         Route::post('tenant/logo', [SettingsController::class, 'uploadLogo'])->middleware('throttle:10,1,tenancy.logo');
         Route::delete('tenant/logo', [SettingsController::class, 'deleteLogo']);
 

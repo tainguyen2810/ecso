@@ -3,6 +3,7 @@
 namespace App\Modules\Tenancy\Http\Resources;
 
 use App\Modules\Tenancy\Models\Tenant;
+use App\Modules\Tenancy\Support\TenantSettings;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -22,6 +23,7 @@ class TenantResource extends JsonResource
             'setup_completed' => $this->setup_completed_at !== null,
             'channels' => $this->settings['setup']['channels'] ?? null,
             'team_size' => $this->settings['setup']['team_size'] ?? null,
+            'advanced_menu' => TenantSettings::advancedMenu($this->resource),
             'is_demo' => (bool) $this->is_demo,
             'demo_status' => $this->demo_status,
             'demo_expires_at' => $this->demo_expires_at?->toIso8601String(),

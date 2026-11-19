@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, Copy, MapPin, Package, Pencil, Tags, Trash2 } from 'lucide-vue-next';
+import { ArrowLeft, Copy, ImagePlus, MapPin, Package, Pencil, Tags, Trash2 } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import Tabs from '../../components/Tabs.vue';
@@ -180,6 +180,7 @@ onMounted(async () => {
         const { data } = await api.get(`/inventory/products/${id.value}/stock`);
         stock.value = data.data;
         warehouses.value = data.warehouses;
+        if (warehouses.value.length <= 1 && tab.value === 'stock') tab.value = 'history';
     }
 });
 
@@ -192,14 +193,31 @@ async function loadMovements(page = 1) {
 watch(tab, (t) => t === 'history' && !movementsLoaded.value && loadMovements());
 watch(warehouse, () => movementsLoaded.value && loadMovements());
 
+/**
+ * One warehouse (most small shops): stock goes into the variant table and the per-warehouse table drops the Kho
+ * column and every column that is empty for this product (Đợt 2).
+ */
+const singleWarehouse = computed(() => warehouses.value.length <= 1);
+const hasBarcode = computed(() => (product.value?.variants ?? []).some((v) => v.barcode));
+const hasWholesale = computed(() => (product.value?.variants ?? []).some((v) => Number(v.wholesale_price)));
+const stockCols = computed(() => ({
+    warehouse: !singleWarehouse.value,
+    incoming: !singleWarehouse.value || stock.value.some((r) => r.incoming || r.in_transit),
+    safety: !singleWarehouse.value || stock.value.some((r) => r.safety_stock),
+    max: !singleWarehouse.value || stock.value.some((r) => r.max_stock != null),
+}));
+/** The shops card only when it says something the table cannot: nothing linked yet, or a stock update failing. */
+const showChannelsCard = computed(() => !!onChannels.value && (!onChannels.value.length || onChannels.value.some((c) => c.push_errors)));
+const lastPush = (variantId?: string) => shopsOf(variantId).map((c) => `${c.account!.shop_name}: ${c.last_pushed_at ? `cập nhật tồn ${formatDateTime(c.last_pushed_at)}` : 'chưa cập nhật tồn'}`).join('\n');
 const visibleStock = computed(() => stock.value.filter((r) => !warehouse.value || r.warehouse.id === warehouse.value));
 
 /** Per SKU, summed over warehouses (the variant table). */
 const totals = computed(() => {
-    const map = new Map<string, { on_hand: number; available: number; incoming: number }>();
+    const map = new Map<string, { on_hand: number; reserved: number; available: number; incoming: number }>();
     for (const r of stock.value) {
-        const t = map.get(r.variant.id) ?? { on_hand: 0, available: 0, incoming: 0 };
+        const t = map.get(r.variant.id) ?? { on_hand: 0, reserved: 0, available: 0, incoming: 0 };
         t.on_hand += r.on_hand;
+        t.reserved += r.reserved;
         t.available += r.available;
         t.incoming += r.incoming;
         map.set(r.variant.id, t);
@@ -259,7 +277,8 @@ async function remove() {
                     </dl>
                     <div class="grid grid-cols-3 gap-1 self-start sm:grid-cols-2">
                         <img v-for="img in product.images?.slice(0, 4)" :key="img.id" :src="img.url" alt="" class="aspect-square w-full rounded border object-cover" />
-                        <span v-if="!product.images?.length" class="col-span-full flex aspect-square flex-col items-center justify-center gap-1 rounded border border-dashed text-xs text-muted-foreground"><Package class="size-5" /> Chưa có ảnh</span>
+                        <RouterLink v-if="!product.images?.length && canManage" :to="`/products/${product.id}/edit`" class="col-span-full flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 text-center text-xs text-primary hover:bg-primary/10" data-testid="upload-image"><ImagePlus class="size-6" /><span class="font-medium">Tải ảnh lên</span></RouterLink>
+                        <span v-else-if="!product.images?.length" class="col-span-full flex aspect-square flex-col items-center justify-center gap-1 rounded border border-dashed text-xs text-muted-foreground"><Package class="size-5" /> Chưa có ảnh</span>
                     </div>
                 </div>
                 <p v-if="product.description" class="whitespace-pre-line border-t px-5 py-4 text-sm text-muted-foreground">{{ product.description }}</p>
@@ -276,9 +295,9 @@ async function remove() {
                 </dl>
                 <p v-else class="p-5 text-sm text-muted-foreground">Bạn không có quyền xem tồn kho.</p>
             </Card>
-            <Card v-if="onChannels" :caps="false" title="Trên các kênh" data-testid="product-channels">
+            <Card v-if="showChannelsCard" :caps="false" title="Trên các kênh" data-testid="product-channels">
                 <template #actions><RouterLink to="/marketplaces" class="text-sm font-medium text-primary hover:underline">Kênh bán</RouterLink></template>
-                <p v-if="!onChannels.length" class="px-5 py-4 text-sm text-muted-foreground">Chưa liên kết với gian hàng nào. Vào Kênh bán › Liên kết SKU để ghép.</p>
+                <p v-if="!onChannels?.length" class="px-5 py-4 text-sm text-muted-foreground">Chưa liên kết với gian hàng nào. Vào Kênh bán › Liên kết SKU để ghép.</p>
                 <ul v-else class="divide-y">
                     <li v-for="c in onChannels" :key="c.account?.id" class="flex items-center gap-3 px-5 py-3">
                         <MarketplaceLogo :marketplace="c.account?.marketplace ?? 'manual'" />
@@ -315,17 +334,19 @@ async function remove() {
             </table>
         </Card>
 
-        <Card :title="product.type === 'combo' ? 'SKU và giá combo' : 'Biến thể và giá'" :description="`${product.variants?.length ?? 0} SKU`" class="mt-5">
+        <Card :title="product.type === 'combo' ? 'SKU và giá combo' : singleWarehouse && canStock ? 'Biến thể, giá và tồn kho' : 'Biến thể và giá'" :description="`${product.variants?.length ?? 0} SKU${singleWarehouse && warehouses[0] ? ` · ${warehouses[0].name}` : ''}`" class="mt-5">
             <div class="overflow-x-auto">
                 <table class="w-full text-sm" data-testid="variant-prices">
                     <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                         <tr>
                             <th class="px-4 py-2.5 font-medium">SKU</th>
                             <th class="px-4 py-2.5 font-medium">Biến thể</th>
-                            <th class="px-4 py-2.5 font-medium">Mã vạch</th>
+                            <th v-if="hasBarcode" class="px-4 py-2.5 font-medium">Mã vạch</th>
                             <th class="px-4 py-2.5 text-right font-medium">Giá bán lẻ</th>
-                            <th class="px-4 py-2.5 text-right font-medium">Giá bán buôn</th>
+                            <th v-if="hasWholesale" class="px-4 py-2.5 text-right font-medium">Giá bán buôn</th>
                             <th v-if="canCost" class="px-4 py-2.5 text-right font-medium">Giá vốn</th>
+                            <th v-if="canStock && singleWarehouse" class="px-4 py-2.5 text-right font-medium">Tồn thực tế</th>
+                            <th v-if="canStock && singleWarehouse" class="px-4 py-2.5 text-right font-medium">Đang giữ</th>
                             <th v-if="canStock" class="px-4 py-2.5 text-right font-medium">Có thể bán</th>
                             <th v-if="showPrices" class="px-4 py-2.5 font-medium">Nguồn giá</th>
                             <th v-if="showPrices" class="px-4 py-2.5 font-medium">Giá trên {{ channelNames.length === 1 ? channelNames[0] : 'website' }}</th>
@@ -342,10 +363,12 @@ async function remove() {
                                     = {{ v.components[0]!.quantity }} × {{ v.components[0]!.variant.sku }}
                                 </span>
                             </td>
-                            <td class="px-4 py-2.5 font-mono text-xs text-muted-foreground">{{ v.barcode ?? '—' }}</td>
+                            <td v-if="hasBarcode" class="px-4 py-2.5 font-mono text-xs text-muted-foreground">{{ v.barcode ?? '—' }}</td>
                             <td class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{{ Number(v.ref_price) ? formatMoney(v.ref_price) : '—' }}</td>
-                            <td class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{{ Number(v.wholesale_price) ? formatMoney(v.wholesale_price) : '—' }}</td>
+                            <td v-if="hasWholesale" class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{{ Number(v.wholesale_price) ? formatMoney(v.wholesale_price) : '—' }}</td>
                             <td v-if="canCost" class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ Number(v.cost_price) ? formatMoney(v.cost_price) : '—' }}</td>
+                            <td v-if="canStock && singleWarehouse" class="px-4 py-2.5 text-right tabular-nums">{{ formatNumber(totals.get(v.id!)?.on_hand ?? 0) }}</td>
+                            <td v-if="canStock && singleWarehouse" class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ formatNumber(totals.get(v.id!)?.reserved ?? 0) }}</td>
                             <td v-if="canStock" class="px-4 py-2.5 text-right font-medium tabular-nums">{{ formatNumber(totals.get(v.id!)?.available ?? 0) }}</td>
                             <td v-if="showPrices" class="px-4 py-2.5" :data-testid="`price-source-${v.sku}`">
                                 <template v-if="pricesOf(v.id)">
@@ -363,7 +386,7 @@ async function remove() {
                                 <span v-if="!pricesOf(v.id)?.channels.length" class="text-muted-foreground">—</span>
                             </td>
                             <td v-if="onChannels?.length" class="px-4 py-2.5">
-                                <span class="flex gap-1"><MarketplaceLogo v-for="c in shopsOf(v.id)" :key="c.account!.id" :marketplace="c.account!.marketplace" :name="c.account!.shop_name" size="sm" /></span>
+                                <span class="flex gap-1" :title="lastPush(v.id) || undefined"><MarketplaceLogo v-for="c in shopsOf(v.id)" :key="c.account!.id" :marketplace="c.account!.marketplace" :name="c.account!.shop_name" size="sm" /></span>
                                 <span v-if="!shopsOf(v.id).length" class="text-xs text-amber-600">Chưa liên kết</span>
                             </td>
                             <td class="whitespace-nowrap px-4 py-2.5 text-right"><RouterLink v-if="canStock" :to="`/inventory/sku/${v.id}`" class="text-xs text-primary hover:underline">Thẻ kho</RouterLink></td>
@@ -414,39 +437,44 @@ async function remove() {
 
         <Card v-if="canStock" class="mt-5">
             <div class="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-                <Tabs v-model="tab" :tabs="[{ value: 'stock', label: 'Tồn theo kho' }, ...(product.track_lots ? [{ value: 'lots', label: 'Lô & hạn sử dụng' }] : []), { value: 'history', label: 'Lịch sử kho' }]" />
-                <Select v-model="warehouse" class="w-48" aria-label="Kho" :options="[{ value: '', label: 'Tất cả kho' }, ...warehouses.map((w) => ({ value: w.id, label: w.name }))]" />
+                <Tabs
+                    v-model="tab"
+                    :tabs="singleWarehouse
+                        ? [{ value: 'history', label: 'Lịch sử kho' }, ...(product.track_lots ? [{ value: 'lots', label: 'Lô & hạn sử dụng' }] : []), { value: 'stock', label: 'Vị trí, tồn an toàn' }]
+                        : [{ value: 'stock', label: 'Tồn theo kho' }, ...(product.track_lots ? [{ value: 'lots', label: 'Lô & hạn sử dụng' }] : []), { value: 'history', label: 'Lịch sử kho' }]"
+                />
+                <Select v-if="!singleWarehouse" v-model="warehouse" class="w-48" aria-label="Kho" :options="[{ value: '', label: 'Tất cả kho' }, ...warehouses.map((w) => ({ value: w.id, label: w.name }))]" />
             </div>
 
             <div v-if="tab === 'stock'" class="overflow-x-auto">
                 <table class="w-full text-sm" data-testid="stock-by-warehouse">
                     <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                         <tr>
-                            <th class="px-4 py-2.5 font-medium">Kho</th>
+                            <th v-if="stockCols.warehouse" class="px-4 py-2.5 font-medium">Kho</th>
                             <th class="px-4 py-2.5 font-medium">SKU</th>
                             <th class="px-4 py-2.5 text-right font-medium">Tồn thực tế</th>
                             <th class="px-4 py-2.5 text-right font-medium">Đang giữ</th>
                             <th class="px-4 py-2.5 text-right font-medium">Có thể bán</th>
-                            <th class="px-4 py-2.5 text-right font-medium">Hàng đang về</th>
-                            <th class="px-4 py-2.5 text-right font-medium">Tồn an toàn</th>
-                            <th class="px-4 py-2.5 text-right font-medium">Tồn tối đa</th>
+                            <th v-if="stockCols.incoming" class="px-4 py-2.5 text-right font-medium">Hàng đang về</th>
+                            <th v-if="stockCols.safety" class="px-4 py-2.5 text-right font-medium">Tồn an toàn</th>
+                            <th v-if="stockCols.max" class="px-4 py-2.5 text-right font-medium">Tồn tối đa</th>
                             <th class="px-4 py-2.5 font-medium">Vị trí</th>
                             <th v-if="canCost" class="px-4 py-2.5 text-right font-medium">Giá vốn</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y">
                         <tr v-for="r in visibleStock" :key="`${r.warehouse.id}-${r.variant.id}`">
-                            <td class="px-4 py-2.5">{{ r.warehouse.name }}</td>
+                            <td v-if="stockCols.warehouse" class="px-4 py-2.5">{{ r.warehouse.name }}</td>
                             <td class="px-4 py-2.5"><span class="font-mono text-xs">{{ r.variant.sku }}</span><span v-if="r.variant.name" class="text-muted-foreground"> · {{ r.variant.name }}</span></td>
                             <td class="px-4 py-2.5 text-right tabular-nums">{{ formatNumber(r.on_hand) }}</td>
                             <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ formatNumber(r.reserved) }}</td>
                             <td :class="cn('px-4 py-2.5 text-right font-medium tabular-nums', r.available <= 0 && 'text-destructive', r.available > 0 && r.available <= r.safety_stock && 'text-amber-600')">{{ formatNumber(r.available) }}</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums" :title="r.in_transit ? `${formatNumber(r.incoming)} từ đơn nhập, ${formatNumber(r.in_transit)} đang chuyển từ kho khác` : undefined">
+                            <td v-if="stockCols.incoming" class="px-4 py-2.5 text-right tabular-nums" :title="r.in_transit ? `${formatNumber(r.incoming)} từ đơn nhập, ${formatNumber(r.in_transit)} đang chuyển từ kho khác` : undefined">
                                 {{ r.incoming || r.in_transit ? formatNumber(r.incoming + (r.in_transit ?? 0)) : '—' }}
                                 <span v-if="r.in_transit" class="block text-xs text-muted-foreground" :data-testid="`in-transit-${r.variant.sku}-${r.warehouse.code}`">{{ formatNumber(r.in_transit) }} đang chuyển đến</span>
                             </td>
-                            <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ r.safety_stock ? formatNumber(r.safety_stock) : '—' }}</td>
-                            <td :class="cn('px-4 py-2.5 text-right tabular-nums text-muted-foreground', r.max_stock != null && r.on_hand > r.max_stock && 'font-medium text-amber-600')" :title="r.max_stock != null && r.on_hand > r.max_stock ? 'Tồn vượt mức tối đa' : undefined">
+                            <td v-if="stockCols.safety" class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ r.safety_stock ? formatNumber(r.safety_stock) : '—' }}</td>
+                            <td v-if="stockCols.max" :class="cn('px-4 py-2.5 text-right tabular-nums text-muted-foreground', r.max_stock != null && r.on_hand > r.max_stock && 'font-medium text-amber-600')" :title="r.max_stock != null && r.on_hand > r.max_stock ? 'Tồn vượt mức tối đa' : undefined">
                                 {{ r.max_stock != null ? formatNumber(r.max_stock) : '—' }}
                             </td>
                             <td class="px-4 py-2.5">

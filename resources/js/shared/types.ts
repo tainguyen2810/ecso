@@ -18,6 +18,8 @@ export interface Tenant {
     setup_completed?: boolean;
     channels?: string[] | null;
     team_size?: string | null;
+    /** Sidebar shows the advanced pages (false: basic menu for a small shop). */
+    advanced_menu?: boolean;
     is_demo?: boolean;
     demo_status?: 'preparing' | 'ready' | 'failed' | null;
     demo_expires_at?: string | null;

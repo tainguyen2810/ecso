@@ -132,6 +132,7 @@ class SettingsController extends Controller
         $size = Rule::in(TenantSettings::PRINT_SIZES);
 
         return [
+            'interface' => ['advanced_menu' => ['present', 'nullable', 'boolean']],
             'store' => [
                 'name' => ['sometimes', 'string', 'min:2', 'max:120'],
                 'timezone' => ['sometimes', 'string', Rule::in(timezone_identifiers_list())],

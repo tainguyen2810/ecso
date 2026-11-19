@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arrangeStartSteps, channelColors, channelLabel, startProgress, type RevenueChannel } from './dashboard';
+import { arrangeStartSteps, channelColors, channelLabel, sellerStartSteps, startProgress, type RevenueChannel } from './dashboard';
 
 const own = (key: string, type: string, name = key): RevenueChannel => ({ key, marketplace: 'manual', channel: { name, type }, revenue: '1' });
 
@@ -31,5 +31,24 @@ describe('dashboard channels', () => {
         expect(seller.map((s) => s.key)).toEqual(['shop', 'products', 'marketplace', 'order']);
         expect(seller.find((s) => s.key === 'marketplace')?.optional).toBe(false);
         expect(arrangeStartSteps(steps, ['pos'], '2-5').map((s) => s.key)).toEqual(['shop', 'products', 'order', 'members', 'marketplace']);
+    });
+});
+
+describe('seller start steps', () => {
+    const base = { marketplaceNames: { tiktok: 'TikTok Shop' }, can: () => true, onHand: 0, recentStatuses: [] as string[] };
+    it('starts with connecting a shop', () => {
+        const s = sellerStartSteps({ ...base, accounts: [] });
+        expect(s.map((x) => x.key)).toEqual(['shop', 'link', 'stock', 'order']);
+        expect(s.every((x) => !x.done)).toBe(true);
+        expect(s[2]!.to).toBe('/inventory/stocktake/new');
+    });
+    it('ticks each step from what the shop has', () => {
+        const acc = { id: 'A1', shop_name: 'Shop Mẫu', marketplace: 'tiktok', status: 'connected', stats: { listings: 50, mapped: 8 } };
+        let s = sellerStartSteps({ ...base, accounts: [acc] });
+        expect(s[0]).toMatchObject({ done: true, detail: 'Đã kết nối TikTok Shop "Shop Mẫu"' });
+        expect(s[1]).toMatchObject({ done: false, detail: '42 mã trên sàn chưa liên kết với sản phẩm trong kho', to: '/marketplaces/A1/listings' });
+        expect(s[2]!.to).toBe('/marketplaces/A1/setup');
+        s = sellerStartSteps({ ...base, accounts: [{ ...acc, stats: { listings: 50, mapped: 50 } }], onHand: 10, recentStatuses: ['READY_TO_PACK', 'HANDED_OVER'] });
+        expect(startProgress(s)).toMatchObject({ done: 4, finished: true });
     });
 });
