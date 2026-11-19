@@ -1,16 +1,15 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Banknote, ChevronDown, Clock, CreditCard, History, Minus, Plus, Printer, QrCode, Trash2, UserRound, Wallet, X } from 'lucide-vue-next';
-import { RouterLink } from 'vue-router';
+import { ArrowLeft, Banknote, Clock, CreditCard, History, Minus, NotebookPen, Plus, Printer, QrCode, ScanBarcode, Store, Trash2, UserRound, Wallet, X } from 'lucide-vue-next';
+import { RouterLink, useRouter } from 'vue-router';
 import Button from '@/shared/ui/Button.vue';
-import Card from '@/shared/ui/Card.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
 import Input from '@/shared/ui/Input.vue';
-import Select from '@/shared/ui/Select.vue';
 import { api, ApiError, idempotent, newIdempotencyKey } from '@/shared/lib/api';
 import { cn, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
+import { useAuthStore } from '@/shared/stores/auth';
 import { paymentMethods } from '../orders/labels';
 import { printInvoice } from '../orders/invoice';
 import { printShopFrom } from '../orders/printShop';
@@ -23,6 +22,8 @@ import type { CashShift, Customer, OrderDetail, SalesChannel, Variant, Warehouse
 const STORAGE_KEY = 'ecso.pos.carts';
 const toast = useToast();
 const tenant = useTenantStore();
+const auth = useAuthStore();
+const router = useRouter();
 const settings = useSettingsStore();
 // Cấu hình: methods offered at the counter, and whether staff may change prices.
 const posMethods = computed(() => (['cash', 'bank_transfer', 'card', 'ewallet'] as const).filter((m) => settings.data?.payments.methods[m] ?? true));
@@ -74,8 +75,6 @@ watch(
     },
     { deep: true },
 );
-// Phones and small tablets: the cart is a sheet over the products, opened from the bar at the bottom.
-const cartOpen = ref(false);
 
 const search = ref('');
 const results = ref<Variant[]>([]);
@@ -175,6 +174,13 @@ function onKey(e: KeyboardEvent) {
     if (e.key === 'F2') {
         e.preventDefault();
         focusSearch();
+    } else if (e.key === 'F4') {
+        e.preventDefault();
+        if (cart.value.customer) dropCustomer();
+        nextTick(() => document.querySelector<HTMLInputElement>('[data-testid="pos-customer-search"]')?.focus());
+    } else if (e.key === 'F6') {
+        e.preventDefault();
+        document.querySelector<HTMLInputElement>('[data-testid="pos-discount"]')?.focus();
     } else if (e.key === 'F9') {
         e.preventDefault();
         pay();
@@ -268,7 +274,6 @@ async function pay() {
             lines: cart.value.lines.map((l) => ({ variant_id: l.variant_id, quantity: l.quantity, unit_price: l.unit_price, discount: l.discount })),
             payments: split.value ? split.value.payments : collected > 0 ? [{ method: cart.value.method, amount: collected }] : [],
         }, idempotent(key));
-        cartOpen.value = false;
         toast.success(`Đã bán ${data.data.external_order_id}${change.value > 0 ? ` · trả lại khách ${formatMoney(change.value)}` : ''}`);
         if (autoPrint.value) {
             const detail = await api.get(`/orders/${data.data.id}`);
@@ -320,168 +325,290 @@ async function onShiftChanged(s: CashShift) {
 }
 
 const stockOf = (variantId: string) => results.value.find((v) => v.id === variantId)?.stock?.available;
-const quick = computed(() => quickCash(totals.value.total));
+const quick = computed(() => quickCash(totals.value.total).slice(0, 4));
+
+/** Thoát: back to where the cashier came from, or the order list. */
+function leave() {
+    if (window.history.state?.back) router.back();
+    else router.push('/orders');
+}
+const shiftLabel = computed(() => {
+    if (!shift.value) return 'Chưa mở ca';
+    const at = new Date(shift.value.opened_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    return `Ca ${shift.value.number} · mở ${at} · ${shift.value.totals?.orders ?? 0} đơn`;
+});
+/** Two letters for a product without a photo: first letters of the first two words of the product name. */
+const mono = (name: string) =>
+    (name.split(' · ')[0] ?? name)
+        .split(/\s+/)
+        .filter((w) => /\p{L}/u.test(w))
+        .slice(0, 2)
+        .map((w) => w.match(/\p{L}/u)![0])
+        .join('')
+        .toUpperCase();
+/** Typed prices may carry dots ("159.000"). */
+const parseMoney = (e: Event) => Number((e.target as HTMLInputElement).value.replace(/\D/g, '')) || 0;
+const warehouseOptions = computed(() => warehouses.value.filter((w) => w.status === 'active'));
 </script>
 
 <template>
-    <div class="flex h-[calc(100vh-4rem)] flex-col gap-3 lg:flex-row" data-testid="pos">
-        <!-- Products -->
-        <div class="flex min-h-0 flex-1 flex-col gap-3">
-            <div class="flex flex-wrap items-center gap-2">
-                <Input ref="searchInput" v-model="search" class="w-full min-w-0 flex-1 text-base sm:w-auto sm:min-w-64" placeholder="Quét mã vạch hoặc tìm sản phẩm (F2)…" data-testid="pos-search" @keydown.enter.prevent="onSearchEnter" />
-                <Select v-model="channelId" class="w-[calc(50%-0.25rem)] sm:w-48" :options="channels.map((c) => ({ value: c.id, label: c.name }))" aria-label="Kênh bán" />
-                <Select v-model="warehouseId" class="w-[calc(50%-0.25rem)] sm:w-40" :options="warehouses.filter((w) => w.status === 'active').map((w) => ({ value: w.id, label: w.name }))" aria-label="Kho" />
-                <Button :variant="shift ? 'outline' : 'default'" data-testid="pos-shift" @click="openShiftDialog"><Clock /> {{ shift ? `Ca ${shift.number}` : 'Mở ca' }}</Button>
-                <RouterLink to="/pos/shifts" class="inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground hover:bg-muted" title="Lịch sử ca" data-testid="pos-shift-history"><History class="size-4" /></RouterLink>
-            </div>
-            <div class="grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto pb-20 sm:grid-cols-3 lg:pb-0 xl:grid-cols-4" data-testid="pos-products">
-                <button
-                    v-for="v in results"
-                    :key="v.id"
-                    type="button"
-                    :disabled="(v.stock?.available ?? 0) <= 0"
-                    :class="cn('flex flex-col rounded-lg border bg-card p-3 text-left shadow-xs transition hover:border-primary hover:shadow disabled:cursor-not-allowed disabled:opacity-50')"
-                    @click="add(v)"
-                >
-                    <span class="line-clamp-2 text-sm font-medium">{{ v.product?.name }}</span>
-                    <span class="text-xs text-muted-foreground">{{ v.name ?? '' }}</span>
-                    <span class="mt-auto pt-2 font-mono text-[11px] text-muted-foreground">{{ v.sku }}</span>
-                    <span class="flex items-end justify-between">
-                        <span class="font-semibold tabular-nums text-primary">{{ formatMoney(v.ref_price) }}</span>
-                        <span class="text-xs tabular-nums" :class="(v.stock?.available ?? 0) <= 0 ? 'text-destructive' : 'text-muted-foreground'">còn {{ formatNumber(v.stock?.available ?? 0) }}</span>
-                    </span>
-                </button>
-            </div>
-        </div>
-
-        <!-- Cart -->
-        <button
-            v-if="!cartOpen"
-            type="button"
-            class="fixed inset-x-0 bottom-0 z-30 flex items-center justify-between gap-3 border-t bg-card px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] lg:hidden"
-            data-testid="pos-cart-bar"
-            @click="cartOpen = true"
-        >
-            <span class="text-sm">Đơn {{ cart.no }} · {{ totals.quantity }} sp</span>
-            <span class="flex items-center gap-2 text-base font-semibold">{{ formatMoney(totals.total) }} <span class="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground">Thanh toán</span></span>
-        </button>
-        <div v-if="cartOpen" class="fixed inset-0 z-30 bg-black/30 lg:hidden" @click="cartOpen = false" />
-        <Card :class="cn('flex min-h-0 w-full flex-col lg:w-[26rem]', 'max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-40 max-lg:max-h-[88vh] max-lg:rounded-b-none max-lg:shadow-2xl', !cartOpen && 'max-lg:hidden')" data-testid="pos-cart-panel">
-            <div class="flex items-center gap-1 overflow-x-auto border-b px-2 py-1.5">
-                <Button variant="ghost" size="icon" class="size-7 lg:hidden" title="Đóng giỏ hàng" data-testid="pos-cart-close" @click="cartOpen = false"><ChevronDown /></Button>
+    <div class="flex min-h-screen flex-col bg-slate-50 lg:h-screen" data-testid="pos">
+        <!-- Dark top bar: leave, the open sales (đơn chờ), counter and warehouse, shift, cashier. -->
+        <header class="flex shrink-0 flex-wrap items-center gap-2 bg-slate-900 px-3 py-2 text-sm text-slate-200 lg:flex-nowrap lg:px-4">
+            <button type="button" class="flex h-9 items-center gap-1.5 rounded-lg px-2.5 hover:bg-white/10" data-testid="pos-leave" @click="leave"><ArrowLeft class="size-4" /> Thoát</button>
+            <div class="order-last flex w-full min-w-0 items-center gap-1.5 overflow-x-auto lg:order-none lg:w-auto lg:flex-1">
                 <button
                     v-for="(c, i) in carts"
                     :key="c.no"
                     type="button"
-                    :class="cn('flex items-center gap-1 rounded-md px-2.5 py-1 text-sm', i === active ? 'bg-primary text-primary-foreground' : 'hover:bg-muted')"
+                    :class="cn('flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 font-medium transition', i === active ? 'bg-white text-slate-900' : 'bg-white/10 text-slate-200 hover:bg-white/15')"
                     @click="active = i"
                 >
-                    Đơn {{ c.no }}<span v-if="c.lines.length" class="text-xs opacity-80">({{ c.lines.length }})</span>
-                    <X v-if="carts.length > 1" class="size-3.5 opacity-70 hover:opacity-100" @click.stop="closeCart(i)" />
+                    Đơn {{ c.no }}<span v-if="c.lines.length && i !== active" class="text-xs font-normal opacity-75">· {{ c.lines.length }} món</span>
+                    <X v-if="carts.length > 1" class="size-3.5 opacity-60 hover:opacity-100" @click.stop="closeCart(i)" />
                 </button>
-                <Button variant="ghost" size="icon" class="size-7" title="Thêm đơn chờ" data-testid="pos-new-cart" @click="newCart"><Plus /></Button>
+                <button type="button" class="grid size-9 shrink-0 place-items-center rounded-lg bg-white/10 hover:bg-white/15" title="Thêm đơn chờ" data-testid="pos-new-cart" @click="newCart"><Plus class="size-4" /></button>
             </div>
+            <div class="ml-auto flex flex-wrap items-center gap-1">
+                <label class="flex h-9 items-center gap-1.5 rounded-lg px-2 hover:bg-white/10">
+                    <Store class="size-4 shrink-0 text-slate-400" />
+                    <select v-model="channelId" class="max-w-36 cursor-pointer appearance-none bg-transparent outline-none" aria-label="Kênh bán">
+                        <option v-for="c in channels" :key="c.id" :value="c.id" class="text-slate-900">{{ c.name }}</option>
+                    </select>
+                    <span class="text-slate-500">·</span>
+                    <select v-model="warehouseId" class="max-w-32 cursor-pointer appearance-none bg-transparent outline-none" aria-label="Kho">
+                        <option v-for="w in warehouseOptions" :key="w.id" :value="w.id" class="text-slate-900">{{ w.name }}</option>
+                    </select>
+                </label>
+                <span class="hidden h-9 items-center gap-1.5 px-2 xl:flex"><UserRound class="size-4 text-slate-400" /> Thu ngân: {{ auth.user?.name }}</span>
+                <RouterLink to="/pos/shifts" class="grid size-9 place-items-center rounded-lg text-slate-300 hover:bg-white/10" title="Lịch sử ca" data-testid="pos-shift-history"><History class="size-4" /></RouterLink>
+                <button
+                    type="button"
+                    :class="cn('flex h-9 items-center gap-1.5 rounded-lg px-3 font-medium', shift ? 'bg-white/10 hover:bg-white/15' : 'bg-amber-400 text-slate-900 hover:bg-amber-300')"
+                    :title="shift ? shiftLabel : undefined"
+                    data-testid="pos-shift"
+                    @click="openShiftDialog"
+                >
+                    <Clock class="size-4" /> <span class="max-w-64 truncate">{{ shift ? shiftLabel : 'Mở ca' }}</span>
+                </button>
+            </div>
+        </header>
 
-            <div class="relative border-b p-2">
-                <div v-if="cart.customer" class="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1.5 text-sm" data-testid="pos-customer">
-                    <span class="flex items-center gap-1.5"><UserRound class="size-4" /> {{ cart.customer.name }} <span class="text-xs text-muted-foreground">{{ cart.customer.phone }}</span></span>
-                    <Button variant="ghost" size="icon" class="size-6" @click="dropCustomer"><X /></Button>
+        <div class="flex flex-1 flex-col lg:min-h-0 lg:flex-row">
+            <!-- Left: scan box, the cart as a table, quick-add products. -->
+            <section class="flex flex-1 flex-col gap-3 p-3 lg:min-h-0 lg:p-4">
+                <div class="relative">
+                    <ScanBarcode class="pointer-events-none absolute left-4 top-1/2 size-6 -translate-y-1/2 text-primary" :stroke-width="1.75" />
+                    <Input
+                        ref="searchInput"
+                        v-model="search"
+                        class="h-14 rounded-xl border-2 border-primary/60 bg-white pl-14 pr-14 text-lg shadow-sm focus-visible:border-primary"
+                        placeholder="Quét mã vạch hoặc gõ tên, SKU (F2)"
+                        data-testid="pos-search"
+                        @keydown.enter.prevent="onSearchEnter"
+                    />
+                    <kbd class="absolute right-4 top-1/2 -translate-y-1/2 rounded border bg-slate-50 px-1.5 text-xs text-muted-foreground">F2</kbd>
                 </div>
-                <template v-else>
-                    <Input v-model="customerQuery" placeholder="Khách lẻ · tìm khách theo tên/SĐT để ghi nợ, tích lịch sử" class="h-8 text-sm" data-testid="pos-customer-search" />
-                    <ul v-if="customerResults.length" class="absolute inset-x-2 z-20 mt-1 overflow-hidden rounded-md border bg-card shadow-lg">
-                        <li v-for="c in customerResults" :key="c.id">
-                            <button type="button" class="flex w-full justify-between px-3 py-2 text-left text-sm hover:bg-muted" @click="pickCustomer(c)">
-                                <span>{{ c.name }}</span><span class="text-xs text-muted-foreground">{{ c.phone }}</span>
-                            </button>
-                        </li>
-                    </ul>
-                </template>
-            </div>
 
-            <div class="min-h-0 flex-1 overflow-y-auto" data-testid="pos-cart">
-                <p v-if="!cart.lines.length" class="px-4 py-10 text-center text-sm text-muted-foreground">Chưa có sản phẩm. Quét mã vạch hoặc bấm vào sản phẩm.</p>
-                <ul v-else class="divide-y">
-                    <li v-for="(l, i) in cart.lines" :key="l.variant_id" class="px-3 py-2">
-                        <div class="flex items-start justify-between gap-2">
-                            <div class="min-w-0">
-                                <p class="truncate text-sm font-medium">{{ l.name }}</p>
-                                <p class="font-mono text-[11px] text-muted-foreground">{{ l.sku }}</p>
-                            </div>
-                            <Button variant="ghost" size="icon" class="size-7" title="Xóa" @click="cart.lines.splice(i, 1)"><Trash2 class="text-muted-foreground" /></Button>
-                        </div>
-                        <div class="mt-1 flex items-center gap-2">
-                            <div class="flex items-center rounded-md border">
-                                <button type="button" class="px-2 py-1" @click="l.quantity > 1 ? l.quantity-- : cart.lines.splice(i, 1)"><Minus class="size-3.5" /></button>
-                                <input v-model.number="l.quantity" type="number" min="1" :data-testid="`pos-qty-${i}`" class="h-7 w-12 border-x bg-card text-center text-sm tabular-nums" />
-                                <button type="button" class="px-2 py-1" @click="l.quantity++"><Plus class="size-3.5" /></button>
-                            </div>
-                            <span class="text-xs text-muted-foreground">×</span>
-                            <input v-model.number="l.unit_price" type="number" min="0" :disabled="!canEditPrice" :title="canEditPrice ? undefined : 'Cấu hình không cho nhân viên sửa giá'" class="h-7 w-24 rounded-md border bg-card px-2 text-right text-sm tabular-nums disabled:bg-muted/50" />
-                            <span class="ml-auto text-sm font-medium tabular-nums">{{ formatNumber(l.quantity * l.unit_price - l.discount) }}</span>
-                        </div>
-                        <p v-if="stockOf(l.variant_id) !== undefined && l.quantity > stockOf(l.variant_id)!" class="mt-1 text-xs text-destructive">Vượt tồn khả dụng ({{ stockOf(l.variant_id) }})</p>
-                    </li>
-                </ul>
-            </div>
-
-            <div class="space-y-2 border-t p-3 text-sm">
-                <div class="flex justify-between"><span class="text-muted-foreground">Tiền hàng ({{ totals.quantity }} sp)</span><span class="tabular-nums">{{ formatMoney(totals.subtotal) }}</span></div>
-                <div class="flex items-center justify-between"><span class="text-muted-foreground">Giảm giá<template v-if="cart.discountAuto"> (nhóm {{ cart.groupPercent }}%)</template><template v-if="cart.tier === 'wholesale'"> · giá buôn</template></span><input v-model="cart.discount" type="number" min="0" :disabled="!canEditPrice" class="h-7 w-28 rounded-md border bg-card px-2 text-right tabular-nums disabled:bg-muted/50" data-testid="pos-discount" @input="cart.discountAuto = false" /></div>
-                <div v-if="promoDiscount > 0" class="flex justify-between text-emerald-700" data-testid="pos-promotion"><span>Khuyến mãi <span class="text-xs">{{ promoNames }}</span></span><span class="tabular-nums">−{{ formatMoney(promoDiscount) }}</span></div>
-                <div v-for="g in promoGifts" :key="`${g.promotion}-${g.sku}`" class="flex justify-between text-emerald-700" data-testid="pos-gift"><span>Tặng {{ g.quantity }} × {{ g.name ?? g.sku }}</span><span class="tabular-nums">0 ₫</span></div>
-                <div v-if="loyalty?.enabled && loyalty.balance > 0" class="flex items-center justify-between">
-                    <span class="text-muted-foreground">Dùng điểm <span class="text-xs">(có {{ loyalty.balance }}, tối đa {{ loyalty.max }})</span></span>
-                    <input v-model="cart.points" type="number" min="0" :max="loyalty.max" placeholder="0" class="h-7 w-28 rounded-md border bg-card px-2 text-right tabular-nums" data-testid="pos-points" />
-                </div>
-                <div v-if="pointsDiscount > 0" class="flex justify-between text-emerald-700"><span>Trừ điểm</span><span class="tabular-nums">−{{ formatMoney(pointsDiscount) }}</span></div>
-                <div class="flex items-center justify-between"><span class="text-muted-foreground">Mã giảm giá</span><input v-model="cart.coupon" placeholder="Nhập mã" maxlength="40" class="h-7 w-28 rounded-md border bg-card px-2 text-right uppercase" data-testid="pos-coupon" /></div>
-                <p v-if="cart.coupon?.trim() && promo?.code_error" class="text-right text-xs text-destructive">{{ promo.code_error }}</p>
-                <div v-if="taxRule.rate > 0" class="flex justify-between text-muted-foreground" data-testid="pos-tax"><span>{{ taxRule.included ? 'Trong đó' : 'Cộng' }} thuế GTGT {{ taxRule.rate }}%</span><span class="tabular-nums">{{ formatMoney(totals.tax) }}</span></div>
-                <div class="flex justify-between text-lg font-semibold"><span>Khách phải trả</span><span class="tabular-nums" data-testid="pos-total">{{ formatMoney(totals.total) }}</span></div>
-
-                <div v-if="cart.split" class="space-y-1.5 rounded-md border p-2" data-testid="pos-split">
-                    <div v-for="(r, i) in cart.split" :key="i" class="flex items-center gap-2">
-                        <select v-model="r.method" class="h-8 flex-1 rounded-md border bg-card px-2 text-sm" :data-testid="`pos-split-method-${i}`">
-                            <option v-for="m in posMethods" :key="m" :value="m">{{ paymentMethods[m] }}</option>
-                        </select>
-                        <input v-model="r.amount" type="number" min="0" class="h-8 w-32 rounded-md border bg-card px-2 text-right tabular-nums" :data-testid="`pos-split-amount-${i}`" />
-                        <Button v-if="cart.split.length > 1" variant="ghost" size="icon" class="size-7" title="Bỏ dòng" @click="cart.split.splice(i, 1)"><X /></Button>
+                <div class="flex flex-col overflow-hidden rounded-xl border bg-white lg:min-h-64 lg:flex-1">
+                    <div class="hidden grid-cols-[2.5rem_minmax(0,1fr)_8.5rem_7rem_7rem_2.5rem] items-center gap-3 border-b bg-slate-50 px-4 py-2.5 text-xs font-medium text-muted-foreground md:grid">
+                        <span>#</span><span>Sản phẩm</span><span class="text-center">Số lượng</span><span class="text-right">Đơn giá</span><span class="text-right">Thành tiền</span><span />
                     </div>
-                    <div class="flex items-center justify-between">
-                        <button type="button" class="text-xs font-medium text-primary hover:underline" @click="cart.split.push({ method: posMethods[0] ?? 'cash', amount: '' })">+ Thêm hình thức</button>
-                        <button type="button" class="text-xs text-muted-foreground hover:underline" data-testid="pos-split-off" @click="toggleSplit">Một hình thức</button>
+                    <div class="lg:min-h-0 lg:flex-1 lg:overflow-y-auto" data-testid="pos-cart">
+                        <div v-if="!cart.lines.length" class="flex h-full min-h-48 flex-col items-center justify-center gap-2 px-4 text-center text-sm text-muted-foreground">
+                            <ScanBarcode class="size-10 text-slate-300" :stroke-width="1.5" />
+                            Chưa có sản phẩm. Quét mã vạch hoặc bấm vào sản phẩm.
+                        </div>
+                        <ul v-else class="divide-y">
+                            <li
+                                v-for="(l, i) in cart.lines"
+                                :key="l.variant_id"
+                                :class="cn('grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-4 py-3 md:grid-cols-[2.5rem_minmax(0,1fr)_8.5rem_7rem_7rem_2.5rem]', i === cart.lines.length - 1 && 'bg-primary/[0.03]')"
+                            >
+                                <span class="hidden text-sm text-muted-foreground md:block">{{ i + 1 }}</span>
+                                <div class="flex min-w-0 items-center gap-3">
+                                    <img v-if="l.image" :src="l.image" alt="" class="size-11 shrink-0 rounded-lg border object-cover" />
+                                    <span v-else class="grid size-11 shrink-0 place-items-center rounded-lg bg-slate-100 text-xs font-semibold text-slate-500">{{ mono(l.name) }}</span>
+                                    <div class="min-w-0">
+                                        <p class="truncate font-medium">{{ l.name }}</p>
+                                        <p class="text-xs text-muted-foreground">
+                                            <span class="font-mono">{{ l.sku }}</span><template v-if="stockOf(l.variant_id) !== undefined"> · tồn {{ formatNumber(stockOf(l.variant_id)!) }}</template>
+                                        </p>
+                                        <p v-if="stockOf(l.variant_id) !== undefined && l.quantity > stockOf(l.variant_id)!" class="text-xs text-destructive">Vượt tồn khả dụng ({{ stockOf(l.variant_id) }})</p>
+                                    </div>
+                                </div>
+                                <button type="button" class="grid size-8 place-items-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-destructive md:hidden" title="Xóa" @click="cart.lines.splice(i, 1)"><Trash2 class="size-4" /></button>
+                                <div class="flex items-center justify-center gap-1 max-md:col-start-1 max-md:justify-start">
+                                    <button type="button" class="grid size-8 place-items-center rounded-lg border hover:bg-slate-50" aria-label="Bớt" @click="l.quantity > 1 ? l.quantity-- : cart.lines.splice(i, 1)"><Minus class="size-3.5" /></button>
+                                    <input v-model.number="l.quantity" type="number" min="1" :data-testid="`pos-qty-${i}`" class="h-8 w-12 rounded-lg border bg-white text-center font-medium tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
+                                    <button type="button" class="grid size-8 place-items-center rounded-lg border hover:bg-slate-50" aria-label="Thêm" @click="l.quantity++"><Plus class="size-3.5" /></button>
+                                </div>
+                                <input
+                                    :value="formatNumber(l.unit_price)"
+                                    inputmode="numeric"
+                                    :disabled="!canEditPrice"
+                                    :title="canEditPrice ? 'Sửa đơn giá' : 'Cấu hình không cho nhân viên sửa giá'"
+                                    class="hidden h-8 w-full rounded-lg border border-transparent bg-transparent px-2 text-right tabular-nums hover:border-slate-200 focus:border-primary focus:bg-white disabled:hover:border-transparent md:block"
+                                    @change="l.unit_price = parseMoney($event)"
+                                />
+                                <span class="text-right font-semibold tabular-nums max-md:row-start-2 max-md:col-start-2">{{ formatNumber(l.quantity * l.unit_price - l.discount) }}</span>
+                                <button type="button" class="hidden size-8 place-items-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-destructive md:grid" title="Xóa" @click="cart.lines.splice(i, 1)"><Trash2 class="size-4" /></button>
+                            </li>
+                        </ul>
                     </div>
                 </div>
-                <div v-else class="grid gap-1" :style="{ gridTemplateColumns: `repeat(${Math.max(posMethods.length, 1)}, minmax(0, 1fr))` }">
-                    <button
-                        v-for="m in posMethods"
-                        :key="m"
-                        type="button"
-                        :class="cn('flex flex-col items-center gap-0.5 rounded-md border px-1 py-1.5 text-xs', cart.method === m ? 'border-primary bg-primary/10 text-primary' : 'hover:bg-muted')"
-                        :data-testid="`pos-method-${m}`"
-                        @click="cart.method = m"
-                    >
-                        <component :is="methodIcons[m]" class="size-4" />{{ paymentMethods[m] }}
-                    </button>
+
+                <div>
+                    <div class="grid max-h-[8.5rem] grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6" data-testid="pos-products">
+                        <button
+                            v-for="v in results"
+                            :key="v.id"
+                            type="button"
+                            :disabled="(v.stock?.available ?? 0) <= 0"
+                            class="flex min-w-0 items-center gap-2.5 rounded-xl border bg-white p-2 text-left transition hover:border-primary hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+                            :title="`${v.product?.name ?? ''}${v.name ? ' · ' + v.name : ''} · còn ${formatNumber(v.stock?.available ?? 0)}`"
+                            @click="add(v)"
+                        >
+                            <img v-if="v.product?.image" :src="v.product.image" alt="" class="size-10 shrink-0 rounded-lg object-cover" />
+                            <span v-else class="grid size-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">{{ mono(v.product?.name ?? v.sku) }}</span>
+                            <span class="min-w-0">
+                                <span class="block truncate text-sm font-medium">{{ v.product?.name }}<template v-if="v.name"> · {{ v.name }}</template></span>
+                                <span class="flex gap-1 whitespace-nowrap text-xs tabular-nums text-muted-foreground">
+                                    {{ formatNumber(Number(v.ref_price)) }}
+                                    <span :class="(v.stock?.available ?? 0) <= 0 ? 'text-destructive' : ''">· còn {{ formatNumber(v.stock?.available ?? 0) }}</span>
+                                </span>
+                            </span>
+                        </button>
+                    </div>
+                    <p class="mt-1.5 text-xs text-muted-foreground">{{ search.trim() ? `Kết quả cho “${search.trim()}” · bấm để thêm` : 'Sản phẩm đang bán · bấm để thêm nhanh' }}</p>
                 </div>
-                <button v-if="!cart.split && posMethods.length > 1" type="button" class="text-xs font-medium text-primary hover:underline" data-testid="pos-split-on" @click="toggleSplit">Chia nhiều hình thức thanh toán</button>
-                <div v-if="!cart.split" class="flex items-center justify-between gap-2">
-                    <span class="text-muted-foreground">Khách đưa</span>
-                    <input v-model="cart.received" type="number" min="0" :placeholder="String(totals.total)" class="h-8 w-36 rounded-md border bg-card px-2 text-right text-base tabular-nums" data-testid="pos-received" />
+            </section>
+
+            <!-- Right: buyer, totals, payment. -->
+            <aside class="flex w-full shrink-0 flex-col border-t bg-white lg:w-[26rem] lg:border-l lg:border-t-0 xl:w-[28rem]" data-testid="pos-cart-panel">
+                <div class="flex-1 space-y-4 p-4 lg:min-h-0 lg:overflow-y-auto">
+                    <div class="relative">
+                        <div v-if="cart.customer" class="flex items-center gap-3 rounded-xl border p-3" data-testid="pos-customer">
+                            <span class="grid size-11 shrink-0 place-items-center rounded-full bg-primary/10 text-sm font-semibold text-primary">{{ mono(cart.customer.name) }}</span>
+                            <div class="min-w-0 flex-1">
+                                <p class="flex items-center gap-2 truncate font-medium">
+                                    {{ cart.customer.name }}
+                                    <span v-if="cart.tier === 'wholesale'" class="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">Giá buôn</span>
+                                </p>
+                                <p class="text-xs text-muted-foreground">{{ cart.customer.phone ?? cart.customer.code }}<template v-if="loyalty?.enabled"> · {{ formatNumber(loyalty.balance) }} điểm</template></p>
+                            </div>
+                            <button type="button" class="grid size-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-100" title="Bỏ khách (F4)" @click="dropCustomer"><X class="size-4" /></button>
+                        </div>
+                        <template v-else>
+                            <div class="relative">
+                                <UserRound class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                                <Input v-model="customerQuery" placeholder="Tìm khách theo tên hoặc SĐT (F4)" class="h-11 rounded-xl pl-9" data-testid="pos-customer-search" />
+                            </div>
+                            <ul v-if="customerResults.length" class="absolute inset-x-0 z-20 mt-1 overflow-hidden rounded-xl border bg-white shadow-lg">
+                                <li v-for="c in customerResults" :key="c.id">
+                                    <button type="button" class="flex w-full justify-between px-3 py-2.5 text-left text-sm hover:bg-slate-50" @click="pickCustomer(c)">
+                                        <span>{{ c.name }}</span><span class="text-xs text-muted-foreground">{{ c.phone }}</span>
+                                    </button>
+                                </li>
+                            </ul>
+                        </template>
+                        <p class="mt-1.5 text-xs text-muted-foreground">F4 đổi khách · bỏ trống = khách lẻ (chọn khách để ghi nợ, tích điểm)</p>
+                    </div>
+
+                    <div class="space-y-2.5 border-t pt-4 text-sm">
+                        <div class="flex justify-between"><span class="text-muted-foreground">Tạm tính · {{ totals.quantity }} sản phẩm</span><span class="tabular-nums">{{ formatMoney(totals.subtotal) }}</span></div>
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-muted-foreground">Giảm giá (F6)<template v-if="cart.discountAuto"> · nhóm {{ cart.groupPercent }}%</template></span>
+                            <input v-model="cart.discount" type="number" min="0" :disabled="!canEditPrice" placeholder="0" class="h-9 w-32 rounded-lg border bg-white px-2.5 text-right tabular-nums text-destructive [appearance:textfield] disabled:bg-slate-50 [&::-webkit-inner-spin-button]:appearance-none" data-testid="pos-discount" @input="cart.discountAuto = false" />
+                        </div>
+                        <div v-if="promoDiscount > 0" class="flex justify-between text-emerald-700" data-testid="pos-promotion"><span>Khuyến mãi <span class="text-xs">{{ promoNames }}</span></span><span class="tabular-nums">−{{ formatMoney(promoDiscount) }}</span></div>
+                        <div v-for="g in promoGifts" :key="`${g.promotion}-${g.sku}`" class="flex justify-between text-emerald-700" data-testid="pos-gift"><span>Tặng {{ g.quantity }} × {{ g.name ?? g.sku }}</span><span class="tabular-nums">0 ₫</span></div>
+                        <div v-if="loyalty?.enabled && loyalty.balance > 0" class="flex items-center justify-between gap-2">
+                            <span class="text-muted-foreground">Dùng điểm <span class="text-xs">(tối đa {{ formatNumber(loyalty.max) }})</span></span>
+                            <span class="flex items-center gap-1.5">
+                                <button type="button" class="text-xs font-medium text-primary hover:underline" @click="cart.points = loyalty.max">Dùng hết</button>
+                                <input v-model="cart.points" type="number" min="0" :max="loyalty.max" placeholder="0" class="h-9 w-24 rounded-lg border bg-white px-2.5 text-right tabular-nums" data-testid="pos-points" />
+                            </span>
+                        </div>
+                        <div v-if="pointsDiscount > 0" class="flex justify-between text-emerald-700"><span>Trừ điểm</span><span class="tabular-nums">−{{ formatMoney(pointsDiscount) }}</span></div>
+                        <div class="flex items-center justify-between gap-2"><span class="text-muted-foreground">Mã giảm giá</span><input v-model="cart.coupon" placeholder="Nhập mã" maxlength="40" class="h-9 w-32 rounded-lg border bg-white px-2.5 text-right uppercase" data-testid="pos-coupon" /></div>
+                        <p v-if="cart.coupon?.trim() && promo?.code_error" class="text-right text-xs text-destructive">{{ promo.code_error }}</p>
+                        <div v-if="taxRule.rate > 0" class="flex justify-between text-muted-foreground" data-testid="pos-tax"><span>{{ taxRule.included ? 'Trong đó' : 'Cộng' }} thuế GTGT {{ taxRule.rate }}%</span><span class="tabular-nums">{{ formatMoney(totals.tax) }}</span></div>
+                        <div class="flex items-end justify-between border-t pt-3">
+                            <span class="font-semibold">Khách phải trả</span>
+                            <span class="text-3xl font-bold tabular-nums text-primary" data-testid="pos-total">{{ formatMoney(totals.total) }}</span>
+                        </div>
+                    </div>
+
+                    <div class="space-y-3 border-t pt-4 text-sm">
+                        <div v-if="cart.split" class="space-y-2 rounded-xl border p-3" data-testid="pos-split">
+                            <div v-for="(r, i) in cart.split" :key="i" class="flex items-center gap-2">
+                                <select v-model="r.method" class="h-9 flex-1 rounded-lg border bg-white px-2" :data-testid="`pos-split-method-${i}`">
+                                    <option v-for="m in posMethods" :key="m" :value="m">{{ paymentMethods[m] }}</option>
+                                </select>
+                                <input v-model="r.amount" type="number" min="0" class="h-9 w-32 rounded-lg border bg-white px-2.5 text-right tabular-nums" :data-testid="`pos-split-amount-${i}`" />
+                                <Button v-if="cart.split.length > 1" variant="ghost" size="icon" class="size-8" title="Bỏ dòng" @click="cart.split.splice(i, 1)"><X /></Button>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <button type="button" class="text-xs font-medium text-primary hover:underline" @click="cart.split.push({ method: posMethods[0] ?? 'cash', amount: '' })">+ Thêm hình thức</button>
+                                <button type="button" class="text-xs text-muted-foreground hover:underline" data-testid="pos-split-off" @click="toggleSplit">Một hình thức</button>
+                            </div>
+                        </div>
+                        <template v-else>
+                            <div class="grid gap-2" :style="{ gridTemplateColumns: `repeat(${Math.max(posMethods.length, 1)}, minmax(0, 1fr))` }">
+                                <button
+                                    v-for="m in posMethods"
+                                    :key="m"
+                                    type="button"
+                                    :class="cn('flex h-14 flex-col items-center justify-center gap-1 rounded-xl border px-1 text-xs font-medium', cart.method === m ? 'border-2 border-primary bg-primary/5 text-primary' : 'hover:bg-slate-50')"
+                                    :data-testid="`pos-method-${m}`"
+                                    @click="cart.method = m"
+                                >
+                                    <component :is="methodIcons[m]" class="size-[18px] shrink-0" /><span class="max-w-full truncate">{{ paymentMethods[m] }}</span>
+                                </button>
+                            </div>
+                            <div>
+                                <div class="mb-1.5 flex items-center justify-between">
+                                    <span class="text-muted-foreground">Khách đưa</span>
+                                    <button v-if="posMethods.length > 1" type="button" class="text-xs font-medium text-primary hover:underline" data-testid="pos-split-on" @click="toggleSplit">Chia nhiều hình thức</button>
+                                </div>
+                                <input v-model="cart.received" type="number" min="0" :placeholder="formatNumber(totals.total)" class="h-14 w-full rounded-xl border-2 bg-white px-4 text-right text-2xl font-semibold tabular-nums [appearance:textfield] focus:border-primary focus:outline-none [&::-webkit-inner-spin-button]:appearance-none" data-testid="pos-received" />
+                            </div>
+                            <div v-if="cart.method === 'cash' && totals.total > 0" class="grid grid-cols-4 gap-2">
+                                <button
+                                    v-for="q in quick"
+                                    :key="q"
+                                    type="button"
+                                    :class="cn('h-10 rounded-lg text-sm font-medium tabular-nums', Number(cart.received) === q ? 'bg-primary text-white' : 'bg-slate-100 hover:bg-slate-200')"
+                                    @click="cart.received = q"
+                                >
+                                    {{ formatNumber(q) }}
+                                </button>
+                            </div>
+                        </template>
+                        <div v-if="change > 0" class="flex items-center justify-between rounded-xl bg-emerald-50 px-4 py-3 text-emerald-800">
+                            <span>Tiền thối lại</span><span class="text-2xl font-bold tabular-nums" data-testid="pos-change">{{ formatMoney(change) }}</span>
+                        </div>
+                        <div v-if="shortfall > 0" class="flex items-center justify-between rounded-xl bg-red-50 px-4 py-3 text-red-700">
+                            <span>{{ cart.customer ? 'Ghi nợ' : 'Còn thiếu' }}</span><span class="text-xl font-bold tabular-nums">{{ formatMoney(shortfall) }}</span>
+                        </div>
+                        <label class="flex cursor-pointer items-center gap-2.5">
+                            <input v-model="autoPrint" type="checkbox" class="peer sr-only" />
+                            <span class="relative h-6 w-11 shrink-0 rounded-full bg-slate-200 transition after:absolute after:left-0.5 after:top-0.5 after:size-5 after:rounded-full after:bg-white after:shadow after:transition peer-checked:bg-primary peer-checked:after:translate-x-5" />
+                            <Printer class="size-4 text-muted-foreground" /><span>In hóa đơn K80 sau khi thanh toán</span>
+                        </label>
+                    </div>
                 </div>
-                <div v-if="!cart.split && cart.method === 'cash' && totals.total > 0" class="flex flex-wrap gap-1">
-                    <button v-for="q in quick" :key="q" type="button" class="rounded border px-2 py-0.5 text-xs tabular-nums hover:bg-muted" @click="cart.received = q">{{ formatNumber(q) }}</button>
+
+                <div class="sticky bottom-0 space-y-2 border-t bg-white p-4">
+                    <p v-if="error" class="text-sm text-destructive" data-testid="pos-error">{{ error }}</p>
+                    <div class="flex gap-2">
+                        <Button variant="outline" class="h-14 w-32 shrink-0 text-base" :disabled="!cart.lines.length" title="Giữ đơn này, mở đơn mới cho khách sau" data-testid="pos-park" @click="newCart"><NotebookPen /> Lưu tạm</Button>
+                        <Button class="h-14 flex-1 text-lg font-semibold" :loading="paying" :disabled="!cart.lines.length" data-testid="pos-pay" @click="pay">Thanh toán · F9</Button>
+                    </div>
                 </div>
-                <div v-if="change > 0" class="flex justify-between font-medium text-success"><span>Trả lại khách</span><span class="tabular-nums" data-testid="pos-change">{{ formatMoney(change) }}</span></div>
-                <div v-if="shortfall > 0" class="flex justify-between font-medium text-destructive"><span>{{ cart.customer ? 'Ghi nợ' : 'Còn thiếu' }}</span><span class="tabular-nums">{{ formatMoney(shortfall) }}</span></div>
-                <p v-if="error" class="text-sm text-destructive" data-testid="pos-error">{{ error }}</p>
-                <div class="flex items-center justify-between">
-                    <label class="flex items-center gap-1.5 text-xs text-muted-foreground"><input v-model="autoPrint" type="checkbox" /> <Printer class="size-3.5" /> In hóa đơn K80</label>
-                </div>
-                <Button class="h-12 w-full text-base" :loading="paying" :disabled="!cart.lines.length" data-testid="pos-pay" @click="pay">Thanh toán (F9)</Button>
-            </div>
-        </Card>
+            </aside>
+        </div>
     </div>
 
     <Dialog v-model:open="shiftOpen" :title="closedShift ? `Đã đóng ca ${closedShift.number}` : shift ? 'Ca bán hàng' : 'Mở ca bán hàng'" size="lg">
