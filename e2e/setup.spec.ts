@@ -40,7 +40,7 @@ test('a new business goes through the setup steps, then tries the sample store a
     await page.getByTestId('setup-finish').click();
 
     await expect(page.getByTestId('tenant-switcher')).toContainText('Zz Thời Trang Thiết Lập');
-    await expect(page.getByRole('heading', { name: /Xin chào/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^Chào buổi/ })).toBeVisible();
     // No shop counter: the POS pages leave the menu; Shopee comes right after the products in "Bắt đầu".
     await page.getByRole('button', { name: 'Đơn hàng', exact: true }).click();
     await expect(page.getByRole('link', { name: 'Bán tại quầy' })).toHaveCount(0);
