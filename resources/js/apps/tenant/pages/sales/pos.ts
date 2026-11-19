@@ -11,6 +11,8 @@ export interface CartLine {
     /** List prices, to switch the line when the buyer's group sells at another price. */
     retail?: number;
     wholesale?: number;
+    /** First product photo, for the cart table. */
+    image?: string | null;
 }
 
 export interface Cart {
@@ -68,7 +70,7 @@ export function addToCart(cart: Cart, v: Variant): void {
     }
     const retail = Number(v.ref_price) || 0;
     const wholesale = Number(v.wholesale_price) || 0;
-    cart.lines.push({ variant_id: v.id!, sku: v.sku, name: (v.product?.name ?? v.sku) + (v.name ? ` · ${v.name}` : ''), quantity: 1, unit_price: linePrice(cart, { retail, wholesale }), discount: 0, retail, wholesale });
+    cart.lines.push({ variant_id: v.id!, sku: v.sku, name: (v.product?.name ?? v.sku) + (v.name ? ` · ${v.name}` : ''), quantity: 1, unit_price: linePrice(cart, { retail, wholesale }), discount: 0, retail, wholesale, ...(v.product?.image ? { image: v.product.image } : {}) });
 }
 
 /** The list price for the cart's price policy: wholesale when the group buys wholesale and the SKU has one. */

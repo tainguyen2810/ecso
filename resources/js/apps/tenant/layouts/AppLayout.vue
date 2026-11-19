@@ -118,7 +118,11 @@ useGoShortcuts(
 </script>
 
 <template>
-    <div class="flex min-h-screen">
+    <!-- Bán tại quầy runs full screen: its own dark top bar replaces the menu and the top bar. -->
+    <div v-if="route.meta.fullscreen" class="min-h-screen bg-slate-50">
+        <RouterView :key="tenant.current?.id" />
+    </div>
+    <div v-else class="flex min-h-screen">
         <div v-if="mobileOpen" class="fixed inset-0 z-30 bg-black/30 lg:hidden" @click="mobileOpen = false" />
         <aside
             :class="
@@ -257,7 +261,7 @@ useGoShortcuts(
             </header>
             <DemoBanner />
             <GlobalSearch v-model:open="searchOpen" />
-            <main :class="cn('mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:pb-6', route.path === '/pos' ? 'pb-6' : 'pb-28')">
+            <main :class="'mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 pb-28 sm:px-6 lg:px-8 lg:pb-6'">
                 <RouterView :key="tenant.current?.id" />
             </main>
             <MobileNav @switch-tenant="switchTenant" @logout="logout" />
