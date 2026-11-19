@@ -267,7 +267,7 @@ function reset() {
             <button type="button" class="px-2 text-xs text-muted-foreground hover:text-destructive" @click="reset">Xóa số đếm</button>
         </div>
         <Alert v-if="movedSince.length" tone="amber" class="m-3" data-testid="stocktake-moved">
-            {{ formatNumber(movedSince.length) }} SKU đã có nhập hoặc xuất sau khi đếm. Khi cân bằng, ECSO chỉ cộng hoặc trừ phần lệch lúc đếm và giữ nguyên các giao dịch đó.
+            {{ formatNumber(movedSince.length) }} SKU đã có nhập hoặc xuất sau khi đếm. Khi cân bằng, EzChat Bán hàng chỉ cộng hoặc trừ phần lệch lúc đếm và giữ nguyên các giao dịch đó.
         </Alert>
         <div v-if="loading" class="space-y-3 p-4"><Skeleton v-for="i in 6" :key="i" class="h-9" /></div>
         <EmptyState v-else-if="!rows.length" :icon="ClipboardCheck" title="Kho chưa có SKU" description="Chọn kho khác hoặc tạo sản phẩm trước." />

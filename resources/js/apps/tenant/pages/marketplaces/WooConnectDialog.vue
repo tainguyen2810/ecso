@@ -11,7 +11,7 @@ import WooConnectResult from './WooConnectResult.vue';
 import type { MarketplaceAccountData, Warehouse, WooConnectChecks } from '@/shared/types';
 
 /**
- * Connecting a WooCommerce store. Default: type the website, approve ECSO on WooCommerce's own screen (no keys to
+ * Connecting a WooCommerce store. Default: type the website, approve EzChat Bán hàng on WooCommerce's own screen (no keys to
  * copy). Fallback: paste REST API keys created by hand, with the steps shown here.
  */
 const open = defineModel<boolean>('open', { required: true });
@@ -76,7 +76,7 @@ const title = computed(() => (mode.value === 'done' ? `Đã kết nối ${result
 const description = computed(() =>
     mode.value === 'approve' ? 'Chỉ cần địa chỉ website. Không phải tạo hay sao chép khóa API.'
     : mode.value === 'manual' ? 'Làm theo 3 bước, mất khoảng 2 phút. Không cần cài plugin.'
-    : 'ECSO đang lấy dữ liệu, anh có thể đóng hộp này.',
+    : 'EzChat Bán hàng đang lấy dữ liệu, bạn có thể đóng hộp này.',
 );
 </script>
 
@@ -87,9 +87,9 @@ const description = computed(() =>
                 <Input v-model="form.website" placeholder="https://tenmien.vn" autofocus data-testid="woo-website" @keydown.enter="startApproval" />
             </FormField>
             <ol class="space-y-3 text-sm">
-                <li class="flex gap-3"><span class="grid size-6 shrink-0 place-items-center rounded-full bg-blue-50 text-xs font-semibold text-blue-600">1</span><span>Bấm <b>Tiếp tục</b>, ECSO mở trang đăng nhập quản trị website của anh.</span></li>
-                <li class="flex gap-3"><span class="grid size-6 shrink-0 place-items-center rounded-full bg-blue-50 text-xs font-semibold text-blue-600">2</span><span>Đăng nhập (nếu chưa) và bấm <b>Phê duyệt</b> để cho ECSO quyền đọc/ghi sản phẩm, đơn hàng.</span></li>
-                <li class="flex gap-3"><span class="grid size-6 shrink-0 place-items-center rounded-full bg-blue-50 text-xs font-semibold text-blue-600">3</span><span>Tự quay về ECSO. ECSO tự đăng ký nhận đơn mới và lấy danh sách sản phẩm.</span></li>
+                <li class="flex gap-3"><span class="grid size-6 shrink-0 place-items-center rounded-full bg-blue-50 text-xs font-semibold text-blue-600">1</span><span>Bấm <b>Tiếp tục</b>, EzChat Bán hàng mở trang đăng nhập quản trị website của bạn.</span></li>
+                <li class="flex gap-3"><span class="grid size-6 shrink-0 place-items-center rounded-full bg-blue-50 text-xs font-semibold text-blue-600">2</span><span>Đăng nhập (nếu chưa) và bấm <b>Phê duyệt</b> để cho EzChat Bán hàng quyền đọc/ghi sản phẩm, đơn hàng.</span></li>
+                <li class="flex gap-3"><span class="grid size-6 shrink-0 place-items-center rounded-full bg-blue-50 text-xs font-semibold text-blue-600">3</span><span>Tự quay về EzChat Bán hàng. EzChat Bán hàng tự đăng ký nhận đơn mới và lấy danh sách sản phẩm.</span></li>
             </ol>
             <p v-if="error && !error.field('website')" class="text-sm text-destructive">{{ error.message }}</p>
             <p class="border-t border-dashed pt-3 text-xs text-muted-foreground">
@@ -106,7 +106,7 @@ const description = computed(() =>
                     <p class="font-medium">Tạo khóa API trên WordPress</p>
                     <p class="text-muted-foreground">
                         Đăng nhập trang quản trị website → <b class="text-foreground">WooCommerce → Cài đặt → Nâng cao → REST API → Thêm khóa</b>.
-                        Mô tả: <code class="rounded bg-muted px-1">ECSO</code>, Quyền: <b class="text-foreground">Đọc/Ghi</b> → Tạo khóa API.
+                        Mô tả: <code class="rounded bg-muted px-1">EzChat Bán hàng</code>, Quyền: <b class="text-foreground">Đọc/Ghi</b> → Tạo khóa API.
                     </p>
                     <a v-if="keysPage" :href="keysPage" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs text-primary hover:bg-muted">
                         <ExternalLink class="size-3.5" /> Mở trang tạo khóa trên website
@@ -128,7 +128,7 @@ const description = computed(() =>
                 <span class="grid size-6 shrink-0 place-items-center rounded-full bg-blue-50 text-xs font-semibold text-blue-600">3</span>
                 <div class="text-sm">
                     <p class="font-medium">Kiểm tra và kết nối</p>
-                    <p class="text-muted-foreground">ECSO thử gọi website, đăng ký webhook nhận đơn, rồi lấy danh sách sản phẩm.</p>
+                    <p class="text-muted-foreground">EzChat Bán hàng thử gọi website, đăng ký webhook nhận đơn, rồi lấy danh sách sản phẩm.</p>
                     <p v-if="error && !error.field('website') && !error.field('consumer_key') && !error.field('consumer_secret')" class="mt-2 text-destructive">{{ error.message }}</p>
                 </div>
             </section>

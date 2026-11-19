@@ -452,7 +452,7 @@ async function removeImage(id: number) {
                             <tr>
                                 <th class="px-5 py-2 font-medium">SKU thành phần</th>
                                 <th class="px-3 py-2 text-right font-medium">Số lượng / combo</th>
-                                <th v-if="canCost" class="px-3 py-2 text-right font-medium">Giá vốn BQ</th>
+                                <th v-if="canCost" class="px-3 py-2 text-right font-medium">Giá vốn</th>
                                 <th class="w-10" />
                             </tr>
                         </thead>
@@ -516,7 +516,7 @@ async function removeImage(id: number) {
                                     <th class="px-3 py-2 text-right font-medium">KL (g)</th>
                                     <th class="px-3 py-2 font-medium" title="Dài × Rộng × Cao, tính bằng mm">Kích thước (mm)</th>
                                     <th v-if="canSuppliers" class="px-3 py-2 font-medium">NCC / Mã NCC</th>
-                                    <th v-if="!isNew && canCost" class="px-4 py-2 text-right font-medium">Giá vốn BQ</th>
+                                    <th v-if="!isNew && canCost" class="px-4 py-2 text-right font-medium">Giá vốn</th>
                                     <th class="px-2 py-2" />
                                 </tr>
                             </thead>

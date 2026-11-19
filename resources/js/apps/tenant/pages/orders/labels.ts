@@ -33,7 +33,7 @@ export const orderFlags: { value: string; label: string }[] = [
     { value: 'overdue', label: 'Quá hạn giao' },
     { value: 'due_soon', label: 'Sắp đến hạn' },
     { value: 'shortage', label: 'Thiếu hàng' },
-    { value: 'unmapped', label: 'Chưa map SKU' },
+    { value: 'unmapped', label: 'Chưa liên kết sản phẩm' },
     { value: 'warning', label: 'Cảnh báo đồng bộ' },
     { value: 'not_printed', label: 'Chưa in phiếu' },
 ];
@@ -169,7 +169,7 @@ export const pushStatus: Record<string, { label: string; tone: Tone }> = {
 
 /** Shown where a marketplace cannot (or is not yet verified to) receive stock updates through its API. */
 export const manualStockHint =
-    'Sàn này chưa cập nhật tồn được qua API. Hãy cập nhật số lượng trên trang quản lý của sàn (Seller Center) theo cột “Có thể bán” trong Kho hàng của ECSO.';
+    'Sàn này chưa cập nhật tồn được qua API. Hãy cập nhật số lượng trên trang quản lý của sàn (Seller Center) theo cột “Có thể bán” trong Kho hàng của EzChat Bán hàng.';
 
 /** Hours left until the ship-by deadline, as a short label ("còn 3 giờ", "quá 2 giờ"). */
 export function deadlineLabel(iso: string | null, now = new Date()): string | null {

@@ -42,7 +42,7 @@ const pages = computed<Row[]>(() => {
     const rows: Row[] = [];
     const actions: [string, string, string, string, Component][] = [
         ['Tạo đơn hàng', 'Đơn kênh riêng, giao hàng', '/orders/new', 'orders.create', Plus],
-        ['Đẩy qua vận chuyển', 'Đơn chờ đẩy sang hãng', '/shipments', 'orders.view', Truck],
+        ['Gửi đơn vị vận chuyển', 'Đơn chờ đẩy sang hãng', '/shipments', 'orders.view', Truck],
         ['Tạo đơn nhập hàng', 'Sản phẩm › Nhập hàng', '/purchasing/new', 'purchasing.manage', Download],
         ['Thêm sản phẩm', 'Sản phẩm', '/products/new', 'products.manage', Plus],
         ['Phiếu thu, phiếu chi', 'Thu chi', '/cash', 'finance.view', Wallet],

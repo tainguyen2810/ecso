@@ -96,7 +96,7 @@ const showPrices = computed(() => !!prices.value && (prices.value.history.length
 const channelNames = computed(() => [...new Set((prices.value?.variants ?? []).flatMap((v) => v.channels.map((c) => c.shop_name ?? '')))].filter(Boolean));
 const sourceOptions = [
     { value: 'auto', label: 'Tự động (theo tồn kho)' },
-    { value: 'ecso', label: 'ECSO giữ giá' },
+    { value: 'ecso', label: 'EzChat Bán hàng giữ giá' },
     { value: 'woo', label: 'Website giữ giá' },
 ];
 const productSource = computed(() => {
@@ -104,7 +104,7 @@ const productSource = computed(() => {
     return set.size === 1 ? [...set][0]! : '';
 });
 function holderText(v: ProductPrices['variants'][number]) {
-    const who = v.holder === 'ecso' ? 'ECSO giữ' : 'Website giữ';
+    const who = v.holder === 'ecso' ? 'EzChat Bán hàng giữ' : 'Website giữ';
     return v.price_source === 'auto' ? `Tự động · ${who}` : who;
 }
 function holderHint(v: ProductPrices['variants'][number]) {
@@ -122,7 +122,7 @@ const historyStatus: Record<string, { label: string; tone: string }> = {
     applied: { label: 'Đã áp dụng', tone: 'text-success' },
     pending: { label: 'Chờ duyệt (ở trang gian hàng)', tone: 'text-amber-600' },
     rejected: { label: 'Bỏ qua', tone: 'text-muted-foreground' },
-    reverted: { label: 'Đã trả lại giá ECSO', tone: 'text-amber-600' },
+    reverted: { label: 'Đã trả lại giá EzChat Bán hàng', tone: 'text-amber-600' },
 };
 const savingSource = ref(false);
 async function setSource(value: string | undefined) {
@@ -272,7 +272,7 @@ async function remove() {
                     <div><dt class="text-muted-foreground">Có thể bán</dt><dd :class="cn('text-lg font-semibold tabular-nums', stockTotals.available <= 0 && 'text-destructive')">{{ formatNumber(stockTotals.available) }}</dd></div>
                     <div><dt class="text-muted-foreground">Đang giữ cho đơn</dt><dd class="font-medium tabular-nums">{{ formatNumber(stockTotals.reserved) }}</dd></div>
                     <div><dt class="text-muted-foreground">Hàng đang về</dt><dd class="font-medium tabular-nums">{{ formatNumber(stockTotals.incoming) }}</dd></div>
-                    <div v-if="canCost" class="col-span-2"><dt class="text-muted-foreground">Giá trị tồn (giá vốn BQ)</dt><dd class="font-medium tabular-nums">{{ formatMoney(stockTotals.value) }}</dd></div>
+                    <div v-if="canCost" class="col-span-2"><dt class="text-muted-foreground">Giá trị tồn (giá vốn)</dt><dd class="font-medium tabular-nums">{{ formatMoney(stockTotals.value) }}</dd></div>
                 </dl>
                 <p v-else class="p-5 text-sm text-muted-foreground">Bạn không có quyền xem tồn kho.</p>
             </Card>
@@ -284,9 +284,9 @@ async function remove() {
                         <MarketplaceLogo :marketplace="c.account?.marketplace ?? 'manual'" />
                         <div class="min-w-0 flex-1">
                             <p class="truncate text-sm font-medium">{{ c.account?.shop_name ?? 'Gian hàng đã xóa' }}</p>
-                            <p class="truncate text-xs text-muted-foreground">{{ c.push_error ? c.push_error : c.last_pushed_at ? `Đẩy tồn ${formatDateTime(c.last_pushed_at)}` : 'Chưa đẩy tồn' }}</p>
+                            <p class="truncate text-xs text-muted-foreground">{{ c.push_error ? c.push_error : c.last_pushed_at ? `Cập nhật tồn ${formatDateTime(c.last_pushed_at)}` : 'Chưa đẩy tồn' }}</p>
                         </div>
-                        <span v-if="c.push_errors" class="shrink-0 text-xs font-medium text-rose-600">Lỗi đẩy tồn</span>
+                        <span v-if="c.push_errors" class="shrink-0 text-xs font-medium text-rose-600">Lỗi cập nhật tồn</span>
                         <span v-else class="shrink-0 text-xs font-medium text-emerald-600">Đã liên kết {{ c.variants.length }}/{{ variantCount }}</span>
                     </li>
                 </ul>
@@ -325,7 +325,7 @@ async function remove() {
                             <th class="px-4 py-2.5 font-medium">Mã vạch</th>
                             <th class="px-4 py-2.5 text-right font-medium">Giá bán lẻ</th>
                             <th class="px-4 py-2.5 text-right font-medium">Giá bán buôn</th>
-                            <th v-if="canCost" class="px-4 py-2.5 text-right font-medium">Giá vốn BQ</th>
+                            <th v-if="canCost" class="px-4 py-2.5 text-right font-medium">Giá vốn</th>
                             <th v-if="canStock" class="px-4 py-2.5 text-right font-medium">Có thể bán</th>
                             <th v-if="showPrices" class="px-4 py-2.5 font-medium">Nguồn giá</th>
                             <th v-if="showPrices" class="px-4 py-2.5 font-medium">Giá trên {{ channelNames.length === 1 ? channelNames[0] : 'website' }}</th>
@@ -399,7 +399,7 @@ async function remove() {
                             <td v-if="(product.variants?.length ?? 0) > 1" class="whitespace-nowrap px-4 py-2.5 font-mono text-xs">{{ h.sku }}</td>
                             <td class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ h.old_price !== null ? formatMoney(h.old_price) : '—' }}</td>
                             <td class="whitespace-nowrap px-4 py-2.5 text-right font-medium tabular-nums">{{ formatMoney(h.new_price) }}</td>
-                            <td class="px-4 py-2.5">{{ h.source === 'ecso' ? 'ECSO' : (h.shop_name ?? 'Website') }}</td>
+                            <td class="px-4 py-2.5">{{ h.source === 'ecso' ? 'EzChat Bán hàng' : (h.shop_name ?? 'Website') }}</td>
                             <td class="px-4 py-2.5">{{ h.actor ? `${h.actor}: ${h.reason ?? ''}` : h.reason }}</td>
                             <td :class="cn('px-4 py-2.5', historyStatus[h.status]?.tone)">{{ historyStatus[h.status]?.label ?? h.status }}</td>
                         </tr>
@@ -408,7 +408,7 @@ async function remove() {
                 </table>
             </div>
             <p class="border-t px-4 py-3 text-xs text-muted-foreground">
-                Tự động: còn hàng thì ECSO giữ giá (sửa giá trong ECSO sẽ đẩy lên website, sửa trên website sẽ bị trả lại); hết hàng thì lấy giá bán thực tế trên website (giá khuyến mãi nếu có). ECSO chỉ đổi giá thường trên website, không đụng giá khuyến mãi.
+                Tự động: còn hàng thì EzChat Bán hàng giữ giá (sửa giá trong EzChat Bán hàng sẽ đẩy lên website, sửa trên website sẽ bị trả lại); hết hàng thì lấy giá bán thực tế trên website (giá khuyến mãi nếu có). EzChat Bán hàng chỉ đổi giá thường trên website, không đụng giá khuyến mãi.
             </p>
         </Card>
 
@@ -431,7 +431,7 @@ async function remove() {
                             <th class="px-4 py-2.5 text-right font-medium">Tồn an toàn</th>
                             <th class="px-4 py-2.5 text-right font-medium">Tồn tối đa</th>
                             <th class="px-4 py-2.5 font-medium">Vị trí</th>
-                            <th v-if="canCost" class="px-4 py-2.5 text-right font-medium">Giá vốn BQ</th>
+                            <th v-if="canCost" class="px-4 py-2.5 text-right font-medium">Giá vốn</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y">

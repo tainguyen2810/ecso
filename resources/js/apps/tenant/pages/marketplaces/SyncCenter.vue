@@ -18,7 +18,7 @@ import Queue from './sync-center/Queue.vue';
 
 /**
  * Trung tâm đồng bộ (docs/SYNC_CENTER_AUDIT.md §15): one page under Kết nối sàn to watch and operate the sync that
- * already runs, and to set how much stock each shop publishes (Phân bổ tồn). Shops and API keys stay on Kết nối sàn.
+ * already runs, and to set how much stock each shop publishes (Chia tồn cho từng shop). Shops and API keys stay on Kết nối sàn.
  */
 type Tab = 'overview' | 'queue' | 'log' | 'problems' | 'allocation';
 const route = useRoute();
@@ -57,7 +57,7 @@ const problemCount = computed(() => Object.values(overview.value?.problems.faile
 </script>
 
 <template>
-    <PageHeader title="Trung tâm đồng bộ" :description="`Theo dõi đơn, tồn kho và giá đồng bộ giữa EzSell và các kênh bán.${overview?.last_synced_at ? ' Lần đồng bộ gần nhất ' + formatDateTime(overview.last_synced_at) + '.' : ''}`">
+    <PageHeader title="Trung tâm đồng bộ" :description="`Theo dõi đơn, tồn kho và giá đồng bộ giữa EzChat Bán hàng và các kênh bán.${overview?.last_synced_at ? ' Lần đồng bộ gần nhất ' + formatDateTime(overview.last_synced_at) + '.' : ''}`">
         <template #links>
             <RouterLink to="/marketplaces" class="text-sm text-primary hover:underline">Shop &amp; tài khoản</RouterLink>
         </template>
@@ -73,7 +73,7 @@ const problemCount = computed(() => Object.values(overview.value?.problems.faile
                 { value: 'queue', label: 'Hàng đợi' },
                 { value: 'log', label: 'Nhật ký đơn' },
                 { value: 'problems', label: 'Lỗi cần xử lý', count: overview ? problemCount : null },
-                { value: 'allocation', label: 'Phân bổ tồn' },
+                { value: 'allocation', label: 'Chia tồn cho từng shop' },
             ]"
             data-testid="sync-center-tabs"
         />

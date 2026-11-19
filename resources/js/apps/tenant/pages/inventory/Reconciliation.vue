@@ -45,13 +45,13 @@ onMounted(load);
     <ErrorState v-if="loadError" :message="loadError" @retry="load" />
     <div v-else-if="loading && !data" class="space-y-3"><Skeleton v-for="i in 3" :key="i" class="h-16" /></div>
     <template v-else-if="data">
-        <p class="mb-4 text-xs text-muted-foreground">Kiểm tra lúc {{ formatDateTime(data.checked_at) }}. ECSO cũng tự kiểm tra mỗi đêm lúc 02:30.</p>
+        <p class="mb-4 text-xs text-muted-foreground">Kiểm tra lúc {{ formatDateTime(data.checked_at) }}. EzChat Bán hàng cũng tự kiểm tra mỗi đêm lúc 02:30.</p>
 
         <Card title="Sổ kho" description="Tồn từng kho phải bằng tổng các dòng nhập, xuất trong sổ kho; số đang giữ phải bằng tổng các đơn đang giữ hàng." class="mb-5">
             <div v-if="!data.ledger.length" class="flex items-center gap-2 p-5 text-sm text-success" data-testid="ledger-ok"><CircleCheck class="size-4" /> Tồn kho khớp với sổ kho ở mọi kho.</div>
             <template v-else>
                 <Alert tone="red" :icon="ShieldAlert" class="m-4" data-testid="ledger-problems">
-                    Có {{ data.ledger.length }} chỗ không khớp. ECSO không tự sửa sổ kho; hãy kiểm hàng SKU đó hoặc liên hệ hỗ trợ.
+                    Có {{ data.ledger.length }} chỗ không khớp. EzChat Bán hàng không tự sửa sổ kho; hãy kiểm hàng SKU đó hoặc liên hệ hỗ trợ.
                 </Alert>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
@@ -81,7 +81,7 @@ onMounted(load);
             </template>
         </Card>
 
-        <Card title="Đơn xuất thiếu hàng" description="Đơn đã bàn giao khi kho không đủ: phần thiếu chưa trừ khỏi tồn. ECSO tự trừ bù khi có hàng nhập về; nếu hàng thực ra đã đi, hãy kiểm hàng lại SKU đó.">
+        <Card title="Đơn xuất thiếu hàng" description="Đơn đã bàn giao khi kho không đủ: phần thiếu chưa trừ khỏi tồn. EzChat Bán hàng tự trừ bù khi có hàng nhập về; nếu hàng thực ra đã đi, hãy kiểm hàng lại SKU đó.">
             <EmptyState v-if="!data.shortages.length" :icon="PackageX" title="Không có đơn xuất thiếu" description="90 ngày qua không có đơn nào bàn giao khi kho thiếu hàng." />
             <div v-else class="overflow-x-auto">
                 <table class="w-full text-sm" data-testid="shortage-table">

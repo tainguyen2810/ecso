@@ -151,7 +151,7 @@ function startAction(action: string) {
     } else act(action);
 }
 
-// Orders the shop ships with its own carrier (own channels, website): carrier and tracking number are kept in ECSO and
+// Orders the shop ships with its own carrier (own channels, website): carrier and tracking number are kept in EzChat Bán hàng and
 // can be corrected after handover. Marketplace orders get theirs from the marketplace.
 const shipsItself = computed(() => isManual.value || isWebsite.value);
 const shippingOpen = ref(false);

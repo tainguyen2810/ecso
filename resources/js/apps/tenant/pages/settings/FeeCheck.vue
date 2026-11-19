@@ -94,7 +94,7 @@ async function sendImport() {
     body.append('file', file.value);
     try {
         const { data } = await api.post('/marketplace-pricing/settlements/import', body);
-        toast.success(`Đã nhập ${formatNumber(data.data.imported)} đơn đối soát (${formatNumber(data.data.linked)} đơn khớp với ECSO).`);
+        toast.success(`Đã nhập ${formatNumber(data.data.imported)} đơn đối soát (${formatNumber(data.data.linked)} đơn khớp với EzChat Bán hàng).`);
         importOpen.value = false;
         await load();
     } catch (e) {
@@ -227,7 +227,7 @@ const guides: Record<string, { name: string; path: string }> = {
         <Card>
             <div class="border-b px-4 py-3">
                 <h2 class="font-semibold">Lấy file đối soát ở đâu</h2>
-                <p class="text-xs text-muted-foreground">Khi sàn duyệt API, ECSO sẽ tự lấy dữ liệu này mỗi ngày, không cần nhập file. Nếu file của sàn không đọc được, hãy dùng file mẫu của ECSO.</p>
+                <p class="text-xs text-muted-foreground">Khi sàn duyệt API, EzChat Bán hàng sẽ tự lấy dữ liệu này mỗi ngày, không cần nhập file. Nếu file của sàn không đọc được, hãy dùng file mẫu của EzChat Bán hàng.</p>
             </div>
             <div class="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div v-for="(g, key) in guides" :key="key" class="rounded-md border p-3 text-sm">

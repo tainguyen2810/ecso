@@ -270,7 +270,7 @@ function sinceLabel(a: MarketplaceAccountData) {
                                 type="button"
                                 role="switch"
                                 :aria-checked="a.sync_enabled"
-                                aria-label="Tự đẩy tồn kho lên sàn"
+                                aria-label="Tự cập nhật tồn kho lên sàn"
                                 :disabled="!tenant.can('marketplace.connect') || busy === `toggle-${a.id}`"
                                 :class="['relative mt-1.5 h-5 w-9 rounded-full transition-colors disabled:opacity-60', a.sync_enabled ? 'bg-primary' : 'bg-slate-300']"
                                 :data-testid="`sync-toggle-${a.id}`"

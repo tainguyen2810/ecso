@@ -43,7 +43,7 @@ const tabs = computed(() => [
     { value: 'unmapped', label: 'Chưa map' },
     { value: 'mapped', label: 'Đã map', count: account.value?.stats?.mapped },
     { value: 'ignored', label: 'Bỏ qua' },
-    { value: 'push_error', label: 'Lỗi đẩy tồn', count: account.value?.stats?.push_errors },
+    { value: 'push_error', label: 'Lỗi cập nhật tồn', count: account.value?.stats?.push_errors },
 ]);
 
 async function load() {
@@ -145,7 +145,7 @@ function pickVariant(v: Variant) {
                         <th class="px-4 py-2.5 font-medium">SKU người bán</th>
                         <th class="px-4 py-2.5 text-right font-medium">Giá</th>
                         <th class="px-4 py-2.5 font-medium">SKU nội bộ</th>
-                        <th class="px-4 py-2.5 font-medium">Đẩy tồn</th>
+                        <th class="px-4 py-2.5 font-medium">Cập nhật tồn</th>
                         <th class="px-4 py-2.5" />
                     </tr>
                 </thead>

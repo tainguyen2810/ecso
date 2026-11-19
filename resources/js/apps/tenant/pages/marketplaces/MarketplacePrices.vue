@@ -87,7 +87,7 @@ const apply = (ids: string[] | null) => run(ids?.length === 1 ? `apply-${ids[0]}
 const lock = (ids: string[], locked: boolean) => run(`lock-${ids[0]}`, async () => {
     await api.post('/marketplace-pricing/board/lock', { listing_ids: ids, locked });
     await load(meta.value.current_page);
-    return locked ? 'Đã khóa giá, ECSO không đổi giá này nữa.' : 'Đã mở khóa giá.';
+    return locked ? 'Đã khóa giá, EzChat Bán hàng không đổi giá này nữa.' : 'Đã mở khóa giá.';
 });
 function exportFile(accountId: string) {
     window.location.href = `/api/v1/marketplace-pricing/board/export?account=${accountId}`;
@@ -180,7 +180,7 @@ const diffText = (c: PriceBoardCell) => (c.current !== null && c.new !== null ? 
                             <template v-if="canEdit">
                                 <button v-if="Object.values(r.cells).some(actionable)" type="button" class="text-primary hover:underline" @click="apply(Object.values(r.cells).filter(actionable).map((c) => c.listing_id))">Áp dụng</button>
                                 <button v-if="r.flags.locked" type="button" class="ml-2 inline-flex items-center gap-1 text-muted-foreground hover:text-foreground" @click="lock(Object.values(r.cells).filter((c) => c.locked).map((c) => c.listing_id), false)"><LockOpen class="size-3.5" /> Mở khóa</button>
-                                <button v-else type="button" class="ml-2 text-muted-foreground hover:text-foreground" title="Khóa giá: ECSO không đổi giá SKU này trên sàn" @click="lock(Object.values(r.cells).map((c) => c.listing_id), true)"><Lock class="size-3.5" /></button>
+                                <button v-else type="button" class="ml-2 text-muted-foreground hover:text-foreground" title="Khóa giá: EzChat Bán hàng không đổi giá SKU này trên sàn" @click="lock(Object.values(r.cells).map((c) => c.listing_id), true)"><Lock class="size-3.5" /></button>
                             </template>
                         </td>
                     </tr>
@@ -189,7 +189,7 @@ const diffText = (c: PriceBoardCell) => (c.current !== null && c.new !== null ? 
         </div>
         <Pagination v-if="rows.length" :page="meta.current_page" :last-page="meta.last_page" :total="meta.total" @go="load" />
         <p class="border-t px-5 py-3 text-xs text-muted-foreground">
-            Shopee, TikTok, Lazada chưa cấp quyền API đổi giá cho ECSO: <b>Áp dụng</b> ghi giá mới vào <b>file giá</b> (Excel: mã sản phẩm, mã phân loại, SKU, giá mới) để anh tải lên công cụ cập nhật hàng loạt của sàn. Khi sàn hiện đúng giá mới, ECSO tự đánh dấu xong. Khi API được duyệt, ECSO đẩy giá thẳng lên sàn.
+            Shopee, TikTok, Lazada chưa cấp quyền API đổi giá cho EzChat Bán hàng: <b>Áp dụng</b> ghi giá mới vào <b>file giá</b> (Excel: mã sản phẩm, mã phân loại, SKU, giá mới) để bạn tải lên công cụ cập nhật hàng loạt của sàn. Khi sàn hiện đúng giá mới, EzChat Bán hàng tự đánh dấu xong. Khi API được duyệt, EzChat Bán hàng đẩy giá thẳng lên sàn.
         </p>
     </Card>
 </template>

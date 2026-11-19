@@ -123,7 +123,7 @@ const steps = ['Thông tin cửa hàng', 'Bạn bán ở đâu', 'Bắt đầu']
     <div class="min-h-screen bg-background px-4 py-8 sm:py-10">
         <div class="mx-auto w-full max-w-3xl" data-testid="setup">
             <div class="mb-6 flex items-center justify-center gap-2.5 text-xl font-extrabold">
-                <span class="grid size-9 place-items-center rounded-lg bg-primary text-sm text-white">Ez</span> EzSell
+                <span class="grid size-9 place-items-center rounded-lg bg-primary text-sm text-white">Ez</span> EzChat Bán hàng
             </div>
 
             <ol class="mb-5 flex items-center gap-2 text-sm">
@@ -153,7 +153,7 @@ const steps = ['Thông tin cửa hàng', 'Bạn bán ở đâu', 'Bắt đầu']
                                 <Input id="setup-phone" v-model="info.phone" inputmode="tel" data-testid="setup-phone" />
                             </FormField>
                         </div>
-                        <FormField label="Ngành hàng chính" hint="Ghi vào Thông tin cửa hàng; giúp EzSell gợi ý cho đúng ngành.">
+                        <FormField label="Ngành hàng chính" hint="Ghi vào Thông tin cửa hàng; giúp EzChat Bán hàng gợi ý cho đúng ngành.">
                             <div class="flex flex-wrap gap-2" data-testid="setup-industry">
                                 <button
                                     v-for="i in INDUSTRIES"
@@ -183,7 +183,7 @@ const steps = ['Thông tin cửa hàng', 'Bạn bán ở đâu', 'Bắt đầu']
                 <template v-else-if="step === 1">
                     <div class="px-5 pt-5 sm:px-7">
                         <h1 class="text-xl font-bold">Bạn đang bán hàng ở đâu?</h1>
-                        <p class="mt-1 text-sm text-muted-foreground">Chọn tất cả kênh đang dùng. EzSell gợi ý việc cần làm theo đúng các kênh này; không tính năng nào bị khóa.</p>
+                        <p class="mt-1 text-sm text-muted-foreground">Chọn tất cả kênh đang dùng. EzChat Bán hàng gợi ý việc cần làm theo đúng các kênh này; không tính năng nào bị khóa.</p>
                     </div>
                     <div class="px-5 py-5 sm:px-7">
                         <div class="grid gap-3 sm:grid-cols-3" data-testid="setup-channels">

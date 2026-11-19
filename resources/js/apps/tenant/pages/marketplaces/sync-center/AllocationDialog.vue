@@ -45,7 +45,7 @@ const previewError = ref('');
 const saving = ref(false);
 
 const shop = computed(() => props.shops.find((s) => s.id === account.value));
-const title = computed(() => (props.target.sku ? `Cài đặt riêng${variant.value ? ' · ' + variant.value.sku : ' cho SKU'}` : `Phân bổ mặc định · ${shop.value?.name ?? ''}`));
+const title = computed(() => (props.target.sku ? `Cài đặt riêng${variant.value ? ' · ' + variant.value.sku : ' cho SKU'}` : `Chia tồn mặc định · ${shop.value?.name ?? ''}`));
 const description = computed(() =>
     props.target.sku
         ? 'SKU này dùng cài đặt dưới đây thay cho mặc định của shop.'

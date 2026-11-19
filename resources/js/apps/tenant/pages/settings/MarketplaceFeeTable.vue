@@ -145,7 +145,7 @@ const pctInput = 'h-8 w-[4.5rem] px-2 text-right tabular-nums';
                             <td class="px-2 text-right"><Input v-model="row.shop.min_margin_pct" :class="pctInput" :disabled="!canEdit" inputmode="decimal" /></td>
                             <td class="px-2">
                                 <label class="flex items-center gap-1.5 text-xs"><input v-model="row.shop.auto_apply" type="checkbox" :disabled="!canEdit" /> giá mới</label>
-                                <label class="mt-1 flex items-center gap-1.5 text-xs" title="Mỗi sáng, phí thực tế lệch quá 0,5 điểm % thì ECSO tự sửa bảng phí và báo email"><input v-model="row.shop.auto_update_fees" type="checkbox" :disabled="!canEdit" /> bảng phí</label>
+                                <label class="mt-1 flex items-center gap-1.5 text-xs" title="Mỗi sáng, phí thực tế lệch quá 0,5 điểm % thì EzChat Bán hàng tự sửa bảng phí và báo email"><input v-model="row.shop.auto_update_fees" type="checkbox" :disabled="!canEdit" /> bảng phí</label>
                             </td>
                             <td class="px-4 text-right"><Button v-if="canEdit" size="sm" :loading="busy === `save-${row.account.id}`" :data-testid="`fee-save-${row.account.id}`" @click="save(row)">Lưu</Button></td>
                         </tr>

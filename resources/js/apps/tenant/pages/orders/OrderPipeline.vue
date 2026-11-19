@@ -13,7 +13,7 @@ const emit = defineEmits<{ select: [key: string] }>();
 
 const queues = [
     { key: 'to_confirm', label: 'Chờ xác nhận' },
-    { key: 'payment_due', label: 'Chờ thanh toán' },
+    { key: 'payment_due', label: 'Còn phải thu', hint: 'Đơn tự tạo, khách chưa trả đủ' },
     { key: 'to_pack', label: 'Chờ đóng gói' },
     { key: 'to_handover', label: 'Chờ bàn giao' },
     { key: 'shipping', label: 'Đang giao hàng' },
@@ -73,6 +73,7 @@ function toggle() {
                     )
                 "
                 :data-testid="`pipeline-${q.key}`"
+                :title="q.hint"
                 @click="emit('select', q.key)"
             >
                 <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
