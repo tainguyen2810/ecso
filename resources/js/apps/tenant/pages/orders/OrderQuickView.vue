@@ -10,7 +10,8 @@ import { formatDateTime, formatMoney, formatNumber, initials } from '@/shared/li
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import PrintDialog from './PrintDialog.vue';
-import { actionLabels, marketplaceNames, orderStatus, paymentStatus } from './labels';
+import ShipDialog from './ShipDialog.vue';
+import { actionLabel, actionLabels, marketplaceNames, orderStatus, paymentStatus } from './labels';
 import type { OrderDetail } from '@/shared/types';
 
 /**
@@ -86,10 +87,17 @@ const action = computed(() => {
     if (!o || !tenant.can('orders.update')) return null;
     const a = nextAction[o.status];
     if (!a) return null;
-    return o.actions?.[a] && !o.actions[a].allowed ? null : a;
+    // Not offered by the marketplace (e.g. handover on Shopee: the carrier collects it): no button that can only fail.
+    return o.actions?.[a] && (!o.actions[a].allowed || o.actions[a].capability !== 'supported') ? null : a;
 });
+const shipOpen = ref(false);
+async function shipped() {
+    await load();
+    emit('changed');
+}
 async function run() {
     if (!order.value || !action.value) return;
+    if (action.value === 'pack' && order.value.marketplace_shipping) return void (shipOpen.value = true);
     busy.value = true;
     try {
         const { data } = await api.post('/orders/bulk', { ids: [order.value.id], action: action.value });
@@ -211,8 +219,9 @@ const source = computed(() => (order.value ? (order.value.channel?.name ?? order
             <div class="flex flex-wrap items-center gap-2 border-t px-5 py-3">
                 <Button v-if="order.source === 'manual'" variant="outline" @click="printOpen = true"><ReceiptText /> In đơn</Button>
                 <RouterLink v-if="order.editable && tenant.can('orders.create') && tenant.can('orders.update')" :to="`/orders/${order.id}/edit`"><Button variant="outline"><Pencil /> Sửa đơn</Button></RouterLink>
-                <Button v-if="action" class="ml-auto" :loading="busy" data-testid="quick-view-action" @click="run">{{ actionLabels[action] }}</Button>
+                <Button v-if="action" class="ml-auto" :loading="busy" data-testid="quick-view-action" @click="run">{{ actionLabel(action, order) }}</Button>
             </div>
+            <ShipDialog v-if="shipOpen" v-model:open="shipOpen" :ids="[order.id]" @done="shipped" />
         </template>
     </aside>
 </template>

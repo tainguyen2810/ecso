@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Ban, Banknote, Bookmark, ClipboardList, FilePen, Package, PackageX, ScanBarcode, Trash2, ChevronDown, ChevronsRight, Clock, Columns3, Download, Filter, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingCart, UserPlus, X } from 'lucide-vue-next';
+import { Ban, Banknote, Bookmark, ClipboardList, FilePen, Package, PackageCheck, PackageX, Tag, ScanBarcode, Trash2, ChevronDown, ChevronsRight, Clock, Columns3, Download, Filter, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingCart, UserPlus, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
@@ -21,8 +21,10 @@ import { api, ApiError, downloadFile } from '@/shared/lib/api';
 import { cn, formatDate, formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
-import { actionLabels, deadlineLabel, marketplaceNames, orderFlags, orderStatus, orderTabs, paymentMethods, paymentStatus } from './labels';
+import { actionLabel, actionLabels, deadlineLabel, marketplaceNames, orderFlags, orderStatus, orderTabs, paymentMethods, paymentStatus } from './labels';
 import PrintDialog from './PrintDialog.vue';
+import ShipDialog from './ShipDialog.vue';
+import LabelPrint from './LabelPrint.vue';
 import { downloadPackingSlips } from './packingSlip';
 import { downloadPickList } from './packing';
 import { useAuthStore } from '@/shared/stores/auth';
@@ -384,6 +386,36 @@ async function paySelected() {
 
 const selectedOrders = computed(() => orders.value.filter((o) => selected.value.has(o.id)));
 const selectedDue = computed(() => selectedOrders.value.filter((o) => o.source === 'manual' && Number(o.balance_due ?? 0) > 0));
+// Shopee / TikTok: "Chuẩn bị hàng" (the marketplace books its carrier) and the marketplace's own label.
+const selectedToArrange = computed(() => selectedOrders.value.filter((o) => o.marketplace_shipping && o.status === 'READY_TO_PACK'));
+const selectedLabels = computed(() => selectedOrders.value.filter((o) => o.marketplace_shipping && ['PACKED', 'HANDED_OVER', 'IN_TRANSIT', 'FAILED_DELIVERY'].includes(o.status)));
+const shipIds = ref<string[]>([]);
+const shipOpen = ref(false);
+function openShip(ids: string[]) {
+    shipIds.value = ids;
+    shipOpen.value = true;
+}
+const labelIds = ref<string[]>([]);
+const labelOpen = ref(false);
+function openLabels(ids: string[]) {
+    labelIds.value = ids;
+    labelOpen.value = true;
+}
+async function afterShip() {
+    selected.value = new Set();
+    await refresh();
+}
+/** "Đóng gói" on the bar: orders of other channels go on as before, Shopee / TikTok ones open "Chuẩn bị hàng". */
+async function bulkPack() {
+    const arrange = selectedToArrange.value.map((o) => o.id);
+    if (!arrange.length) return bulk('pack');
+    const others = [...selected.value].filter((id) => !arrange.includes(id));
+    if (others.length) {
+        selected.value = new Set(others);
+        await bulk('pack');
+    }
+    openShip(arrange);
+}
 
 async function print() {
     busy.value = 'print';
@@ -470,8 +502,14 @@ const channelPicked = (key: string) => (key === '' ? !filters.marketplace && !fi
 
 /** The next step of an order, done from its row (same rules as the bulk actions). */
 const nextAction: Record<string, string> = { PENDING_CONFIRMATION: 'confirm', READY_TO_PACK: 'pack', PACKED: 'handover' };
-const rowAction = (o: OrderSummary) => (tenant.can('orders.update') ? (nextAction[o.status] ?? null) : null);
+const rowAction = (o: OrderSummary) => {
+    // Shopee / TikTok after "Chuẩn bị hàng": the carrier comes to the parcel, what is left here is its label.
+    if (o.marketplace_shipping && o.status === 'PACKED') return tenant.can('orders.print') ? 'label' : null;
+    return tenant.can('orders.update') ? (nextAction[o.status] ?? null) : null;
+};
 async function runRow(o: OrderSummary, action: string) {
+    if (action === 'pack' && o.marketplace_shipping) return openShip([o.id]);
+    if (action === 'label') return openLabels([o.id]);
     busy.value = `row-${o.id}`;
     try {
         const { data } = await api.post('/orders/bulk', { ids: [o.id], action });
@@ -694,12 +732,16 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
             <span class="mr-2 font-semibold"><span class="tabular-nums">{{ selected.size }}</span> đơn đã chọn</span>
             <template v-if="tenant.can('orders.update')">
                 <Button size="sm" variant="outline" :loading="busy === 'confirm'" @click="bulk('confirm')">{{ actionLabels.confirm }}</Button>
-                <Button size="sm" variant="outline" :loading="busy === 'pack'" @click="bulk('pack')">{{ actionLabels.pack }}</Button>
+                <Button size="sm" variant="outline" :loading="busy === 'pack'" data-testid="bulk-pack" @click="bulkPack">
+                    <template v-if="selectedToArrange.length"><PackageCheck /> Chuẩn bị hàng ({{ selectedToArrange.length }})</template>
+                    <template v-else>{{ actionLabels.pack }}</template>
+                </Button>
                 <Button size="sm" variant="outline" :loading="busy === 'handover'" @click="bulk('handover')">{{ actionLabels.handover }}</Button>
             </template>
             <Button v-if="tenant.can('orders.payment')" size="sm" variant="outline" :disabled="!selectedDue.length" data-testid="bulk-pay" @click="payOpen = true"><Banknote /> Thanh toán nhanh</Button>
             <Button v-if="tenant.can('orders.assign')" size="sm" variant="outline" @click="assignOpen = true"><UserPlus /> Phân công</Button>
             <Button size="sm" variant="outline" :loading="busy === 'invoice'" data-testid="bulk-invoice" @click="printInvoices"><ReceiptText /> In hóa đơn</Button>
+            <Button v-if="tenant.can('orders.print') && selectedLabels.length" size="sm" variant="outline" data-testid="bulk-labels" @click="openLabels(selectedLabels.map((o) => o.id))"><Tag /> In phiếu sàn ({{ selectedLabels.length }})</Button>
             <Button v-if="tenant.can('orders.print')" size="sm" :loading="busy === 'print'" data-testid="print-slips" @click="print"><Printer /> In phiếu đóng gói</Button>
             <Button v-if="tenant.can('orders.print')" size="sm" variant="outline" :loading="busy === 'pick'" data-testid="print-picklist" @click="printPickList"><ClipboardList /> In phiếu nhặt hàng</Button>
             <Button v-if="tenant.can('orders.cancel')" size="sm" variant="outline" class="!text-rose-300" data-testid="bulk-cancel" @click="cancelOpen = true"><Ban /> Hủy đơn</Button>
@@ -759,6 +801,8 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                                     <span v-if="o.sync_warning" class="rounded-full bg-amber-50 px-1.5 text-amber-700">Cảnh báo</span>
                                     <span v-if="o.deleted_on_channel_at" class="rounded-full bg-rose-50 px-1.5 text-rose-600">Đã xóa trên website</span>
                                     <span v-if="o.flags.printed" class="inline-flex items-center gap-0.5"><Printer class="size-3" /> Đã in</span>
+                                    <span v-if="o.ship_arrangement && ['PACKED', 'HANDED_OVER'].includes(o.status)" class="rounded-full bg-sky-50 px-1.5 text-sky-700" data-testid="row-arrangement">{{ o.ship_arrangement.method === 'pickup' ? `Shipper lấy ${o.ship_arrangement.slot ?? ''}` : 'Tự mang ra bưu cục' }}</span>
+                                    <span v-if="o.label_print_count" class="inline-flex items-center gap-0.5 text-emerald-700" data-testid="row-label-count"><Tag class="size-3" /> Phiếu sàn đã in {{ o.label_print_count }} lần</span>
                                     <span v-for="t in o.tags ?? []" :key="t" class="rounded-full bg-slate-100 px-1.5 text-slate-600">#{{ t }}</span>
                                 </div>
                             </td>
@@ -798,7 +842,7 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                                 <div v-if="!columns.payment && !compact" class="text-xs text-muted-foreground">{{ o.payment_status && o.status !== 'CANCELLED' ? paymentStatus[o.payment_status]?.label : o.is_cod ? 'COD' : o.source === 'manual' ? '' : 'Sàn thu' }}</div>
                             </td>
                             <td class="px-3 py-2 text-right" @click.stop>
-                                <Button v-if="rowAction(o)" size="sm" variant="outline" class="whitespace-nowrap" :loading="busy === `row-${o.id}`" :data-testid="`row-action-${rowAction(o)}`" @click="runRow(o, rowAction(o)!)">{{ actionLabels[rowAction(o)!] }}</Button>
+                                <Button v-if="rowAction(o)" size="sm" variant="outline" class="whitespace-nowrap" :loading="busy === `row-${o.id}`" :data-testid="`row-action-${rowAction(o)}`" @click="runRow(o, rowAction(o)!)">{{ actionLabel(rowAction(o)!, o) }}</Button>
                             </td>
                         </tr>
                     </template>
@@ -813,6 +857,10 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
     <div v-if="selected.size" class="h-20" />
 
     <PrintDialog v-model:open="printOpen" :orders="printOrders" />
+    <ShipDialog v-if="shipOpen" v-model:open="shipOpen" :ids="shipIds" @done="afterShip" />
+    <Dialog v-model:open="labelOpen" title="In phiếu sàn" size="lg">
+        <LabelPrint v-if="labelOpen" :ids="labelIds" @printed="refresh" />
+    </Dialog>
 
     <Dialog v-model:open="assignOpen" title="Phân công đơn" :description="`${selected.size} đơn được chọn`">
         <Select v-model="assignTo" :options="[{ value: '', label: '— Bỏ phân công —' }, ...assignees.map((a) => ({ value: a.id, label: a.name }))]" aria-label="Nhân viên" />

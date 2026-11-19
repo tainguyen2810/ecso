@@ -4,6 +4,7 @@ namespace App\Modules\Orders\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Identity\Models\User;
+use App\Modules\Marketplace\Connectors\ArrangesShipment;
 use App\Modules\Marketplace\Connectors\Capability;
 use App\Modules\Marketplace\Connectors\ConnectorRegistry;
 use App\Modules\Marketplace\Connectors\WooCommerce\WooCommerceConnector;
@@ -84,10 +85,23 @@ class OrderActions
             throw new UnsupportedCapability($account->marketplace, $capability, $state);
         }
 
+        // "Chuẩn bị hàng" on Shopee / TikTok: the marketplace needs to know how the parcel reaches its carrier.
+        $choice = null;
+        if ($action === 'pack' && $connector instanceof ArrangesShipment) {
+            $choice = MarketplaceShipping::choiceFor($order, $params);
+            if ($choice === null) {
+                throw ValidationException::withMessages(['shipping' => 'Chọn cách giao hàng cho đơn sàn: shipper đến lấy hoặc tự mang ra bưu cục.']);
+            }
+            $params = $choice;
+        }
+
         try {
             $connector->performOrderAction($account, $order->external_order_id, $action, $params);
         } catch (ConnectorException $e) {
             throw ValidationException::withMessages(['action' => $e->getMessage()]);
+        }
+        if ($choice !== null) {
+            app(MarketplaceShipping::class)->arranged($order, $choice);
         }
 
         $result = $this->sync->syncOne($account, $order->external_order_id, 'user', null, Auth::id());
@@ -132,8 +146,8 @@ class OrderActions
         $results = [];
         foreach ($orders as $order) {
             try {
-                $this->perform($order, $action, $params);
-                $results[] = ['id' => $order->ulid, 'ok' => true, 'message' => null];
+                $done = $this->perform($order, $action, $params);
+                $results[] = ['id' => $order->ulid, 'ok' => true, 'message' => null, 'external_order_id' => $done->external_order_id, 'tracking_number' => $done->tracking_number];
             } catch (ValidationException $e) {
                 $results[] = ['id' => $order->ulid, 'ok' => false, 'message' => collect($e->errors())->flatten()->first()];
             } catch (UnsupportedCapability $e) {

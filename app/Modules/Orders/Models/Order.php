@@ -28,6 +28,9 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $cancelled_at
  * @property Carbon|null $deleted_on_channel_at
  * @property Carbon|null $packing_slip_printed_at
+ * @property array{method: string, slot: string|null, address: string|null, at: string}|null $ship_arrangement
+ * @property int $label_print_count
+ * @property Carbon|null $label_printed_at
  * @property Carbon|null $deliver_on
  * @property array<int, string>|null $tags
  * @property string|null $shipping_street
@@ -103,6 +106,9 @@ class Order extends Model
             'cancelled_at' => 'datetime',
             'deleted_on_channel_at' => 'datetime',
             'packing_slip_printed_at' => 'datetime',
+            'ship_arrangement' => 'array',
+            'label_print_count' => 'integer',
+            'label_printed_at' => 'datetime',
             'raw' => 'array',
             'tags' => 'array',
             'deliver_on' => 'date',

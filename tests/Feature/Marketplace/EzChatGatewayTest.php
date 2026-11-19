@@ -11,6 +11,10 @@ use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Models\MarketplaceCredential;
 use App\Modules\Marketplace\Models\WebhookEvent;
 use App\Modules\Marketplace\Services\AccountService;
+use App\Modules\Orders\Domain\OrderStatus;
+use App\Modules\Orders\Models\Order;
+use App\Modules\Orders\Models\OrderItem;
+use App\Modules\Orders\Services\OrderSync;
 use App\Modules\Tenancy\Support\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\Request;
@@ -43,6 +47,10 @@ function fakeEzChat(array $answers): void
 {
     Http::fake(function (Request $r) use ($answers) {
         $path = (string) parse_url($r->url(), PHP_URL_PATH);
+        if (! str_starts_with($r->url(), EZ_URL)) {
+            // A file the marketplace links to (TikTok's label PDF): not EzChat, no signature.
+            return Http::response($answers[$r->url()] ?? '', isset($answers[$r->url()]) ? 200 : 404);
+        }
         $ts = $r->header('X-Banhang-Timestamp')[0] ?? '';
         if (! hash_equals(hash_hmac('sha256', "{$ts}.{$path}.{$r->body()}", EZ_SECRET), $r->header('X-Banhang-Signature')[0] ?? '')) {
             return Http::response(['error' => ['code' => 'UNAUTHORIZED', 'message' => 'Invalid signature']], 401);
@@ -75,7 +83,8 @@ it('offers Shopee and TikTok Shop through EzChat once EZCHAT_URL and EZCHAT_SECR
         expect($connector)->toBeInstanceOf($class)
             ->and($connector->capabilities()[Capability::ORDERS_FETCH])->toBe(Capability::SUPPORTED)
             ->and($connector->capabilities()[Capability::INVENTORY_UPDATE])->toBe(Capability::SUPPORTED)
-            ->and($connector->capabilities()[Capability::ORDERS_PACK])->toBe(Capability::UNKNOWN);
+            ->and($connector->capabilities()[Capability::ORDERS_PACK])->toBe(Capability::SUPPORTED)
+            ->and($connector->capabilities()[Capability::ORDERS_CANCEL])->toBe(Capability::UNKNOWN);
     }
     actingInTenant($this->owner, $this->tenant)->getJson('/api/v1/marketplaces')->assertOk()
         ->assertJsonPath('data.0.key', 'shopee')->assertJsonPath('data.0.credentials_configured', true);
@@ -287,4 +296,132 @@ it('tells EzChat to forget the share when the shop is disconnected', function ()
 
     expect(ezCalls()[0]['key'])->toBe('/api/banhang/gw/revoke')->and(ezCalls()[0]['token'])->toBe('Bearer share-token-1')
         ->and($account->refresh()->status)->toBe(MarketplaceAccount::REVOKED);
+});
+
+/** A Shopee order waiting to be packed; once ship_order was called Shopee reports it PROCESSED with a tracking number. */
+function shopeeShipFake(array $extra = []): void
+{
+    $shipped = false;
+    $order = fn (string $status) => ['data' => ['data' => ['response' => ['order_list' => [[
+        'order_sn' => '2611SHIP1', 'order_status' => $status, 'create_time' => 1763500000, 'update_time' => 1763500000 + ($status === 'PROCESSED' ? 60 : 0),
+        'ship_by_date' => 1763600000, 'currency' => 'VND', 'total_amount' => 120000, 'shipping_carrier' => 'SPX Express',
+        'recipient_address' => ['name' => 'L***n', 'full_address' => 'TP. HCM'],
+        'item_list' => [['item_id' => 11, 'item_name' => 'Áo thun', 'model_id' => 0, 'model_quantity_purchased' => 1, 'model_original_price' => 120000, 'model_discounted_price' => 120000]],
+    ]]]]]];
+    fakeEzChat([
+        'GET /api/v2/order/get_order_detail' => function () use (&$shipped, $order) {
+            return Http::response($order($shipped ? 'PROCESSED' : 'READY_TO_SHIP'));
+        },
+        'GET /api/v2/logistics/get_shipping_parameter' => ['data' => ['data' => ['response' => [
+            'info_needed' => ['pickup' => ['address_id', 'pickup_time_id'], 'dropoff' => []],
+            'pickup' => ['address_list' => [
+                ['address_id' => 7, 'address' => '99 Nguyễn Trãi', 'city' => 'TP. Hồ Chí Minh', 'address_flag' => ['return_address'], 'time_slot_list' => []],
+                ['address_id' => 8, 'address' => '12 Lê Lợi', 'district' => 'Quận 1', 'city' => 'TP. Hồ Chí Minh', 'address_flag' => ['pickup_address'],
+                    'time_slot_list' => [['date' => 1763604000, 'time_text' => '08:00-12:00', 'pickup_time_id' => 'slot-8']]],
+            ]],
+        ]]]],
+        'POST /api/v2/logistics/ship_order' => function () use (&$shipped) {
+            $shipped = true;
+
+            return Http::response(['data' => ['data' => ['response' => []]]]);
+        },
+        'GET /api/v2/logistics/get_tracking_number' => ['data' => ['data' => ['response' => ['tracking_number' => 'SPXVN0099']]]],
+        'POST /api/v2/logistics/get_shipping_document_parameter' => ['data' => ['data' => ['response' => ['result_list' => [['order_sn' => '2611SHIP1', 'suggest_shipping_document_type' => 'THERMAL_AIR_WAYBILL']]]]]],
+        'POST /api/v2/logistics/create_shipping_document' => ['data' => ['data' => ['response' => ['result_list' => [['order_sn' => '2611SHIP1']]]]]],
+        'POST /api/v2/logistics/get_shipping_document_result' => ['data' => ['data' => ['response' => ['result_list' => [['order_sn' => '2611SHIP1', 'status' => 'READY']]]]]],
+        'POST /api/v2/logistics/download_shipping_document' => ['data' => ['data' => ['file' => base64_encode('%PDF-1.4 shopee label'), 'contentType' => 'application/pdf']]],
+        ...$extra,
+    ]);
+}
+
+it('prepares Shopee orders from the list: pickup slot of the shop address, then prints Shopee\'s label', function () {
+    shopeeShipFake();
+    $account = gatewayShop($this->tenant, 'shopee');
+    TenantContext::run($this->tenant, fn () => app(OrderSync::class)->syncOne($account, '2611SHIP1', 'webhook'));
+    $order = Order::withoutGlobalScopes()->where('external_order_id', '2611SHIP1')->sole();
+    expect($order->status)->toBe(OrderStatus::READY_TO_PACK);
+    $api = actingInTenant($this->owner, $this->tenant);
+
+    $api->getJson('/api/v1/orders?flags[]=not_arranged')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.marketplace_shipping', true);
+    $group = $api->postJson('/api/v1/orders/ship-options', ['ids' => [$order->ulid]])->assertOk()->json('data.groups.0');
+    expect($group['account']['id'])->toBe($account->ulid)
+        ->and($group['options']['pickup']['available'])->toBeTrue()->and($group['options']['dropoff']['available'])->toBeTrue()
+        ->and($group['options']['pickup']['addresses'][0])->toMatchArray(['id' => '8', 'label' => '12 Lê Lợi, Quận 1, TP. Hồ Chí Minh'])
+        ->and($group['options']['pickup']['addresses'][0]['slots'][0]['id'])->toBe('slot-8')
+        ->and($group['options']['pickup']['addresses'][0]['slots'][0]['label'])->toContain('08:00-12:00');
+
+    // Without a choice nothing is sent to Shopee.
+    $api->postJson('/api/v1/orders/bulk', ['ids' => [$order->ulid], 'action' => 'pack'])->assertOk()
+        ->assertJsonPath('data.0.ok', false)->assertJsonPath('data.0.message', fn ($m) => str_contains($m, 'Chọn cách giao'));
+    expect(collect(ezCalls())->where('key', 'POST /api/v2/logistics/ship_order'))->toHaveCount(0);
+
+    $choice = ['method' => 'pickup', 'address_id' => '8', 'slot_id' => 'slot-8', 'slot_label' => 'Thứ 5 20/11 · 08:00-12:00', 'address_label' => '12 Lê Lợi'];
+    $api->postJson('/api/v1/orders/bulk', ['ids' => [$order->ulid], 'action' => 'pack', 'shipping' => [$account->ulid => $choice]])->assertOk()
+        ->assertJsonPath('data.0.ok', true)->assertJsonPath('data.0.tracking_number', 'SPXVN0099');
+    $ship = collect(ezCalls())->firstWhere('key', 'POST /api/v2/logistics/ship_order');
+    expect($ship['body'])->toBe(['order_sn' => '2611SHIP1', 'pickup' => ['address_id' => 8, 'pickup_time_id' => 'slot-8']]);
+    $order->refresh();
+    expect($order->status)->toBe(OrderStatus::PACKED)->and($order->ship_arrangement)->toMatchArray(['method' => 'pickup', 'slot' => 'Thứ 5 20/11 · 08:00-12:00', 'address' => '12 Lê Lợi'])
+        ->and($account->refresh()->settings['ship_choice'])->toBe(['method' => 'pickup', 'address_id' => '8']);
+
+    $api->getJson('/api/v1/orders?flags[]=label_unprinted')->assertOk()->assertJsonCount(1, 'data');
+    $labels = $api->postJson('/api/v1/orders/shipping-labels', ['ids' => [$order->ulid]])->assertOk()->json('data');
+    expect($labels['failed'])->toBe([])->and(base64_decode($labels['files'][0]['pdf']))->toBe('%PDF-1.4 shopee label')
+        ->and($order->refresh()->label_print_count)->toBe(1);
+    $download = collect(ezCalls())->firstWhere('key', 'POST /api/v2/logistics/download_shipping_document');
+    expect($download['body'])->toBe(['shipping_document_type' => 'THERMAL_AIR_WAYBILL', 'order_list' => [['order_sn' => '2611SHIP1']]]);
+    $api->getJson('/api/v1/orders?flags[]=label_unprinted')->assertOk()->assertJsonCount(0, 'data');
+});
+
+it('packing a Shopee order asks how it goes, or uses the shop\'s last choice when Cấu hình says so', function () {
+    shopeeShipFake();
+    $account = gatewayShop($this->tenant, 'shopee');
+    TenantContext::run($this->tenant, fn () => app(OrderSync::class)->syncOne($account, '2611SHIP1', 'webhook'));
+    $order = Order::withoutGlobalScopes()->where('external_order_id', '2611SHIP1')->sole();
+    $line = (string) OrderItem::withoutGlobalScopes()->where('order_id', $order->id)->value('id');
+    $api = actingInTenant($this->owner, $this->tenant);
+
+    $api->postJson("/api/v1/orders/{$order->ulid}/packing/finish", ['scanned' => [$line => 1]])->assertStatus(422)->assertJsonValidationErrors('shipping');
+
+    $account->forceFill(['settings' => [...($account->settings ?? []), 'ship_choice' => ['method' => 'dropoff', 'address_id' => null]]])->save();
+    $api->putJson('/api/v1/tenant/settings/sales', ['marketplace_auto_arrange' => true])->assertOk();
+    $api->postJson("/api/v1/orders/{$order->ulid}/packing/finish", ['scanned' => [$line => 1]])->assertOk()->assertJsonPath('data.status', OrderStatus::PACKED);
+    expect(collect(ezCalls())->firstWhere('key', 'POST /api/v2/logistics/ship_order')['body'])->toBe(['order_sn' => '2611SHIP1', 'dropoff' => []])
+        ->and($order->refresh()->ship_arrangement['method'])->toBe('dropoff');
+});
+
+it('prepares a TikTok Shop package for drop-off and prints its label from TikTok\'s file link', function () {
+    $shipped = false;
+    fakeEzChat([
+        'GET /order/202309/orders' => function () use (&$shipped) {
+            return Http::response(['data' => ['data' => ['orders' => [[
+                'id' => '5790001', 'status' => $shipped ? 'AWAITING_COLLECTION' : 'AWAITING_SHIPMENT', 'create_time' => 1763500000, 'update_time' => 1763500000 + ($shipped ? 60 : 0),
+                'payment' => ['currency' => 'VND', 'sub_total' => '99000', 'total_amount' => '99000'], 'packages' => [['id' => 'PKG77']],
+                'line_items' => [['id' => 'L1', 'sku_id' => 'S1', 'product_name' => 'Mũ', 'sale_price' => '99000', 'original_price' => '99000']],
+            ]]]]]);
+        },
+        'GET /fulfillment/202309/packages/PKG77/handover_time_slots' => ['data' => ['data' => ['can_pickup' => true, 'can_drop_off' => true, 'pickup_slots' => [
+            ['start_time' => 1763600000, 'end_time' => 1763614400, 'avaliable' => true], ['start_time' => 1763700000, 'end_time' => 1763714400, 'avaliable' => false],
+        ]]]],
+        'POST /fulfillment/202309/packages/PKG77/ship' => function () use (&$shipped) {
+            $shipped = true;
+
+            return Http::response(['data' => ['data' => []]]);
+        },
+        'GET /fulfillment/202309/packages/PKG77/shipping_documents' => ['data' => ['data' => ['doc_url' => 'https://open-fs.tiktokshop.test/label.pdf']]],
+        'https://open-fs.tiktokshop.test/label.pdf' => '%PDF-1.4 tiktok label',
+    ]);
+    $account = gatewayShop($this->tenant, 'tiktok', '7000');
+    TenantContext::run($this->tenant, fn () => app(OrderSync::class)->syncOne($account, '5790001', 'webhook'));
+    $order = Order::withoutGlobalScopes()->where('external_order_id', '5790001')->sole();
+    $api = actingInTenant($this->owner, $this->tenant);
+
+    $options = $api->postJson('/api/v1/orders/ship-options', ['ids' => [$order->ulid]])->assertOk()->json('data.groups.0.options');
+    expect($options['pickup']['addresses'][0]['slots'])->toHaveCount(1)->and($options['pickup']['addresses'][0]['slots'][0]['id'])->toBe('1763600000-1763614400');
+
+    $api->postJson("/api/v1/orders/{$order->ulid}/actions/pack", ['shipping' => [$account->ulid => ['method' => 'dropoff']]])->assertOk()->assertJsonPath('data.status', OrderStatus::PACKED);
+    expect(collect(ezCalls())->firstWhere('key', 'POST /fulfillment/202309/packages/PKG77/ship')['body'])->toBe(['handover_method' => 'DROP_OFF']);
+
+    $labels = $api->postJson('/api/v1/orders/shipping-labels', ['ids' => [$order->ulid]])->assertOk()->json('data');
+    expect(base64_decode($labels['files'][0]['pdf']))->toBe('%PDF-1.4 tiktok label');
 });

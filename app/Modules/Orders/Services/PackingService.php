@@ -4,11 +4,13 @@ namespace App\Modules\Orders\Services;
 
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Inventory\Services\ReservationLedger;
+use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
 use App\Modules\Orders\Models\OrderStatusHistory;
 use App\Modules\Orders\Models\PackScanError;
+use App\Modules\Tenancy\Support\TenantSettings;
 use App\Shared\Support\ReportRange;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -36,7 +38,7 @@ class PackingService
         OrderStatus::RETURNED => 'Đã hoàn',
     ];
 
-    public function __construct(private readonly OrderActions $actions, private readonly AuditLogger $audit, private readonly ReservationLedger $ledger) {}
+    public function __construct(private readonly OrderActions $actions, private readonly AuditLogger $audit, private readonly ReservationLedger $ledger, private readonly MarketplaceShipping $shipping) {}
 
     /** The order behind a scanned code: our order code, the marketplace's order id or the tracking number. */
     public function find(string $code): Order
@@ -119,8 +121,9 @@ class PackingService
      * Marks the order packed. $scanned holds the count per line id; a line short of its quantity needs $reason.
      *
      * @param  array<string, int>  $scanned
+     * @param  array<string, array<string, string|null>>|null  $shipping  marketplace order: "Chuẩn bị hàng" choice per shop
      */
-    public function finish(Order $order, array $scanned, ?string $reason): Order
+    public function finish(Order $order, array $scanned, ?string $reason, ?array $shipping = null): Order
     {
         $lines = collect($this->present($order)['lines']);
         $short = $lines
@@ -131,7 +134,23 @@ class PackingService
             throw ValidationException::withMessages(['reason' => 'Đơn còn thiếu hàng: ghi lý do đóng thiếu, hoặc quét đủ rồi hoàn tất.']);
         }
 
-        $order = $this->actions->perform($order, 'pack');
+        // Shopee / TikTok: packing done means "Chuẩn bị hàng" on the marketplace. The packer picks how the parcel goes,
+        // or (Cấu hình › Bán hàng) the shop's last choice is used with the earliest pickup slot.
+        $params = [];
+        if ($this->shipping->connector($order) !== null) {
+            if ($shipping === null && TenantSettings::current()->get('sales.marketplace_auto_arrange')) {
+                try {
+                    $shipping = $this->shipping->autoChoice($order);
+                } catch (ConnectorException $e) {
+                    throw ValidationException::withMessages(['shipping' => preg_replace('#^/\S+: #', '', $e->getMessage())]);
+                }
+            }
+            if ($shipping === null) {
+                throw ValidationException::withMessages(['shipping' => 'Chọn cách giao hàng để chuẩn bị hàng trên sàn.']);
+            }
+            $params = ['shipping' => $shipping];
+        }
+        $order = $this->actions->perform($order, 'pack', $params);
 
         if ($short->isNotEmpty()) {
             $this->actions->addNote($order, 'Đóng thiếu hàng: '.$short->implode(', ').'. Lý do: '.$reason);

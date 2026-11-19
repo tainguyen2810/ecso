@@ -4,6 +4,7 @@ namespace App\Modules\Orders\Http\Resources;
 
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Orders\Services\MarketplaceShipping;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -71,6 +72,11 @@ class OrderResource extends JsonResource
             'placed_at' => $this->placed_at?->toIso8601String(),
             'paid_at' => $this->paid_at?->toIso8601String(),
             'ship_by_at' => $this->ship_by_at?->toIso8601String(),
+            // Shopee / TikTok: "Chuẩn bị hàng" and the marketplace label are done from here.
+            'marketplace_shipping' => ! $this->isManual() && in_array($this->marketplace, MarketplaceShipping::marketplaces(), true),
+            'ship_arrangement' => $this->ship_arrangement,
+            'label_print_count' => (int) ($this->label_print_count ?? 0),
+            'label_printed_at' => $this->label_printed_at?->toIso8601String(),
             'deliver_on' => $this->deliver_on?->toDateString(),
             'handed_over_at' => $this->handed_over_at?->toIso8601String(),
             'cancelled_at' => $this->cancelled_at?->toIso8601String(),

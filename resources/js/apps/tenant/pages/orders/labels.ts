@@ -35,7 +35,9 @@ export const orderFlags: { value: string; label: string }[] = [
     { value: 'shortage', label: 'Thiếu hàng' },
     { value: 'unmapped', label: 'Chưa liên kết sản phẩm' },
     { value: 'warning', label: 'Cảnh báo đồng bộ' },
-    { value: 'not_printed', label: 'Chưa in phiếu' },
+    { value: 'not_printed', label: 'Chưa in phiếu đóng gói' },
+    { value: 'not_arranged', label: 'Chưa chuẩn bị hàng (sàn)' },
+    { value: 'label_unprinted', label: 'Chưa in phiếu sàn' },
 ];
 
 export const actionLabels: Record<string, string> = {
@@ -48,6 +50,10 @@ export const actionLabels: Record<string, string> = {
     fail_delivery: 'Giao thất bại',
     redeliver: 'Giao lại',
 };
+
+/** Name of an action on this order: on Shopee / TikTok, packing is "Chuẩn bị hàng" (the marketplace books its carrier). */
+export const actionLabel = (action: string, order?: { marketplace_shipping?: boolean } | null): string =>
+    action === 'label' ? 'In phiếu sàn' : action === 'pack' && order?.marketplace_shipping ? 'Chuẩn bị hàng' : (actionLabels[action] ?? action);
 
 /** Order of the buttons on a manual order (primary action first). */
 export const manualActionOrder = ['confirm', 'pack', 'handover', 'redeliver', 'deliver', 'complete', 'fail_delivery', 'cancel'];

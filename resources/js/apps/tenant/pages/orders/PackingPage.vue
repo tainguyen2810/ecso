@@ -36,6 +36,7 @@ import { useAuthStore } from "@/shared/stores/auth";
 import { useTenantStore } from "@/shared/stores/tenant";
 import { marketplaceNames } from "./labels";
 import { downloadPackingSlips } from "./packingSlip";
+import ShipDialog from "./ShipDialog.vue";
 import {
     beep,
     downloadPickList,
@@ -263,7 +264,15 @@ async function tryFinish() {
     );
 }
 
-async function finish(reason: string | null) {
+// Shopee / TikTok: finishing is "Chuẩn bị hàng" on the marketplace. When the server needs to know how the parcel goes
+// (no automatic choice in Cấu hình), the packer picks it in the dialog and the finish is sent again with it.
+const shipOpen = ref(false);
+const pendingReason = ref<string | null>(null);
+function shipChosen(shipping: Record<string, unknown>) {
+    void finish(pendingReason.value, shipping);
+}
+
+async function finish(reason: string | null, shipping: Record<string, unknown> | null = null) {
     const o = order.value;
     if (!o) return;
     busy.value = "finish";
@@ -271,6 +280,7 @@ async function finish(reason: string | null) {
         await api.post(`/orders/${o.id}/packing/finish`, {
             scanned: counts.value,
             reason,
+            shipping,
         });
         shortOpen.value = false;
         toast.success(`Đã đóng gói đơn ${o.external_order_id}.`);
@@ -290,6 +300,12 @@ async function finish(reason: string | null) {
         }
         await loadStats();
     } catch (e) {
+        if (e instanceof ApiError && !shipping && e.field("shipping")) {
+            pendingReason.value = reason;
+            shipOpen.value = true;
+            say("info", "Đơn sàn: chọn cách giao để chuẩn bị hàng.");
+            return;
+        }
         say(
             "error",
             e instanceof ApiError ? e.message : "Không hoàn tất được đơn.",
@@ -715,4 +731,5 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
             >
         </template>
     </Dialog>
+    <ShipDialog v-if="shipOpen && order" v-model:open="shipOpen" :ids="[order.id]" mode="select" @chosen="shipChosen" />
 </template>

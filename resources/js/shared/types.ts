@@ -286,6 +286,11 @@ export interface OrderSummary {
     coupon_codes?: string[];
     transaction_id?: string | null;
     flags: { shortage: boolean; unmapped: boolean; overdue: boolean; due_soon: boolean; printed: boolean };
+    /** Shopee / TikTok Shop: "Chuẩn bị hàng" and the marketplace label are done from here. */
+    marketplace_shipping?: boolean;
+    ship_arrangement?: { method: 'pickup' | 'dropoff'; slot: string | null; address: string | null; at: string } | null;
+    label_print_count?: number;
+    label_printed_at?: string | null;
     sync_warning: string | null;
     warehouse?: { id: string; code: string; name: string } | null;
     assignee?: Ref | null;

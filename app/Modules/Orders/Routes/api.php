@@ -24,6 +24,8 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::get('orders/tags', [OrderController::class, 'tags']);
     Route::post('orders/bulk', [OrderController::class, 'bulk'])->middleware('throttle:30,1,orders.orders.bulk');
     Route::post('orders/packing-slips', [OrderController::class, 'packingSlips']);
+    Route::post('orders/ship-options', [OrderController::class, 'shipOptions'])->middleware('throttle:60,1,orders.orders.ship-options');
+    Route::post('orders/shipping-labels', [OrderController::class, 'shippingLabels'])->middleware('throttle:30,1,orders.orders.shipping-labels');
     Route::post('orders/pick-list', [PackingController::class, 'pickList']);
     Route::get('orders/packing/lookup', [PackingController::class, 'lookup'])->middleware('throttle:240,1,orders.packing.lookup');
     Route::get('orders/packing/stats', [PackingController::class, 'stats']);

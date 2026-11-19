@@ -104,7 +104,7 @@ it('requires the connect permission', function () {
     actingInTenant($staff, $this->tenant)->postJson('/api/v1/marketplace-accounts/authorize/testmp')->assertForbidden();
 });
 
-it('returns UNSUPPORTED_CAPABILITY for order actions on a Shopee order', function () {
+it('returns UNSUPPORTED_CAPABILITY for order actions not offered on a Shopee order; packing needs a shipping choice', function () {
     $variant = makeVariant($this->tenant, 'AO-1');
     $account = TenantContext::run($this->tenant, fn () => MarketplaceAccount::query()->forceCreate([
         'marketplace' => 'shopee', 'external_shop_id' => 'sp-1', 'shop_name' => 'Shopee shop', 'region' => 'VN',
@@ -115,10 +115,12 @@ it('returns UNSUPPORTED_CAPABILITY for order actions on a Shopee order', functio
         'raw_status' => 'READY_TO_SHIP', 'status' => 'READY_TO_PACK', 'placed_at' => now(),
     ]));
 
-    actingInTenant($this->owner, $this->tenant)->postJson("/api/v1/orders/{$order->ulid}/actions/pack")
+    actingInTenant($this->owner, $this->tenant)->postJson("/api/v1/orders/{$order->ulid}/actions/cancel")
         ->assertStatus(422)->assertJsonPath('code', 'UNSUPPORTED_CAPABILITY')->assertJsonPath('state', 'unknown');
+    actingInTenant($this->owner, $this->tenant)->postJson("/api/v1/orders/{$order->ulid}/actions/pack")
+        ->assertStatus(422)->assertJsonValidationErrors('shipping');
     actingInTenant($this->owner, $this->tenant)->getJson("/api/v1/orders/{$order->ulid}")
-        ->assertJsonPath('data.actions.pack.capability', 'unknown');
+        ->assertJsonPath('data.actions.cancel.capability', 'unknown')->assertJsonPath('data.actions.pack.capability', 'supported');
 });
 
 it('enforces the shop limit of the plan when a new shop comes back from authorization', function () {

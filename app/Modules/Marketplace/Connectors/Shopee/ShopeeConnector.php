@@ -192,6 +192,94 @@ class ShopeeConnector extends GatewayConnector
         }
     }
 
+    // ---- Chuẩn bị hàng, shipping label ----------------------------------------------------------------------
+
+    public function shipOptions(MarketplaceAccount $account, string $externalOrderId): array
+    {
+        $res = (array) ($this->gateway->call($account, 'GET', '/api/v2/logistics/get_shipping_parameter', ['order_sn' => $externalOrderId])['response'] ?? []);
+        $needed = (array) ($res['info_needed'] ?? []);
+        $addresses = [];
+        foreach ((array) ($res['pickup']['address_list'] ?? []) as $a) {
+            $flags = (array) ($a['address_flag'] ?? []);
+            $slots = [];
+            foreach ((array) ($a['time_slot_list'] ?? []) as $t) {
+                if (filled($t['pickup_time_id'] ?? null)) {
+                    $slots[] = ['id' => (string) $t['pickup_time_id'], 'label' => self::slotLabel((int) ($t['date'] ?? 0), null, filled($t['time_text'] ?? null) ? (string) $t['time_text'] : null)];
+                }
+            }
+            $addresses[] = [
+                'id' => (string) $a['address_id'],
+                'label' => implode(', ', array_filter([$a['address'] ?? null, $a['district'] ?? null, $a['city'] ?? null, $a['state'] ?? null], 'filled')),
+                'slots' => $slots,
+                'default' => in_array('pickup_address', $flags, true) || in_array('default_address', $flags, true),
+            ];
+        }
+        // The shop's pickup address first.
+        usort($addresses, fn ($a, $b) => $b['default'] <=> $a['default']);
+
+        return [
+            'pickup' => ['available' => array_key_exists('pickup', $needed) && $addresses !== [], 'addresses' => array_map(fn ($a) => ['id' => $a['id'], 'label' => $a['label'], 'slots' => $a['slots']], $addresses)],
+            'dropoff' => ['available' => array_key_exists('dropoff', $needed)],
+            'carrier' => null,
+        ];
+    }
+
+    protected function arrange(MarketplaceAccount $account, string $externalOrderId, string $method, ?string $addressId, ?string $slotId): void
+    {
+        $body = ['order_sn' => $externalOrderId];
+        if ($method === 'pickup') {
+            if ($addressId === null) {
+                throw new ConnectorException('Chọn địa chỉ shipper đến lấy hàng.', temporary: false);
+            }
+            $body['pickup'] = ['address_id' => (int) $addressId, 'pickup_time_id' => $slotId];
+        } else {
+            // A drop-off point is only asked for in some regions; the first branch Shopee offers is used then.
+            $res = (array) ($this->gateway->call($account, 'GET', '/api/v2/logistics/get_shipping_parameter', ['order_sn' => $externalOrderId])['response'] ?? []);
+            $branch = $res['dropoff']['branch_list'][0]['branch_id'] ?? null;
+            $body['dropoff'] = in_array('branch_id', (array) ($res['info_needed']['dropoff'] ?? []), true) && $branch !== null ? ['branch_id' => (int) $branch] : (object) [];
+        }
+        $this->gateway->call($account, 'POST', '/api/v2/logistics/ship_order', [], $body);
+    }
+
+    /**
+     * Shopee makes the label in steps: pick the document type, ask for it, wait until it is ready, download the PDF
+     * (EzChat passes the file on as base64).
+     */
+    public function shippingLabel(MarketplaceAccount $account, string $externalOrderId): string
+    {
+        $one = ['order_list' => [['order_sn' => $externalOrderId]]];
+        $param = $this->gateway->call($account, 'POST', '/api/v2/logistics/get_shipping_document_parameter', [], $one);
+        $type = (string) ($param['response']['result_list'][0]['suggest_shipping_document_type'] ?? 'THERMAL_AIR_WAYBILL');
+        $tracking = (string) ($this->gateway->call($account, 'GET', '/api/v2/logistics/get_tracking_number', ['order_sn' => $externalOrderId])['response']['tracking_number'] ?? '');
+        if ($tracking === '') {
+            throw new ConnectorException('Shopee chưa cấp mã vận đơn cho đơn này. Thử lại sau ít phút.', temporary: true);
+        }
+        $create = $this->gateway->call($account, 'POST', '/api/v2/logistics/create_shipping_document', [], ['order_list' => [['order_sn' => $externalOrderId, 'tracking_number' => $tracking, 'shipping_document_type' => $type]]]);
+        $error = (string) ($create['response']['result_list'][0]['fail_message'] ?? $create['response']['result_list'][0]['fail_error'] ?? '');
+        // Asked before (printed already): Shopee keeps the document, go on to download it.
+        if ($error !== '' && ! preg_match('/already|exist|created/i', $error)) {
+            throw new ConnectorException("Shopee: {$error}", temporary: false);
+        }
+        for ($try = 0; ; $try++) {
+            $result = $this->gateway->call($account, 'POST', '/api/v2/logistics/get_shipping_document_result', [], ['order_list' => [['order_sn' => $externalOrderId, 'shipping_document_type' => $type]]]);
+            $status = (string) ($result['response']['result_list'][0]['status'] ?? '');
+            if ($status === 'READY') {
+                break;
+            }
+            if ($status === 'FAILED' || $try >= 4) {
+                throw new ConnectorException('Shopee chưa tạo xong phiếu giao cho đơn này. Thử in lại sau ít phút.', temporary: true);
+            }
+            usleep(800_000);
+        }
+        $file = $this->gateway->call($account, 'POST', '/api/v2/logistics/download_shipping_document', [], ['shipping_document_type' => $type, 'order_list' => [['order_sn' => $externalOrderId]]]);
+        $pdf = base64_decode((string) ($file['file'] ?? ''), true);
+        if (! is_string($pdf) || ! str_starts_with($pdf, '%PDF')) {
+            throw new ConnectorException('Shopee không trả về file phiếu giao. Hãy cập nhật EzChat lên bản mới rồi thử lại.', temporary: false);
+        }
+
+        return $pdf;
+    }
+
     // ---- Products ---------------------------------------------------------------------------------------------
 
     /** Cursor: the offset of the next page of get_item_list. */
