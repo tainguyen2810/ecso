@@ -56,6 +56,7 @@ interface Summary {
     days: number;
     revenue_by_day: { date: string; revenue: string; orders: number; channels: Record<string, string> }[];
     revenue_by_channel: RevenueChannel[];
+    payout: { received: string; orders: number; pending: string; pending_orders: number } | null;
     recent: OrderSummary[];
 }
 
@@ -160,6 +161,9 @@ const kpis = computed(() => {
         { key: 'revenue', label: 'Doanh thu hôm nay', value: formatMoney(o.today_ordered_revenue), delta: pct(Number(o.today_ordered_revenue), yRevenue), deltaText: null as string | null, line: sparkline(revenue), note: 'Khách trả, chưa trừ phí sàn', to: null as string | null },
         { key: 'orders', label: 'Đơn hàng mới', value: formatNumber(o.today_orders), delta: null, deltaText: yOrders || o.today_orders ? `${o.today_orders - yOrders >= 0 ? '+' : ''}${o.today_orders - yOrders} đơn` : null, up: o.today_orders >= yOrders, line: sparkline(count), note: `${formatNumber(o.to_process)} đơn đang chờ xử lý`, to: '/orders' },
         { key: 'avg', label: 'Giá trị TB / đơn', value: o.today_orders ? formatMoney(todayAvg) : '—', delta: o.today_orders ? pct(todayAvg, yAvg) : null, deltaText: null, line: sparkline(avg), note: 'so với hôm qua', to: null },
+        ...(o.payout
+            ? [{ key: 'payout', label: `Thực nhận ${days.value} ngày`, value: formatMoney(o.payout.received), delta: null, deltaText: null, line: '', note: o.payout.pending_orders ? `+ ${formatMoney(o.payout.pending)} tạm tính (${formatNumber(o.payout.pending_orders)} đơn)` : `${formatNumber(o.payout.orders)} đơn sàn đã chốt tiền`, to: '/finance' as string | null }]
+            : []),
         { key: 'cancel', label: 'Hủy / hoàn hôm nay', value: `${formatNumber(o.today_cancelled)} / ${formatNumber(o.today_returns)}`, delta: null, deltaText: null, line: '', note: 'đơn hủy / đơn hoàn trả', to: '/orders?tab=cancelled' },
     ].map((k) => ({ ...k, up: 'up' in k ? (k as { up: boolean }).up : (k.delta ?? 0) >= 0 }));
 });
@@ -318,7 +322,7 @@ const showStart = computed(() => !sellerPath.value && !startHidden.value && !pro
             </RouterLink>
         </div>
 
-        <div class="mb-5 grid gap-px overflow-hidden rounded-xl border bg-border shadow-xs sm:grid-cols-2 xl:grid-cols-4" data-testid="dashboard-kpis">
+        <div :class="['mb-5 grid gap-px overflow-hidden rounded-xl border bg-border shadow-xs sm:grid-cols-2', kpis.length > 4 ? 'xl:grid-cols-5' : 'xl:grid-cols-4']" data-testid="dashboard-kpis">
             <component :is="k.to ? 'RouterLink' : 'div'" v-for="k in kpis" :key="k.key" :to="k.to ?? undefined" :class="['block bg-card px-5 py-4', k.to && 'hover:bg-slate-50']">
                 <div class="flex items-center justify-between gap-2">
                     <p class="text-sm text-muted-foreground">{{ k.label }}</p>

@@ -38,6 +38,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::put('orders/{order}/assignee', [OrderController::class, 'assign']);
     Route::put('orders/{order}/meta', [OrderController::class, 'meta']);
     Route::post('orders/{order}/notes', [OrderController::class, 'note']);
+    Route::post('orders/{order}/payout', [OrderController::class, 'refreshPayout'])->middleware('throttle:30,1,orders.payout');
     Route::post('orders/{order}/sync', [OrderController::class, 'sync'])->middleware('throttle:30,1,orders.orders.x.sync');
     Route::post('orders/{order}/returns', [ReturnController::class, 'store'])->middleware('idempotent');
 

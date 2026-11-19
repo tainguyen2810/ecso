@@ -42,6 +42,9 @@ Schedule::command('ecso:carriers:track')->everyThirtyMinutes()->withoutOverlappi
 
 Schedule::command('ecso:woo:check-webhooks')->hourlyAt(17)->withoutOverlapping(50)->onOneServer();
 
+// Tiền thực nhận (đợt 5): settlements of delivered marketplace orders, read from the marketplaces' finance APIs.
+Schedule::command('ecso:marketplace:settlements')->everyTwoHours(23)->withoutOverlapping(100)->onOneServer();
+
 // Fee check: actual marketplace fees vs fee tables, loss orders (round 3 WooCommerce/pricing).
 Schedule::command('ecso:marketplace:check-fees')->dailyAt('06:00')->withoutOverlapping(120)->onOneServer();
 

@@ -17,6 +17,7 @@ import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError, idempotent, newIdempotencyKey } from '@/shared/lib/api';
 import { cn, formatDateTime, formatMoney, initials } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
+import OrderPayoutCard from './OrderPayoutCard.vue';
 import OrderShipmentsCard from '../shipments/OrderShipmentsCard.vue';
 import OrderEInvoiceCard from './OrderEInvoiceCard.vue';
 import { useTenantStore } from '@/shared/stores/tenant';
@@ -507,7 +508,7 @@ async function createReturn() {
                             <template v-if="!isManual && Number(order.refunded_amount ?? 0) > 0"><dt class="text-rose-600">Đã hoàn trên website</dt><dd class="text-right tabular-nums text-rose-600" data-testid="refunded-total">−{{ formatMoney(order.refunded_amount ?? 0) }}</dd></template>
                         </dl>
                     </div>
-                    <p v-if="!isManual" class="border-t px-5 py-2 text-xs text-muted-foreground">Số tiền khách trả chưa phải tiền thực nhận: phí sàn, phí thanh toán và đối soát sẽ được tính ở module Tài chính.</p>
+                    <OrderPayoutCard v-if="!isManual && order.payout && order.status !== 'CANCELLED'" :order-id="order.id" :payout="order.payout" :marketplace-name="marketplaceNames[order.marketplace] ?? order.marketplace" />
                 </Card>
 
                 <OrderShipmentsCard :order-id="order.id" :order-code="order.external_order_id" :shipments="order.shipments ?? []" :ships-itself="shipsItself" :order-status="order.status" @changed="load" />

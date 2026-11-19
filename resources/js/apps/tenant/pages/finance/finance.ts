@@ -6,6 +6,7 @@ export interface ShopRow {
     shop: string;
     marketplace: string;
     ordered_orders: number;
+    payout: number | null;
     cancelled_orders: number;
     revenue: number;
     orders: number;
@@ -70,7 +71,7 @@ export const metricTitles: Record<Metric, string> = {
     cancelled: 'Đơn hủy',
     returns: 'Phiếu trả hàng đã duyệt',
     fees: 'Phí sàn theo đơn',
-    payouts: 'Tiền sàn đã chuyển về (theo file đối soát)',
+    payouts: 'Tiền sàn đã chuyển về',
 };
 
 export const feeStatusLabels: Record<string, string> = {

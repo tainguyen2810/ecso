@@ -204,6 +204,8 @@ class FinanceReport
                 'fees' => $p['marketplace_fees'],
                 'fees_unknown_orders' => $p['fees_unknown_orders'],
                 'shipping' => $p['shipping'],
+                // Đợt 5: money the marketplace paid for the shop's orders of the period (null: own channel or none yet).
+                'payout' => $isAccount ? $this->payout($from, $to, ['account' => $shop->id])['received'] : null,
                 // Contribution before selling expenses (which belong to the whole business).
                 'profit' => $p['contribution_profit'],
                 'margin' => $p['revenue'] > 0 ? round($p['contribution_profit'] / $p['revenue'] * 100, 1) : null,

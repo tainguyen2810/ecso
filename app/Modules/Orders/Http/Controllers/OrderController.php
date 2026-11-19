@@ -11,6 +11,8 @@ use App\Modules\Inventory\Services\ReservationLedger;
 use App\Modules\Marketplace\Connectors\Capability;
 use App\Modules\Marketplace\Connectors\ConnectorRegistry;
 use App\Modules\Marketplace\Exceptions\ConnectorException;
+use App\Modules\Marketplace\Models\MarketplaceSettlement;
+use App\Modules\Marketplace\Services\SettlementSync;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Http\Resources\OrderResource;
 use App\Modules\Orders\Http\Resources\ReturnResource;
@@ -38,6 +40,7 @@ use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Sales\Services\ManualOrderService;
 use App\Modules\Sales\Services\PaymentService;
 use App\Modules\Tenancy\Models\TenantUser;
+use App\Modules\Tenancy\Support\TenantContext;
 use App\Shared\Support\ReportRange;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -191,6 +194,8 @@ class OrderController extends Controller
                     ])->values(),
                     'return' => $r->orderReturn ? ['id' => $r->orderReturn->ulid, 'number' => $r->orderReturn->number, 'status' => $r->orderReturn->status] : null,
                 ]),
+            // Đợt 5: tiền thực nhận, giá vốn và lãi (lãi only with finance.profit).
+            'payout' => app(SettlementSync::class)->view($order, app(TenantContext::class)->can('finance.profit')),
             // This order was taken in exchange for returned goods.
             'exchanged_from' => OrderReturn::query()->with('order')->where('exchange_order_id', $order->id)->get()->map(fn (OrderReturn $r) => [
                 'id' => $r->ulid, 'number' => $r->number, 'credit' => $r->exchange_credit,
@@ -486,11 +491,40 @@ class OrderController extends Controller
             'days' => $days,
             'revenue_by_day' => array_values(array_map(fn ($d) => [...$d, 'channels' => (object) $d['channels']], $byDay)),
             'revenue_by_channel' => collect($byChannel)->map(fn ($v, $k) => ['key' => (string) $k, ...$channelInfo[$k], 'revenue' => $v])->values(),
+            // Đợt 5 "Thực nhận": money the marketplaces settled in the range (and still estimated), for finance members.
+            'payout' => app(TenantContext::class)->can('finance.view') ? $this->payoutSummary($from) : null,
             'to_process' => Order::query()->whereIn('status', OrderStatus::OPEN)->count(),
             'overdue' => Order::query()->whereIn('status', OrderStatus::OPEN)->where('ship_by_at', '<', now())->count(),
             'shortage' => Order::query()->where('has_shortage', true)->whereIn('status', OrderStatus::OPEN)->count(),
             'recent' => OrderResource::collection(Order::query()->with(['account', 'channel', 'items.variant.product.images'])->orderByDesc('placed_at')->orderByDesc('id')->limit(6)->get()),
         ]]);
+    }
+
+    /** @return array{received: string, orders: int, pending: string, pending_orders: int} */
+    private function payoutSummary(\DateTimeInterface $from): array
+    {
+        $row = MarketplaceSettlement::query()->where('settled_at', '>=', $from)->where('final', true)->toBase()
+            ->selectRaw('COALESCE(SUM(net_amount), 0) as amount, COUNT(*) as n')->first();
+        $pending = MarketplaceSettlement::query()->where('final', false)->toBase()->selectRaw('COALESCE(SUM(net_amount), 0) as amount, COUNT(*) as n')->first();
+
+        return [
+            'received' => number_format((float) $row->amount, 2, '.', ''), 'orders' => (int) $row->n,
+            'pending' => number_format((float) $pending->amount, 2, '.', ''), 'pending_orders' => (int) $pending->n,
+        ];
+    }
+
+    /** Đợt 5: reads the order's "tiền thực nhận" from the marketplace now. */
+    public function refreshPayout(Request $request, Order $order, SettlementSync $settlements): JsonResponse
+    {
+        $this->authorize('view', $order);
+        abort_unless($settlements->supports($order), 422, 'Sàn này chưa cho lấy tiền thực nhận tự động. Nhập file đối soát ở Cấu hình › Phí sàn.');
+        try {
+            $settlements->fetch($order->loadMissing('account'));
+        } catch (ConnectorException $e) {
+            abort(422, $e->getMessage());
+        }
+
+        return response()->json(['data' => $settlements->view($order, app(TenantContext::class)->can('finance.profit'))]);
     }
 
     /** Members who can be assigned orders. */

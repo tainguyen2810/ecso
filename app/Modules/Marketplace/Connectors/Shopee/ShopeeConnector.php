@@ -444,6 +444,47 @@ class ShopeeConnector extends GatewayConnector
         return $results;
     }
 
+    // ---- Tiền thực nhận -----------------------------------------------------------------------------------------
+
+    /** Shopee's escrow detail: an estimate until the order is completed and the money released (final = null). */
+    public function settlement(MarketplaceAccount $account, string $externalOrderId): ?array
+    {
+        $res = (array) ($this->gateway->call($account, 'GET', '/api/v2/payment/get_escrow_detail', ['order_sn' => $externalOrderId])['response'] ?? []);
+        $in = (array) ($res['order_income'] ?? []);
+        if (! array_key_exists('escrow_amount', $in)) {
+            return null;
+        }
+        $n = fn (string $k): float => round((float) ($in[$k] ?? 0), 2);
+        $fee = fn (string $k): float => abs($n($k));
+        $shipping = $n('final_shipping_fee') < 0 ? abs($n('final_shipping_fee')) : 0.0;
+        $goods = array_key_exists('cost_of_goods_sold', $in) ? $n('cost_of_goods_sold') : $n('original_price') - $fee('seller_discount');
+        $lines = array_values(array_filter([
+            ['label' => 'Tiền hàng', 'amount' => $goods],
+            ['label' => 'Voucher của shop', 'amount' => -$fee('voucher_from_seller')],
+            ['label' => 'Phí cố định (hoa hồng)', 'amount' => -$fee('commission_fee')],
+            ['label' => 'Phí dịch vụ', 'amount' => -$fee('service_fee')],
+            ['label' => 'Phí thanh toán', 'amount' => -$fee('seller_transaction_fee')],
+            ['label' => 'Phí tiếp thị liên kết', 'amount' => -$fee('order_ams_commission_fee')],
+            ['label' => 'Phí vận chuyển shop trả', 'amount' => -$shipping],
+            ['label' => 'Phí vận chuyển trả hàng', 'amount' => -$fee('reverse_shipping_fee')],
+            ['label' => 'Hoàn tiền cho người mua', 'amount' => -$fee('seller_return_refund')],
+            ['label' => 'Thuế', 'amount' => -$fee('escrow_tax')],
+        ], fn ($l) => abs($l['amount']) >= 0.01));
+
+        return [
+            'order_amount' => $goods,
+            'commission_fee' => $fee('commission_fee'),
+            'payment_fee' => $fee('seller_transaction_fee'),
+            'service_fee' => $fee('service_fee') + $fee('order_ams_commission_fee'),
+            'fixed_fee' => 0.0,
+            'shipping_fee' => $shipping + $fee('reverse_shipping_fee'),
+            'net_amount' => $n('escrow_amount'),
+            'final' => null,
+            'settled_at' => null,
+            'lines' => $lines,
+        ];
+    }
+
     // ---- Helpers ----------------------------------------------------------------------------------------------
 
     public static function skuId(int $itemId, int $modelId): string

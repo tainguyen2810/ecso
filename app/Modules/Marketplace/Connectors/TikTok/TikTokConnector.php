@@ -362,6 +362,98 @@ class TikTokConnector extends GatewayConnector
         return $results;
     }
 
+    // ---- Tiền thực nhận -----------------------------------------------------------------------------------------
+
+    /** TikTok's own totals, summed from the fee lines, not fees of their own. */
+    private const FEE_TOTALS = ['fee_amount', 'fee_tax_amount', 'total_fee_amount', 'total_fee_tax_amount', 'settlement_amount', 'revenue_amount',
+        'shipping_cost_amount', 'adjustment_amount', 'total_revenue_amount', 'tax_amount', 'total_amount'];
+
+    /** @var array<string, string> */
+    private const FEE_LABELS = [
+        'platform_commission' => 'Phí hoa hồng sàn', 'referral_fee' => 'Phí giới thiệu', 'transaction_fee' => 'Phí thanh toán',
+        'affiliate_commission' => 'Hoa hồng tiếp thị liên kết', 'affiliate_partner_commission' => 'Hoa hồng đối tác liên kết',
+        'sfp_service_fee' => 'Phí dịch vụ SFP', 'live_specials_fee' => 'Phí LIVE Specials', 'voucher_xtra_service_fee' => 'Phí Voucher Xtra',
+        'flash_sales_service_fee' => 'Phí Flash Sale', 'bonus_cashback_service_fee' => 'Phí hoàn xu',
+    ];
+
+    /**
+     * The order's statement (Finance 202309). TikTok writes it once the order is delivered; null before. Settled when
+     * the statement is paid out.
+     */
+    public function settlement(MarketplaceAccount $account, string $externalOrderId): ?array
+    {
+        $d = $this->gateway->call($account, 'GET', '/finance/'.self::V.'/orders/'.rawurlencode($externalOrderId).'/statement_transactions');
+        $list = (array) ($d['statement_transactions'] ?? $d['order_statement_transactions'] ?? []);
+        $top = $list !== [] ? array_values(array_filter($list, 'is_array')) : (array_key_exists('settlement_amount', $d) ? [$d] : []);
+        if ($top === []) {
+            return null;
+        }
+        $sum = fn (string $k): float => round(array_sum(array_map(fn ($x) => is_numeric($x[$k] ?? null) ? (float) $x[$k] : 0.0, $top)), 2);
+        $amounts = [];
+        foreach ($top as $x) {
+            self::amounts(array_diff_key($x, ['sku_statement_transactions' => 1]), $amounts);
+        }
+        $isFee = fn (string $k) => (bool) preg_match('/fee|commission/', $k) && ! in_array($k, self::FEE_TOTALS, true) && ! preg_match('/shipping|tax/', $k);
+        if (! array_filter(array_keys($amounts), $isFee)) {
+            // Only the per-SKU breakdown carries the fee lines.
+            foreach ($top as $x) {
+                self::amounts((array) ($x['sku_statement_transactions'] ?? []), $amounts);
+            }
+        }
+        $buckets = ['commission_fee' => 0.0, 'payment_fee' => 0.0, 'service_fee' => 0.0];
+        $lines = [['label' => 'Tiền hàng', 'amount' => $sum('revenue_amount')]];
+        foreach ($amounts as $k => $v) {
+            if (! $isFee($k) || abs($v) < 0.01) {
+                continue;
+            }
+            $key = (string) preg_replace('/_amount$/', '', $k);
+            $bucket = preg_match('/commission|referral/', $key) && ! str_contains($key, 'affiliate') ? 'commission_fee' : (preg_match('/transaction|payment/', $key) ? 'payment_fee' : 'service_fee');
+            $buckets[$bucket] += abs($v);
+            $lines[] = ['label' => self::FEE_LABELS[$key] ?? ucfirst(str_replace('_', ' ', $key)), 'amount' => -abs($v)];
+        }
+        $shipping = $sum('shipping_cost_amount');
+        if (abs($shipping) >= 0.01) {
+            $lines[] = ['label' => $shipping < 0 ? 'Phí vận chuyển shop trả' : 'Trợ giá vận chuyển', 'amount' => $shipping];
+        }
+        $adjust = $sum('adjustment_amount');
+        if (abs($adjust) >= 0.01) {
+            $lines[] = ['label' => 'Điều chỉnh của sàn', 'amount' => $adjust];
+        }
+        $at = null;
+        foreach ($top as $x) {
+            $at ??= self::time($x['statement_time'] ?? $x['settled_time'] ?? null);
+        }
+        $settled = $at !== null || (bool) array_filter($top, fn ($x) => preg_match('/SETTLED|PAID|COMPLETED/i', (string) ($x['status'] ?? $x['statement_status'] ?? '')));
+
+        return [
+            'order_amount' => $sum('revenue_amount'),
+            ...array_map(fn ($v) => round($v, 2), $buckets),
+            'fixed_fee' => 0.0,
+            'shipping_fee' => $shipping < 0 ? abs($shipping) : 0.0,
+            'net_amount' => $sum('settlement_amount'),
+            'final' => $settled,
+            'settled_at' => $at,
+            'lines' => $lines,
+        ];
+    }
+
+    /**
+     * Sums every "*_amount" leaf of a statement by key.
+     *
+     * @param  array<mixed>  $v
+     * @param  array<string, float>  $out
+     */
+    private static function amounts(array $v, array &$out): void
+    {
+        foreach ($v as $k => $x) {
+            if (is_array($x)) {
+                self::amounts($x, $out);
+            } elseif (is_string($k) && str_ends_with($k, '_amount') && is_numeric($x)) {
+                $out[$k] = ($out[$k] ?? 0.0) + (float) $x;
+            }
+        }
+    }
+
     private static function time(mixed $unix): ?CarbonImmutable
     {
         return is_numeric($unix) && (int) $unix > 0 ? CarbonImmutable::createFromTimestamp((int) $unix) : null;

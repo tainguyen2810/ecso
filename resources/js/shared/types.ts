@@ -349,6 +349,7 @@ export interface OrderDetail extends OrderSummary {
     /** Website order: what the store reports paid that nobody has confirmed in a fund yet (null otherwise). */
     unconfirmed_amount?: string | null;
     created_by: string | null;
+    payout?: OrderPayout;
     exchanged_from?: { id: string; number: string; credit: string; order: { id: string; external_order_id: string } }[];
     customer_stats: { orders_count: number; total_spent: string; debt: string; returns_count: number; failed_deliveries: number } | null;
     refunds?: OrderRefundData[];
@@ -1099,4 +1100,23 @@ export interface MarketplaceImageSource {
     account: { id: string; name: string; marketplace: string };
     images: string[];
     variants: { url: string; label: string; variant_ids: string[] }[];
+}
+
+/** Đợt 5 "Tiền thực nhận" of a marketplace order: the sàn's settlement, cost of goods and profit (finance.profit only). */
+export interface OrderPayout {
+    supported: boolean;
+    settlement: {
+        final: boolean;
+        source: 'api' | 'file';
+        settled_at: string | null;
+        fetched_at: string | null;
+        order_amount: string;
+        fees: string | null;
+        net_amount: string;
+        lines: { label: string; amount: string }[];
+    } | null;
+    cogs: string | null;
+    cogs_estimated: boolean;
+    profit: string | null;
+    profit_hidden: boolean;
 }

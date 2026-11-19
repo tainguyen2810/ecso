@@ -96,9 +96,9 @@ function exportCsv() {
     ];
     const shops = d.by_shop.map((s) => [
         s.shop, marketplaceNames[s.marketplace] ?? s.marketplace, s.ordered_orders, s.cancelled_orders, s.orders, s.net_revenue,
-        ...(p ? [s.cogs, s.gross_profit] : []), s.fees, s.fees_unknown_orders, s.shipping, ...(p ? [s.profit, s.margin] : []), s.average_order, s.growth,
+        ...(p ? [s.cogs, s.gross_profit] : []), s.fees, s.fees_unknown_orders, s.payout, s.shipping, ...(p ? [s.profit, s.margin] : []), s.average_order, s.growth,
     ]);
-    const shopHead = ['Shop / kênh', 'Sàn', 'Đơn đặt', 'Đơn hủy', 'Đơn ghi nhận', 'Doanh thu thuần', ...(p ? ['Giá vốn', 'Lãi gộp'] : []), 'Phí sàn', 'Đơn chưa biết phí', 'Ship khách trả', ...(p ? ['Lợi nhuận đóng góp', 'Biên %'] : []), 'Giá trị TB/đơn', 'Tăng trưởng %'];
+    const shopHead = ['Shop / kênh', 'Sàn', 'Đơn đặt', 'Đơn hủy', 'Đơn ghi nhận', 'Doanh thu thuần', ...(p ? ['Giá vốn', 'Lãi gộp'] : []), 'Phí sàn', 'Đơn chưa biết phí', 'Thực nhận', 'Ship khách trả', ...(p ? ['Lợi nhuận đóng góp', 'Biên %'] : []), 'Giá trị TB/đơn', 'Tăng trưởng %'];
     const csv = toCsv(head, lines) + '\n\n' + toCsv(shopHead, shops).replace(/^﻿/, '');
     downloadCsv(`tai-chinh-${d.range.from}-${d.range.to}.csv`, csv);
 }
@@ -226,6 +226,7 @@ function exportCsv() {
                             <th v-if="profit" class="px-3 py-2.5 text-right font-medium">Giá vốn</th>
                             <th v-if="profit" class="px-3 py-2.5 text-right font-medium">Lãi gộp</th>
                             <th class="px-3 py-2.5 text-right font-medium">Phí sàn</th>
+                            <th class="px-3 py-2.5 text-right font-medium">Thực nhận</th>
                             <th v-if="profit" class="px-3 py-2.5 text-right font-medium" :title="formulas.contribution">Lợi nhuận đóng góp</th>
                             <th v-if="profit" class="px-3 py-2.5 text-right font-medium">Biên</th>
                             <th class="px-3 py-2.5 text-right font-medium">TB/đơn</th>
@@ -244,6 +245,7 @@ function exportCsv() {
                             <td class="whitespace-nowrap px-3 py-2.5 text-right tabular-nums">
                                 {{ formatMoney(s.fees) }}<span v-if="s.fees_unknown_orders" class="block text-[11px] text-amber-600">+ {{ s.fees_unknown_orders }} đơn chưa biết phí</span>
                             </td>
+                            <td class="whitespace-nowrap px-3 py-2.5 text-right tabular-nums" data-testid="shop-payout">{{ s.payout === null ? '—' : formatMoney(s.payout) }}</td>
                             <td v-if="profit" :class="cn('whitespace-nowrap px-3 py-2.5 text-right tabular-nums font-medium', Number(s.profit) < 0 && 'text-destructive')">{{ formatMoney(s.profit) }}</td>
                             <td v-if="profit" class="whitespace-nowrap px-3 py-2.5 text-right tabular-nums">{{ s.margin === null ? '—' : s.margin + '%' }}</td>
                             <td class="whitespace-nowrap px-3 py-2.5 text-right tabular-nums">{{ formatMoney(s.average_order) }}</td>
