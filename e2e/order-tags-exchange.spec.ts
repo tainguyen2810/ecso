@@ -17,6 +17,7 @@ test('tags and promised delivery date on an order, then filter and save the view
     await login(page, 'owner@demo.test');
     await page.goto('/orders?source=manual');
     await page.locator('[data-testid="order-table"] tbody tr').first().click();
+    await page.getByRole('link', { name: 'Mở trang đầy đủ' }).click();
     await expect(page.getByTestId('order-meta')).toBeVisible();
 
     const saved = () => page.waitForResponse((r) => r.url().includes('/meta') && r.request().method() === 'PUT');
@@ -52,6 +53,7 @@ test('exchange: a return pays for the new order', async ({ page }) => {
     // A completed, paid counter order of the demo shop.
     await page.goto('/orders?source=manual&tab=done&payment_status=paid');
     await page.locator('[data-testid="order-table"] tbody tr').first().click();
+    await page.getByRole('link', { name: 'Mở trang đầy đủ' }).click();
 
     await page.getByTestId('create-return').click();
     await page.getByRole('dialog').getByRole('button', { name: 'Tạo phiếu' }).click();

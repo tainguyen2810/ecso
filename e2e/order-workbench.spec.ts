@@ -24,11 +24,12 @@ test('order list: to-handle strip, quick view, advanced filters, bulk actions, e
     await expect(page.getByTestId('flag-payment_due')).toHaveClass(/border-primary/);
     await expect(page.getByTestId('pipeline-payment_due')).toHaveClass(/ring-primary/);
 
-    // Quick view opens under the row.
-    await page.getByTestId('quick-view-toggle').first().click();
+    // Clicking a row opens the order in a side panel over the list.
+    await page.locator('[data-testid="order-table"] tbody tr').first().click();
     await expect(page.getByTestId('order-quick-view')).toContainText('Khách phải trả', { timeout: 15000 });
     await shot(page, '02-order-quick-view');
-    await page.getByTestId('quick-view-toggle').first().click();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('order-quick-view')).toBeHidden();
 
     // Advanced filters.
     await page.getByTestId('more-filters').click();
@@ -67,6 +68,7 @@ test('order detail: progress, buyer summary, copy into a new order with shortcut
     await login(page, 'owner@demo.test');
     await page.goto('/orders?source=manual');
     await page.locator('[data-testid="order-table"] tbody tr').first().click();
+    await page.getByRole('link', { name: 'Mở trang đầy đủ' }).click();
     await expect(page.getByTestId('order-workflow')).toBeVisible();
     await shot(page, '05-order-detail-workflow');
 
