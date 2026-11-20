@@ -2,7 +2,7 @@
 import PushToggle from './PushToggle.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch, type Component } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { AlertTriangle, Bell, ChevronRight, CircleCheck, Clock, FileText, KeyRound, Package, PackageX, PlugZap, Settings2, ShoppingCart, Unplug, Wallet } from 'lucide-vue-next';
+import { AlertTriangle, Bell, ChevronRight, CircleCheck, Clock, FileText, KeyRound, Package, PackageX, PlugZap, Settings2, ShoppingCart, TrendingDown, Unplug, Wallet } from 'lucide-vue-next';
 import { api } from '@/shared/lib/api';
 import { cn } from '@/shared/lib/utils';
 import { toneClasses, type Tone } from '@/shared/lib/tones';
@@ -47,6 +47,7 @@ const icons: Record<string, Component> = {
     'sync.problems': PlugZap,
     'sync.token_expiring': KeyRound,
     'stock.low': Package,
+    'orders.loss': TrendingDown,
     'cash.pending': Wallet,
     'suppliers.overdue': FileText,
 };

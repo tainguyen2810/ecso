@@ -49,6 +49,9 @@ Schedule::command('ecso:marketplace:settlements')->everyTwoHours(23)->withoutOve
 Schedule::command('ecso:marketplace:returns')->everyThirtyMinutes()->withoutOverlapping(25)->onOneServer();
 
 // Fee check: actual marketplace fees vs fee tables, loss orders (round 3 WooCommerce/pricing).
+// Đợt 14: orders sold at a loss after marketplace fees, told to the owner's phone.
+Schedule::command('ecso:orders:loss-alerts')->everyFifteenMinutes()->withoutOverlapping(14)->onOneServer();
+
 Schedule::command('ecso:marketplace:check-fees')->dailyAt('06:00')->withoutOverlapping(120)->onOneServer();
 
 // Customers who reached a group's buying threshold join it (only customers with no group yet).

@@ -82,6 +82,51 @@ export const reports: Record<string, DetailReport> = {
             { key: 'profit_after_fees', label: 'Lãi sau phí sàn', type: 'money', total: true, tone: negative('profit_after_fees') },
         ],
     },
+    'loss-orders': {
+        key: 'loss-orders',
+        title: 'Đơn lỗ sau phí sàn',
+        description: 'Đơn bán ra thu về ít hơn giá vốn sau khi sàn trừ phí, và sản phẩm nên tăng giá.',
+        endpoint: '/reports/loss-orders',
+        permission: 'finance.profit',
+        period: 'range',
+        tabs: { order: 'Đơn lỗ', product: 'Sản phẩm nên tăng giá' },
+        empty: 'Không có đơn nào bán lỗ sau phí trong kỳ.',
+        note: 'Tính theo ngày đặt, ngay khi có đơn (không chờ sàn hoàn thành), bỏ đơn hủy và đơn hoàn. Lãi sau phí = tiền hàng sau chiết khấu − giá vốn − phí sàn. Giá vốn lấy lúc xuất kho, chưa xuất thì lấy giá vốn hiện tại; dòng chưa có giá vốn không tính. Phí sàn theo đối soát, chưa có thì ước tính theo bảng phí của shop. Giá hòa vốn đã cộng phần phí sàn tăng theo giá, làm tròn lên 1.000đ.',
+        kpis: (d) =>
+            d.totals.products !== undefined
+                ? [
+                      { label: 'Sản phẩm lỗ', value: d.totals.products, type: 'number' },
+                      { label: 'Số lượng bán', value: d.totals.units, type: 'number' },
+                      { label: 'Tổng lỗ', value: d.totals.profit, type: 'money' },
+                  ]
+                : [
+                      { label: 'Đơn lỗ', value: d.totals.orders, type: 'number' },
+                      { label: 'Tiền hàng', value: d.totals.net, type: 'money' },
+                      { label: 'Phí sàn', value: d.totals.fees, type: 'money' },
+                      { label: 'Tổng lỗ', value: d.totals.profit, type: 'money' },
+                  ],
+        columns: (_d, by) =>
+            by === 'product'
+                ? [
+                      { key: 'variant', label: 'Sản phẩm', value: variant, sub: variantSku, link: variantLink },
+                      { key: 'units', label: 'SL bán', type: 'number', total: true },
+                      { key: 'avg_price', label: 'Giá bán TB', type: 'money' },
+                      { key: 'avg_cost', label: 'Giá vốn', type: 'money' },
+                      { key: 'fees', label: 'Phí sàn', type: 'money', sub: (r) => (r.fees_unknown ? 'thiếu bảng phí' : r.fee_pct !== null ? `${String(r.fee_pct).replace('.', ',')}% giá bán` : null) },
+                      { key: 'profit', label: 'Lãi sau phí', type: 'money', total: true, tone: negative('profit') },
+                      { key: 'break_even', label: 'Giá hòa vốn', type: 'money', sub: (r) => (r.ref_price ? `giá gốc đang để ${Math.round(r.ref_price).toLocaleString('vi-VN')}đ` : null) },
+                  ]
+                : [
+                      { key: 'number', label: 'Mã đơn', link: (r) => `/orders/${r.id}`, sub: (r) => r.channel },
+                      { key: 'placed_at', label: 'Ngày đặt', type: 'datetime' },
+                      { key: 'skus', label: 'SKU', value: (r) => r.skus.join(', ') || '—' },
+                      { key: 'net', label: 'Tiền hàng', type: 'money', total: true },
+                      { key: 'cogs', label: 'Giá vốn', type: 'money', total: true, sub: (r) => (r.missing_cost_lines ? `${r.missing_cost_lines} dòng thiếu giá vốn` : null) },
+                      { key: 'fees', label: 'Phí sàn', type: 'money', total: true, sub: (r) => ({ confirmed: 'theo đối soát', estimated: 'ước tính', unknown: 'thiếu bảng phí', none: null })[r.fee_kind as string] ?? null },
+                      { key: 'profit', label: 'Lãi sau phí', type: 'money', total: true, tone: negative('profit') },
+                  ],
+        action: { label: 'Mở Bảng giá sàn', to: '/marketplaces/prices' },
+    },
     orders: {
         key: 'orders',
         title: 'Thống kê theo đơn hàng',

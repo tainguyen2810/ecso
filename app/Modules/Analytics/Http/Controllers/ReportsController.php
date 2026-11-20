@@ -5,6 +5,7 @@ namespace App\Modules\Analytics\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Analytics\Services\BusinessReports;
 use App\Modules\Analytics\Services\LedgerReports;
+use App\Modules\Analytics\Services\LossReports;
 use App\Modules\Analytics\Services\OrderReports;
 use App\Modules\Analytics\Services\StockReports;
 use App\Modules\Analytics\Services\TradeReports;
@@ -85,6 +86,16 @@ class ReportsController extends Controller
         $q = $request->validate(['q' => ['nullable', 'string', 'max:100']])['q'] ?? null;
 
         return response()->json(['data' => ProfitFields::strip($trade->salesByProduct($from, $to, $q), $this->context->can('finance.profit'))]);
+    }
+
+    /** Đợt 14: orders sold at a loss after marketplace fees, or the SKUs that lose money (with a break-even price). */
+    public function lossOrders(Request $request, LossReports $losses): JsonResponse
+    {
+        $this->allow('finance.profit');
+        $this->exporting($request, 'loss-orders');
+        [$from, $to] = $this->range($request);
+
+        return response()->json(['data' => $this->by($request, ['order', 'product']) === 'product' ? $losses->products($from, $to) : $losses->orders($from, $to)]);
     }
 
     public function returns(Request $request, TradeReports $trade): JsonResponse
