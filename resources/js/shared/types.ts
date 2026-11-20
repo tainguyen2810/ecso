@@ -997,10 +997,12 @@ export interface PriceBoardCell {
     raised: boolean;
     new_outcome: { fees: number; net: number; profit: number | null; margin_pct: number | null } | null;
     current_outcome: { fees: number; net: number; profit: number | null; margin_pct: number | null } | null;
-    status: 'pending' | 'loss' | 'locked' | 'export' | 'ok' | 'no_price';
+    status: 'pending' | 'loss' | 'locked' | 'export' | 'pushing' | 'failed' | 'ok' | 'no_price';
     locked: boolean;
     below_margin: boolean;
     min_margin_pct: number | null;
+    /** Why the marketplace refused the last push (status failed). */
+    push_error: string | null;
 }
 
 export interface PriceBoardRow {

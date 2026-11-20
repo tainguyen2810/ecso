@@ -5,13 +5,18 @@ use App\Modules\Catalog\Models\ProductImage;
 use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Marketplace\Connectors\Capability;
 use App\Modules\Marketplace\Connectors\ConnectorRegistry;
+use App\Modules\Marketplace\Connectors\Data\PriceUpdate;
 use App\Modules\Marketplace\Connectors\Data\StockUpdate;
 use App\Modules\Marketplace\Connectors\Data\StockUpdateResult;
 use App\Modules\Marketplace\Connectors\Shopee\ShopeeConnector;
 use App\Modules\Marketplace\Connectors\TikTok\TikTokConnector;
+use App\Modules\Marketplace\Connectors\UpdatesPrices;
 use App\Modules\Marketplace\Exceptions\ConnectorException;
+use App\Modules\Marketplace\Jobs\PushPricesJob;
+use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Models\MarketplaceCredential;
+use App\Modules\Marketplace\Models\MarketplaceListing;
 use App\Modules\Marketplace\Models\WebhookEvent;
 use App\Modules\Marketplace\Services\AccountService;
 use App\Modules\Orders\Domain\OrderStatus;
@@ -506,4 +511,43 @@ it('takes Shopee pictures: links the same SKU by itself, makes new products with
     $api->postJson("/api/v1/products/{$polo->ulid}/marketplace-images", ['urls' => [$img('b'), 'https://evil.test/x.png']])
         ->assertOk()->assertJsonPath('data.added', 1)->assertJsonCount(3, 'data.images');
     RemoteImage::$resolver = null;
+});
+
+it('pushes prices to Shopee and TikTok Shop from the price board queue', function () {
+    fakeEzChat([
+        'POST /api/v2/product/update_price' => fn (Request $r) => Http::response(['data' => ['data' => ['response' => [
+            'failure_list' => $r['body']['item_id'] === 12 ? [['model_id' => 502, 'failed_reason' => 'Item is in promotion']] : [],
+        ]]]]),
+        'POST /product/202309/products/P1/prices/update' => ['data' => ['data' => []]],
+    ]);
+    $shopeeShop = gatewayShop($this->tenant, 'shopee');
+    $tiktokShop = gatewayShop($this->tenant, 'tiktok', '7000123');
+    $shopee = app(ConnectorRegistry::class)->for('shopee');
+    $tiktok = app(ConnectorRegistry::class)->for('tiktok');
+    expect($shopee)->toBeInstanceOf(UpdatesPrices::class);
+
+    $results = $shopee->updatePrices($shopeeShop, [
+        new PriceUpdate('12', '501', '120000'),
+        new PriceUpdate('12', '502', '125000'),
+        new PriceUpdate('11', 'i11', '99000.00'),
+    ]);
+    expect(array_map(fn ($r) => [$r->externalSkuId, $r->status], $results))->toBe([
+        ['501', StockUpdateResult::OK], ['502', StockUpdateResult::REJECTED], ['i11', StockUpdateResult::OK],
+    ])->and($results[1]->message)->toBe('Shopee: Item is in promotion');
+    $calls = collect(ezCalls())->where('key', 'POST /api/v2/product/update_price')->values();
+    expect($calls[0]['body'])->toBe(['item_id' => 12, 'price_list' => [['model_id' => 501, 'original_price' => 120000], ['model_id' => 502, 'original_price' => 125000]]])
+        ->and($calls[1]['body']['price_list'][0])->toBe(['model_id' => 0, 'original_price' => 99000]);
+
+    // The job sends a queued TikTok price and shows it as the shop's price at once (no sync_prices switch needed).
+    TenantContext::run($this->tenant, function () use ($tiktokShop) {
+        $listing = MarketplaceListing::query()->create(['marketplace_account_id' => $tiktokShop->id, 'external_product_id' => 'P1', 'title' => 'Áo']);
+        $v = ListingVariant::query()->create(['marketplace_account_id' => $tiktokShop->id, 'listing_id' => $listing->id, 'external_sku_id' => 'S1', 'price' => 90000, 'regular_price' => 90000]);
+        $v->forceFill(['target_price' => 110000, 'price_push_status' => 'pending'])->save();
+    });
+    (new PushPricesJob($tiktokShop->id))->handle(app(ConnectorRegistry::class));
+
+    $row = ListingVariant::withoutGlobalScopes()->where('external_sku_id', 'S1')->sole();
+    expect($row->price_push_status)->toBe('ok')->and($row->price)->toBe('110000.00')
+        ->and(collect(ezCalls())->firstWhere('key', 'POST /product/202309/products/P1/prices/update')['body'])
+        ->toBe(['skus' => [['id' => 'S1', 'price' => ['amount' => '110000', 'currency' => 'VND']]]]);
 });

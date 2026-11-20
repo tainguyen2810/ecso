@@ -444,6 +444,46 @@ class ShopeeConnector extends GatewayConnector
         return $results;
     }
 
+    // ---- Giá ----------------------------------------------------------------------------------------------------
+
+    /** Sets the original (list) price per model; Shopee keeps running discounts on top of it. */
+    public function updatePrices(MarketplaceAccount $account, array $updates): array
+    {
+        $byItem = [];
+        foreach ($updates as $u) {
+            $byItem[$u->externalProductId][] = $u;
+        }
+
+        $results = [];
+        foreach ($byItem as $itemId => $rows) {
+            $priceList = array_map(fn ($u) => ['model_id' => self::modelId($u->externalSkuId), 'original_price' => (float) self::money($u->price)], $rows);
+            try {
+                $res = (array) ($this->gateway->call($account, 'POST', '/api/v2/product/update_price', [], ['item_id' => (int) $itemId, 'price_list' => $priceList])['response'] ?? []);
+            } catch (ConnectorException $e) {
+                if ($e->authExpired) {
+                    throw $e;
+                }
+                foreach ($rows as $u) {
+                    $results[] = new StockUpdateResult($u->externalSkuId, $e->temporary ? StockUpdateResult::RETRY : StockUpdateResult::REJECTED, 'Shopee: '.preg_replace('#^/\S+: #', '', $e->getMessage()));
+                }
+
+                continue;
+            }
+            $failed = [];
+            foreach ((array) ($res['failure_list'] ?? []) as $f) {
+                $failed[(int) ($f['model_id'] ?? 0)] = 'Shopee: '.(string) ($f['failed_reason'] ?? 'từ chối đổi giá');
+            }
+            foreach ($rows as $u) {
+                $model = self::modelId($u->externalSkuId);
+                $results[] = isset($failed[$model])
+                    ? new StockUpdateResult($u->externalSkuId, StockUpdateResult::REJECTED, $failed[$model])
+                    : new StockUpdateResult($u->externalSkuId, StockUpdateResult::OK);
+            }
+        }
+
+        return $results;
+    }
+
     // ---- Tiền thực nhận -----------------------------------------------------------------------------------------
 
     /** Shopee's escrow detail: an estimate until the order is completed and the money released (final = null). */

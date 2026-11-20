@@ -6,6 +6,7 @@ use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Inventory\Services\StockReader;
 use App\Modules\Marketplace\Connectors\ConnectorRegistry;
 use App\Modules\Marketplace\Connectors\UpdatesPrices;
+use App\Modules\Marketplace\Connectors\WooCommerce\WooCommerceConnector;
 use App\Modules\Marketplace\Jobs\PushPricesJob;
 use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
@@ -48,7 +49,9 @@ class PriceSync
     /** Can ECSO set prices on this shop, and does the shop want it? */
     public function enabledFor(MarketplaceAccount $account): bool
     {
-        return $account->isActive() && $account->syncs('sync_prices') && $this->connectors->has($account->marketplace)
+        // Websites only: marketplaces sell at the fee-table price from "Bảng giá sàn", never at the base price.
+        return $account->marketplace === WooCommerceConnector::MARKETPLACE
+            && $account->isActive() && $account->syncs('sync_prices') && $this->connectors->has($account->marketplace)
             && $this->connectors->for($account->marketplace) instanceof UpdatesPrices;
     }
 

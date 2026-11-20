@@ -6,6 +6,7 @@ import Pagination from '../../components/Pagination.vue';
 import Tabs from '../../components/Tabs.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
+import Dialog from '@/shared/ui/Dialog.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import Input from '@/shared/ui/Input.vue';
 import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
@@ -26,7 +27,7 @@ const canEdit = computed(() => tenant.can('marketplace.connect'));
 const tab = ref<'pending' | 'loss' | 'locked' | 'all'>('pending');
 const q = ref('');
 const rows = ref<PriceBoardRow[]>([]);
-const accounts = ref<{ id: string; shop_name: string; marketplace: string }[]>([]);
+const accounts = ref<{ id: string; shop_name: string; marketplace: string; by_api: boolean }[]>([]);
 const counts = ref({ pending: 0, loss: 0, locked: 0, all: 0 });
 const meta = ref({ current_page: 1, last_page: 1, total: 0 });
 const rulesUpdatedAt = ref<string | null>(null);
@@ -56,7 +57,7 @@ watch(q, () => {
     timer = setTimeout(() => load(), 300);
 });
 
-const actionable = (c?: PriceBoardCell) => !!c && (c.status === 'pending' || c.status === 'loss');
+const actionable = (c?: PriceBoardCell) => !!c && (c.status === 'pending' || c.status === 'loss' || c.status === 'failed');
 function toggleRow(r: PriceBoardRow, on: boolean) {
     for (const c of Object.values(r.cells)) {
         if (on) selected.value.add(c.listing_id);
@@ -82,8 +83,38 @@ const apply = (ids: string[] | null) => run(ids?.length === 1 ? `apply-${ids[0]}
     const { data } = await api.post('/marketplace-pricing/board/apply', ids ? { listing_ids: ids } : { all: true });
     await load(meta.value.current_page);
     const d = data.data;
-    return d.exported ? `Đã áp dụng ${formatNumber(d.applied)} giá. ${formatNumber(d.exported)} giá đang chờ trong file giá để tải lên sàn.` : `Đã áp dụng ${formatNumber(d.applied)} giá.`;
+    const parts = [`Đã áp dụng ${formatNumber(d.applied)} giá.`];
+    if (d.pushed) parts.push(`${formatNumber(d.pushed)} giá đang được đẩy lên sàn.`);
+    if (d.exported) parts.push(`${formatNumber(d.exported)} giá đang chờ trong file giá để tải lên sàn.`);
+    return parts.join(' ');
 });
+
+/** Prices that would go straight to a marketplace: shown first, sent only after "Đẩy giá lên sàn". */
+type Preview = { name: string; shop: string; marketplace: string; current: number | null; next: number };
+const confirmOpen = ref(false);
+const confirmIds = ref<string[] | null>(null);
+const preview = ref<Preview[]>([]);
+const apiShops = computed(() => new Set(accounts.value.filter((a) => a.by_api).map((a) => a.id)));
+function askApply(ids: string[] | null) {
+    const list: Preview[] = [];
+    for (const r of rows.value) {
+        for (const [accountId, c] of Object.entries(r.cells)) {
+            if (!actionable(c) || c.new === null || !apiShops.value.has(accountId)) continue;
+            if (ids && !ids.includes(c.listing_id)) continue;
+            const a = accounts.value.find((x) => x.id === accountId)!;
+            list.push({ name: [r.name, r.variant_name].filter(Boolean).join(' · '), shop: a.shop_name, marketplace: a.marketplace, current: c.current, next: c.new });
+        }
+    }
+    if (!list.length) return apply(ids);
+    preview.value = list;
+    confirmIds.value = ids;
+    confirmOpen.value = true;
+}
+async function confirmApply() {
+    confirmOpen.value = false;
+    await apply(confirmIds.value);
+}
+const previewMore = computed(() => (ids: string[] | null) => !ids && counts.value.pending > rows.value.length);
 const lock = (ids: string[], locked: boolean) => run(`lock-${ids[0]}`, async () => {
     await api.post('/marketplace-pricing/board/lock', { listing_ids: ids, locked });
     await load(meta.value.current_page);
@@ -100,7 +131,7 @@ const diffText = (c: PriceBoardCell) => (c.current !== null && c.new !== null ? 
         <template #description>Giá niêm yết từng sàn tính từ giá gốc và <RouterLink to="/settings/pricing" class="text-primary hover:underline">bảng phí</RouterLink>. Duyệt rồi áp dụng, hoặc xuất file giá để tải lên Seller Center.</template>
         <Button v-for="a in accounts" v-show="exportable" :key="a.id" variant="outline" :data-testid="`export-${a.id}`" @click="exportFile(a.id)"><Download /> File giá {{ a.shop_name }}</Button>
         <Button v-if="canEdit && selected.size" variant="outline" :loading="busy?.startsWith('lock')" @click="lock([...selected], true)"><Lock /> Khóa giá đã chọn</Button>
-        <Button v-if="canEdit" :loading="busy === 'apply'" :disabled="!counts.pending" data-testid="apply-prices" @click="apply(selected.size ? [...selected] : null)">
+        <Button v-if="canEdit" :loading="busy === 'apply'" :disabled="!counts.pending" data-testid="apply-prices" @click="askApply(selected.size ? [...selected] : null)">
             {{ selected.size ? `Áp dụng đã chọn (${selected.size})` : `Áp dụng tất cả (${counts.pending})` }}
         </Button>
     </PageHeader>
@@ -167,6 +198,8 @@ const diffText = (c: PriceBoardCell) => (c.current !== null && c.new !== null ? 
                                     <template v-else-if="r.cells[a.id].new !== null">
                                         <span class="font-semibold">{{ formatMoney(r.cells[a.id].new) }}</span>
                                         <span v-if="r.cells[a.id].status === 'export'" class="block text-xs text-blue-600">trong file giá</span>
+                                        <span v-else-if="r.cells[a.id].status === 'pushing'" class="block text-xs text-blue-600">đang đẩy lên sàn…</span>
+                                        <span v-else-if="r.cells[a.id].status === 'failed'" class="block max-w-56 whitespace-normal text-xs text-destructive" :title="r.cells[a.id].push_error ?? ''">sàn chưa nhận: {{ r.cells[a.id].push_error }}</span>
                                         <span v-else-if="r.cells[a.id].raised && actionable(r.cells[a.id])" class="block text-xs text-amber-600">nâng lên lãi tối thiểu {{ r.cells[a.id].min_margin_pct }}%</span>
                                         <span v-else-if="actionable(r.cells[a.id]) && diffText(r.cells[a.id]) !== null" class="block text-xs text-amber-600">{{ diffText(r.cells[a.id])! > 0 ? '+' : '' }}{{ formatMoney(diffText(r.cells[a.id])) }}</span>
                                         <span v-else class="block text-xs text-muted-foreground">không đổi</span>
@@ -178,7 +211,7 @@ const diffText = (c: PriceBoardCell) => (c.current !== null && c.new !== null ? 
                         </template>
                         <td class="whitespace-nowrap px-4 text-right text-sm">
                             <template v-if="canEdit">
-                                <button v-if="Object.values(r.cells).some(actionable)" type="button" class="text-primary hover:underline" @click="apply(Object.values(r.cells).filter(actionable).map((c) => c.listing_id))">Áp dụng</button>
+                                <button v-if="Object.values(r.cells).some(actionable)" type="button" class="text-primary hover:underline" @click="askApply(Object.values(r.cells).filter(actionable).map((c) => c.listing_id))">Áp dụng</button>
                                 <button v-if="r.flags.locked" type="button" class="ml-2 inline-flex items-center gap-1 text-muted-foreground hover:text-foreground" @click="lock(Object.values(r.cells).filter((c) => c.locked).map((c) => c.listing_id), false)"><LockOpen class="size-3.5" /> Mở khóa</button>
                                 <button v-else type="button" class="ml-2 text-muted-foreground hover:text-foreground" title="Khóa giá: EzChat Bán hàng không đổi giá SKU này trên sàn" @click="lock(Object.values(r.cells).map((c) => c.listing_id), true)"><Lock class="size-3.5" /></button>
                             </template>
@@ -189,7 +222,29 @@ const diffText = (c: PriceBoardCell) => (c.current !== null && c.new !== null ? 
         </div>
         <Pagination v-if="rows.length" :page="meta.current_page" :last-page="meta.last_page" :total="meta.total" @go="load" />
         <p class="border-t px-5 py-3 text-xs text-muted-foreground">
-            Shopee, TikTok, Lazada chưa cấp quyền API đổi giá cho EzChat Bán hàng: <b>Áp dụng</b> ghi giá mới vào <b>file giá</b> (Excel: mã sản phẩm, mã phân loại, SKU, giá mới) để bạn tải lên công cụ cập nhật hàng loạt của sàn. Khi sàn hiện đúng giá mới, EzChat Bán hàng tự đánh dấu xong. Khi API được duyệt, EzChat Bán hàng đẩy giá thẳng lên sàn.
+            <template v-if="accounts.some((a) => a.by_api)"><b>Áp dụng</b> đẩy giá mới thẳng lên Shopee và TikTok Shop sau khi bạn xem lại và xác nhận. Giá đổi là giá niêm yết; chương trình giảm giá đang chạy trên sàn vẫn giữ nguyên. </template>
+            <template v-if="accounts.some((a) => !a.by_api)">Sàn chưa đổi giá qua API được thì <b>Áp dụng</b> ghi giá mới vào <b>file giá</b> (Excel: mã sản phẩm, mã phân loại, SKU, giá mới) để bạn tải lên công cụ cập nhật hàng loạt của sàn. Khi sàn hiện đúng giá mới, EzChat Bán hàng tự đánh dấu xong.</template>
         </p>
     </Card>
+
+    <Dialog v-model:open="confirmOpen" title="Đẩy giá lên sàn" :description="`${formatNumber(preview.length)} giá sẽ đổi ngay trên sàn. Xem lại trước khi đẩy.`" size="lg">
+        <table class="w-full text-sm" data-testid="price-push-preview">
+            <thead class="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                <tr><th class="py-1.5 font-medium">Sản phẩm</th><th class="py-1.5 font-medium">Shop</th><th class="py-1.5 text-right font-medium">Đang bán</th><th class="py-1.5 text-right font-medium">Giá mới</th></tr>
+            </thead>
+            <tbody class="divide-y">
+                <tr v-for="(p, i) in preview.slice(0, 50)" :key="i">
+                    <td class="py-2 pr-3">{{ p.name }}</td>
+                    <td class="py-2 pr-3"><span class="inline-flex items-center gap-1.5 whitespace-nowrap"><MarketplaceLogo :marketplace="p.marketplace" :name="p.shop" size="sm" />{{ p.shop }}</span></td>
+                    <td class="whitespace-nowrap py-2 text-right tabular-nums text-muted-foreground">{{ p.current !== null ? formatMoney(p.current) : '—' }}</td>
+                    <td class="whitespace-nowrap py-2 text-right font-semibold tabular-nums">{{ formatMoney(p.next) }}</td>
+                </tr>
+            </tbody>
+        </table>
+        <p v-if="preview.length > 50 || previewMore(confirmIds)" class="mt-2 text-xs text-muted-foreground">Bảng chỉ hiện các giá ở trang này; "Áp dụng tất cả" đẩy mọi giá đang chờ duyệt.</p>
+        <template #footer>
+            <Button variant="outline" @click="confirmOpen = false">Để sau</Button>
+            <Button data-testid="confirm-price-push" @click="confirmApply">Đẩy giá lên sàn</Button>
+        </template>
+    </Dialog>
 </template>
