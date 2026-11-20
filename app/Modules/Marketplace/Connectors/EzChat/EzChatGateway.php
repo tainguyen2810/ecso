@@ -27,10 +27,18 @@ class EzChatGateway
         return filled(config('marketplaces.ezchat.url')) && filled(config('marketplaces.ezchat.secret'));
     }
 
-    /** The EzChat page where the seller picks the shop to share; EzChat returns to $redirectUri with code + state. */
+    /**
+     * Where "Kết nối" sends the seller; EzChat returns to $redirectUri with code + state (or error + state).
+     * The link is signed (ts, sig) so EzChat may offer "Kết nối thẳng": the seller grants EzChat's marketplace app
+     * without an EzChat account. EZCHAT_CONNECT=direct goes there at once instead of EzChat's choice page.
+     */
     public function connectUrl(string $type, string $state, string $redirectUri): string
     {
-        return $this->base().'/connect/banhang?'.http_build_query(['type' => $type, 'state' => $state, 'redirect' => $redirectUri]);
+        $ts = (string) time();
+        $query = ['type' => $type, 'state' => $state, 'redirect' => $redirectUri, 'ts' => $ts, 'sig' => $this->sign("{$ts}.direct.{$type}.{$state}.{$redirectUri}")];
+        $page = config('marketplaces.ezchat.connect') === 'direct' ? '/api/banhang/gw/direct' : '/connect/banhang';
+
+        return $this->base().$page.'?'.http_build_query($query);
     }
 
     /**

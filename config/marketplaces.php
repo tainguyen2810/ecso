@@ -59,6 +59,9 @@ return [
         'url' => env('EZCHAT_URL'),
         'secret' => env('EZCHAT_SECRET'),
         'timeout' => (int) env('EZCHAT_TIMEOUT', 30),
+        // "Kết nối Shopee / TikTok": 'ask' shows EzChat's page (connect directly, or pick a shop of an EzChat
+        // workspace); 'direct' skips it and goes straight to the marketplace (banhang sold on its own, no EzChat).
+        'connect' => env('EZCHAT_CONNECT', 'ask'),
     ],
 
     // Lifetime of the one-time "state" that links a marketplace callback to the tenant and user who started it.
