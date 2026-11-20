@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { ShoppingBasket, Sparkles } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Button from '@/shared/ui/Button.vue';
@@ -16,6 +16,10 @@ import { draftFromRows, REORDER_DRAFT_KEY, type ReorderRow } from './reorder';
 import type { Warehouse } from '@/shared/types';
 
 const router = useRouter();
+const route = useRoute();
+/** "to_order": only "Hàng đặt" bought for the orders waiting for it (from the orders page, "Tạo đơn mua"). */
+const only = ref(route.query.only === 'to_order' ? 'to_order' : '');
+const supplierFilter = ref('');
 const tenant = useTenantStore();
 const warehouses = ref<Warehouse[]>([]);
 const warehouse = ref('');
@@ -30,7 +34,7 @@ async function load() {
     loading.value = true;
     loadError.value = null;
     try {
-        const { data } = await api.get('/purchase-orders/reorder', { params: { warehouse_id: warehouse.value || undefined, cover_days: cover.value } });
+        const { data } = await api.get('/purchase-orders/reorder', { params: { warehouse_id: warehouse.value || undefined, cover_days: cover.value, only: only.value || undefined } });
         rows.value = data.data;
         warehouse.value ||= data.meta.warehouse.id;
         picked.value = Object.fromEntries(rows.value.map((r) => [r.variant.id, true]));
@@ -45,10 +49,15 @@ onMounted(async () => {
     warehouses.value = ((await api.get('/warehouses')).data.data as Warehouse[]).filter((w) => w.status === 'active');
     await load();
 });
-watch(cover, load);
+watch([cover, only], load);
+watch(only, (v) => router.replace({ query: v ? { only: v } : {} }));
+
+// One purchase order per supplier: pick the supplier to buy from when the list mixes several.
+const suppliers = computed(() => [...new Map(rows.value.map((r) => [r.supplier?.id ?? '', r.supplier?.name ?? 'Chưa có nhà cung cấp'])).entries()]);
+const visible = computed(() => (supplierFilter.value ? rows.value.filter((r) => (r.supplier?.id ?? '-') === supplierFilter.value) : rows.value));
 watch(warehouse, (now, before) => before && load());
 
-const selected = computed(() => rows.value.filter((r) => picked.value[r.variant.id]));
+const selected = computed(() => visible.value.filter((r) => picked.value[r.variant.id]));
 const selectedValue = computed(() => selected.value.reduce((t, r) => t + (qty.value[r.variant.id] ?? 0) * Number(r.unit_cost), 0));
 
 async function createOrder() {
@@ -68,14 +77,18 @@ async function createOrder() {
     <Card>
         <div class="flex flex-wrap items-center gap-3 border-b p-4 text-sm">
             <Sparkles class="size-4 text-primary" />
-            <span class="text-muted-foreground">Gợi ý = bán trung bình/ngày (30 ngày qua) × số ngày cần đủ hàng + tồn an toàn − khả dụng − đang về.</span>
-            <div class="ml-auto flex gap-2">
+            <span v-if="only" class="text-muted-foreground">Hàng đặt: số cái các đơn đang chờ − đang về. Nhập hàng về là phần mềm tự giữ cho đơn chờ (đơn cũ trước).</span>
+            <span v-else class="text-muted-foreground">Gợi ý = bán trung bình/ngày (30 ngày qua) × số ngày cần đủ hàng + tồn an toàn − khả dụng − đang về. Hàng đặt: số cái các đơn đang chờ.</span>
+            <div class="ml-auto flex flex-wrap gap-2">
+                <Select v-model="only" class="w-48" :options="[{ value: '', label: 'Tất cả gợi ý' }, { value: 'to_order', label: 'Hàng đặt chờ nhập' }]" aria-label="Loại" data-testid="reorder-only" />
+                <Select v-if="suppliers.length > 1" v-model="supplierFilter" class="w-52" :options="[{ value: '', label: 'Mọi nhà cung cấp' }, ...suppliers.map(([id, name]) => ({ value: id || '-', label: name }))]" aria-label="Nhà cung cấp" data-testid="reorder-supplier" />
                 <Select v-model="warehouse" class="w-48" :options="warehouses.map((w) => ({ value: w.id, label: w.name }))" aria-label="Kho" />
-                <Select v-model="cover" class="w-44" :options="[7, 14, 21, 30, 45, 60].map((d) => ({ value: String(d), label: `Đủ hàng ${d} ngày` }))" aria-label="Số ngày" />
+                <Select v-if="!only" v-model="cover" class="w-44" :options="[7, 14, 21, 30, 45, 60].map((d) => ({ value: String(d), label: `Đủ hàng ${d} ngày` }))" aria-label="Số ngày" />
             </div>
         </div>
         <div v-if="loading && !rows.length" class="space-y-3 p-4"><Skeleton v-for="i in 4" :key="i" class="h-10" /></div>
         <ErrorState v-else-if="loadError" :message="loadError" @retry="load" />
+        <EmptyState v-else-if="!rows.length && only" :icon="Sparkles" title="Không có đơn chờ nhập hàng" description="Đơn có hàng đặt đều đã có hàng, hoặc đã có đơn nhập đang về đủ." />
         <EmptyState v-else-if="!rows.length" :icon="Sparkles" title="Chưa cần nhập thêm" description="Không SKU nào sắp thiếu hàng theo tốc độ bán hiện tại và tồn an toàn đã đặt." />
         <div v-else class="overflow-x-auto">
             <table class="w-full text-sm" data-testid="reorder-table">
@@ -93,9 +106,13 @@ async function createOrder() {
                     </tr>
                 </thead>
                 <tbody class="divide-y">
-                    <tr v-for="r in rows" :key="r.variant.id">
+                    <tr v-for="r in visible" :key="r.variant.id">
                         <td class="px-4 py-2.5"><input v-model="picked[r.variant.id]" type="checkbox" class="size-4" /></td>
-                        <td class="px-4 py-2.5"><p class="font-mono text-xs font-medium">{{ r.variant.sku }}</p><p class="max-w-64 truncate text-xs text-muted-foreground">{{ r.variant.name }}</p></td>
+                        <td class="px-4 py-2.5">
+                            <p class="font-mono text-xs font-medium">{{ r.variant.sku }}<span v-if="r.to_order" class="ml-1.5 rounded bg-blue-50 px-1.5 py-0.5 font-sans text-[11px] font-medium text-blue-700">Hàng đặt</span></p>
+                            <p class="max-w-64 truncate text-xs text-muted-foreground">{{ r.variant.name }}</p>
+                            <p v-if="r.waiting" class="text-xs text-blue-700" data-testid="reorder-waiting">{{ formatNumber(r.waiting) }} cái cho {{ formatNumber(r.waiting_orders ?? 0) }} đơn đang chờ</p>
+                        </td>
                         <td class="px-4 py-2.5 text-right tabular-nums">{{ formatNumber(r.sold) }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums">{{ r.daily.toLocaleString('vi-VN') }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums" :class="r.available <= r.safety_stock && 'font-medium text-destructive'">{{ formatNumber(r.available) }}<span v-if="r.safety_stock" class="text-xs text-muted-foreground"> / an toàn {{ r.safety_stock }}</span></td>

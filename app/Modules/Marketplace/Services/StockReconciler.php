@@ -54,6 +54,8 @@ class StockReconciler
             ->whereNotIn('id', InventorySyncOutbox::query()->where('marketplace_account_id', $account->id)->where('status', InventorySyncOutbox::PENDING)->select('listing_variant_id'))
             ->get();
         $desired = $this->planner->desired($account, $rows);
+        // Listings ECSO does not publish ("Hàng đặt" on a website) are not compared.
+        $rows = $rows->filter(fn (ListingVariant $l) => isset($desired[$l->id]))->values();
 
         $differ = $rows->filter(fn (ListingVariant $l) => (int) $l->marketplace_stock !== ($desired[$l->id] ?? 0));
         $items = $differ->sortByDesc(fn (ListingVariant $l) => abs((int) $l->marketplace_stock - $desired[$l->id]))->take(StockCheck::MAX_ITEMS)

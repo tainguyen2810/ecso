@@ -70,12 +70,14 @@ class Inbox
         $toConfirm = OrderQuery::visible(Order::query())->where('status', OrderStatus::PENDING_CONFIRMATION)->count();
         $toPack = OrderQuery::visible(Order::query())->where('status', OrderStatus::READY_TO_PACK)->count();
         $shortage = $open()->where('has_shortage', true)->count();
+        $awaiting = $open()->where('awaiting_purchase', true)->count();
 
         return [
             $this->item('orders.failed_delivery', 'orders', 'red', $failed, "{$failed} đơn giao thất bại", 'Cần giao lại hoặc nhận hàng hoàn', '/orders?status=FAILED_DELIVERY'),
             $this->item('orders.overdue', 'orders', 'red', $overdue, "{$overdue} đơn quá hạn giao", 'Đã quá hạn giao cho đơn vị vận chuyển', '/orders?flags=overdue'),
             $this->item('orders.due_soon', 'orders', 'amber', $dueSoon, "{$dueSoon} đơn sắp quá hạn giao", "Hạn giao trong {$hours} giờ tới", '/orders?flags=due_soon'),
             $this->item('orders.shortage', 'orders', 'amber', $shortage, "{$shortage} đơn thiếu hàng", 'Kho không đủ hàng để giữ cho đơn', '/orders?flags=shortage'),
+            $this->item('orders.awaiting_purchase', 'orders', 'blue', $awaiting, "{$awaiting} đơn chờ nhập hàng", 'Hàng đặt: tạo đơn mua để nhập về giao khách', '/orders?flags=awaiting_purchase'),
             $this->item('orders.to_confirm', 'orders', 'green', $toConfirm, "{$toConfirm} đơn chờ xác nhận", null, '/orders?tab=to_confirm'),
             $this->item('orders.to_pack', 'orders', 'green', $toPack, "{$toPack} đơn chờ đóng gói", null, '/orders?tab=to_pack'),
         ];

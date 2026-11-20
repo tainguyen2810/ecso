@@ -25,6 +25,7 @@ export const inboxKinds: { key: string; label: string }[] = [
     { key: 'orders.overdue', label: 'Đơn quá hạn giao' },
     { key: 'orders.due_soon', label: 'Đơn sắp quá hạn giao' },
     { key: 'orders.shortage', label: 'Đơn thiếu hàng' },
+    { key: 'orders.awaiting_purchase', label: 'Đơn chờ nhập hàng (hàng đặt)' },
     { key: 'orders.to_confirm', label: 'Đơn chờ xác nhận' },
     { key: 'orders.to_pack', label: 'Đơn chờ đóng gói' },
     { key: 'sync.disconnected', label: 'Shop mất kết nối' },

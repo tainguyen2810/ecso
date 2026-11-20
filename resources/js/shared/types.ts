@@ -87,6 +87,9 @@ export interface Variant {
     options: Record<string, string>;
     ref_price: string | number | null;
     wholesale_price?: string | number | null;
+    /** "order" = Hàng đặt: priced by the website, bought after the customer orders. */
+    sourcing?: 'stock' | 'order';
+    virtual_stock?: number;
     components?: { variant: { id: string; sku: string; name: string }; quantity: number }[];
     cost_price?: string;
     weight_gram: number | null;
@@ -287,7 +290,7 @@ export interface OrderSummary {
     fee_total?: string;
     coupon_codes?: string[];
     transaction_id?: string | null;
-    flags: { shortage: boolean; unmapped: boolean; overdue: boolean; due_soon: boolean; printed: boolean };
+    flags: { shortage: boolean; awaiting_purchase?: boolean; unmapped: boolean; overdue: boolean; due_soon: boolean; printed: boolean };
     /** Shopee / TikTok Shop: "Chuẩn bị hàng" and the marketplace label are done from here. */
     marketplace_shipping?: boolean;
     ship_arrangement?: { method: 'pickup' | 'dropoff'; slot: string | null; address: string | null; at: string } | null;

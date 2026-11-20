@@ -124,6 +124,42 @@ const historyStatus: Record<string, { label: string; tone: string }> = {
     rejected: { label: 'Bỏ qua', tone: 'text-muted-foreground' },
     reverted: { label: 'Đã trả lại giá EzChat Bán hàng', tone: 'text-amber-600' },
 };
+/** "Hàng đặt": listed on the website at the supplier's price (scraped there), bought after the customer orders. */
+const sourcing = computed(() => {
+    const set = new Set((product.value?.variants ?? []).map((v) => v.sourcing ?? 'stock'));
+    return set.size === 1 ? [...set][0]! : '';
+});
+const sourcingOptions = [
+    { value: 'stock', label: 'Có sẵn trong kho' },
+    { value: 'order', label: 'Hàng đặt (giá theo web)' },
+];
+const sourcingDialog = ref(false);
+const virtualStock = ref(0);
+const savingSourcing = ref(false);
+function askSourcing(value: string | undefined) {
+    if (!value || value === sourcing.value) return;
+    if (value === 'order') {
+        virtualStock.value = product.value?.variants?.[0]?.virtual_stock ?? 0;
+        sourcingDialog.value = true;
+        return;
+    }
+    void saveSourcing('stock');
+}
+async function saveSourcing(value: 'stock' | 'order') {
+    savingSourcing.value = true;
+    try {
+        await api.put(`/products/${id.value}/sourcing`, { sourcing: value, virtual_stock: value === 'order' ? virtualStock.value : undefined });
+        product.value = (await api.get(`/products/${id.value}`)).data.data;
+        prices.value = (await api.get(`/products/${id.value}/prices`)).data.data;
+        sourcingDialog.value = false;
+        toast.success(value === 'order' ? 'Đã chuyển sang hàng đặt' : 'Đã chuyển sang hàng có sẵn');
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    } finally {
+        savingSourcing.value = false;
+    }
+}
+
 const savingSource = ref(false);
 async function setSource(value: string | undefined) {
     if (!value) return;
@@ -335,6 +371,16 @@ async function remove() {
         </Card>
 
         <Card :title="product.type === 'combo' ? 'SKU và giá combo' : singleWarehouse && canStock ? 'Biến thể, giá và tồn kho' : 'Biến thể và giá'" :description="`${product.variants?.length ?? 0} SKU${singleWarehouse && warehouses[0] ? ` · ${warehouses[0].name}` : ''}`" class="mt-5">
+            <template v-if="product.type !== 'combo'" #actions>
+                <label class="flex items-center gap-2 text-sm text-muted-foreground">
+                    Cách bán
+                    <Select :model-value="sourcing" class="w-56" aria-label="Cách bán" :disabled="!canManage || savingSourcing" :options="sourcing ? sourcingOptions : [{ value: '', label: 'Khác nhau theo SKU' }, ...sourcingOptions]" data-testid="sourcing-select" @update:model-value="askSourcing" />
+                </label>
+            </template>
+            <div v-if="sourcing === 'order'" class="flex flex-wrap items-center gap-2 border-b bg-blue-50/60 px-4 py-2.5 text-sm text-blue-900" data-testid="sourcing-note">
+                <b>Hàng đặt:</b> giá bán lấy theo giá trên web (plugin cào giá nhà cung cấp), phần mềm không đẩy tồn lên web; khách đặt thì đơn vào "Chờ nhập hàng" để tạo đơn mua.
+                <span class="text-blue-700">Tồn trên sàn: {{ product.variants?.[0]?.virtual_stock ? formatNumber(product.variants[0].virtual_stock) : '0 (không bán trên sàn)' }}</span>
+            </div>
             <div class="overflow-x-auto">
                 <table class="w-full text-sm" data-testid="variant-prices">
                     <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -356,7 +402,10 @@ async function remove() {
                     </thead>
                     <tbody class="divide-y">
                         <tr v-for="v in product.variants" :key="v.id">
-                            <td class="whitespace-nowrap px-4 py-2.5 font-mono text-xs font-medium">{{ v.sku }}</td>
+                            <td class="whitespace-nowrap px-4 py-2.5 font-mono text-xs font-medium">
+                                {{ v.sku }}
+                                <span v-if="v.sourcing === 'order' && sourcing === ''" class="ml-1 rounded bg-blue-50 px-1.5 py-0.5 font-sans text-[11px] text-blue-700">Hàng đặt</span>
+                            </td>
                             <td class="px-4 py-2.5">
                                 {{ v.name ?? '—' }}
                                 <span v-if="product.type !== 'combo' && v.components?.length === 1" class="block text-xs text-muted-foreground" data-testid="pack-conversion">
@@ -395,6 +444,21 @@ async function remove() {
                 </table>
             </div>
         </Card>
+
+        <Dialog v-model:open="sourcingDialog" title="Chuyển sang hàng đặt" description="Hàng đăng trên web theo giá nhà cung cấp, khách đặt rồi mới nhập về giao." size="md">
+            <ul class="list-disc space-y-1.5 pl-5 text-sm">
+                <li><b>Giá:</b> lấy giá bán trên web (plugin trên web đã cào giá nhà cung cấp và cộng lợi nhuận). Giá sàn vẫn cộng phí sàn theo Bảng phí sàn.</li>
+                <li><b>Tồn kho:</b> không đẩy lên web, để web tự báo còn/hết theo nhà cung cấp. Không báo dưới tồn an toàn.</li>
+                <li><b>Đơn:</b> khách đặt thì đơn vào "Chờ nhập hàng" (không báo thiếu hàng). Tạo đơn mua, hàng về là tự giữ cho đơn.</li>
+            </ul>
+            <FormField label="Tồn hiện trên sàn (Shopee, TikTok…)" hint="0 = không bán trên sàn. Đặt số khác để khách sàn đặt được hàng đặt." class="mt-4">
+                <Input v-model.number="virtualStock" type="number" min="0" class="w-32" data-testid="virtual-stock" />
+            </FormField>
+            <template #footer>
+                <Button variant="outline" @click="sourcingDialog = false">Để sau</Button>
+                <Button :loading="savingSourcing" data-testid="sourcing-confirm" @click="saveSourcing('order')">Chuyển sang hàng đặt</Button>
+            </template>
+        </Dialog>
 
         <Card v-if="showPrices" title="Lịch sử giá" class="mt-5" data-testid="price-history">
             <template #actions>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Ban, Banknote, Bookmark, ClipboardList, FilePen, Package, PackageCheck, PackageX, Tag, ScanBarcode, Trash2, ChevronDown, ChevronsRight, Clock, Columns3, Download, Filter, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingCart, UserPlus, X } from 'lucide-vue-next';
+import { Ban, Banknote, Bookmark, ClipboardList, FilePen, Package, PackageCheck, PackageX, Tag, ScanBarcode, Trash2, ChevronDown, ChevronsRight, Clock, Columns3, Download, Filter, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingBasket, ShoppingCart, UserPlus, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
@@ -541,6 +541,18 @@ function dismissShortage() {
 }
 onMounted(loadShortage);
 
+/** "Hàng đặt": open orders waiting for goods bought from the supplier, with the way to buy them. */
+const awaitingCount = ref(0);
+async function loadAwaiting() {
+    try {
+        const { data } = await api.get('/orders', { params: { flags: ['awaiting_purchase'], per_page: 10 } });
+        awaitingCount.value = data.meta.total ?? 0;
+    } catch {
+        awaitingCount.value = 0;
+    }
+}
+onMounted(loadAwaiting);
+
 const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.external_order_id ?? id;
 </script>
 
@@ -572,6 +584,13 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
         <Button size="sm" variant="outline" class="bg-white" @click="toggleFlag('shortage')">Xem các đơn này</Button>
         <RouterLink to="/inventory"><Button size="sm" variant="outline" class="bg-white">Nhập tồn kho</Button></RouterLink>
         <button type="button" class="rounded p-1 text-amber-700 hover:bg-amber-100" aria-label="Ẩn gợi ý" @click="dismissShortage"><X class="size-4" /></button>
+    </div>
+
+    <div v-if="awaitingCount > 0" class="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm" data-testid="awaiting-purchase-hint">
+        <ShoppingBasket class="size-5 shrink-0 text-blue-600" />
+        <span class="min-w-60 flex-1"><b>{{ formatNumber(awaitingCount) }} đơn chờ nhập hàng.</b> Đơn có hàng đặt: nhập hàng về là phần mềm tự giữ cho đơn (đơn cũ trước), rồi đóng gói giao như thường.</span>
+        <Button size="sm" variant="outline" class="bg-white" data-testid="awaiting-purchase-view" @click="toggleFlag('awaiting_purchase')">Xem các đơn này</Button>
+        <RouterLink v-if="tenant.can('purchasing.manage')" :to="{ path: '/purchasing/reorder', query: { only: 'to_order' } }"><Button size="sm" data-testid="awaiting-purchase-buy"><ShoppingBasket /> Tạo đơn mua</Button></RouterLink>
     </div>
 
     <OrderPipeline ref="pipeline" :active="activeQueue" @select="selectQueue" />
@@ -790,6 +809,7 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                                     <span v-if="o.external_number && o.external_number !== o.external_order_id" class="font-mono text-xs text-muted-foreground">#{{ o.external_number }}</span>
                                     <template v-if="compact">
                                         <span v-if="o.flags.shortage" class="rounded-full bg-rose-50 px-1.5 text-[11px] text-rose-600">Thiếu hàng</span>
+                                        <span v-if="o.flags.awaiting_purchase" class="rounded-full bg-blue-50 px-1.5 text-[11px] text-blue-700">Chờ nhập hàng</span>
                                         <span v-if="o.flags.unmapped" class="rounded-full bg-amber-50 px-1.5 text-[11px] text-amber-700">Chưa liên kết sản phẩm</span>
                                     </template>
                                 </div>
@@ -797,6 +817,7 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                                     <span v-if="!columns.date" class="tabular-nums">{{ formatDateTime(o.placed_at) }} ·</span>
                                     {{ o.shop?.name ?? o.channel?.name ?? marketplaceNames[o.marketplace] }}
                                     <span v-if="o.flags.shortage" class="rounded-full bg-rose-50 px-1.5 text-rose-600" title="Thiếu hàng">Thiếu hàng</span>
+                                    <span v-if="o.flags.awaiting_purchase" class="rounded-full bg-blue-50 px-1.5 text-blue-700" title="Hàng đặt, chờ nhập từ nhà cung cấp">Chờ nhập hàng</span>
                                     <span v-if="o.flags.unmapped" class="rounded-full bg-amber-50 px-1.5 text-amber-700">Chưa liên kết sản phẩm</span>
                                     <span v-if="o.sync_warning" class="rounded-full bg-amber-50 px-1.5 text-amber-700">Cảnh báo</span>
                                     <span v-if="o.deleted_on_channel_at" class="rounded-full bg-rose-50 px-1.5 text-rose-600">Đã xóa trên website</span>

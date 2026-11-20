@@ -84,6 +84,7 @@ class Order extends Model
             'refunded_amount' => 'decimal:2',
             'is_cod' => 'boolean',
             'has_shortage' => 'boolean',
+            'awaiting_purchase' => 'boolean',
             'has_unmapped' => 'boolean',
             'subtotal' => 'decimal:2',
             'shipping_fee' => 'decimal:2',
