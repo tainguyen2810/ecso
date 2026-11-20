@@ -78,7 +78,7 @@ export const reports: Record<string, DetailReport> = {
             { key: 'cogs', label: 'Giá vốn', type: 'money', total: true },
             { key: 'gross_profit', label: 'Lãi gộp', type: 'money', total: true, tone: negative('gross_profit') },
             { key: 'margin', label: 'Biên', type: 'pct' },
-            { key: 'fees', label: 'Phí sàn', type: 'money', total: true, sub: (r) => (r.fees_unknown_orders ? 'có đơn chưa có bảng phí' : null) },
+            { key: 'fees', label: 'Phí sàn', type: 'money', total: true, sub: (r) => (r.fees_unknown_orders ? 'thiếu bảng phí' : null) },
             { key: 'profit_after_fees', label: 'Lãi sau phí sàn', type: 'money', total: true, tone: negative('profit_after_fees') },
         ],
     },

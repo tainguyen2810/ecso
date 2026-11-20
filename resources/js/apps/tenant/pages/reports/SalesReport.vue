@@ -167,45 +167,45 @@ function exportCsv() {
                     <tbody class="divide-y">
                         <tr v-for="r in data.rows" :key="r.label + r.kind" :class="!r.orders && 'text-muted-foreground'">
                             <td class="whitespace-nowrap px-4 py-2">{{ label(r) }}<span v-if="kindLabel(r.kind)" class="ml-1.5 text-xs text-muted-foreground">{{ kindLabel(r.kind) }}</span></td>
-                            <td class="px-4 py-2 text-right tabular-nums">{{ r.orders ? formatNumber(r.orders) : '—' }}</td>
-                            <td class="px-4 py-2 text-right tabular-nums">{{ r.units ? formatNumber(r.units) : '—' }}</td>
+                            <td class="px-4 py-2 whitespace-nowrap text-right tabular-nums">{{ r.orders ? formatNumber(r.orders) : '—' }}</td>
+                            <td class="px-4 py-2 whitespace-nowrap text-right tabular-nums">{{ r.units ? formatNumber(r.units) : '—' }}</td>
                             <td class="px-4 py-2">
                                 <div class="flex items-center gap-2">
                                     <div class="h-2 flex-1 rounded-full bg-muted"><div class="h-2 rounded-full bg-primary" :style="{ width: `${(r.revenue / maxRevenue) * 100}%` }" /></div>
-                                    <span class="w-28 text-right tabular-nums">{{ r.revenue ? formatMoney(r.revenue) : '—' }}</span>
+                                    <span class="w-28 whitespace-nowrap text-right tabular-nums">{{ r.revenue ? formatMoney(r.revenue) : '—' }}</span>
                                 </div>
                             </td>
                             <template v-if="canProfit">
-                                <td class="px-4 py-2 text-right tabular-nums">{{ r.cogs ? formatMoney(r.cogs) : '—' }}</td>
-                                <td class="px-4 py-2 text-right tabular-nums" :class="(r.gross_profit ?? 0) < 0 && 'text-destructive'">{{ r.orders ? formatMoney(r.gross_profit ?? 0) : '—' }}</td>
-                                <td class="px-4 py-2 text-right tabular-nums">{{ r.margin == null ? '—' : `${r.margin}%` }}</td>
+                                <td class="px-4 py-2 whitespace-nowrap text-right tabular-nums">{{ r.cogs ? formatMoney(r.cogs) : '—' }}</td>
+                                <td class="px-4 py-2 whitespace-nowrap text-right tabular-nums" :class="(r.gross_profit ?? 0) < 0 && 'text-destructive'">{{ r.orders ? formatMoney(r.gross_profit ?? 0) : '—' }}</td>
+                                <td class="px-4 py-2 whitespace-nowrap text-right tabular-nums">{{ r.margin == null ? '—' : `${r.margin}%` }}</td>
                             </template>
                             <template v-if="showFees">
-                                <td class="px-4 py-2 text-right tabular-nums" data-testid="channel-fees">
+                                <td class="px-4 py-2 whitespace-nowrap text-right tabular-nums" data-testid="channel-fees">
                                     {{ r.fees ? formatMoney(r.fees) : '—' }}
-                                    <span v-if="r.fees_unknown_orders" class="block text-xs text-amber-600">{{ formatNumber(r.fees_unknown_orders) }} đơn chưa có bảng phí</span>
-                                    <span v-else-if="r.fees && r.fees_confirmed_orders !== undefined && r.fees_confirmed_orders < r.orders" class="block text-xs text-muted-foreground">có phần ước tính</span>
+                                    <span v-if="r.fees_unknown_orders" class="block whitespace-normal text-xs text-amber-600">{{ formatNumber(r.fees_unknown_orders) }} đơn chưa có bảng phí</span>
+                                    <span v-else-if="r.fees && r.fees_confirmed_orders !== undefined && r.fees_confirmed_orders < r.orders" class="block whitespace-normal text-xs text-muted-foreground">có phần ước tính</span>
                                 </td>
-                                <td class="px-4 py-2 text-right font-medium tabular-nums" :class="(r.profit_after_fees ?? 0) < 0 && 'text-destructive'">{{ r.orders ? formatMoney(r.profit_after_fees ?? 0) : '—' }}</td>
-                                <td class="px-4 py-2 text-right tabular-nums">{{ r.margin_after_fees == null ? '—' : `${r.margin_after_fees}%` }}</td>
+                                <td class="px-4 py-2 whitespace-nowrap text-right font-medium tabular-nums" :class="(r.profit_after_fees ?? 0) < 0 && 'text-destructive'">{{ r.orders ? formatMoney(r.profit_after_fees ?? 0) : '—' }}</td>
+                                <td class="px-4 py-2 whitespace-nowrap text-right tabular-nums">{{ r.margin_after_fees == null ? '—' : `${r.margin_after_fees}%` }}</td>
                             </template>
                         </tr>
                     </tbody>
                     <tfoot class="border-t bg-muted/30 font-medium">
                         <tr>
                             <td class="px-4 py-2.5">Tổng</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums">{{ formatNumber(data.totals.orders) }}</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums">{{ formatNumber(data.totals.units) }}</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(data.totals.revenue) }}</td>
+                            <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ formatNumber(data.totals.orders) }}</td>
+                            <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ formatNumber(data.totals.units) }}</td>
+                            <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ formatMoney(data.totals.revenue) }}</td>
                             <template v-if="canProfit">
-                                <td class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(data.totals.cogs ?? 0) }}</td>
-                                <td class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(data.totals.gross_profit ?? 0) }}</td>
-                                <td class="px-4 py-2.5 text-right tabular-nums">{{ data.totals.margin == null ? '—' : `${data.totals.margin}%` }}</td>
+                                <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ formatMoney(data.totals.cogs ?? 0) }}</td>
+                                <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ formatMoney(data.totals.gross_profit ?? 0) }}</td>
+                                <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ data.totals.margin == null ? '—' : `${data.totals.margin}%` }}</td>
                             </template>
                             <template v-if="showFees">
-                                <td class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(data.totals.fees ?? 0) }}</td>
-                                <td class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(data.totals.profit_after_fees ?? 0) }}</td>
-                                <td class="px-4 py-2.5 text-right tabular-nums">{{ data.totals.margin_after_fees == null ? '—' : `${data.totals.margin_after_fees}%` }}</td>
+                                <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ formatMoney(data.totals.fees ?? 0) }}</td>
+                                <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ formatMoney(data.totals.profit_after_fees ?? 0) }}</td>
+                                <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ data.totals.margin_after_fees == null ? '—' : `${data.totals.margin_after_fees}%` }}</td>
                             </template>
                         </tr>
                     </tfoot>
