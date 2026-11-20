@@ -664,6 +664,18 @@ export interface SyncTaskData {
     related?: SyncTaskData[];
 }
 
+export interface StockCheckData {
+    status: 'running' | 'done' | 'failed';
+    trigger: 'nightly' | 'manual';
+    checked: number;
+    mismatched: number;
+    fixed: number;
+    error: string | null;
+    started_at: string | null;
+    finished_at: string | null;
+    items?: { sku: string | null; name: string; marketplace_qty: number; ecso_qty: number }[];
+}
+
 export interface SyncShopData {
     id: string;
     name: string;
@@ -679,6 +691,8 @@ export interface SyncShopData {
     open_errors: number;
     pending_push: number;
     stock_drift: number;
+    /** Đợt 16: latest "Đối soát tồn với sàn" of the shop. */
+    stock_check: StockCheckData | null;
 }
 
 export interface SyncOverviewData {

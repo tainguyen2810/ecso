@@ -5,13 +5,14 @@ import Alert from '@/shared/ui/Alert.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
+import Dialog from '@/shared/ui/Dialog.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import KpiCard from '@/shared/ui/KpiCard.vue';
 import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
 import { api, ApiError } from '@/shared/lib/api';
-import { formatDate, formatNumber } from '@/shared/lib/utils';
+import { formatDate, formatDateTime, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
-import type { SyncOverviewData, SyncShopData } from '@/shared/types';
+import type { StockCheckData, SyncOverviewData, SyncShopData } from '@/shared/types';
 import { shopStatus, statusInfo, timeOnly } from './labels';
 
 const props = defineProps<{ data: SyncOverviewData }>();
@@ -33,6 +34,41 @@ const tiles = computed(() => [
 ] as const);
 
 const canSyncNow = (s: SyncShopData) => s.status === 'connected' && s.sync_enabled;
+
+/** Đợt 16 "Đối soát tồn với sàn": the latest check of a shop and the SKUs that differed. */
+const checkShop = ref<SyncShopData | null>(null);
+const checkData = ref<StockCheckData | null>(null);
+const checkOpen = ref(false);
+async function openCheck(s: SyncShopData) {
+    checkShop.value = s;
+    checkData.value = s.stock_check;
+    checkOpen.value = true;
+    try {
+        const { data } = await api.get(`/marketplace-accounts/${s.id}/stock-check`);
+        checkData.value = data.data;
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    }
+}
+async function runCheck(s: SyncShopData) {
+    busy.value = `check-${s.id}`;
+    try {
+        await api.post(`/marketplace-accounts/${s.id}/stock-check`);
+        toast.success(`Đang đối soát tồn của ${s.name}. Kết quả hiện ở đây sau ít phút.`);
+        checkOpen.value = false;
+        emit('changed');
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    } finally {
+        busy.value = null;
+    }
+}
+const checkLine = (c: StockCheckData | null) => {
+    if (!c) return 'Chưa đối soát';
+    if (c.status === 'running') return 'Đang đối soát…';
+    if (c.status === 'failed') return 'Lần đối soát gần nhất bị lỗi';
+    return c.mismatched ? `Lệch ${formatNumber(c.mismatched)}/${formatNumber(c.checked)} SKU, đã sửa` : `Khớp ${formatNumber(c.checked)} SKU`;
+};
 
 async function syncNow(s: SyncShopData) {
     busy.value = s.id;
@@ -128,6 +164,9 @@ async function syncNow(s: SyncShopData) {
                                 </td>
                                 <td class="px-4 py-3 text-right tabular-nums" :title="s.stock_drift ? 'Số SKU mà sàn báo khác số EzChat Bán hàng đã đẩy lên gần nhất' : ''">
                                     <span :class="s.stock_drift ? 'font-medium text-amber-600' : 'text-muted-foreground'">{{ formatNumber(s.stock_drift) }}</span>
+                                    <button type="button" class="block w-full whitespace-nowrap text-right text-xs text-primary hover:underline" data-testid="stock-check-open" @click="openCheck(s)">
+                                        {{ checkLine(s.stock_check) }}
+                                    </button>
                                 </td>
                                 <td class="px-5 py-3 text-right">
                                     <Button v-if="data.permissions.operate" size="sm" variant="outline" :disabled="!canSyncNow(s)" :loading="busy === s.id" data-testid="sync-center-sync-now" @click="syncNow(s)">
@@ -140,8 +179,41 @@ async function syncNow(s: SyncShopData) {
                 </div>
             </Card>
             <p class="mt-2 text-xs text-muted-foreground">
+                Mỗi đêm lúc 2 giờ, EzChat Bán hàng đọc lại tồn trên từng sàn, so với tồn đang bán trong phần mềm và đẩy lại số đúng cho SKU lệch. Bản tin 8 giờ sáng báo số SKU đã sửa.
                 Tồn lệch là số SKU mà sàn báo khác số EzChat Bán hàng đã đẩy lên gần nhất, thường do ai đó sửa tồn trực tiếp trên sàn. EzChat Bán hàng không cộng hay ghi đè tồn kho nội bộ theo số này; lần đẩy tồn sau sẽ đặt lại số trên sàn.
             </p>
         </div>
     </div>
+
+    <Dialog v-model:open="checkOpen" :title="`Đối soát tồn · ${checkShop?.name ?? ''}`" :description="checkData?.finished_at ? `Lần gần nhất: ${formatDateTime(checkData.finished_at)}${checkData.trigger === 'manual' ? ' (bấm tay)' : ' (tự động ban đêm)'}` : 'Mỗi đêm lúc 2 giờ, so tồn trên sàn với tồn trong phần mềm.'" size="lg">
+        <div data-testid="stock-check-dialog">
+            <p v-if="!checkData" class="text-sm text-muted-foreground">Shop này chưa được đối soát. Bấm Đối soát ngay để chạy lần đầu.</p>
+            <p v-else-if="checkData.status === 'running'" class="text-sm text-muted-foreground">Đang đọc tồn trên sàn, vui lòng đợi ít phút.</p>
+            <Alert v-else-if="checkData.status === 'failed'" :icon="AlertTriangle" tone="red">{{ checkData.error }}</Alert>
+            <template v-else>
+                <p class="text-sm">
+                    Đã so <b>{{ formatNumber(checkData.checked) }}</b> SKU đã liên kết.
+                    <template v-if="checkData.mismatched"><b class="text-amber-600">{{ formatNumber(checkData.mismatched) }}</b> SKU lệch, đã đẩy lại tồn đúng lên sàn.</template>
+                    <template v-else>Tất cả đều khớp.</template>
+                </p>
+                <table v-if="checkData.items?.length" class="mt-3 w-full text-sm">
+                    <thead class="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                        <tr><th class="py-1.5 font-medium">Sản phẩm</th><th class="py-1.5 text-right font-medium">Trên sàn</th><th class="py-1.5 text-right font-medium">Đúng là</th></tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <tr v-for="(it, i) in checkData.items" :key="i">
+                            <td class="py-2 pr-3"><span class="block">{{ it.name }}</span><span class="font-mono text-xs text-muted-foreground">{{ it.sku }}</span></td>
+                            <td :class="['whitespace-nowrap py-2 text-right tabular-nums', it.marketplace_qty > it.ecso_qty ? 'font-medium text-rose-600' : 'text-muted-foreground']">{{ formatNumber(it.marketplace_qty) }}</td>
+                            <td class="whitespace-nowrap py-2 text-right font-semibold tabular-nums">{{ formatNumber(it.ecso_qty) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p v-if="checkData.items?.length" class="mt-2 text-xs text-muted-foreground">Số đỏ: sàn đang bán nhiều hơn hàng thật, dễ bị đặt quá số lượng.</p>
+            </template>
+        </div>
+        <template #footer>
+            <Button variant="outline" @click="checkOpen = false">Đóng</Button>
+            <Button v-if="data.permissions.operate && checkShop" :disabled="!canSyncNow(checkShop)" :loading="busy === `check-${checkShop.id}`" data-testid="stock-check-run" @click="runCheck(checkShop)"><RefreshCw /> Đối soát ngay</Button>
+        </template>
+    </Dialog>
 </template>

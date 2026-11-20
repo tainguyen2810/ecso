@@ -52,6 +52,9 @@ Schedule::command('ecso:marketplace:returns')->everyThirtyMinutes()->withoutOver
 // Đợt 14: orders sold at a loss after marketplace fees, told to the owner's phone.
 Schedule::command('ecso:orders:loss-alerts')->everyFifteenMinutes()->withoutOverlapping(14)->onOneServer();
 
+// Đợt 16: marketplace stock compared with ECSO's every night (before the 8 am brief, which reports it).
+Schedule::command('ecso:marketplace:stock-check')->dailyAt('02:15')->timezone('Asia/Ho_Chi_Minh')->withoutOverlapping(60)->onOneServer();
+
 // Đợt 15: morning summary on the phones that asked for it.
 Schedule::command('ecso:morning-brief')->dailyAt('08:00')->timezone('Asia/Ho_Chi_Minh')->withoutOverlapping(60)->onOneServer();
 

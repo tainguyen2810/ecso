@@ -3,6 +3,7 @@
 namespace App\Modules\Analytics\Console;
 
 use App\Modules\Inventory\Services\LowStockQuery;
+use App\Modules\Marketplace\Models\StockCheck;
 use App\Modules\Messaging\Push\PushNotifier;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
@@ -14,7 +15,8 @@ use Illuminate\Console\Command;
 
 /**
  * Đợt 15 "Bản tin 8h sáng": one notification per store to the phones that asked for it — orders to ship today, those
- * late or due today, yesterday's sales, SKUs running low and marketplace returns on their way back.
+ * late or due today, yesterday's sales, SKUs running low, marketplace returns on their way back and the SKUs whose
+ * marketplace stock was set right during the night.
  */
 class MorningBriefCommand extends Command
 {
@@ -49,7 +51,7 @@ class MorningBriefCommand extends Command
     /**
      * The figures of the brief, in the store's time zone.
      *
-     * @return array{date: string, to_ship: int, overdue: int, due_today: int, yesterday_orders: int, yesterday_sales: float, low_stock: int, returns_coming: int}
+     * @return array{date: string, to_ship: int, overdue: int, due_today: int, yesterday_orders: int, yesterday_sales: float, low_stock: int, returns_coming: int, stock_fixed: int}
      */
     public static function figures(Tenant $tenant, LowStockQuery $lowStock): array
     {
@@ -68,6 +70,8 @@ class MorningBriefCommand extends Command
             'yesterday_sales' => (float) (clone $sold)->sum('total'),
             'low_stock' => count($lowStock->forTenant($tenant->id, 200)),
             'returns_coming' => OrderReturn::query()->whereIn('status', [OrderReturn::APPROVED, OrderReturn::IN_TRANSIT])->count(),
+            // Đợt 16: SKUs whose marketplace stock was wrong and set right during the night.
+            'stock_fixed' => (int) StockCheck::query()->where('status', StockCheck::DONE)->where('created_at', '>=', $now->startOfDay()->utc())->sum('mismatched'),
         ];
     }
 
@@ -90,6 +94,9 @@ class MorningBriefCommand extends Command
         }
         if ($f['returns_coming'] > 0) {
             $parts[] = "{$f['returns_coming']} đơn hoàn đang về.";
+        }
+        if (($f['stock_fixed'] ?? 0) > 0) {
+            $parts[] = "Đêm qua sửa {$f['stock_fixed']} SKU lệch tồn trên sàn.";
         }
         if ($parts === []) {
             return null;
