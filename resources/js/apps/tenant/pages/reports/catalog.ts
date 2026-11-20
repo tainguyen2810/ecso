@@ -61,13 +61,13 @@ export const reports: Record<string, DetailReport> = {
     'product-sales': {
         key: 'product-sales',
         title: 'Bán hàng theo sản phẩm',
-        description: 'Số lượng, doanh thu, giá vốn và lãi gộp của từng SKU trên mọi kênh bán.',
+        description: 'Số lượng, doanh thu, giá vốn, lãi gộp và lãi sau phí sàn của từng SKU trên mọi kênh bán.',
         endpoint: '/reports/product-sales',
         permission: 'reports.view',
         period: 'range',
         search: true,
         empty: 'Chưa có hàng bán trong khoảng thời gian này.',
-        note: 'Tính các đơn đã ghi nhận doanh thu trong kỳ, giống trang Tài chính: đơn sàn khi sàn báo hoàn thành, đơn kênh riêng khi giao xong. Chiết khấu là chiết khấu từng dòng hàng; chiết khấu cả đơn không chia về từng sản phẩm.',
+        note: 'Tính các đơn đã ghi nhận doanh thu trong kỳ, giống trang Tài chính: đơn sàn khi sàn báo hoàn thành, đơn kênh riêng khi giao xong. Chiết khấu là chiết khấu từng dòng hàng; chiết khấu cả đơn không chia về từng sản phẩm. Phí sàn của mỗi đơn (theo đối soát, chưa có thì ước tính theo bảng phí của shop) được chia cho các dòng hàng theo giá trị; đơn kênh riêng không có phí sàn.',
         columns: () => [
             { key: 'variant', label: 'Sản phẩm', value: variant, sub: variantSku, link: variantLink },
             { key: 'orders', label: 'Đơn', type: 'number', total: true },
@@ -78,6 +78,8 @@ export const reports: Record<string, DetailReport> = {
             { key: 'cogs', label: 'Giá vốn', type: 'money', total: true },
             { key: 'gross_profit', label: 'Lãi gộp', type: 'money', total: true, tone: negative('gross_profit') },
             { key: 'margin', label: 'Biên', type: 'pct' },
+            { key: 'fees', label: 'Phí sàn', type: 'money', total: true, sub: (r) => (r.fees_unknown_orders ? 'có đơn chưa có bảng phí' : null) },
+            { key: 'profit_after_fees', label: 'Lãi sau phí sàn', type: 'money', total: true, tone: negative('profit_after_fees') },
         ],
     },
     orders: {

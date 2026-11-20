@@ -2,6 +2,7 @@
 
 namespace App\Modules\Analytics\Services;
 
+use App\Modules\Analytics\Support\ProfitFigures;
 use App\Modules\Analytics\Support\RevenuePolicy;
 use App\Modules\Analytics\Support\Search;
 use App\Modules\Cashbook\Services\CashFlows;
@@ -69,7 +70,8 @@ class BusinessReports
                 ->leftJoin('marketplace_accounts', 'marketplace_accounts.id', '=', 'orders.marketplace_account_id')
                 ->leftJoin('sales_channels', 'sales_channels.id', '=', 'orders.sales_channel_id')
                 ->groupBy('orders.marketplace_account_id', 'orders.sales_channel_id', 'marketplace_accounts.shop_name', 'marketplace_accounts.marketplace', 'sales_channels.name', 'sales_channels.type')
-                ->selectRaw("COALESCE(marketplace_accounts.shop_name, sales_channels.name, 'Khác') as label, COALESCE(marketplace_accounts.marketplace, sales_channels.type) as kind, {$metrics}")
+                ->selectRaw("COALESCE(marketplace_accounts.shop_name, sales_channels.name, 'Khác') as label, COALESCE(marketplace_accounts.marketplace, sales_channels.type) as kind, "
+                    ."orders.marketplace_account_id as account_id, orders.sales_channel_id as channel_id, {$metrics}")
                 ->orderByDesc('revenue')->get(),
             'staff' => (clone $base)
                 ->leftJoin('users', 'users.id', '=', 'orders.created_by')
@@ -97,6 +99,9 @@ class BusinessReports
             $rows = $this->fillDays($rows, $from, $to);
         }
         $totals = $this->salesRow((clone $base)->selectRaw("'total' as label, NULL as kind, {$metrics}")->first());
+        if ($by === 'channel') {
+            [$rows, $totals] = $this->withChannelFees($grouped->all(), $rows, $totals, $from, $to);
+        }
         $cancelled = DB::table('orders')->where('tenant_id', $this->tenant())->whereBetween('placed_at', [$from, $to])
             ->whereIn('status', self::EXCLUDED)->selectRaw('COUNT(*) as n, COALESCE(SUM(total), 0) as total')->first();
         // Marketplace orders delivered in the period that the marketplace has not completed yet: not revenue yet.
@@ -269,6 +274,50 @@ class BusinessReports
     }
 
     /** @return array<string, mixed> */
+    /**
+     * Marketplace fees on the "Theo kênh" tab (Đợt 11): confirmed by the shop's settlement or estimated from its fee
+     * table, the same figures as Tài chính, and the profit left after them:
+     *   Lãi sau phí sàn = lợi nhuận gộp − phí sàn + phí giao khách trả  (Tài chính's "lợi nhuận đóng góp" of the shop,
+     *   before selling expenses, which belong to the whole business).
+     * Orders of a shop without settlement nor fee table are counted in fees_unknown_orders, never as a 0 fee.
+     *
+     * @param  array<int, object>  $grouped
+     * @param  array<int, array<string, mixed>>  $rows
+     * @param  array<string, mixed>  $totals
+     * @return array{0: array<int, array<string, mixed>>, 1: array<string, mixed>}
+     */
+    private function withChannelFees(array $grouped, array $rows, array $totals, CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        $fees = ProfitFigures::withFees(RevenuePolicy::recognized(DB::table('orders as o')->where('o.tenant_id', $this->tenant()), 'o', $from, $to))
+            ->groupBy('o.marketplace_account_id', 'o.sales_channel_id')
+            ->selectRaw('o.marketplace_account_id as account_id, o.sales_channel_id as channel_id, '
+                .'COALESCE(SUM('.ProfitFigures::confirmedFeeSql().'), 0) + COALESCE(SUM('.ProfitFigures::estimatedFeeSql().'), 0) as fees, '
+                .'COUNT(s.id) as confirmed_orders, COALESCE(SUM('.ProfitFigures::unknownFeeSql().'), 0) as unknown_orders')
+            ->get()->keyBy(fn ($f) => $f->account_id.'-'.$f->channel_id);
+
+        $add = function (array $row, float $fees, int $confirmed, int $unknown): array {
+            $after = $row['gross_profit'] - $fees + $row['shipping'];
+
+            return [...$row,
+                'fees' => round($fees, 2),
+                'fees_confirmed_orders' => $confirmed,
+                'fees_unknown_orders' => $unknown,
+                'profit_after_fees' => round($after, 2) + 0.0,
+                'margin_after_fees' => $row['goods'] > 0 ? round($after / $row['goods'] * 100, 1) : null,
+            ];
+        };
+        $sum = ['fees' => 0.0, 'confirmed' => 0, 'unknown' => 0];
+        foreach ($rows as $i => $row) {
+            $f = $fees->get($grouped[$i]->account_id.'-'.$grouped[$i]->channel_id);
+            $rows[$i] = $add($row, (float) ($f->fees ?? 0), (int) ($f->confirmed_orders ?? 0), (int) ($f->unknown_orders ?? 0));
+            $sum['fees'] += (float) ($f->fees ?? 0);
+            $sum['confirmed'] += (int) ($f->confirmed_orders ?? 0);
+            $sum['unknown'] += (int) ($f->unknown_orders ?? 0);
+        }
+
+        return [$rows, $add($totals, $sum['fees'], $sum['confirmed'], $sum['unknown'])];
+    }
+
     private function salesRow(object $r): array
     {
         $goods = (float) $r->goods;

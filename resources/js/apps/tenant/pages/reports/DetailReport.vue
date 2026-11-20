@@ -85,7 +85,7 @@ watch(q, () => {
 });
 
 // Without "xem giá vốn & lợi nhuận" the server leaves cost and profit out (profit_hidden): drop their columns and cards.
-const PROFIT_KEYS = ['cogs', 'gross_profit', 'margin'];
+const PROFIT_KEYS = ['cogs', 'gross_profit', 'margin', 'profit_after_fees'];
 const columns = computed<Column[]>(() =>
     data.value ? report.value.columns(data.value, tab.value).filter((c) => !(data.value.profit_hidden && PROFIT_KEYS.includes(c.key))) : [],
 );
