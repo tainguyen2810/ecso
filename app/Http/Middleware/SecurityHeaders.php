@@ -20,7 +20,8 @@ class SecurityHeaders
         $headers->set('X-Content-Type-Options', 'nosniff');
         $headers->set('X-Frame-Options', 'DENY');
         $headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
-        $headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+        // camera=(self): "Quét bằng camera" in Đóng gói and Hoàn/Trả; still off for any embedded frame.
+        $headers->set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(), payment=()');
         $headers->set('Cross-Origin-Opener-Policy', 'same-origin');
 
         if (app()->isProduction()) {
@@ -29,7 +30,9 @@ class SecurityHeaders
             }
             $headers->set('Content-Security-Policy', implode('; ', [
                 "default-src 'self'",
-                "script-src 'self'",
+                // 'wasm-unsafe-eval': the barcode reader (zxing .wasm, served from our build) on phones without
+                // a native BarcodeDetector. It allows compiling WebAssembly only, not JS eval.
+                "script-src 'self' 'wasm-unsafe-eval'",
                 // Tailwind/Vue inline style bindings.
                 "style-src 'self' 'unsafe-inline'",
                 "img-src 'self' data: blob:",

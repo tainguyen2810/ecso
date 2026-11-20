@@ -115,7 +115,9 @@ it('connects a shop shared from EzChat: picker on EzChat, code traded for a shar
     $url = $api->postJson('/api/v1/marketplace-accounts/authorize/shopee')->assertOk()->json('data.url');
     expect($url)->toStartWith(EZ_URL.'/connect/banhang?type=SHOPEE');
     parse_str((string) parse_url($url, PHP_URL_QUERY), $q);
-    expect($q['redirect'])->toEndWith('/marketplaces/shopee/callback');
+    expect($q['redirect'])->toEndWith('/marketplaces/shopee/callback')
+        // Signed, so EzChat can offer "Kết nối thẳng" to a seller without EzChat.
+        ->and($q['sig'])->toBe(hash_hmac('sha256', "{$q['ts']}.direct.SHOPEE.{$q['state']}.{$q['redirect']}", EZ_SECRET));
 
     $api->postJson('/api/v1/marketplace-accounts/callback/shopee', ['state' => $q['state'], 'params' => ['code' => 'one-time', 'state' => $q['state']]])
         ->assertCreated()->assertJsonPath('data.external_shop_id', '880011')->assertJsonMissingPath('data.access_token');
@@ -130,7 +132,23 @@ it('refuses a shop of the other marketplace and a cancelled pick', function () {
     $shopee = app(ConnectorRegistry::class)->for('shopee');
 
     expect(fn () => $shopee->completeAuthorization(['code' => 'c'], 'x'))->toThrow(ConnectorException::class, 'không thuộc sàn này')
-        ->and(fn () => $shopee->completeAuthorization(['error' => 'cancelled'], 'x'))->toThrow(ConnectorException::class);
+        ->and(fn () => $shopee->completeAuthorization(['error' => 'cancelled'], 'x'))->toThrow(ConnectorException::class)
+        ->and(fn () => $shopee->completeAuthorization(['error' => 'CHANNEL_EXISTS'], 'x'))->toThrow(ConnectorException::class, 'Tôi đang dùng EzChat');
+});
+
+it('"Kết nối thẳng": EZCHAT_CONNECT=direct goes straight to the marketplace through EzChat, and the shop has no workspace', function () {
+    config(['marketplaces.ezchat.connect' => 'direct']);
+    fakeEzChat(['/api/banhang/gw/exchange' => ['data' => [
+        'token' => 'direct-token', 'direct' => true,
+        'shop' => ['type' => 'TIKTOK_SHOP', 'shopId' => '7490001', 'name' => 'Shop Không Dùng EzChat', 'region' => 'VN'],
+        'workspace' => ['id' => 'ten_connector', 'name' => 'hidden'],
+    ]]]);
+    $tiktok = app(ConnectorRegistry::class)->for('tiktok');
+
+    $url = $tiktok->authorizationUrl('state-0123456789abcdef', 'https://banhang.test/marketplaces/tiktok/callback');
+    expect($url)->toStartWith(EZ_URL.'/api/banhang/gw/direct?type=TIKTOK_SHOP');
+    $auth = $tiktok->completeAuthorization(['code' => 'one-time-code', 'state' => 'state-0123456789abcdef'], 'x');
+    expect($auth->scopes)->toBe(['ezchat:direct'])->and($auth->shopName)->toBe('Shop Không Dùng EzChat');
 });
 
 it('reads a Shopee order through EzChat with the share token', function () {

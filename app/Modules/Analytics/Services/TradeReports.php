@@ -2,6 +2,7 @@
 
 namespace App\Modules\Analytics\Services;
 
+use App\Modules\Analytics\Support\ProfitFigures;
 use App\Modules\Analytics\Support\RevenuePolicy;
 use App\Modules\Analytics\Support\Search;
 use App\Modules\Orders\Domain\OrderStatus;
@@ -32,8 +33,17 @@ class TradeReports
      */
     public function salesByProduct(CarbonImmutable $from, CarbonImmutable $to, ?string $q = null): array
     {
+        // Each order's marketplace fee (confirmed, else estimated) shared over its lines by their value (Đợt 11).
+        $orderFees = ProfitFigures::withFees(RevenuePolicy::recognized(DB::table('orders as o')->where('o.tenant_id', $this->tenant()), 'o', $from, $to))
+            ->selectRaw('o.id as order_id, COALESCE('.ProfitFigures::confirmedFeeSql().', '.ProfitFigures::estimatedFeeSql().', 0) as fee, '.ProfitFigures::unknownFeeSql().' as unknown');
+        $lineTotals = DB::table('order_items')->where('tenant_id', $this->tenant())->groupBy('order_id')
+            ->selectRaw('order_id, SUM(quantity * unit_price - discount) as lines_value');
+        $share = '(i.quantity * i.unit_price - i.discount) / NULLIF(lt.lines_value, 0)';
+
         $grouped = RevenuePolicy::recognized(DB::table('order_items as i')
             ->join('orders as o', 'o.id', '=', 'i.order_id')
+            ->leftJoinSub($orderFees, 'f', 'f.order_id', '=', 'o.id')
+            ->leftJoinSub($lineTotals, 'lt', 'lt.order_id', '=', 'o.id')
             ->leftJoin('product_variants as v', 'v.id', '=', 'i.product_variant_id')
             ->leftJoin('products as p', 'p.id', '=', 'v.product_id')
             ->where('o.tenant_id', $this->tenant()), 'o', $from, $to)
@@ -41,8 +51,9 @@ class TradeReports
             ->groupBy('i.product_variant_id', 'v.ulid', 'v.sku', 'v.name', 'p.name')
             ->selectRaw('v.ulid, v.sku, v.name as variant_name, p.name as product_name, MAX(i.name) as item_name, MAX(i.seller_sku) as seller_sku, '
                 .'COUNT(DISTINCT o.id) as orders, SUM(i.quantity) as units, SUM(i.quantity * i.unit_price) as goods, SUM(i.discount) as discount, '
-                .'SUM(COALESCE(i.cost_snapshot, 0) * i.quantity) as cogs, SUM(CASE WHEN i.cost_snapshot IS NULL AND i.mapping_status <> \'service\' THEN 1 ELSE 0 END) as missing');
-        $all = $this->over($grouped, ['orders', 'units', 'goods', 'discount', 'cogs', 'missing']);
+                .'SUM(COALESCE(i.cost_snapshot, 0) * i.quantity) as cogs, SUM(CASE WHEN i.cost_snapshot IS NULL AND i.mapping_status <> \'service\' THEN 1 ELSE 0 END) as missing, '
+                ."COALESCE(SUM(COALESCE(f.fee, 0) * COALESCE({$share}, 0)), 0) as fees, COUNT(DISTINCT CASE WHEN f.unknown = 1 THEN o.id END) as fees_unknown");
+        $all = $this->over($grouped, ['orders', 'units', 'goods', 'discount', 'cogs', 'missing', 'fees', 'fees_unknown']);
         $rows = (clone $grouped)->orderByDesc('goods')->limit(self::limit())->get();
 
         $out = $rows->map(function ($r) {
@@ -62,6 +73,9 @@ class TradeReports
                 'gross_profit' => round($net - $cogs, 2),
                 'margin' => $net > 0 ? round(($net - $cogs) / $net * 100, 1) : null,
                 'missing_cost_lines' => (int) $r->missing,
+                'fees' => round((float) $r->fees, 2),
+                'fees_unknown_orders' => (int) $r->fees_unknown,
+                'profit_after_fees' => round($net - $cogs - (float) $r->fees, 2) + 0.0,
             ];
         })->all();
 
@@ -75,6 +89,9 @@ class TradeReports
             'cogs' => round((float) $all->cogs, 2),
             'gross_profit' => round($net - (float) $all->cogs, 2),
             'missing_cost_lines' => (int) $all->missing,
+            'fees' => round((float) $all->fees, 2),
+            'fees_unknown_orders' => (int) $all->fees_unknown,
+            'profit_after_fees' => round($net - (float) $all->cogs - (float) $all->fees, 2) + 0.0,
         ];
 
         return ['range' => $this->range($from, $to), 'basis' => 'completed', 'rows' => $out, 'totals' => $totals, ...$this->truncation(count($out), (int) $all->n)];

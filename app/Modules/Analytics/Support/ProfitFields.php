@@ -9,7 +9,7 @@ namespace App\Modules\Analytics\Support;
  */
 final class ProfitFields
 {
-    public const KEYS = ['cogs', 'gross_profit', 'margin', 'missing_cost_lines', 'cost_snapshot', 'unit_cost'];
+    public const KEYS = ['cogs', 'gross_profit', 'margin', 'missing_cost_lines', 'cost_snapshot', 'unit_cost', 'profit_after_fees', 'margin_after_fees'];
 
     /**
      * @param  array<string, mixed>  $report

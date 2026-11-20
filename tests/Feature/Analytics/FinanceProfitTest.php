@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Access\Models\Role;
+use App\Modules\Analytics\Support\ProfitFields;
 use App\Modules\Billing\Models\Plan;
 use App\Modules\Billing\Models\Subscription;
 use App\Modules\Orders\Models\Order;
@@ -168,4 +169,52 @@ it('keeps VAT out of net revenue, whether prices include it or it is added on to
         ->and($api->getJson('/api/v1/finance/details?metric=returns')->json('data.total.value'))->toEqual(200000.0);
     $revenue = $api->getJson('/api/v1/finance/details?metric=revenue')->json('data');
     expect($revenue['total']['goods'])->toEqual(300000.0)->and(collect($revenue['rows'])->sum('tax'))->toEqual(30000);
+});
+
+it('shows marketplace fees and the profit after them per shop and per SKU (Đợt 11), matching Tài chính', function () {
+    [$tenant, $owner] = tenantWithOwner();
+    multiShop($tenant);
+    $a = makeVariant($tenant, 'SKU-LAI-A');
+    $b = makeVariant($tenant, 'SKU-LAI-B');
+    stockIn($tenant, $a, 20);
+    stockIn($tenant, $b, 20);
+    $withTable = fakeShop($tenant, name: 'Shop có biểu phí');
+    $noTable = fakeShop($tenant, name: 'Shop chưa có phí');
+    shopFees($withTable, 10, 1000);
+
+    $settled = fakeOrder($withTable, [[$a, 1], [$b, 1]], 'fake_completed');
+    fakeOrder($withTable, [[$a, 2]], 'fake_completed');
+    fakeOrder($noTable, [[$b, 1]], 'fake_completed');
+    settle($settled, 12345, 50000);
+
+    $api = actingInTenant($owner, $tenant);
+    $summary = $api->getJson('/api/v1/finance/summary')->assertOk()->json('data');
+
+    $sales = $api->getJson('/api/v1/reports/sales?by=channel')->assertOk()->json('data');
+    $rows = collect($sales['rows'])->keyBy('label');
+    expect($sales['totals']['fees'])->toEqual($summary['fees']['total'])
+        ->and($rows['Shop có biểu phí']['fees_confirmed_orders'])->toBe(1)
+        ->and($rows['Shop có biểu phí']['fees_unknown_orders'])->toBe(0)
+        ->and($rows['Shop chưa có phí']['fees'])->toEqual(0.0)
+        ->and($rows['Shop chưa có phí']['fees_unknown_orders'])->toBe(1);
+    foreach ($sales['rows'] as $row) {
+        expect($row['profit_after_fees'])->toEqual(round($row['gross_profit'] - $row['fees'] + $row['shipping'], 2));
+    }
+    // One shop's line equals that shop's own Tài chính contribution profit.
+    $scoped = $api->getJson("/api/v1/finance/summary?shop={$withTable->ulid}")->assertOk()->json('data');
+    expect($rows['Shop có biểu phí']['fees'])->toEqual($scoped['fees']['total'])
+        ->and($rows['Shop có biểu phí']['profit_after_fees'])->toEqual($scoped['contribution_profit']);
+
+    // Per SKU: each order's fee is shared over its lines, so the SKU fees add up to the total.
+    $products = $api->getJson('/api/v1/reports/product-sales')->assertOk()->json('data');
+    $bySku = collect($products['rows'])->keyBy('variant.sku');
+    expect(round(collect($products['rows'])->sum('fees'), 2))->toEqual($summary['fees']['total'])
+        ->and($products['totals']['fees'])->toEqual($summary['fees']['total'])
+        ->and($bySku['SKU-LAI-B']['fees_unknown_orders'])->toBe(1)
+        ->and($bySku['SKU-LAI-A']['profit_after_fees'])->toEqual(round($bySku['SKU-LAI-A']['gross_profit'] - $bySku['SKU-LAI-A']['fees'], 2));
+});
+
+it('hides the profit after fees from members without the profit permission', function () {
+    $report = ProfitFields::strip(['rows' => [['fees' => 1.0, 'profit_after_fees' => 2.0, 'margin_after_fees' => 3.0]], 'totals' => ['profit_after_fees' => 2.0]], false);
+    expect($report['rows'][0])->toBe(['fees' => 1.0])->and($report['totals'])->toBe([]);
 });

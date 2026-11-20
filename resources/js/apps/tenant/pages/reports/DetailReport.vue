@@ -85,7 +85,7 @@ watch(q, () => {
 });
 
 // Without "xem giá vốn & lợi nhuận" the server leaves cost and profit out (profit_hidden): drop their columns and cards.
-const PROFIT_KEYS = ['cogs', 'gross_profit', 'margin'];
+const PROFIT_KEYS = ['cogs', 'gross_profit', 'margin', 'profit_after_fees'];
 const columns = computed<Column[]>(() =>
     data.value ? report.value.columns(data.value, tab.value).filter((c) => !(data.value.profit_hidden && PROFIT_KEYS.includes(c.key))) : [],
 );
@@ -257,7 +257,7 @@ async function exportCsv() {
                 </thead>
                 <tbody class="divide-y">
                     <tr v-for="(row, i) in rows" :key="i" class="hover:bg-muted/30">
-                        <td v-for="c in columns" :key="c.key" :class="cn('px-4 py-2', numeric(c) && 'whitespace-nowrap text-right tabular-nums', c.tone?.(row) && toneClass[c.tone(row)!])">
+                        <td v-for="c in columns" :key="c.key" :class="cn('px-4 py-2', c === columns[0] && 'min-w-48', numeric(c) && 'whitespace-nowrap text-right tabular-nums', c.tone?.(row) && toneClass[c.tone(row)!])">
                             <RouterLink v-if="c.link?.(row)" :to="c.link(row)!" class="font-medium hover:text-primary hover:underline">{{ show(c.type, raw(c, row)) }}</RouterLink>
                             <template v-else>{{ show(c.type, raw(c, row)) }}</template>
                             <span v-if="c.sub?.(row)" class="block text-xs text-muted-foreground">{{ c.sub(row) }}</span>

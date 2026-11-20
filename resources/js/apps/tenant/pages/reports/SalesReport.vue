@@ -27,6 +27,13 @@ interface Row {
     gross_profit?: number;
     margin?: number | null;
     missing_cost_lines?: number;
+    shipping?: number;
+    // "Theo kênh" only (Đợt 11): marketplace fees and the profit left after them.
+    fees?: number;
+    fees_confirmed_orders?: number;
+    fees_unknown_orders?: number;
+    profit_after_fees?: number;
+    margin_after_fees?: number | null;
 }
 interface SalesData {
     rows: Row[];
@@ -60,6 +67,8 @@ onMounted(load);
 watch(() => [range.value.from, range.value.to, by.value], load);
 
 const canProfit = computed(() => !data.value?.profit_hidden);
+/** Phí sàn and Lãi sau phí sàn columns: the channel tab, for members who see profit. */
+const showFees = computed(() => by.value === 'channel' && canProfit.value && data.value?.totals.fees !== undefined);
 const maxRevenue = computed(() => Math.max(1, ...(data.value?.rows.map((r) => r.revenue) ?? [1])));
 const firstColumn = computed(() => ({ day: 'Ngày', channel: 'Kênh bán', staff: 'Nhân viên', customer: 'Khách hàng', warehouse: 'Kho' })[by.value]);
 
@@ -81,8 +90,12 @@ function exportCsv() {
     downloadCsv(
         `ban-hang-${by.value}-${range.value.from}-${range.value.to}.csv`,
         toCsv(
-            [firstColumn.value, 'Số đơn', 'Số lượng', 'Doanh thu', 'Tiền hàng', ...(profit ? ['Giá vốn', 'Lợi nhuận gộp', 'Biên LN %'] : [])],
-            data.value.rows.map((r) => [label(r), r.orders, r.units, r.revenue, r.goods, ...(profit ? [r.cogs ?? 0, r.gross_profit ?? 0, r.margin ?? null] : [])]),
+            [firstColumn.value, 'Số đơn', 'Số lượng', 'Doanh thu', 'Tiền hàng', ...(profit ? ['Giá vốn', 'Lợi nhuận gộp', 'Biên LN %'] : []), ...(showFees.value ? ['Phí sàn', 'Phí giao khách trả', 'Lãi sau phí sàn', 'Biên sau phí %'] : [])],
+            data.value.rows.map((r) => [
+                label(r), r.orders, r.units, r.revenue, r.goods,
+                ...(profit ? [r.cogs ?? 0, r.gross_profit ?? 0, r.margin ?? null] : []),
+                ...(showFees.value ? [r.fees ?? 0, r.shipping ?? 0, r.profit_after_fees ?? 0, r.margin_after_fees ?? null] : []),
+            ]),
         ),
     );
 }
@@ -112,6 +125,10 @@ function exportCsv() {
                 <template v-if="data.awaiting.orders">{{ formatNumber(data.awaiting.orders) }} đơn sàn đã giao nhưng sàn chưa hoàn thành ({{ formatMoney(data.awaiting.goods) }} tiền hàng) chưa được tính.</template>
             </span>
         </p>
+        <p v-if="showFees" class="mb-4 flex items-start gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground" data-testid="channel-fees-note">
+            <Info class="mt-0.5 size-3.5 shrink-0" />
+            <span>Lãi sau phí sàn = lợi nhuận gộp − phí sàn + phí giao khách trả, giống "Lợi nhuận đóng góp" ở trang Tài chính của từng shop. Phí sàn lấy theo đối soát của sàn; đơn chưa đối soát thì ước tính theo bảng phí của shop. Kênh bán riêng không có phí sàn.</span>
+        </p>
         <p v-if="data.totals.missing_cost_lines || data.excluded.orders" class="mb-4 flex items-start gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
             <Info class="mt-0.5 size-3.5 shrink-0" />
             <span>
@@ -140,36 +157,55 @@ function exportCsv() {
                                 <th class="px-4 py-2.5 text-right font-medium">Lợi nhuận gộp</th>
                                 <th class="px-4 py-2.5 text-right font-medium">Biên</th>
                             </template>
+                            <template v-if="showFees">
+                                <th class="px-4 py-2.5 text-right font-medium">Phí sàn</th>
+                                <th class="px-4 py-2.5 text-right font-medium">Lãi sau phí sàn</th>
+                                <th class="px-4 py-2.5 text-right font-medium">Biên sau phí</th>
+                            </template>
                         </tr>
                     </thead>
                     <tbody class="divide-y">
                         <tr v-for="r in data.rows" :key="r.label + r.kind" :class="!r.orders && 'text-muted-foreground'">
                             <td class="whitespace-nowrap px-4 py-2">{{ label(r) }}<span v-if="kindLabel(r.kind)" class="ml-1.5 text-xs text-muted-foreground">{{ kindLabel(r.kind) }}</span></td>
-                            <td class="px-4 py-2 text-right tabular-nums">{{ r.orders ? formatNumber(r.orders) : '—' }}</td>
-                            <td class="px-4 py-2 text-right tabular-nums">{{ r.units ? formatNumber(r.units) : '—' }}</td>
+                            <td class="px-4 py-2 whitespace-nowrap text-right tabular-nums">{{ r.orders ? formatNumber(r.orders) : '—' }}</td>
+                            <td class="px-4 py-2 whitespace-nowrap text-right tabular-nums">{{ r.units ? formatNumber(r.units) : '—' }}</td>
                             <td class="px-4 py-2">
                                 <div class="flex items-center gap-2">
                                     <div class="h-2 flex-1 rounded-full bg-muted"><div class="h-2 rounded-full bg-primary" :style="{ width: `${(r.revenue / maxRevenue) * 100}%` }" /></div>
-                                    <span class="w-28 text-right tabular-nums">{{ r.revenue ? formatMoney(r.revenue) : '—' }}</span>
+                                    <span class="w-28 whitespace-nowrap text-right tabular-nums">{{ r.revenue ? formatMoney(r.revenue) : '—' }}</span>
                                 </div>
                             </td>
                             <template v-if="canProfit">
-                                <td class="px-4 py-2 text-right tabular-nums">{{ r.cogs ? formatMoney(r.cogs) : '—' }}</td>
-                                <td class="px-4 py-2 text-right tabular-nums" :class="(r.gross_profit ?? 0) < 0 && 'text-destructive'">{{ r.orders ? formatMoney(r.gross_profit ?? 0) : '—' }}</td>
-                                <td class="px-4 py-2 text-right tabular-nums">{{ r.margin == null ? '—' : `${r.margin}%` }}</td>
+                                <td class="px-4 py-2 whitespace-nowrap text-right tabular-nums">{{ r.cogs ? formatMoney(r.cogs) : '—' }}</td>
+                                <td class="px-4 py-2 whitespace-nowrap text-right tabular-nums" :class="(r.gross_profit ?? 0) < 0 && 'text-destructive'">{{ r.orders ? formatMoney(r.gross_profit ?? 0) : '—' }}</td>
+                                <td class="px-4 py-2 whitespace-nowrap text-right tabular-nums">{{ r.margin == null ? '—' : `${r.margin}%` }}</td>
+                            </template>
+                            <template v-if="showFees">
+                                <td class="px-4 py-2 whitespace-nowrap text-right tabular-nums" data-testid="channel-fees">
+                                    {{ r.fees ? formatMoney(r.fees) : '—' }}
+                                    <span v-if="r.fees_unknown_orders" class="block whitespace-normal text-xs text-amber-600">{{ formatNumber(r.fees_unknown_orders) }} đơn chưa có bảng phí</span>
+                                    <span v-else-if="r.fees && r.fees_confirmed_orders !== undefined && r.fees_confirmed_orders < r.orders" class="block whitespace-normal text-xs text-muted-foreground">có phần ước tính</span>
+                                </td>
+                                <td class="px-4 py-2 whitespace-nowrap text-right font-medium tabular-nums" :class="(r.profit_after_fees ?? 0) < 0 && 'text-destructive'">{{ r.orders ? formatMoney(r.profit_after_fees ?? 0) : '—' }}</td>
+                                <td class="px-4 py-2 whitespace-nowrap text-right tabular-nums">{{ r.margin_after_fees == null ? '—' : `${r.margin_after_fees}%` }}</td>
                             </template>
                         </tr>
                     </tbody>
                     <tfoot class="border-t bg-muted/30 font-medium">
                         <tr>
                             <td class="px-4 py-2.5">Tổng</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums">{{ formatNumber(data.totals.orders) }}</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums">{{ formatNumber(data.totals.units) }}</td>
-                            <td class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(data.totals.revenue) }}</td>
+                            <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ formatNumber(data.totals.orders) }}</td>
+                            <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ formatNumber(data.totals.units) }}</td>
+                            <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ formatMoney(data.totals.revenue) }}</td>
                             <template v-if="canProfit">
-                                <td class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(data.totals.cogs ?? 0) }}</td>
-                                <td class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(data.totals.gross_profit ?? 0) }}</td>
-                                <td class="px-4 py-2.5 text-right tabular-nums">{{ data.totals.margin == null ? '—' : `${data.totals.margin}%` }}</td>
+                                <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ formatMoney(data.totals.cogs ?? 0) }}</td>
+                                <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ formatMoney(data.totals.gross_profit ?? 0) }}</td>
+                                <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ data.totals.margin == null ? '—' : `${data.totals.margin}%` }}</td>
+                            </template>
+                            <template v-if="showFees">
+                                <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ formatMoney(data.totals.fees ?? 0) }}</td>
+                                <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ formatMoney(data.totals.profit_after_fees ?? 0) }}</td>
+                                <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ data.totals.margin_after_fees == null ? '—' : `${data.totals.margin_after_fees}%` }}</td>
                             </template>
                         </tr>
                     </tfoot>

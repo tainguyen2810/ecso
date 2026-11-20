@@ -3,9 +3,10 @@ import { onBeforeUnmount, ref } from 'vue';
 import { Camera, X } from 'lucide-vue-next';
 
 /**
- * "Quét bằng camera" (Đợt 8): reads barcodes and QR codes with the phone camera (the browser's BarcodeDetector:
- * Chrome on Android, Edge, Samsung Internet). `continuous` keeps the camera open for the next code (packing items);
- * the same code is not read twice within 1.5 s.
+ * "Quét bằng camera" (Đợt 8): reads barcodes and QR codes with the phone camera. Uses the browser's BarcodeDetector
+ * (Chrome on Android, Edge, Samsung Internet) and, where there is none (Safari on iPhone/iPad, Firefox), loads the
+ * ZXing WebAssembly reader on first use (Đợt 9). The .wasm file is served from our own build, never a CDN.
+ * `continuous` keeps the camera open for the next code (packing items); the same code is not read twice within 1.5 s.
  */
 defineOptions({ inheritAttrs: false });
 const props = withDefaults(defineProps<{ continuous?: boolean; label?: string }>(), { continuous: false, label: 'Quét bằng camera' });
@@ -23,20 +24,39 @@ let stream: MediaStream | null = null;
 let timer: number | undefined;
 let lastAt = 0;
 
-const Ctor = (typeof window !== 'undefined' ? (window as unknown as { BarcodeDetector?: DetectorClass }).BarcodeDetector : undefined);
-const supported = !!Ctor && typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
+const native = (typeof window !== 'undefined' ? (window as unknown as { BarcodeDetector?: DetectorClass }).BarcodeDetector : undefined);
+const hasCamera = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
+
+/** The native detector, or the ZXing ponyfill loaded on demand (≈1 MB, only when the camera is opened). */
+async function detectorClass(): Promise<DetectorClass> {
+    if (native) return native;
+    const [{ BarcodeDetector, prepareZXingModule }, { default: wasmUrl }] = await Promise.all([
+        import('barcode-detector/ponyfill'),
+        import('zxing-wasm/reader/zxing_reader.wasm?url'),
+    ]);
+    prepareZXingModule({ overrides: { locateFile: (path: string, prefix: string) => (path.endsWith('.wasm') ? wasmUrl : prefix + path) } });
+    return BarcodeDetector as unknown as DetectorClass;
+}
 
 async function start() {
     error.value = '';
     last.value = '';
     open.value = true;
-    if (!supported || !Ctor) {
-        error.value = 'Trình duyệt này chưa quét được bằng camera. Dùng Chrome trên Android, hoặc dùng máy quét / gõ mã.';
+    if (!hasCamera) {
+        error.value = 'Trình duyệt này không mở được camera. Mở trang bằng Safari hoặc Chrome (địa chỉ https), hoặc dùng máy quét / gõ mã.';
         return;
     }
+    let Ctor: DetectorClass;
+    try {
+        Ctor = await detectorClass();
+    } catch {
+        error.value = 'Chưa tải được bộ đọc mã. Kiểm tra mạng rồi thử lại, hoặc dùng máy quét / gõ mã.';
+        return;
+    }
+    if (!open.value) return;
     try {
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
-        if (!video.value) return;
+        if (!open.value || !video.value) return stop();
         video.value.srcObject = stream;
         await video.value.play();
         const wanted = ['code_128', 'code_39', 'code_93', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'itf', 'qr_code', 'data_matrix', 'codabar'];

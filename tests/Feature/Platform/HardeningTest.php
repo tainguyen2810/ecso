@@ -9,12 +9,13 @@ use Laravel\Sanctum\Sanctum;
 
 it('sends baseline security headers, and a CSP + HSTS on production', function () {
     $this->get('/login')->assertHeader('X-Content-Type-Options', 'nosniff')->assertHeader('X-Frame-Options', 'DENY')
-        ->assertHeader('Referrer-Policy', 'strict-origin-when-cross-origin')->assertHeaderMissing('Content-Security-Policy');
+        ->assertHeader('Referrer-Policy', 'strict-origin-when-cross-origin')->assertHeaderMissing('Content-Security-Policy')
+        ->assertHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(), payment=()');
     $this->getJson('/api/v1/marketplaces')->assertHeader('X-Content-Type-Options', 'nosniff');
 
     app()->detectEnvironment(fn () => 'production');
     $response = $this->get('https://localhost/up');
-    expect($response->headers->get('Content-Security-Policy'))->toContain("frame-ancestors 'none'")->toContain("script-src 'self'")
+    expect($response->headers->get('Content-Security-Policy'))->toContain("frame-ancestors 'none'")->toContain("script-src 'self' 'wasm-unsafe-eval'")
         ->and($response->headers->get('Strict-Transport-Security'))->toContain('max-age=31536000');
 });
 

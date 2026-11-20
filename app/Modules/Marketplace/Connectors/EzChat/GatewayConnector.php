@@ -57,7 +57,13 @@ abstract class GatewayConnector implements ArrangesShipment, FetchesReturns, Fet
     public function completeAuthorization(array $query, string $redirectUri): ShopAuthorization
     {
         if (($query['error'] ?? '') !== '') {
-            throw new ConnectorException('Đã hủy kết nối shop.', temporary: false);
+            throw new ConnectorException(match ((string) $query['error']) {
+                'cancelled', 'MARKETPLACE_DENIED' => 'Đã hủy kết nối shop. Có thể kết nối lại bất cứ lúc nào.',
+                'CHANNEL_EXISTS' => 'Shop này đã kết nối trong một tài khoản EzChat. Bấm Kết nối lại, chọn "Tôi đang dùng EzChat" và đăng nhập tài khoản đó.',
+                'SHOPEE_MAIN_ACCOUNT' => 'Hãy đăng nhập bằng tài khoản shop, không phải tài khoản chính (main account).',
+                'CHANNEL_DISABLED' => 'Kết nối '.$this->name().' đang tạm tắt. Vui lòng thử lại sau.',
+                default => 'Sàn chưa cấp quyền cho shop ('.$query['error'].'). Vui lòng kết nối lại.',
+            }, temporary: false);
         }
         $code = (string) ($query['code'] ?? '');
         if ($code === '') {
@@ -74,7 +80,8 @@ abstract class GatewayConnector implements ArrangesShipment, FetchesReturns, Fet
             shopName: (string) ($shop['name'] ?? ''),
             accessToken: (string) $result['token'],
             region: (string) ($shop['region'] ?? 'VN'),
-            scopes: ['ezchat:'.(string) (((array) ($result['workspace'] ?? []))['id'] ?? '')],
+            // "Kết nối thẳng" shops belong to no EzChat workspace.
+            scopes: [($result['direct'] ?? false) ? 'ezchat:direct' : 'ezchat:'.(string) (((array) ($result['workspace'] ?? []))['id'] ?? '')],
         );
     }
 
