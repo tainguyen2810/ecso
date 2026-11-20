@@ -23,7 +23,7 @@ class PushController extends Controller
         return response()->json(['data' => [
             'public_key' => $push->publicKey(),
             'subscribed' => $sub !== null,
-            'morning_brief' => $sub?->morning_brief ?? true,
+            'morning_brief' => $sub->morning_brief ?? true,
         ]]);
     }
 

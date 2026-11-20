@@ -58,8 +58,8 @@ class StockReconciler
         $differ = $rows->filter(fn (ListingVariant $l) => (int) $l->marketplace_stock !== ($desired[$l->id] ?? 0));
         $items = $differ->sortByDesc(fn (ListingVariant $l) => abs((int) $l->marketplace_stock - $desired[$l->id]))->take(StockCheck::MAX_ITEMS)
             ->map(fn (ListingVariant $l) => [
-                'sku' => $l->variant?->sku ?? $l->seller_sku,
-                'name' => trim(($l->variant?->product?->name ?? $l->listing?->title ?? '').($l->variant?->name ? ' - '.$l->variant->name : '')),
+                'sku' => $l->variant->sku ?? $l->seller_sku,
+                'name' => trim(($l->variant->product->name ?? $l->listing->title ?? '').($l->variant?->name ? ' - '.$l->variant->name : '')),
                 'marketplace_qty' => (int) $l->marketplace_stock,
                 'ecso_qty' => $desired[$l->id],
             ])->values()->all();
