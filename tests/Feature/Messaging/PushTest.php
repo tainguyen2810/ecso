@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Analytics\Console\MorningBriefCommand;
 use App\Modules\Messaging\Jobs\SendNewOrderPush;
 use App\Modules\Messaging\Models\PushSubscription;
 use App\Modules\Messaging\Push\WebPush;
@@ -56,4 +57,29 @@ it('tells subscribed phones about new orders, several at once in one notificatio
     $this->postJson('/api/v1/push/last', ['endpoint' => 'https://push.example.test/sub/other'])->assertOk()->assertJsonPath('data', null);
     $api->deleteJson('/api/v1/push/subscriptions', ['endpoint' => 'https://push.example.test/sub/abc'])->assertOk();
     expect(PushSubscription::withoutGlobalScopes()->count())->toBe(0);
+});
+
+it('sends the 8 am brief to phones that kept it on', function () {
+    $api = actingInTenant($this->owner, $this->tenant);
+    $api->postJson('/api/v1/push/subscriptions', ['endpoint' => 'https://push.example.test/sub/a', 'device' => 'Android'])->assertOk();
+    $api->postJson('/api/v1/push/subscriptions', ['endpoint' => 'https://push.example.test/sub/b', 'device' => 'Laptop'])->assertOk();
+    $api->patchJson('/api/v1/push/subscriptions', ['endpoint' => 'https://push.example.test/sub/b', 'morning_brief' => false])->assertOk();
+    $api->getJson('/api/v1/push?endpoint='.urlencode('https://push.example.test/sub/b'))->assertJsonPath('data.morning_brief', false);
+
+    Http::fake(['push.example.test/*' => Http::response('', 201)]);
+    $channel = defaultChannel($this->tenant)->ulid;
+    $this->travelTo(now()->subDay());
+    $api->postJson('/api/v1/sales-orders', ['channel_id' => $channel, 'buyer_name' => 'Chị Lan', 'lines' => [['variant_id' => $this->shirt->ulid, 'quantity' => 2]]])->assertCreated();
+    $this->travelBack();
+
+    Http::fake(['push.example.test/*' => Http::response('', 201)]);
+    $this->artisan('ecso:morning-brief')->assertSuccessful();
+    Http::assertSentCount(1);
+    $msg = $this->postJson('/api/v1/push/last', ['endpoint' => 'https://push.example.test/sub/a'])->json('data');
+    expect($msg['title'])->toStartWith('Bản tin sáng')->and($msg['body'])->toContain('Hôm qua 1 đơn, 300.000đ.');
+
+    // A quiet day says nothing.
+    expect(MorningBriefCommand::message(['date' => '20/11', 'to_ship' => 0, 'overdue' => 0, 'due_today' => 0, 'yesterday_orders' => 0, 'yesterday_sales' => 0, 'low_stock' => 0, 'returns_coming' => 0]))->toBeNull()
+        ->and(MorningBriefCommand::message(['date' => '20/11', 'to_ship' => 12, 'overdue' => 3, 'due_today' => 4, 'yesterday_orders' => 0, 'yesterday_sales' => 0, 'low_stock' => 5, 'returns_coming' => 2])['body'])
+        ->toBe('Cần giao 12 đơn (3 quá hạn, 4 hạn hôm nay). 5 SKU sắp hết hàng. 2 đơn hoàn đang về.');
 });

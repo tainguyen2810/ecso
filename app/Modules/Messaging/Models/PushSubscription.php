@@ -22,7 +22,7 @@ class PushSubscription extends Model
 
     protected function casts(): array
     {
-        return ['last_sent_at' => 'datetime'];
+        return ['last_sent_at' => 'datetime', 'morning_brief' => 'boolean'];
     }
 
     public static function hashOf(string $endpoint): string

@@ -16,8 +16,11 @@ class PushNotifier
 {
     public function __construct(private readonly WebPush $push, private readonly TenantContext $context) {}
 
-    /** @return int phones woken */
-    public function send(string $permission, string $title, string $body, string $url): int
+    /**
+     * @param  bool  $brief  only phones that kept "Bản tin 8h sáng" on
+     * @return int phones woken
+     */
+    public function send(string $permission, string $title, string $body, string $url, bool $brief = false): int
     {
         $users = TenantUser::query()->withoutGlobalScopes()->with('role')
             ->where('tenant_id', $this->context->id())->where('status', TenantUser::STATUS_ACTIVE)->get()
@@ -28,7 +31,7 @@ class PushNotifier
         }
 
         $sent = 0;
-        foreach (PushSubscription::query()->whereIn('user_id', $users)->get() as $sub) {
+        foreach (PushSubscription::query()->whereIn('user_id', $users)->when($brief, fn ($q) => $q->where('morning_brief', true))->get() as $sub) {
             $sub->forceFill(['last_title' => mb_substr($title, 0, 150), 'last_body' => mb_substr($body, 0, 300), 'last_url' => $url, 'last_sent_at' => now()])->save();
             try {
                 $this->push->wake($sub->endpoint) ? $sent++ : $sub->delete();

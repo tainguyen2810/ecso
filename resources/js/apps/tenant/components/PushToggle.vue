@@ -22,6 +22,15 @@ async function toggle(on: boolean) {
     }
 }
 
+async function toggleBrief(on: boolean) {
+    try {
+        await push.setBrief(on);
+        toast.success(on ? 'Máy này sẽ nhận bản tin lúc 8 giờ sáng.' : 'Đã tắt bản tin buổi sáng.');
+    } catch {
+        toast.error('Chưa lưu được, thử lại sau.');
+    }
+}
+
 async function test() {
     await push.test();
     toast.success('Đã gửi thông báo thử.');
@@ -54,5 +63,9 @@ async function test() {
                 <span :class="['absolute top-0.5 size-4 rounded-full bg-white shadow transition-all', push.state.value === 'on' ? 'left-[18px]' : 'left-0.5']" />
             </button>
         </div>
+        <label v-if="push.state.value === 'on'" class="mt-2 flex items-start gap-2 border-t border-blue-100 pt-2 text-xs" data-testid="push-brief">
+            <input type="checkbox" class="mt-0.5" :checked="push.brief.value" @change="toggleBrief(($event.target as HTMLInputElement).checked)" />
+            <span><b class="font-medium">Bản tin 8 giờ sáng</b><span class="block text-muted-foreground">Đơn cần giao hôm nay, đơn sắp trễ hạn, hàng sắp hết, hàng hoàn chờ nhận.</span></span>
+        </label>
     </div>
 </template>
