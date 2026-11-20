@@ -92,6 +92,8 @@ class OrderQuery
         foreach ((array) ($filters['flags'] ?? []) as $flag) {
             match ($flag) {
                 'shortage' => $query->where('has_shortage', true),
+                // "Hàng đặt": open orders waiting for goods bought from the supplier.
+                'awaiting_purchase' => $query->where('awaiting_purchase', true)->whereIn('status', OrderStatus::OPEN),
                 'unmapped' => $query->where('has_unmapped', true),
                 'overdue' => $query->whereIn('status', OrderStatus::OPEN)->where('ship_by_at', '<', now()),
                 'due_soon' => $query->whereIn('status', OrderStatus::OPEN)->whereBetween('ship_by_at', [now(), now()->addHours(config('ecso.orders.due_soon_hours'))]),

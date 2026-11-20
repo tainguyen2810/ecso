@@ -167,6 +167,17 @@ async function bulkStatus(status: string) {
     }
 }
 
+async function bulkSourcing(sourcing: 'stock' | 'order') {
+    try {
+        const { data } = await api.post('/products/bulk-sourcing', { ids: [...selected.value], sourcing });
+        toast.success(sourcing === 'order' ? `Đã chuyển ${data.updated} SKU sang hàng đặt` : `Đã chuyển ${data.updated} SKU sang hàng có sẵn`);
+        selected.value = new Set();
+        await load();
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    }
+}
+
 async function bulkDelete() {
     if (!window.confirm(`Xóa ${selected.value.size} sản phẩm đã chọn? Sản phẩm còn tồn kho sẽ được giữ lại.`)) return;
     try {
@@ -386,6 +397,8 @@ function toggleAll() {
             <Button size="sm" variant="outline" @click="bulkStatus('inactive')">Ngừng bán</Button>
             <Button size="sm" variant="outline" @click="bulkStatus('archived')">Lưu trữ</Button>
             <Button size="sm" variant="outline" data-testid="bulk-print" @click="printSelected">In tem mã vạch</Button>
+            <Button size="sm" variant="outline" data-testid="bulk-to-order" title="Giá theo web, không đẩy tồn lên web, khách đặt rồi mới nhập" @click="bulkSourcing('order')">Hàng đặt</Button>
+            <Button size="sm" variant="outline" @click="bulkSourcing('stock')">Hàng có sẵn</Button>
             <Button size="sm" variant="outline" class="text-destructive" data-testid="bulk-delete" @click="bulkDelete">Xóa</Button>
             <button class="ml-auto text-xs text-muted-foreground hover:text-foreground" @click="selected = new Set()">Bỏ chọn</button>
         </div>

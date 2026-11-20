@@ -3,6 +3,7 @@
 use App\Modules\Marketplace\Http\Controllers\AllocationController;
 use App\Modules\Marketplace\Http\Controllers\FakeMarketplaceController;
 use App\Modules\Marketplace\Http\Controllers\ListingController;
+use App\Modules\Marketplace\Http\Controllers\MadeToOrderController;
 use App\Modules\Marketplace\Http\Controllers\MarketplaceAccountController;
 use App\Modules\Marketplace\Http\Controllers\MarketplacePricingController;
 use App\Modules\Marketplace\Http\Controllers\PriceController;
@@ -67,6 +68,8 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::post('price-changes/{change}/reject', [PriceController::class, 'reject']);
     Route::get('products/{product}/prices', [PriceController::class, 'product']);
     Route::put('products/{product}/price-source', [PriceController::class, 'setSource']);
+    Route::put('products/{product}/sourcing', [MadeToOrderController::class, 'product']);
+    Route::post('products/bulk-sourcing', [MadeToOrderController::class, 'bulk']);
 
     Route::prefix('marketplace-pricing')->controller(MarketplacePricingController::class)->group(function () {
         Route::get('rules', 'rules');

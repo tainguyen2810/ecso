@@ -51,7 +51,7 @@ class MorningBriefCommand extends Command
     /**
      * The figures of the brief, in the store's time zone.
      *
-     * @return array{date: string, to_ship: int, overdue: int, due_today: int, yesterday_orders: int, yesterday_sales: float, low_stock: int, returns_coming: int, stock_fixed: int}
+     * @return array{date: string, to_ship: int, overdue: int, due_today: int, yesterday_orders: int, yesterday_sales: float, low_stock: int, awaiting_purchase: int, returns_coming: int, stock_fixed: int}
      */
     public static function figures(Tenant $tenant, LowStockQuery $lowStock): array
     {
@@ -69,6 +69,8 @@ class MorningBriefCommand extends Command
             'yesterday_orders' => (clone $sold)->count(),
             'yesterday_sales' => (float) (clone $sold)->sum('total'),
             'low_stock' => count($lowStock->forTenant($tenant->id, 200)),
+            // "Hàng đặt": orders waiting for goods to be bought from the supplier.
+            'awaiting_purchase' => Order::query()->whereIn('status', OrderStatus::OPEN)->where('awaiting_purchase', true)->count(),
             'returns_coming' => OrderReturn::query()->whereIn('status', [OrderReturn::APPROVED, OrderReturn::IN_TRANSIT])->count(),
             // Đợt 16: SKUs whose marketplace stock was wrong and set right during the night.
             'stock_fixed' => (int) StockCheck::query()->where('status', StockCheck::DONE)->where('created_at', '>=', $now->startOfDay()->utc())->sum('mismatched'),
@@ -91,6 +93,9 @@ class MorningBriefCommand extends Command
         }
         if ($f['low_stock'] > 0) {
             $parts[] = ($f['low_stock'] >= 200 ? '200+' : $f['low_stock']).' SKU sắp hết hàng.';
+        }
+        if (($f['awaiting_purchase'] ?? 0) > 0) {
+            $parts[] = "{$f['awaiting_purchase']} đơn hàng đặt chờ nhập hàng.";
         }
         if ($f['returns_coming'] > 0) {
             $parts[] = "{$f['returns_coming']} đơn hoàn đang về.";

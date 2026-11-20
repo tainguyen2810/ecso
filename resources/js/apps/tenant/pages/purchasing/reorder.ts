@@ -17,6 +17,10 @@ export interface ReorderRow {
     suggested: number;
     unit_cost: string;
     supplier: { id: string; name: string } | null;
+    /** "Hàng đặt": bought for the orders waiting for it (waiting units / orders), not kept in stock. */
+    to_order?: boolean;
+    waiting?: number;
+    waiting_orders?: number;
 }
 
 /** Builds a draft from the ticked rows; the supplier is pre-selected when all of them came from the same one. */

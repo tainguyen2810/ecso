@@ -22,13 +22,14 @@ class ReorderController extends Controller
             'warehouse_id' => ['nullable', 'string'],
             'cover_days' => ['nullable', 'integer', 'min:1', 'max:180'],
             'lookback_days' => ['nullable', 'integer', 'min:7', 'max:180'],
+            'only' => ['nullable', 'in:to_order'],
         ]);
         $warehouse = ($data['warehouse_id'] ?? null) ? $this->findWarehouse($data['warehouse_id'], assigned: false)
             : Warehouse::query()->where('is_default', true)->first() ?? Warehouse::query()->orderBy('id')->firstOrFail();
         $cover = (int) ($data['cover_days'] ?? 14);
         $lookback = (int) ($data['lookback_days'] ?? 30);
 
-        $rows = $suggestions->compute($warehouse->id, $cover, $lookback);
+        $rows = $suggestions->compute($warehouse->id, $cover, $lookback, onlyToOrder: ($data['only'] ?? null) === 'to_order');
         $suppliers = Supplier::query()->whereIn('id', array_filter(array_column($rows, 'supplier_id')))->get(['id', 'ulid', 'name'])->keyBy('id');
 
         return response()->json([
@@ -41,6 +42,9 @@ class ReorderController extends Controller
                 'on_order' => $r['on_order'],
                 'suggested' => $r['suggested'],
                 'unit_cost' => $r['unit_cost'],
+                'to_order' => $r['to_order'],
+                'waiting' => $r['waiting'],
+                'waiting_orders' => $r['waiting_orders'],
                 'supplier' => ($s = $suppliers->get($r['supplier_id'])) ? ['id' => $s->ulid, 'name' => $s->name] : null,
             ], $rows),
             'meta' => ['warehouse' => ['id' => $warehouse->ulid, 'name' => $warehouse->name], 'cover_days' => $cover, 'lookback_days' => $lookback],

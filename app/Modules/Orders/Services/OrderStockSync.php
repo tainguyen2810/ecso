@@ -2,6 +2,7 @@
 
 namespace App\Modules\Orders\Services;
 
+use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Services\ReservationLedger;
 use App\Modules\Orders\Domain\OrderStatus;
@@ -65,16 +66,22 @@ class OrderStockSync
         $this->shipments->apply($order);
     }
 
-    /** Recomputes has_shortage / has_unmapped from the current reservations. */
+    /** Recomputes has_shortage / awaiting_purchase / has_unmapped from the current reservations. */
     public function refreshFlags(Order $order, $items = null): void
     {
         $items ??= $order->items()->get();
         $snapshot = $this->ledger->snapshot(Order::STOCK_REFERENCE, $items->pluck('id')->all());
         $relevant = OrderStatus::policy($order->status) !== OrderStatus::RELEASE;
 
+        // "Hàng đặt" lines short of stock are expected (bought after the order): they wait for goods, not a shortage.
+        $toOrder = ProductVariant::madeToOrder($items->pluck('product_variant_id')->filter()->map(fn ($id) => (int) $id)->unique()->values()->all());
+        $short = collect($snapshot)->filter(fn ($r, $itemId) => $relevant && $r['shortage'] > 0 && $r['status'] !== 'released')
+            ->keys()->map(fn ($itemId) => $items->firstWhere('id', $itemId)?->product_variant_id);
+
         $order->forceFill([
             'has_unmapped' => $items->contains(fn (OrderItem $i) => $i->product_variant_id === null && $i->mapping_status !== OrderItem::SERVICE),
-            'has_shortage' => $relevant && collect($snapshot)->contains(fn ($r) => $r['shortage'] > 0 && $r['status'] !== 'released'),
+            'has_shortage' => $short->contains(fn ($variantId) => ! isset($toOrder[(int) $variantId])),
+            'awaiting_purchase' => $short->contains(fn ($variantId) => isset($toOrder[(int) $variantId])),
         ])->save();
     }
 

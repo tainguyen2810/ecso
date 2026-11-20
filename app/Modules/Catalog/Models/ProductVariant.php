@@ -25,6 +25,14 @@ class ProductVariant extends Model
     /** Who holds the selling price: auto (ECSO while in stock, else the website), ecso, woo. */
     public const PRICE_SOURCES = ['auto', 'ecso', 'woo'];
 
+    /** Kept in stock (bán từ kho). */
+    public const SOURCING_STOCK = 'stock';
+
+    /** "Hàng đặt": listed at the website's (supplier's) price, bought only after a customer orders. */
+    public const SOURCING_ORDER = 'order';
+
+    public const SOURCINGS = [self::SOURCING_STOCK, self::SOURCING_ORDER];
+
     protected $fillable = ['sku', 'barcode', 'location', 'name', 'options', 'ref_price', 'price_source', 'wholesale_price', 'weight_gram', 'status', 'supplier_id', 'supplier_sku', 'length_mm', 'width_mm', 'height_mm'];
 
     protected function casts(): array
@@ -36,6 +44,7 @@ class ProductVariant extends Model
             'price_updated_at' => 'datetime',
             'wholesale_price' => 'decimal:2',
             'weight_gram' => 'integer',
+            'virtual_stock' => 'integer',
         ];
     }
 
@@ -85,6 +94,27 @@ class ProductVariant extends Model
         $product = $this->product;
 
         return $this->status === Product::STATUS_ACTIVE && ($product === null || $product->status === Product::STATUS_ACTIVE);
+    }
+
+    public function isMadeToOrder(): bool
+    {
+        return $this->sourcing === self::SOURCING_ORDER;
+    }
+
+    /**
+     * Ids of the given variants that are "Hàng đặt", with the stock to show on marketplaces. Runs in the tenant scope.
+     *
+     * @param  array<int, int>  $ids
+     * @return array<int, int> variant id => virtual stock
+     */
+    public static function madeToOrder(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return static::query()->whereIn('id', $ids)->where('sourcing', self::SOURCING_ORDER)
+            ->pluck('virtual_stock', 'id')->mapWithKeys(fn ($q, $id) => [(int) $id => (int) $q])->all();
     }
 
     /**

@@ -2,7 +2,7 @@
 import PushToggle from './PushToggle.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch, type Component } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { AlertTriangle, Bell, ChevronRight, CircleCheck, Clock, FileText, KeyRound, Package, PackageX, PlugZap, Settings2, ShoppingCart, TrendingDown, Unplug, Wallet } from 'lucide-vue-next';
+import { AlertTriangle, Bell, ChevronRight, CircleCheck, Clock, FileText, KeyRound, Package, PackageX, PlugZap, Settings2, ShoppingBasket, ShoppingCart, TrendingDown, Unplug, Wallet } from 'lucide-vue-next';
 import { api } from '@/shared/lib/api';
 import { cn } from '@/shared/lib/utils';
 import { toneClasses, type Tone } from '@/shared/lib/tones';
@@ -41,6 +41,7 @@ const icons: Record<string, Component> = {
     'orders.overdue': Clock,
     'orders.due_soon': Clock,
     'orders.shortage': PackageX,
+    'orders.awaiting_purchase': ShoppingBasket,
     'orders.to_confirm': ShoppingCart,
     'orders.to_pack': Package,
     'sync.disconnected': Unplug,

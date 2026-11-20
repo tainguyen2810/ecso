@@ -7,6 +7,7 @@ use App\Modules\Catalog\Services\ComboResolver;
 use App\Modules\Inventory\Domain\AllocationCalculator;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Services\StockReader;
+use App\Modules\Marketplace\Connectors\WooCommerce\WooCommerceConnector;
 use App\Modules\Marketplace\Jobs\PushInventoryJob;
 use App\Modules\Marketplace\Models\InventorySyncOutbox;
 use App\Modules\Marketplace\Models\ListingVariant;
@@ -52,6 +53,10 @@ class InventorySyncPlanner
             $soonest = null;
 
             foreach ($rows as $listing) {
+                // Not ours to publish (a "Hàng đặt" SKU on a website): the website decides its stock.
+                if (! isset($desiredQty[$listing->id])) {
+                    continue;
+                }
                 $desired = $desiredQty[$listing->id];
                 $outbox = InventorySyncOutbox::query()->where('listing_variant_id', $listing->id)->first();
                 $upToDate = $listing->push_status === 'ok' && $listing->last_pushed_qty === $desired
@@ -98,8 +103,11 @@ class InventorySyncPlanner
      * What each linked listing of a shop should show: sellable stock of the shop's warehouse, after its allocation
      * rule; 0 for a SKU stopped in ECSO (Ngừng bán / Lưu trữ) so the shop stops taking orders for it.
      *
+     * "Hàng đặt" SKUs (bought after the customer orders) are left out on websites, whose own supplier scraping says
+     * whether they can be ordered, and show their fixed "tồn ảo" on marketplaces (0 = not sold there).
+     *
      * @param  iterable<ListingVariant>  $rows  mapped listings of $account
-     * @return array<int, int> listing id => quantity
+     * @return array<int, int> listing id => quantity (listings ECSO does not publish are left out)
      */
     public function desired(MarketplaceAccount $account, iterable $rows, ?int $warehouseId = null): array
     {
@@ -110,8 +118,16 @@ class InventorySyncPlanner
         $stopped = array_flip(ProductVariant::stoppedIds($ids));
         // How much of it this shop publishes (Phân bổ tồn); no rule = everything, as before.
         $rules = $this->allocations->rules($account->id, $ids);
+        $toOrder = ProductVariant::madeToOrder($ids);
+        $website = $account->marketplace === WooCommerceConnector::MARKETPLACE;
+        if ($website) {
+            $rows = $rows->reject(fn (ListingVariant $l) => isset($toOrder[$l->product_variant_id]));
+        }
 
-        return $rows->mapWithKeys(fn (ListingVariant $l) => [$l->id => isset($stopped[$l->product_variant_id]) ? 0
-            : AllocationCalculator::publish($sellable[$l->product_variant_id] ?? 0, $rules[$l->product_variant_id] ?? AllocationPolicy::DEFAULT_RULE)])->all();
+        return $rows->mapWithKeys(fn (ListingVariant $l) => [$l->id => match (true) {
+            isset($stopped[$l->product_variant_id]) => 0,
+            isset($toOrder[$l->product_variant_id]) => $toOrder[$l->product_variant_id],
+            default => AllocationCalculator::publish($sellable[$l->product_variant_id] ?? 0, $rules[$l->product_variant_id] ?? AllocationPolicy::DEFAULT_RULE),
+        }])->all();
     }
 }

@@ -624,7 +624,7 @@ class OrderController extends Controller
             'deliver_to' => ['nullable', 'date'],
             'assignee' => ['nullable', 'string'],
             'flags' => ['nullable', 'array'],
-            'flags.*' => [Rule::in(['shortage', 'unmapped', 'overdue', 'due_soon', 'warning', 'not_printed', 'payment_due', 'not_arranged', 'label_unprinted'])],
+            'flags.*' => [Rule::in(['shortage', 'awaiting_purchase', 'unmapped', 'overdue', 'due_soon', 'warning', 'not_printed', 'payment_due', 'not_arranged', 'label_unprinted'])],
             'sort' => ['nullable', Rule::in(['newest', 'oldest', 'ship_by'])],
             'per_page' => ['nullable', 'integer', 'min:10', 'max:100'],
         ]);

@@ -23,6 +23,8 @@ class LowStockQuery
             ->where('b.safety_stock', '>', 0)
             ->whereRaw('b.on_hand - b.reserved <= b.safety_stock')
             ->whereNull('v.deleted_at')->whereNull('w.deleted_at')
+            // "Hàng đặt" is bought per order, never kept in stock.
+            ->where('v.sourcing', '!=', 'order')
             ->where('p.status', '!=', 'archived')
             ->orderByRaw('(b.on_hand - b.reserved) - CAST(b.safety_stock AS SIGNED)')
             ->orderBy('v.sku')

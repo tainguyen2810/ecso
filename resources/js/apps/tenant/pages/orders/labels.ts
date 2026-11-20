@@ -33,6 +33,7 @@ export const orderFlags: { value: string; label: string }[] = [
     { value: 'overdue', label: 'Quá hạn giao' },
     { value: 'due_soon', label: 'Sắp đến hạn' },
     { value: 'shortage', label: 'Thiếu hàng' },
+    { value: 'awaiting_purchase', label: 'Chờ nhập hàng' },
     { value: 'unmapped', label: 'Chưa liên kết sản phẩm' },
     { value: 'warning', label: 'Cảnh báo đồng bộ' },
     { value: 'not_printed', label: 'Chưa in phiếu đóng gói' },

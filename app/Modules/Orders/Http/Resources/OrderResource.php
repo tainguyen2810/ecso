@@ -85,6 +85,7 @@ class OrderResource extends JsonResource
             'external_updated_at' => $this->external_updated_at?->toIso8601String(),
             'flags' => [
                 'shortage' => $this->has_shortage,
+                'awaiting_purchase' => $this->awaiting_purchase,
                 'unmapped' => $this->has_unmapped,
                 'overdue' => $open && $this->ship_by_at?->isPast(),
                 'due_soon' => $open && $this->ship_by_at !== null && ! $this->ship_by_at->isPast()

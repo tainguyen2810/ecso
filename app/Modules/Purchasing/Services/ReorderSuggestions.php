@@ -11,15 +11,18 @@ use Illuminate\Support\Facades\DB;
  * What to buy: sales velocity over the last N days against available stock and goods already on order.
  *
  * suggested = ceil(daily sales × cover days) + safety stock − available − on order   (only when > 0)
+ *
+ * "Hàng đặt" SKUs are bought for the orders waiting for them, not to keep in stock:
+ *   suggested = units the open orders still miss − on order
  */
 class ReorderSuggestions
 {
     public function __construct(private readonly TenantContext $context) {}
 
     /**
-     * @return array<int, array{variant_id: int, variant_ulid: string, sku: string, name: string, variant_name: string|null, sold: int, daily: float, available: int, safety_stock: int, on_order: int, suggested: int, unit_cost: string, supplier_id: int|null}>
+     * @return array<int, array{variant_id: int, variant_ulid: string, sku: string, name: string, variant_name: string|null, sold: int, daily: float, available: int, safety_stock: int, on_order: int, suggested: int, unit_cost: string, supplier_id: int|null, to_order: bool, waiting: int, waiting_orders: int}>
      */
-    public function compute(int $warehouseId, int $coverDays = 14, int $lookbackDays = 30, int $limit = 200): array
+    public function compute(int $warehouseId, int $coverDays = 14, int $lookbackDays = 30, int $limit = 200, bool $onlyToOrder = false): array
     {
         $tenant = $this->context->id();
         $since = now()->subDays($lookbackDays);
@@ -49,7 +52,17 @@ class ReorderSuggestions
             ->get(['product_variant_id', 'on_hand', 'reserved', 'safety_stock', 'max_stock'])
             ->keyBy('product_variant_id');
 
-        $candidates = collect($sold->keys())->merge($balances->filter(fn ($b) => $b->safety_stock > 0)->keys())->unique()->values();
+        // Units the open orders of this warehouse still miss, per SKU (for "Hàng đặt").
+        $waiting = DB::table('stock_reservations as r')
+            ->join('order_items as i', 'i.id', '=', 'r.reference_id')
+            ->join('orders as o', 'o.id', '=', 'i.order_id')
+            ->where('r.tenant_id', $tenant)->where('r.reference_type', 'order_item')->where('r.status', 'active')
+            ->where('r.warehouse_id', $warehouseId)->where('r.shortage', '>', 0)->where('o.awaiting_purchase', true)
+            ->groupBy('r.product_variant_id')
+            ->selectRaw('r.product_variant_id as variant_id, SUM(r.shortage) as qty, COUNT(DISTINCT o.id) as orders')
+            ->get()->keyBy('variant_id');
+
+        $candidates = collect($sold->keys())->merge($balances->filter(fn ($b) => $b->safety_stock > 0)->keys())->merge($waiting->keys())->unique()->values();
         if ($candidates->isEmpty()) {
             return [];
         }
@@ -70,7 +83,8 @@ class ReorderSuggestions
             ->whereIn('product_variants.id', $candidates)
             ->whereNull('product_variants.deleted_at')
             ->where('products.status', '!=', 'archived')
-            ->get(['product_variants.id', 'product_variants.ulid', 'product_variants.sku', 'product_variants.name as variant_name', 'products.name', 'product_variants.cost_price', 'product_variants.supplier_id']);
+            ->when($onlyToOrder, fn ($q) => $q->where('product_variants.sourcing', 'order'))
+            ->get(['product_variants.id', 'product_variants.ulid', 'product_variants.sku', 'product_variants.name as variant_name', 'products.name', 'product_variants.cost_price', 'product_variants.supplier_id', 'product_variants.sourcing']);
 
         $rows = [];
         foreach ($variants as $v) {
@@ -80,9 +94,11 @@ class ReorderSuggestions
             $available = $b ? max(0, (int) $b->on_hand - (int) $b->reserved) : 0;
             $safety = $b ? (int) $b->safety_stock : 0;
             $pending = (int) ($onOrder[$v->id] ?? 0);
-            $suggested = (int) ceil($daily * $coverDays) + $safety - $available - $pending;
+            $toOrder = $v->sourcing === 'order';
+            $missing = (int) ($waiting->get($v->id)->qty ?? 0);
+            $suggested = $toOrder ? $missing - $pending : (int) ceil($daily * $coverDays) + $safety - $available - $pending;
             // Never suggest more than the warehouse should hold.
-            if ($b && $b->max_stock !== null) {
+            if (! $toOrder && $b && $b->max_stock !== null) {
                 $suggested = min($suggested, (int) $b->max_stock - $available - $pending);
             }
             if ($suggested <= 0) {
@@ -104,10 +120,14 @@ class ReorderSuggestions
                 'unit_cost' => bcadd((string) ($last->unit_cost ?? $v->cost_price ?? '0'), '0', 2),
                 // The SKU's usual supplier first, else whoever supplied it last.
                 'supplier_id' => $v->supplier_id ? (int) $v->supplier_id : ($last ? (int) $last->supplier_id : null),
+                'to_order' => $toOrder,
+                'waiting' => $missing,
+                'waiting_orders' => (int) ($waiting->get($v->id)->orders ?? 0),
             ];
         }
 
-        usort($rows, fn ($a, $b) => $b['suggested'] <=> $a['suggested']);
+        // Orders waiting for goods first, then the biggest suggestions.
+        usort($rows, fn ($a, $b) => [$b['waiting'] > 0, $b['suggested']] <=> [$a['waiting'] > 0, $a['suggested']]);
 
         return array_slice($rows, 0, $limit);
     }
