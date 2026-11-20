@@ -29,7 +29,7 @@ it('finds SKUs whose marketplace stock was changed, lists them and pushes the ri
 
     $check = StockCheck::withoutGlobalScopes()->sole();
     expect($check->status)->toBe(StockCheck::DONE)->and($check->checked)->toBe(2)->and($check->mismatched)->toBe(1)
-        ->and($check->items)->toBe([['sku' => 'AO-001', 'name' => 'Áo thun', 'marketplace_qty' => 25, 'ecso_qty' => 10]])
+        ->and($check->items)->toEqual([['sku' => 'AO-001', 'name' => 'Áo thun', 'marketplace_qty' => 25, 'ecso_qty' => 10]])
         ->and(($this->remote)('AO-001'))->toBe(10);
 
     $this->api->getJson("/api/v1/marketplace-accounts/{$this->shop->ulid}/stock-check")->assertOk()

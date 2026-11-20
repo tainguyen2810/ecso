@@ -96,7 +96,7 @@ it('keeps a plan the store paid for, follows the EzChat plan and ends the gift w
 });
 
 it('is off when the server says so, and the login page shows the button only when on', function () {
-    $this->get('/login')->assertSee('name="ezchat-sso"', false);
+    $this->withoutVite()->get('/login')->assertSee('name="ezchat-sso"', false);
     config(['marketplaces.ezchat.sso' => 'off']);
     $this->get('/sso/ezchat/start')->assertNotFound();
     $this->get('/login')->assertDontSee('name="ezchat-sso"', false);
