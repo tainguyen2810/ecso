@@ -4,6 +4,7 @@ namespace App\Modules\Marketplace\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Marketplace\Connectors\WooCommerce\WooCommerceConnector;
 use App\Modules\Marketplace\Domain\SyncErrorCode;
 use App\Modules\Marketplace\Jobs\PushInventoryJob;
 use App\Modules\Marketplace\Jobs\PushPricesJob;
@@ -275,7 +276,7 @@ class SyncCenterController extends Controller
     private function retryPrice(Model $listing, MarketplaceAccount $account): void
     {
         assert($listing instanceof ListingVariant);
-        if (! $account->syncs('sync_prices') || $listing->target_price === null) {
+        if (($account->marketplace === WooCommerceConnector::MARKETPLACE && ! $account->syncs('sync_prices')) || $listing->target_price === null) {
             throw ValidationException::withMessages(['task' => 'Shop đang tắt đồng bộ giá.']);
         }
         $listing->forceFill(['price_push_status' => 'pending', 'price_push_error' => null])->save();

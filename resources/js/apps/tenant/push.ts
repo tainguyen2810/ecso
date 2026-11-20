@@ -9,6 +9,8 @@ export type PushState = 'unsupported' | 'needs-install' | 'denied' | 'off' | 'on
 
 const state = ref<PushState>('off');
 const busy = ref(false);
+/** "Bản tin 8h sáng" for this phone (Đợt 15). */
+const brief = ref(true);
 
 function supported(): boolean {
     return typeof window !== 'undefined' && window.isSecureContext && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
@@ -52,6 +54,7 @@ async function refresh(): Promise<void> {
     }
     const { data } = await api.get('/push', { params: { endpoint: sub.endpoint } });
     state.value = data.data.subscribed ? 'on' : 'off';
+    brief.value = data.data.morning_brief ?? true;
 }
 
 async function enable(): Promise<void> {
@@ -87,11 +90,18 @@ async function disable(): Promise<void> {
     }
 }
 
+async function setBrief(on: boolean): Promise<void> {
+    const sub = await current();
+    if (!sub) return;
+    await api.patch('/push/subscriptions', { endpoint: sub.endpoint, morning_brief: on });
+    brief.value = on;
+}
+
 async function test(): Promise<void> {
     const sub = await current();
     if (sub) await api.post('/push/test', { endpoint: sub.endpoint });
 }
 
 export function usePush() {
-    return { state, busy, refresh, enable, disable, test };
+    return { state, busy, brief, refresh, enable, disable, setBrief, test };
 }

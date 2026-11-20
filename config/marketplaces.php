@@ -62,6 +62,11 @@ return [
         // "Kết nối Shopee / TikTok": 'ask' shows EzChat's page (connect directly, or pick a shop of an EzChat
         // workspace); 'direct' skips it and goes straight to the marketplace (banhang sold on its own, no EzChat).
         'connect' => env('EZCHAT_CONNECT', 'ask'),
+        // Đợt 17 "Đăng nhập bằng EzChat": on = the login page offers it (EzChat signs a one-time ticket); off = own
+        // login only (banhang sold on its own). Needs EZCHAT_URL and EZCHAT_SECRET.
+        'sso' => env('EZCHAT_SSO', 'on'),
+        // Gói tặng kèm: EzChat plan slug => banhang plan key, given for as long as the EzChat plan runs. Empty = no gift.
+        'gift_plans' => env('EZCHAT_GIFT_PLANS', 'basic:starter,pro:pro,business:business'),
     ],
 
     // Lifetime of the one-time "state" that links a marketplace callback to the tenant and user who started it.

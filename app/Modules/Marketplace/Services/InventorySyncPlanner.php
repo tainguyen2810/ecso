@@ -48,16 +48,11 @@ class InventorySyncPlanner
             if (! $warehouseId) {
                 continue;
             }
-            $ids = $rows->pluck('product_variant_id')->unique()->values()->all();
-            $sellable = $this->stock->sellable([$warehouseId], $ids);
-            // A SKU stopped in ECSO (Ngừng bán / Lưu trữ) is published as 0 so the shop stops taking orders for it.
-            $stopped = array_flip(ProductVariant::stoppedIds($ids));
-            // How much of it this shop publishes (Phân bổ tồn); no rule = everything, as before.
-            $rules = $this->allocations->rules($account->id, $ids);
+            $desiredQty = $this->desired($account, $rows, $warehouseId);
             $soonest = null;
 
             foreach ($rows as $listing) {
-                $desired = isset($stopped[$listing->product_variant_id]) ? 0 : AllocationCalculator::publish($sellable[$listing->product_variant_id] ?? 0, $rules[$listing->product_variant_id] ?? AllocationPolicy::DEFAULT_RULE);
+                $desired = $desiredQty[$listing->id];
                 $outbox = InventorySyncOutbox::query()->where('listing_variant_id', $listing->id)->first();
                 $upToDate = $listing->push_status === 'ok' && $listing->last_pushed_qty === $desired
                     && $listing->last_pushed_at?->gt(now()->subDay());
@@ -97,5 +92,26 @@ class InventorySyncPlanner
         }
 
         return $queued;
+    }
+
+    /**
+     * What each linked listing of a shop should show: sellable stock of the shop's warehouse, after its allocation
+     * rule; 0 for a SKU stopped in ECSO (Ngừng bán / Lưu trữ) so the shop stops taking orders for it.
+     *
+     * @param  iterable<ListingVariant>  $rows  mapped listings of $account
+     * @return array<int, int> listing id => quantity
+     */
+    public function desired(MarketplaceAccount $account, iterable $rows, ?int $warehouseId = null): array
+    {
+        $rows = collect($rows);
+        $warehouseId ??= $account->warehouse_id ?? Warehouse::query()->where('is_default', true)->value('id');
+        $ids = $rows->pluck('product_variant_id')->unique()->values()->all();
+        $sellable = $warehouseId ? $this->stock->sellable([$warehouseId], $ids) : [];
+        $stopped = array_flip(ProductVariant::stoppedIds($ids));
+        // How much of it this shop publishes (Phân bổ tồn); no rule = everything, as before.
+        $rules = $this->allocations->rules($account->id, $ids);
+
+        return $rows->mapWithKeys(fn (ListingVariant $l) => [$l->id => isset($stopped[$l->product_variant_id]) ? 0
+            : AllocationCalculator::publish($sellable[$l->product_variant_id] ?? 0, $rules[$l->product_variant_id] ?? AllocationPolicy::DEFAULT_RULE)])->all();
     }
 }

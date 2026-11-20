@@ -10,10 +10,12 @@ use App\Modules\Marketplace\Connectors\Tiki\TikiConnector;
 use App\Modules\Marketplace\Connectors\WooCommerce\WooCommerceConnector;
 use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Http\Resources\AccountResource;
+use App\Modules\Marketplace\Jobs\StockCheckJob;
 use App\Modules\Marketplace\Models\InventorySyncOutbox;
 use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Models\PriceChange;
+use App\Modules\Marketplace\Models\StockCheck;
 use App\Modules\Marketplace\Models\SyncError;
 use App\Modules\Marketplace\Models\WebhookEvent;
 use App\Modules\Marketplace\Services\AccountService;
@@ -22,6 +24,7 @@ use App\Modules\Marketplace\Services\ListingService;
 use App\Modules\Marketplace\Services\MarketplaceImages;
 use App\Modules\Marketplace\Services\NewListingService;
 use App\Modules\Marketplace\Services\ShopAuthorizationService;
+use App\Modules\Marketplace\Services\StockReconciler;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Http\JsonResponse;
@@ -233,6 +236,25 @@ class MarketplaceAccountController extends Controller
         $variantIds = $account->listingVariants()->where('mapping_status', ListingVariant::MAPPED)->pluck('product_variant_id')->unique()->values()->all();
 
         return response()->json(['data' => ['queued' => $planner->plan($variantIds, force: true)]]);
+    }
+
+    /** Đợt 16: the latest "Đối soát tồn với sàn" of a shop, with the SKUs that differed. */
+    public function stockCheck(MarketplaceAccount $account): JsonResponse
+    {
+        $this->authorize('viewAny', MarketplaceAccount::class);
+        $check = StockCheck::query()->where('marketplace_account_id', $account->id)->latest('id')->first();
+
+        return response()->json(['data' => $check?->summary(withItems: true)]);
+    }
+
+    /** "Đối soát ngay": runs the check for a shop now (in the background). */
+    public function runStockCheck(MarketplaceAccount $account): JsonResponse
+    {
+        $this->authorize('map', MarketplaceAccount::class);
+        abort_unless(StockReconciler::eligible($account), 422, 'Shop đang tắt đồng bộ tồn hoặc chưa kết nối xong.');
+        StockCheckJob::dispatch($account->id, 'manual');
+
+        return response()->json(['data' => ['queued' => true]], 202);
     }
 
     /** Recent webhooks of this tenant's shops (inbox monitor). */

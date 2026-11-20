@@ -25,6 +25,18 @@ export const reportGroups: Record<ReportGroupKey, { title: string; permission: s
             { title: 'Thống kê theo đơn hàng', description: 'Mỗi đơn một dòng: khách, kênh, tiền hàng, chiết khấu, phí giao, giá vốn, lãi gộp.', icon: FileText, permission: 'reports.view', to: { report: 'orders' }, ranged: true },
             { title: 'Thống kê theo sản phẩm', description: 'Số lượng, doanh thu, giá vốn và lãi gộp từng SKU.', icon: Package, permission: 'reports.view', to: { report: 'product-sales' }, ranged: true },
             { title: 'Bán hàng chi tiết', description: 'Từng dòng hàng của từng đơn: ngày, mã đơn, khách, sản phẩm, giá, chiết khấu, lãi gộp.', icon: List, permission: 'reports.view', to: { report: 'sales-lines' }, ranged: true },
+            {
+                title: 'Đơn lỗ sau phí sàn',
+                description: 'Đơn thu về ít hơn giá vốn sau phí sàn, và sản phẩm nên tăng giá kèm giá hòa vốn.',
+                icon: TrendingDown,
+                permission: 'finance.profit',
+                to: { report: 'loss-orders', by: 'order' },
+                ranged: true,
+                chips: [
+                    { label: 'Đơn lỗ', by: 'order' },
+                    { label: 'Sản phẩm nên tăng giá', by: 'product' },
+                ],
+            },
             { title: 'Bán chạy, bán chậm', description: 'Top sản phẩm bán chạy và hàng tồn lâu không bán được.', icon: Flame, permission: 'reports.view', to: { name: 'report-products' }, ranged: true },
             { title: 'Doanh thu theo kênh bán', description: 'Doanh thu, lợi nhuận theo từng kênh và gian hàng.', icon: Store, permission: 'reports.view', to: { name: 'report-sales', query: { by: 'channel' } }, ranged: true },
             { title: 'Doanh thu theo nhân viên', description: 'Ai bán được bao nhiêu.', icon: User, permission: 'reports.view', to: { name: 'report-sales', query: { by: 'staff' } }, ranged: true },

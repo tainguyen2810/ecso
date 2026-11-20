@@ -6,6 +6,7 @@ use App\Modules\Marketplace\Models\InventorySyncOutbox;
 use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Marketplace\Models\MarketplaceCredential;
+use App\Modules\Marketplace\Models\StockCheck;
 use App\Modules\Marketplace\Models\SyncError;
 use App\Modules\Marketplace\Models\SyncRun;
 use App\Modules\Marketplace\Models\WebhookEvent;
@@ -54,6 +55,10 @@ class SyncDashboard
         $drift = $this->driftQuery()->whereIn('marketplace_account_id', $ids)
             ->selectRaw('marketplace_account_id, COUNT(*) as n')->groupBy('marketplace_account_id')->pluck('n', 'marketplace_account_id');
 
+        // Đợt 16: the latest "Đối soát tồn với sàn" of each shop.
+        $checks = StockCheck::query()->whereIn('id', StockCheck::query()->whereIn('marketplace_account_id', $ids)->selectRaw('MAX(id)')->groupBy('marketplace_account_id'))
+            ->get()->keyBy('marketplace_account_id');
+
         $deadLetters = InventorySyncOutbox::query()->whereIn('marketplace_account_id', $ids)->where('status', InventorySyncOutbox::FAILED)->count()
             + WebhookEvent::query()->where('tenant_id', $this->context->id())->whereIn('marketplace_account_id', $ids)->where('status', WebhookEvent::FAILED)
                 ->where('received_at', '>=', now()->subDays(SyncHealth::KEEP_DAYS))->count();
@@ -93,6 +98,7 @@ class SyncDashboard
                 'open_errors' => (int) ($openErrors[$a->id] ?? 0),
                 'pending_push' => (int) ($pendingPush[$a->id] ?? 0),
                 'stock_drift' => (int) ($drift[$a->id] ?? 0),
+                'stock_check' => $checks->get($a->id)?->summary(),
             ])->values(),
         ];
     }

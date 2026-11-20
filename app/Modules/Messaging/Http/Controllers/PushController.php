@@ -18,9 +18,12 @@ class PushController extends Controller
     {
         $endpoint = (string) $request->query('endpoint', '');
 
+        $sub = $endpoint !== '' ? PushSubscription::query()->where('endpoint_hash', PushSubscription::hashOf($endpoint))->first() : null;
+
         return response()->json(['data' => [
             'public_key' => $push->publicKey(),
-            'subscribed' => $endpoint !== '' && PushSubscription::query()->where('endpoint_hash', PushSubscription::hashOf($endpoint))->exists(),
+            'subscribed' => $sub !== null,
+            'morning_brief' => $sub->morning_brief ?? true,
         ]]);
     }
 
@@ -32,6 +35,16 @@ class PushController extends Controller
         $sub->fill(['user_id' => Auth::id(), 'endpoint' => $data['endpoint'], 'device' => Str::limit((string) ($data['device'] ?? ''), 120, '')])->save();
 
         return response()->json(['data' => ['subscribed' => true]]);
+    }
+
+    /** Đợt 15: "Bản tin 8h sáng" on or off for this phone. */
+    public function update(Request $request): JsonResponse
+    {
+        $data = $request->validate(['endpoint' => ['required', 'string', 'max:1000'], 'morning_brief' => ['required', 'boolean']]);
+        $sub = PushSubscription::query()->where('endpoint_hash', PushSubscription::hashOf($data['endpoint']))->firstOrFail();
+        $sub->forceFill(['morning_brief' => $data['morning_brief']])->save();
+
+        return response()->json(['data' => ['morning_brief' => $sub->morning_brief]]);
     }
 
     public function unsubscribe(Request $request): JsonResponse

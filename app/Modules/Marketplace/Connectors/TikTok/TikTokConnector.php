@@ -362,6 +362,37 @@ class TikTokConnector extends GatewayConnector
         return $results;
     }
 
+    // ---- Giá ----------------------------------------------------------------------------------------------------
+
+    /** Sets the SKU price (Product 202309 prices/update), one call per product. */
+    public function updatePrices(MarketplaceAccount $account, array $updates): array
+    {
+        $byProduct = [];
+        foreach ($updates as $u) {
+            $byProduct[$u->externalProductId][] = $u;
+        }
+
+        $results = [];
+        foreach ($byProduct as $productId => $rows) {
+            $skus = array_map(fn ($u) => ['id' => $u->externalSkuId, 'price' => ['amount' => (string) round((float) $u->price), 'currency' => 'VND']], $rows);
+            try {
+                $this->gateway->call($account, 'POST', '/product/'.self::V.'/products/'.rawurlencode((string) $productId).'/prices/update', [], ['skus' => $skus]);
+                foreach ($rows as $u) {
+                    $results[] = new StockUpdateResult($u->externalSkuId, StockUpdateResult::OK);
+                }
+            } catch (ConnectorException $e) {
+                if ($e->authExpired) {
+                    throw $e;
+                }
+                foreach ($rows as $u) {
+                    $results[] = new StockUpdateResult($u->externalSkuId, $e->temporary ? StockUpdateResult::RETRY : StockUpdateResult::REJECTED, 'TikTok Shop: '.preg_replace('#^/\S+: #', '', $e->getMessage()));
+                }
+            }
+        }
+
+        return $results;
+    }
+
     // ---- Hàng hoàn ----------------------------------------------------------------------------------------------
 
     /** @var array<string, string> TikTok return_status => normalised */

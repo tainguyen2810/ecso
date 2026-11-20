@@ -57,6 +57,7 @@ interface SubscriptionData {
     trial_ends_at: string | null;
     trial_available: boolean;
     current_period_end: string | null;
+    gift: { source: string; label: string | null } | null;
     past_due_since: string | null;
     grace_until: string | null;
     pending_plan: { key: string; name: string } | null;
@@ -219,6 +220,9 @@ async function copy(text: string) {
                     {{ data.plan?.name }} <Badge :tone="statusInfo.tone">{{ statusInfo.label }}</Badge>
                 </p>
                 <p v-if="data.status === 'trialing'" class="mt-1 text-sm text-muted-foreground">Dùng thử đến {{ formatDateTime(data.trial_ends_at) }}</p>
+                <p v-else-if="data.gift" class="mt-1 text-sm text-muted-foreground" data-testid="gift-plan">
+                    Tặng kèm {{ data.gift.label ?? 'EzChat' }}<template v-if="data.current_period_end"> · đến {{ formatDateTime(data.current_period_end) }}</template>. Gia hạn gói EzChat thì gói này tự gia hạn theo.
+                </p>
                 <p v-else-if="data.current_period_end" class="mt-1 text-sm text-muted-foreground">
                     {{ cycleLabels[data.billing_cycle] }} · hết kỳ {{ formatDateTime(data.current_period_end) }}
                 </p>

@@ -22,6 +22,9 @@ class MarketplacePriceBoard
 {
     public const TABS = ['pending', 'loss', 'locked', 'all'];
 
+    /** Cell statuses "Áp dụng" acts on (failed = the marketplace refused it last time). */
+    public const ACTIONABLE = ['pending', 'loss', 'failed'];
+
     public function __construct(private readonly MarketplacePricing $pricing, private readonly ConnectorRegistry $connectors) {}
 
     /**
@@ -76,7 +79,7 @@ class MarketplacePriceBoard
                 $row['cells'][$listing->marketplace_account_id] = $this->cell($listing, $fee, $base, $cost);
             }
             $row['flags'] = [
-                'pending' => collect($row['cells'])->contains(fn ($c) => $c['status'] === 'pending' || $c['status'] === 'loss'),
+                'pending' => collect($row['cells'])->contains(fn ($c) => in_array($c['status'], self::ACTIONABLE, true)),
                 'loss' => collect($row['cells'])->contains(fn ($c) => $c['below_margin']),
                 'locked' => collect($row['cells'])->contains(fn ($c) => $c['locked']),
             ];
@@ -100,10 +103,17 @@ class MarketplacePriceBoard
         $below = $fee && $current !== null && MarketplacePricing::belowMargin($current, $cost, $fee);
         $differs = $quote && ($current === null || abs($quote['price'] - $current) >= 1);
 
+        $targeted = $quote && $listing->target_price !== null && abs((float) $listing->target_price - $quote['price']) < 1;
+        $onSale = $listing->sale_price !== null && (float) $listing->sale_price > 0;
         $status = match (true) {
             $locked => 'locked',
             $quote === null => 'no_price',
-            $listing->price_push_status === 'export' && $listing->target_price !== null && abs((float) $listing->target_price - $quote['price']) < 1 => 'export',
+            $targeted && $listing->price_push_status === 'export' => 'export',
+            // Sent through the marketplace's API: waiting for the queue, or refused (can be sent again).
+            $targeted && $listing->price_push_status === 'pending' => 'pushing',
+            $targeted && $listing->price_push_status === 'failed' => 'failed',
+            // List price already right; a discount on the marketplace shows a lower price on top of it.
+            $targeted && $listing->price_push_status === 'ok' && $onSale && $listing->regular_price !== null && abs((float) $listing->regular_price - $quote['price']) < 1 => 'ok',
             $below => 'loss',
             (bool) $differs => 'pending',
             default => 'ok',
@@ -118,6 +128,7 @@ class MarketplacePriceBoard
             'locked' => $locked,
             'below_margin' => $below,
             'status' => $status,
+            'push_error' => $status === 'failed' ? $listing->price_push_error : null,
         ];
     }
 
@@ -136,12 +147,12 @@ class MarketplacePriceBoard
                 if ($accountId !== null && $cellAccount !== $accountId) {
                     continue;
                 }
-                if (! in_array($cell['status'], ['pending', 'loss'], true) || ! $cell['quote']) {
+                if (! in_array($cell['status'], self::ACTIONABLE, true) || ! $cell['quote']) {
                     continue;
                 }
                 /** @var ListingVariant $listing */
                 $listing = $cell['listing'];
-                $byApi = $this->connectors->has($listing->account->marketplace ?? '') && $this->connectors->for($listing->account->marketplace) instanceof UpdatesPrices;
+                $byApi = $listing->account !== null && $this->byApi($listing->account);
                 $listing->forceFill([
                     'target_price' => $cell['quote']['price'],
                     'price_push_status' => $byApi ? 'pending' : 'export',
@@ -157,6 +168,12 @@ class MarketplacePriceBoard
         }
 
         return $result;
+    }
+
+    /** Can this shop take prices through its API (else the price file)? */
+    public function byApi(MarketplaceAccount $account): bool
+    {
+        return $this->connectors->has($account->marketplace) && $this->connectors->for($account->marketplace) instanceof UpdatesPrices;
     }
 
     /** Applies automatically on shops whose fee table says so, for one SKU (after its base price changed). */

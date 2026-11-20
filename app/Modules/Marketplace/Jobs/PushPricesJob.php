@@ -6,6 +6,7 @@ use App\Modules\Marketplace\Connectors\ConnectorRegistry;
 use App\Modules\Marketplace\Connectors\Data\PriceUpdate;
 use App\Modules\Marketplace\Connectors\Data\StockUpdateResult;
 use App\Modules\Marketplace\Connectors\UpdatesPrices;
+use App\Modules\Marketplace\Connectors\WooCommerce\WooCommerceConnector;
 use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
@@ -18,7 +19,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 
 /**
- * Pushes ECSO's price to the website SKUs of one shop that are waiting for it (price_push_status = pending).
+ * Pushes ECSO's price to the website (or marketplace) SKUs of one shop that are waiting for it (price_push_status = pending).
  * Temporary errors (timeouts, 5xx) are retried by the queue; a refused SKU is marked failed with the reason.
  */
 class PushPricesJob implements ShouldBeUnique, ShouldQueue
@@ -48,7 +49,9 @@ class PushPricesJob implements ShouldBeUnique, ShouldQueue
     {
         $account = MarketplaceAccount::query()->withoutGlobalScopes()->find($this->accountId);
         $tenant = $account ? Tenant::query()->find($account->tenant_id) : null;
-        if (! $account || ! $tenant || ! $account->isActive() || ! $account->syncs('sync_prices')) {
+        // Websites need two-way price sync on; marketplace prices are only queued from "Bảng giá sàn" by the seller.
+        $website = $account?->marketplace === WooCommerceConnector::MARKETPLACE;
+        if (! $account || ! $tenant || ! $account->isActive() || ($website && ! $account->syncs('sync_prices'))) {
             return;
         }
 
@@ -93,6 +96,8 @@ class PushPricesJob implements ShouldBeUnique, ShouldQueue
                 $row->forceFill([
                     'pushed_price' => $row->target_price,
                     'regular_price' => $row->target_price,
+                    // A marketplace shows the new price at once unless a discount runs on top of it.
+                    ...($account->marketplace !== WooCommerceConnector::MARKETPLACE && ($row->sale_price === null || (float) $row->sale_price <= 0) ? ['price' => $row->target_price] : []),
                     'price_pushed_at' => now(),
                     'price_push_status' => 'ok',
                     'price_push_error' => null,

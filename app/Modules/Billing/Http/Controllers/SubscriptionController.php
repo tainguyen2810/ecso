@@ -28,6 +28,8 @@ class SubscriptionController extends Controller
             'trial_ends_at' => $subscription->trial_ends_at?->toIso8601String(),
             'trial_available' => $subscription->trial_used_at === null,
             'current_period_end' => $subscription->current_period_end?->toIso8601String(),
+            // Đợt 17: a plan given with the EzChat plan ("Tặng kèm EzChat Pro").
+            'gift' => $subscription->gift_source ? ['source' => $subscription->gift_source, 'label' => $subscription->gift_label] : null,
             'past_due_since' => $subscription->past_due_since?->toIso8601String(),
             'grace_until' => $subscription->past_due_since?->copy()->addDays((int) config('billing.grace_days'))->toIso8601String(),
             'pending_plan' => $subscription->pendingPlan ? ['key' => $subscription->pendingPlan->key, 'name' => $subscription->pendingPlan->name] : null,

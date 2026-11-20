@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Modules\Analytics\Console\LossAlertsCommand;
+use App\Modules\Analytics\Console\MorningBriefCommand;
 use App\Modules\Billing\Console\BillingSweepCommand;
 use App\Modules\Billing\Listeners\CountOrderUsage;
 use App\Modules\Billing\Payments\GatewayRegistry;
@@ -37,6 +39,7 @@ use App\Modules\Marketplace\Console\CheckWebhooksCommand;
 use App\Modules\Marketplace\Console\PruneSyncLogsCommand;
 use App\Modules\Marketplace\Console\PushDueInventoryCommand;
 use App\Modules\Marketplace\Console\RecoverSyncCommand;
+use App\Modules\Marketplace\Console\StockCheckCommand;
 use App\Modules\Marketplace\Console\SyncReturnsCommand;
 use App\Modules\Marketplace\Console\SyncSettlementsCommand;
 use App\Modules\Marketplace\Events\ListingMappingChanged;
@@ -168,7 +171,7 @@ class ModuleServiceProvider extends ServiceProvider
         $this->configureAuthLinks();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([AutoGroupCustomersCommand::class, ZnsPaymentRemindersCommand::class, LoyaltyNightlyCommand::class, CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, VerifyOrderMoneyCommand::class, LowStockDigestCommand::class, LotExpiryCommand::class, PushDueInventoryCommand::class, RecoverSyncCommand::class, PruneSyncLogsCommand::class, CheckFeesCommand::class, SyncSettlementsCommand::class, SyncReturnsCommand::class, CheckWebhooksCommand::class, ReconcileOrdersCommand::class, BackfillShipmentsCommand::class, TrackCarrierShipmentsCommand::class, BillingSweepCommand::class, MonitorCommand::class, BackupDatabaseCommand::class, PruneDemoStoresCommand::class, DemoTenantCommand::class]);
+            $this->commands([AutoGroupCustomersCommand::class, ZnsPaymentRemindersCommand::class, LoyaltyNightlyCommand::class, CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, VerifyOrderMoneyCommand::class, LowStockDigestCommand::class, LotExpiryCommand::class, PushDueInventoryCommand::class, RecoverSyncCommand::class, PruneSyncLogsCommand::class, CheckFeesCommand::class, StockCheckCommand::class, SyncSettlementsCommand::class, SyncReturnsCommand::class, CheckWebhooksCommand::class, ReconcileOrdersCommand::class, BackfillShipmentsCommand::class, TrackCarrierShipmentsCommand::class, BillingSweepCommand::class, LossAlertsCommand::class, MorningBriefCommand::class, MonitorCommand::class, BackupDatabaseCommand::class, PruneDemoStoresCommand::class, DemoTenantCommand::class]);
         }
     }
 

@@ -46,6 +46,9 @@ class Inbox
         if ($this->context->can('inventory.view')) {
             array_push($items, ...$this->stock());
         }
+        if ($this->context->can('finance.profit')) {
+            array_push($items, ...$this->losses());
+        }
         if ($this->context->can('finance.approve')) {
             array_push($items, ...$this->vouchers());
         }
@@ -118,6 +121,19 @@ class Inbox
             $this->item('stock.expired', 'ops', 'red', $lots['blocked'], "{$lots['blocked']} lô hết hạn / ngừng bán còn tồn", 'Chuyển sang kho hàng lỗi hoặc xuất hủy', $report.($report === '/inventory' ? '' : '?by=expired')),
             $this->item('stock.expiring', 'ops', 'amber', $lots['expiring'], "{$lots['expiring']} lô sắp hết hạn", $soonest, $report),
         ];
+    }
+
+    /**
+     * Đợt 14: orders of the last 7 days that sell at a loss after marketplace fees.
+     *
+     * @return list<array{key: string, group: string, tone: string, count: int, title: string, detail: string|null, to: string}>
+     */
+    private function losses(): array
+    {
+        $totals = app(LossReports::class)->orders(now()->subDays(7), now())['totals'];
+        $count = $totals['orders'];
+
+        return [$this->item('orders.loss', 'money', 'red', $count, "{$count} đơn lỗ sau phí sàn", 'Tổng lỗ '.self::money((string) abs($totals['profit'])).' trong 7 ngày', '/reports/view/loss-orders')];
     }
 
     /** @return list<array{key: string, group: string, tone: string, count: int, title: string, detail: string|null, to: string}> */
