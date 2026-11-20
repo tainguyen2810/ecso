@@ -216,6 +216,9 @@ class SubscriptionService
             'past_due_since' => null,
             'pending_plan_id' => null,
             'pending_billing_cycle' => null,
+            // Any plan change ends a gift; EzChatGift sets it again when it gives the plan.
+            'gift_source' => null,
+            'gift_label' => null,
         ])->save();
         $this->audit->record('subscription.plan_changed', $subscription, ['from' => $from, 'to' => $plan->key, 'cycle' => $cycle, 'status' => $status], $subscription->tenant_id);
     }
@@ -223,6 +226,7 @@ class SubscriptionService
     public function isPaidAndRunning(Subscription $subscription): bool
     {
         return in_array($subscription->status, [Subscription::STATUS_ACTIVE, Subscription::STATUS_PAST_DUE], true)
+            && $subscription->gift_source === null
             && ! $subscription->plan->isFree()
             && $subscription->current_period_end !== null;
     }

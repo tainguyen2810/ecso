@@ -53,6 +53,16 @@ class BillingSweepCommand extends Command
                         return;
                     }
 
+                    // Đợt 17: a plan given with EzChat bills nothing; once it ends the business is on Free.
+                    if ($sub->gift_source !== null) {
+                        if ($end->isPast()) {
+                            $service->switchTo($sub, $free, 'monthly', Subscription::STATUS_ACTIVE, now(), null);
+                            $counts['gift_ended'] = ($counts['gift_ended'] ?? 0) + 1;
+                        }
+
+                        return;
+                    }
+
                     if ($end->isFuture()) {
                         $noticeAt = $end->copy()->subDays((int) config('billing.renewal_notice_days'));
                         $hasOpen = Invoice::query()->where('status', Invoice::PENDING)->exists();

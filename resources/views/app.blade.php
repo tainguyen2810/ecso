@@ -9,6 +9,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="EzSell">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    @if (\App\Modules\Identity\Services\EzChatSso::enabled())
+    <meta name="ezchat-sso" content="1">
+    @endif
     <title>{{ config('app.name') }}</title>
     @vite('resources/js/apps/tenant/main.ts')
 </head>

@@ -30,7 +30,9 @@ export const useTenantStore = defineStore('tenant', () => {
     /** Loads the context of the stored tenant, or the first tenant the user belongs to. */
     async function restore(): Promise<boolean> {
         await fetchTenants();
-        const stored = getApiTenant();
+        // Đợt 17: back from "Đăng nhập bằng EzChat" with the business to open (?tenant=).
+        const fromUrl = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('tenant') : null;
+        const stored = fromUrl && tenants.value.some((t) => t.id === fromUrl) ? fromUrl : getApiTenant();
         const target = tenants.value.find((t) => t.id === stored) ?? tenants.value[0];
         if (!target) {
             setApiTenant(null);
