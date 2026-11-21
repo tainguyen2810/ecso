@@ -2,6 +2,7 @@ import {
     BarChart3,
     CreditCard,
     HandCoins,
+    Landmark,
     LayoutDashboard,
     LayoutGrid,
     RefreshCw,
@@ -104,6 +105,13 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
         items: [
             { name: 'cash', label: 'Thu chi', path: '/cash', icon: HandCoins, permission: 'finance.view', shortcut: 'q', description: 'Phiếu thu, phiếu chi, sổ quỹ, đối soát COD và loại phiếu.',
                 children: [{ label: 'Phiếu thu, phiếu chi', path: '/cash' }, { label: 'Sổ quỹ', path: '/reports/cashbook' }, { label: 'Quỹ', path: '/cash/accounts' }, { label: 'Đối soát COD', path: '/cash/cod' }, { label: 'Loại phiếu', path: '/cash/types', advanced: true }] },
+            { name: 'accounting', label: 'Kế toán, thuế', path: '/accounting', icon: Landmark, permission: 'finance.view', description: 'Tổng quan thuế, sổ sách hộ kinh doanh, tờ khai thuế, hoá đơn mua vào.',
+                children: [
+                    { label: 'Tổng quan thuế', path: '/accounting' },
+                    { label: 'Sổ sách', path: '/accounting/books' },
+                    { label: 'Tờ khai thuế', path: '/accounting/declaration' },
+                    { label: 'Hoá đơn mua vào', path: '/purchasing/invoices', permission: 'purchasing.view' },
+                ] },
             { name: 'finance', label: 'Tài chính', path: '/finance', icon: Wallet, permission: 'finance.view', description: 'Doanh thu, phí sàn, đối soát, lợi nhuận ước tính và đã xác nhận.' },
             { name: 'reports', label: 'Báo cáo', path: '/reports', icon: BarChart3, permission: 'reports.view', description: 'Bán hàng, lãi lỗ, kho, nhập hàng, công nợ và khách hàng.',
                 children: [
