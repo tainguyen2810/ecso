@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
-import { Camera, CheckCircle2, ImageUp, Loader2, Plus, Sparkles, TriangleAlert, X } from 'lucide-vue-next';
+import { useRoute, useRouter } from 'vue-router';
+import { Camera, CheckCircle2, FileCode2, ImageUp, Loader2, Plus, Sparkles, TriangleAlert, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
 import AiNotice from '../../components/AiNotice.vue';
@@ -21,6 +21,10 @@ import { buildDraft, priceRise, reviewLines, SCAN_DRAFT_KEY, skuFromLine, type R
  */
 const MAX_PAGES = 6;
 const router = useRouter();
+const route = useRoute();
+/** Opened from "Hoá đơn mua vào" (?invoice=…): the e-invoice is already read, no photo and no AI credit. */
+const invoiceId = typeof route.query.invoice === 'string' ? route.query.invoice : null;
+const einvoice = ref<{ series: string; number: string; issued_on: string | null; seller: { name: string; tax_code: string }; total: string; vat_amount: string; authority_code: string | null; status: string; purchase_order: { id: string; number: string } | null } | null>(null);
 const toast = useToast();
 
 const status = ref<{ available: boolean; reason: string | null } | null>(null);
@@ -49,7 +53,23 @@ onMounted(async () => {
     suppliers.value = sup.data.data;
     warehouses.value = (w.data.data as Warehouse[]).filter((x) => x.status === 'active' && x.purpose !== 'defective');
     warehouseId.value = (warehouses.value.find((x) => x.is_default) ?? warehouses.value[0])?.id ?? '';
+    if (invoiceId) await openInvoice(invoiceId);
 });
+
+async function openInvoice(id: string) {
+    reading.value = true;
+    try {
+        const { data } = await api.get(`/purchase-invoices/${id}`);
+        einvoice.value = data.data;
+        result.value = data.data.draft as ScanResult;
+        lines.value = reviewLines(result.value.lines);
+        supplierId.value = data.data.supplier?.id ?? result.value.supplier.match?.id ?? '';
+    } catch (e) {
+        failure.value = (e as ApiError).message || 'Không mở được hoá đơn.';
+    } finally {
+        reading.value = false;
+    }
+}
 onBeforeUnmount(() => photos.value.forEach((p) => URL.revokeObjectURL(p.url)));
 
 async function addFiles(e: Event) {
@@ -92,6 +112,10 @@ async function read() {
 }
 
 function reset() {
+    if (invoiceId) {
+        router.push('/purchasing/invoices');
+        return;
+    }
     result.value = null;
     lines.value = [];
     failure.value = null;
@@ -149,12 +173,13 @@ async function createSupplier() {
 
 const picked = computed(() => lines.value.filter((l) => l.include && l.pick).length);
 const waiting = computed(() => lines.value.filter((l) => l.include && !l.pick).length);
-const ready = computed(() => !!supplierId.value && !!warehouseId.value && picked.value > 0 && waiting.value === 0);
+const linked = computed(() => einvoice.value?.status === 'linked');
+const ready = computed(() => !linked.value && !!supplierId.value && !!warehouseId.value && picked.value > 0 && waiting.value === 0);
 
 function makeDraft() {
     if (!result.value || !ready.value) return;
     try {
-        sessionStorage.setItem(SCAN_DRAFT_KEY, JSON.stringify(buildDraft(result.value, lines.value, supplierId.value, warehouseId.value)));
+        sessionStorage.setItem(SCAN_DRAFT_KEY, JSON.stringify(buildDraft(result.value, lines.value, supplierId.value, warehouseId.value, invoiceId)));
     } catch {
         toast.error('Trình duyệt không cho lưu tạm, hãy thử lại.');
         return;
@@ -169,12 +194,24 @@ const label = (l: ReviewLine) =>
 </script>
 
 <template>
-    <PageHeader title="Chụp hoá đơn nhập hàng" description="AI đọc hoá đơn của nhà cung cấp, ghép với sản phẩm trong kho rồi tạo phiếu nhập nháp cho bạn kiểm tra." :back="{ to: '/purchasing', label: 'Nhập hàng' }" />
+    <PageHeader
+        v-if="invoiceId"
+        :title="einvoice ? `Tạo phiếu nhập từ hoá đơn ${einvoice.series} ${einvoice.number}` : 'Tạo phiếu nhập từ hoá đơn'"
+        description="Từng dòng hoá đơn được ghép với sản phẩm trong kho. Kiểm tra rồi tạo phiếu nhập nháp."
+        :back="{ to: '/purchasing/invoices', label: 'Hoá đơn mua vào' }"
+    />
+    <PageHeader v-else title="Chụp hoá đơn nhập hàng" description="AI đọc hoá đơn của nhà cung cấp, ghép với sản phẩm trong kho rồi tạo phiếu nhập nháp cho bạn kiểm tra." :back="{ to: '/purchasing', label: 'Nhập hàng' }" />
 
-    <AiNotice v-if="status && !status.available" :reason="status.reason" class="mb-4" />
+    <AiNotice v-if="!invoiceId && status && !status.available" :reason="status.reason" class="mb-4" />
+
+    <div v-if="invoiceId && !result" class="py-16 text-center text-sm text-muted-foreground">
+        <Loader2 v-if="reading" class="mx-auto mb-2 size-5 animate-spin" />
+        <span v-if="reading">Đang mở hoá đơn…</span>
+        <span v-else class="text-rose-700">{{ failure }}</span>
+    </div>
 
     <!-- Step 1: photos -->
-    <Card v-if="!result" class="p-5">
+    <Card v-else-if="!result" class="p-5">
         <div class="grid gap-4 sm:grid-cols-2">
             <label class="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 p-6 text-center" data-testid="scan-camera">
                 <span class="grid size-12 place-items-center rounded-2xl bg-card text-primary shadow-sm"><Camera class="size-6" /></span>
@@ -207,20 +244,35 @@ const label = (l: ReviewLine) =>
     <!-- Step 2: review -->
     <div v-else class="grid grid-cols-[minmax(0,1fr)] items-start gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
         <div class="space-y-3 xl:sticky xl:top-4">
-            <Card class="p-3">
+            <Card v-if="einvoice" class="space-y-3 p-4 text-sm" data-testid="einvoice-card">
+                <div class="flex items-center gap-2 font-semibold"><FileCode2 class="size-4 text-primary" />Hoá đơn điện tử</div>
+                <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5">
+                    <dt class="text-muted-foreground">Người bán</dt><dd class="font-medium">{{ einvoice.seller.name }}</dd>
+                    <dt class="text-muted-foreground">MST</dt><dd>{{ einvoice.seller.tax_code }}</dd>
+                    <dt class="text-muted-foreground">Ký hiệu, số</dt><dd>{{ einvoice.series }} · {{ einvoice.number }}</dd>
+                    <dt class="text-muted-foreground">Ngày</dt><dd>{{ einvoice.issued_on?.split('-').reverse().join('/') ?? '—' }}</dd>
+                    <dt class="text-muted-foreground">Mã CQT</dt><dd class="break-all">{{ einvoice.authority_code || 'Không có' }}</dd>
+                    <dt class="text-muted-foreground">Thuế GTGT</dt><dd class="tabular-nums">{{ formatMoney(Number(einvoice.vat_amount)) }}</dd>
+                    <dt class="text-muted-foreground">Tổng tiền</dt><dd class="font-semibold tabular-nums">{{ formatMoney(Number(einvoice.total)) }}</dd>
+                </dl>
+                <div v-if="einvoice.purchase_order" class="rounded-lg bg-emerald-50 p-3 text-emerald-800">
+                    Đã vào phiếu nhập <RouterLink :to="`/purchasing/${einvoice.purchase_order.id}`" class="font-medium underline">{{ einvoice.purchase_order.number }}</RouterLink>.
+                </div>
+            </Card>
+            <Card v-else class="p-3">
                 <img v-if="photos[preview]" :src="photos[preview]!.url" alt="Ảnh hoá đơn" class="max-h-[40vh] w-full rounded-lg object-contain xl:max-h-[70vh]" />
                 <div v-if="photos.length > 1" class="mt-2 flex gap-2">
                     <button v-for="(p, i) in photos" :key="p.url" type="button" class="size-12 overflow-hidden rounded border" :class="i === preview ? 'ring-2 ring-primary' : ''" @click="preview = i"><img :src="p.url" alt="" class="size-full object-cover" /></button>
                 </div>
             </Card>
-            <Button variant="outline" class="w-full" @click="reset">Chụp lại</Button>
+            <Button variant="outline" class="w-full" @click="reset">{{ invoiceId ? 'Về danh sách hoá đơn' : 'Chụp lại' }}</Button>
         </div>
 
         <Card>
             <div class="flex flex-wrap items-center gap-2 border-b px-4 py-3">
-                <span class="font-semibold">AI đã đọc được</span>
-                <span class="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700"><Sparkles class="size-3" /> EzChat AI</span>
-                <span class="ml-auto text-xs text-muted-foreground">{{ lines.length }} dòng · {{ credits }} credit</span>
+                <span class="font-semibold">{{ invoiceId ? 'Dòng hàng trên hoá đơn' : 'AI đã đọc được' }}</span>
+                <span v-if="!invoiceId" class="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700"><Sparkles class="size-3" /> EzChat AI</span>
+                <span class="ml-auto text-xs text-muted-foreground">{{ lines.length }} dòng<template v-if="!invoiceId"> · {{ credits }} credit</template></span>
             </div>
             <div class="grid gap-4 border-b px-4 py-3 text-sm sm:grid-cols-3">
                 <div>
@@ -296,7 +348,8 @@ const label = (l: ReviewLine) =>
             <div v-if="result.unreadable" class="mx-4 mb-3 flex gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800"><TriangleAlert class="mt-0.5 size-4 shrink-0" />AI chưa đọc rõ: {{ result.unreadable }}</div>
 
             <div class="flex flex-wrap items-center gap-3 border-t px-4 py-3">
-                <span v-if="waiting" class="text-sm text-rose-700">Còn {{ waiting }} dòng chưa có sản phẩm: chọn, tạo mới hoặc bỏ tick.</span>
+                <span v-if="linked" class="text-sm text-emerald-700">Hoá đơn này đã vào phiếu nhập.</span>
+                <span v-else-if="waiting" class="text-sm text-rose-700">Còn {{ waiting }} dòng chưa có sản phẩm: chọn, tạo mới hoặc bỏ tick.</span>
                 <span v-else-if="!supplierId" class="text-sm text-rose-700">Chọn nhà cung cấp.</span>
                 <div class="ml-auto flex gap-2">
                     <Button variant="outline" @click="reset">Huỷ</Button>

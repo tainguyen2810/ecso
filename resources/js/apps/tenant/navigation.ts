@@ -81,6 +81,7 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
                     { label: 'Quản lý kho', path: '/inventory', permission: 'inventory.view' },
                     { label: 'Đặt hàng nhập', path: '/purchasing/orders', permission: 'purchasing.view', advanced: true },
                     { label: 'Nhập hàng', path: '/purchasing', permission: 'purchasing.view' },
+                    { label: 'Hoá đơn mua vào', path: '/purchasing/invoices', permission: 'purchasing.view' },
                     { label: 'Kiểm hàng', path: '/inventory/stocktake', permission: 'inventory.view' },
                     { label: 'Chuyển hàng', path: '/inventory/transfers', permission: 'inventory.view', advanced: true },
                     { label: 'Nhà cung cấp', path: '/purchasing/suppliers', permission: 'purchasing.view' },

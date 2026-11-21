@@ -51,6 +51,10 @@ export interface ScanDraft {
     tax_rate: number | null;
     note: string;
     lines: { id: string; sku: string; name: string; quantity: number; unit_cost: number }[];
+    /** Made from "Hoá đơn mua vào": the invoice gets linked to the purchase order. */
+    purchase_invoice_id?: string | null;
+    /** "Nhớ cách ghép": the supplier's item code for each picked SKU. */
+    supplier_codes?: { id: string; code: string }[];
 }
 
 export function reviewLines(lines: ScanLine[]): ReviewLine[] {
@@ -69,7 +73,7 @@ export function invoiceReference(inv: ScanResult['invoice']): string {
 }
 
 /** Lines picked for the order; the same SKU twice becomes one line (quantities added, price weighted). */
-export function buildDraft(result: ScanResult, lines: ReviewLine[], supplierId: string, warehouseId: string): ScanDraft {
+export function buildDraft(result: ScanResult, lines: ReviewLine[], supplierId: string, warehouseId: string, invoiceId: string | null = null): ScanDraft {
     const merged = new Map<string, { id: string; sku: string; name: string; quantity: number; total: number }>();
     for (const l of lines) {
         if (!l.include || !l.pick || l.quantity <= 0) continue;
@@ -87,9 +91,21 @@ export function buildDraft(result: ScanResult, lines: ReviewLine[], supplierId: 
         discount: Math.round(result.discount),
         extra_cost: Math.round(result.shipping),
         tax_rate: result.vat_rate,
-        note: 'Tạo từ ảnh hoá đơn (AI đọc).',
+        note: invoiceId ? 'Tạo từ hoá đơn điện tử.' : 'Tạo từ ảnh hoá đơn (AI đọc).',
         lines: [...merged.values()].map((m) => ({ id: m.id, sku: m.sku, name: m.name, quantity: m.quantity, unit_cost: Math.round(m.total / m.quantity) })),
+        purchase_invoice_id: invoiceId,
+        supplier_codes: supplierCodes(lines),
     };
+}
+
+/** The supplier's code printed for each picked SKU (first one wins), so the next invoice matches at once. */
+export function supplierCodes(lines: ReviewLine[]): { id: string; code: string }[] {
+    const out = new Map<string, string>();
+    for (const l of lines) {
+        const code = l.code.trim();
+        if (l.include && l.pick && code && !out.has(l.pick.id)) out.set(l.pick.id, code.slice(0, 64));
+    }
+    return [...out].map(([id, code]) => ({ id, code }));
 }
 
 /** SKU for a product created from an invoice line: the supplier's code when it has one. */

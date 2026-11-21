@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { Camera, ClipboardList, Lightbulb, Plus, Search, Truck, Undo2 } from 'lucide-vue-next';
+import { Camera, ClipboardList, FileCode2, Lightbulb, Plus, Search, Truck, Undo2 } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import HeaderLink from '../../components/HeaderLink.vue';
 import Pagination from '../../components/Pagination.vue';
@@ -98,6 +98,7 @@ const newLink = computed(() => (ordering.value ? { path: '/purchasing/new', quer
         <template #links>
             <HeaderLink v-if="!ordering" :icon="Truck" to="/purchasing/orders">Đặt hàng nhập</HeaderLink>
             <HeaderLink v-else :icon="Truck" to="/purchasing">Nhập hàng</HeaderLink>
+            <HeaderLink :icon="FileCode2" to="/purchasing/invoices">Hoá đơn mua vào</HeaderLink>
             <HeaderLink :icon="Undo2" to="/purchasing/returns">Trả hàng nhà cung cấp</HeaderLink>
             <HeaderLink :icon="Lightbulb" to="/purchasing/reorder">Gợi ý nhập hàng</HeaderLink>
         </template>

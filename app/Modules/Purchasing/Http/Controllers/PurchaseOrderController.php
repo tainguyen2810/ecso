@@ -5,12 +5,15 @@ namespace App\Modules\Purchasing\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Access\Support\DataAccess;
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Inventory\Http\Controllers\Concerns\ResolvesLines;
 use App\Modules\Inventory\Http\Resources\DocumentResource;
 use App\Modules\Purchasing\Http\Resources\PurchaseOrderResource;
+use App\Modules\Purchasing\Models\PurchaseInvoice;
 use App\Modules\Purchasing\Models\PurchaseOrder;
 use App\Modules\Purchasing\Models\Supplier;
 use App\Modules\Purchasing\Models\SupplierPayment;
+use App\Modules\Purchasing\Services\PurchaseInvoiceService;
 use App\Modules\Purchasing\Services\PurchaseService;
 use App\Modules\Purchasing\Services\SupplierAllocation;
 use App\Modules\Purchasing\Services\SupplierPaymentService;
@@ -105,13 +108,22 @@ class PurchaseOrderController extends Controller
             'payment.amount' => ['required_with:payment', 'numeric', 'min:0', 'max:9999999999'],
             'payment.method' => ['required_with:payment', Rule::in(SupplierPayment::METHODS)],
             'payment.reference' => ['nullable', 'string', 'max:100'],
+            // Made from "Hoá đơn mua vào" / "Chụp hoá đơn": link the invoice and remember the supplier's item codes.
+            'purchase_invoice_id' => ['nullable', 'string', 'max:40'],
+            'supplier_codes' => ['nullable', 'array', 'max:300'],
+            'supplier_codes.*.id' => ['required', 'string', 'max:40'],
+            'supplier_codes.*.code' => ['required', 'string', 'max:100'],
             ...$this->headerRules(),
             ...$this->lineRules(300),
             ...$this->costRules(),
         ]);
 
         $supplier = $this->findSupplier($data['supplier_id']);
-        $po = DB::transaction(function () use ($request, $data, $supplier, $purchases, $payments) {
+        $invoice = filled($data['purchase_invoice_id'] ?? null) ? PurchaseInvoice::query()->where('ulid', $data['purchase_invoice_id'])->first() : null;
+        if ($invoice !== null && $invoice->status === 'linked') {
+            throw ValidationException::withMessages(['purchase_invoice_id' => 'Hoá đơn này đã vào phiếu nhập khác.']);
+        }
+        $po = DB::transaction(function () use ($request, $data, $supplier, $purchases, $payments, $invoice) {
             $po = $purchases->create([
                 'supplier' => $supplier,
                 'warehouse' => $this->findWarehouse($data['warehouse_id']),
@@ -128,6 +140,11 @@ class PurchaseOrderController extends Controller
                 $this->authorize('pay', Supplier::class);
                 $payments->record($supplier, ['method' => $data['payment']['method'], 'amount' => $data['payment']['amount'], 'reference' => $data['payment']['reference'] ?? null], $po);
             }
+
+            if ($invoice !== null) {
+                app(PurchaseInvoiceService::class)->link($invoice, $po);
+            }
+            $this->rememberCodes($data['supplier_codes'] ?? [], $supplier);
 
             return $po;
         });
@@ -214,6 +231,25 @@ class PurchaseOrderController extends Controller
     {
         return Supplier::query()->where('ulid', $ulid)->first()
             ?? throw ValidationException::withMessages(['supplier_id' => 'Nhà cung cấp không tồn tại.']);
+    }
+
+    /**
+     * "Nhớ cách ghép": a SKU without the supplier's item code gets the code printed on the invoice, so the next
+     * invoice from the same supplier matches it at once.
+     *
+     * @param  array<int, array{id: string, code: string}>  $codes
+     */
+    private function rememberCodes(array $codes, Supplier $supplier): void
+    {
+        foreach (array_slice($codes, 0, 300) as $c) {
+            $code = trim($c['code']);
+            if ($code === '') {
+                continue;
+            }
+            ProductVariant::query()->where('ulid', $c['id'])->where(fn ($q) => $q->whereNull('supplier_sku')->orWhere('supplier_sku', ''))
+                ->update(['supplier_sku' => mb_substr($code, 0, 64)]);
+            ProductVariant::query()->where('ulid', $c['id'])->whereNull('supplier_id')->update(['supplier_id' => $supplier->id]);
+        }
     }
 
     /** @return array<string, array<int, mixed>> */
