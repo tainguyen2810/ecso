@@ -25,6 +25,22 @@ class TenantSettings
         // Menu: null = automatic (basic for a small shop, full from a second warehouse or 6 members), true/false = chosen.
         'interface' => ['advanced_menu' => null],
         'tax' => ['sale_rate' => 0, 'purchase_rate' => 0, 'prices_include_tax' => true],
+        // Kế toán, thuế (hộ kinh doanh khai thuế theo tỷ lệ % doanh thu): kỳ khai, ngưỡng doanh thu năm, nhóm ngành
+        // mặc định và theo danh mục (ulid => group), tỷ lệ GTGT / TNCN của từng nhóm (sửa được khi luật đổi).
+        'household_tax' => [
+            'period' => 'quarter',
+            'threshold' => 500000000,
+            'taxpayer_name' => null,
+            'default_group' => 'goods',
+            'category_groups' => [],
+            'include_shipping' => false,
+            'rates' => [
+                'goods' => ['vat' => 1, 'pit' => 0.5],
+                'service' => ['vat' => 5, 'pit' => 2],
+                'production' => ['vat' => 3, 'pit' => 1.5],
+                'other' => ['vat' => 2, 'pit' => 1],
+            ],
+        ],
         'pricing' => ['sale_price' => 'retail', 'staff_edit_price' => true],
         'payments' => [
             'methods' => ['cash' => true, 'bank_transfer' => true, 'card' => true, 'cod' => true, 'ewallet' => true],
