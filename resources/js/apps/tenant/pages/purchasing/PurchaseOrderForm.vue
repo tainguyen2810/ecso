@@ -136,6 +136,7 @@ onMounted(async () => {
                 });
                 const vat = draft.tax_rate !== null && VAT_RATES.includes(draft.tax_rate as (typeof VAT_RATES)[number]) ? String(draft.tax_rate) : defaultVat.value;
                 lines.value = draft.lines.map((l) => ({ ...l, image: null, stock: null, quantity: String(l.quantity), unit_cost: String(l.unit_cost), tax_rate: vat }));
+                fromInvoice.value = { purchase_invoice_id: draft.purchase_invoice_id ?? null, supplier_codes: draft.supplier_codes ?? [] };
             }
         } catch {
             /* storage unavailable: start empty */
@@ -143,6 +144,9 @@ onMounted(async () => {
     }
 });
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
+
+/** From "Chụp hoá đơn" / "Hoá đơn mua vào": the invoice to link and the supplier codes to remember. */
+const fromInvoice = ref<{ purchase_invoice_id: string | null; supplier_codes: { id: string; code: string }[] }>({ purchase_invoice_id: null, supplier_codes: [] });
 
 function add(v: Variant) {
     const existing = lines.value.find((l) => l.id === v.id);
@@ -191,7 +195,7 @@ async function submit(action: 'draft' | 'place' | 'receive') {
     try {
         const { data } = editId.value
             ? await api.put(`/purchase-orders/${editId.value}`, body)
-            : await api.post('/purchase-orders', { ...body, place: action !== 'draft', receive: action === 'receive', payment }, idempotency.config());
+            : await api.post('/purchase-orders', { ...body, ...fromInvoice.value, place: action !== 'draft', receive: action === 'receive', payment }, idempotency.config());
         idempotency.renew();
         try {
             sessionStorage.removeItem(REORDER_DRAFT_KEY);

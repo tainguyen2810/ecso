@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Purchasing\Http\Controllers\PurchaseInvoiceController;
 use App\Modules\Purchasing\Http\Controllers\PurchaseOrderController;
 use App\Modules\Purchasing\Http\Controllers\ReorderController;
 use App\Modules\Purchasing\Http\Controllers\SupplierController;
@@ -14,6 +15,14 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant', 'idempotent'])->group(f
     Route::post('suppliers/{supplier}/payments', [SupplierPaymentController::class, 'store'])->middleware('idempotent');
     Route::post('suppliers/{supplier}/refunds', [SupplierPaymentController::class, 'refund'])->middleware('idempotent');
     Route::post('supplier-payments/{supplierPayment}/void', [SupplierPaymentController::class, 'void']);
+
+    Route::get('purchase-invoices/export', [PurchaseInvoiceController::class, 'export'])->middleware('throttle:10,1,purchasing.invoices.export');
+    Route::post('purchase-invoices/import', [PurchaseInvoiceController::class, 'import'])->middleware('throttle:20,1,purchasing.invoices.import');
+    Route::get('purchase-invoices', [PurchaseInvoiceController::class, 'index']);
+    Route::get('purchase-invoices/{purchaseInvoice}', [PurchaseInvoiceController::class, 'show']);
+    Route::post('purchase-invoices/{purchaseInvoice}/ignore', [PurchaseInvoiceController::class, 'ignore']);
+    Route::post('purchase-invoices/{purchaseInvoice}/restore', [PurchaseInvoiceController::class, 'restore']);
+    Route::delete('purchase-invoices/{purchaseInvoice}', [PurchaseInvoiceController::class, 'destroy']);
 
     Route::get('purchase-orders/reorder', [ReorderController::class, 'index']);
     Route::apiResource('purchase-orders', PurchaseOrderController::class)->except('destroy');

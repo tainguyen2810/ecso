@@ -68,6 +68,7 @@ const routes: RouteRecordRaw[] = [
             { path: 'orders/:id', name: 'order-show', component: () => import('./pages/orders/OrderDetail.vue'), meta: { permission: 'orders.view', nav: 'orders' } },
             { path: 'purchasing', name: 'purchasing', component: () => import('./pages/purchasing/PurchaseOrderList.vue'), meta: { permission: 'purchasing.view', nav: 'purchasing' } },
             { path: 'purchasing/orders', name: 'purchase-orders-ordering', component: () => import('./pages/purchasing/PurchaseOrderList.vue'), meta: { permission: 'purchasing.view', nav: 'purchasing', mode: 'ordering' } },
+            { path: 'purchasing/invoices', name: 'purchase-invoices', component: () => import('./pages/purchasing/PurchaseInvoiceList.vue'), meta: { permission: 'purchasing.view', nav: 'purchasing' } },
             { path: 'purchasing/scan', name: 'purchase-scan', component: () => import('./pages/purchasing/InvoiceScan.vue'), meta: { permission: 'purchasing.manage', nav: 'purchasing' } },
             { path: 'purchasing/new', name: 'purchase-new', component: () => import('./pages/purchasing/PurchaseOrderForm.vue'), meta: { permission: 'purchasing.manage', nav: 'purchasing' } },
             { path: 'purchasing/suppliers', name: 'suppliers', component: () => import('./pages/purchasing/SupplierList.vue'), meta: { permission: 'purchasing.view', nav: 'purchasing' } },
