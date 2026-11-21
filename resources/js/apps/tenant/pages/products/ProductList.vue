@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Bookmark, Boxes, ChevronDown, ChevronRight, Columns3, Download, FileSpreadsheet, ImageIcon, ImageOff, Images, Package, Plus, Printer, RotateCcw, Search, SlidersHorizontal, Tags, Upload, X } from 'lucide-vue-next';
+import { Bookmark, Boxes, ChevronDown, ChevronRight, Columns3, Download, FileSpreadsheet, ImageIcon, ImageOff, Images, Package, Plus, Printer, RotateCcw, Search, SlidersHorizontal, Sparkles, Tags, Upload, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import StockOverview from '../../components/StockOverview.vue';
@@ -286,6 +286,7 @@ function toggleAll() {
             <HeaderLink v-if="canManage" :icon="Boxes" :to="{ path: '/products/new', query: { type: 'combo' } }" data-testid="new-combo">Thêm combo</HeaderLink>
             <HeaderLink :icon="Printer" to="/products/labels">In tem mã vạch</HeaderLink>
         </template>
+        <RouterLink v-if="canManage" to="/products/scan"><Button variant="outline" data-testid="product-from-photos"><Sparkles /> Tạo từ ảnh</Button></RouterLink>
         <RouterLink v-if="canManage" to="/products/new"><Button data-testid="new-product"><Plus /> Thêm sản phẩm</Button></RouterLink>
     </PageHeader>
 
