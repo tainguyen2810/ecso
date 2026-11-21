@@ -16,6 +16,7 @@ import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
 import { useIdempotencyKey } from '@/shared/composables/useIdempotencyKey';
 import { REORDER_DRAFT_KEY, type ReorderDraft } from './reorder';
+import { SCAN_DRAFT_KEY, type ScanDraft } from './scan';
 import { purchaseCosts, VAT_RATES } from './costs';
 import { supplierPaymentMethods } from './labels';
 import { useSettingsStore } from '@/shared/stores/settings';
@@ -118,6 +119,27 @@ onMounted(async () => {
         } catch {
             /* storage unavailable: start empty */
         }
+    } else if (route.query.from === 'scan') {
+        // From "Chụp hoá đơn": supplier, invoice number and date, discount, shipping and the matched lines.
+        try {
+            const draft: ScanDraft = JSON.parse(sessionStorage.getItem(SCAN_DRAFT_KEY) ?? 'null');
+            if (draft) {
+                Object.assign(form, {
+                    supplier_id: draft.supplier_id || form.supplier_id,
+                    warehouse_id: draft.warehouse_id || form.warehouse_id,
+                    invoice_date: draft.invoice_date,
+                    reference: draft.reference,
+                    note: draft.note,
+                    discount: draft.discount ? String(draft.discount) : '',
+                    extra_cost: draft.extra_cost ? String(draft.extra_cost) : '',
+                    extra_cost_note: draft.extra_cost ? 'Phí vận chuyển trên hoá đơn' : '',
+                });
+                const vat = draft.tax_rate !== null && VAT_RATES.includes(draft.tax_rate as (typeof VAT_RATES)[number]) ? String(draft.tax_rate) : defaultVat.value;
+                lines.value = draft.lines.map((l) => ({ ...l, image: null, stock: null, quantity: String(l.quantity), unit_cost: String(l.unit_cost), tax_rate: vat }));
+            }
+        } catch {
+            /* storage unavailable: start empty */
+        }
     }
 });
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
@@ -173,6 +195,7 @@ async function submit(action: 'draft' | 'place' | 'receive') {
         idempotency.renew();
         try {
             sessionStorage.removeItem(REORDER_DRAFT_KEY);
+            sessionStorage.removeItem(SCAN_DRAFT_KEY);
         } catch {
             /* ignore */
         }
