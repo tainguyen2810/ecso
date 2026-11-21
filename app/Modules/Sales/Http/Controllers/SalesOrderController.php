@@ -27,6 +27,9 @@ class SalesOrderController extends Controller
     public function store(Request $request, ManualOrderService $orders): JsonResponse
     {
         $this->authorize('create', Order::class);
+        if ($request->boolean('offline') && $request->filled('placed_at') && strtotime((string) $request->input('placed_at')) > time()) {
+            $request->merge(['placed_at' => now()->toIso8601String()]); // the till's clock runs a little ahead
+        }
         $data = $request->validate([
             'channel_id' => ['required', 'string'],
             'stage' => ['nullable', Rule::in(['pending', 'confirmed', 'completed'])],
@@ -40,8 +43,16 @@ class SalesOrderController extends Controller
             'exchange_return_id' => ['nullable', 'string'],
             'placed_at' => ['nullable', 'date', 'before_or_equal:now'],
             'counter' => ['sometimes', 'boolean'], // sold at the till (POS screen): needs an open shift
+            // Bán khi mất mạng: a sale the till kept while offline, sent once the connection is back.
+            'offline' => ['sometimes', 'boolean'],
+            'offline_key' => ['nullable', 'required_if:offline,true', 'string', 'max:64'],
         ]);
-        $this->guardSettings($request, $data);
+        $offline = ! empty($data['offline']) && ! empty($data['counter']);
+        if (! empty($data['counter']) && ! empty($data['offline_key']) && ($existing = $orders->findOffline((string) $data['offline_key']))) {
+            // Sent again after the first answer was lost (or the idempotency window passed): the same sale, not a new one.
+            return (new OrderResource($existing->load(['channel', 'customer', 'warehouse'])))->response()->setStatusCode(200);
+        }
+        $this->guardSettings($request, $data, $offline);
 
         $order = $orders->create($data);
 
@@ -120,9 +131,16 @@ class SalesOrderController extends Controller
      *
      * @param  array<string, mixed>  $data
      */
-    private function guardSettings(Request $request, array $data): void
+    private function guardSettings(Request $request, array $data, bool $offline = false): void
     {
         $settings = TenantSettings::current();
+        if ($offline) {
+            // The time the till made the sale, kept while offline: within the last 7 days.
+            if (isset($data['placed_at']) && now()->parse($data['placed_at'])->lt(now()->subDays(7))) {
+                throw ValidationException::withMessages(['placed_at' => 'Đơn bán khi mất mạng đã quá 7 ngày, không gửi lên được nữa. Tạo lại đơn bằng tay nếu cần.']);
+            }
+            unset($data['placed_at'], $data['promotions_off']); // the till priced it without the promotions it could not check
+        }
         if (isset($data['placed_at']) && ! $settings->get('sales.allow_change_sale_time')) {
             throw ValidationException::withMessages(['placed_at' => 'Cấu hình chưa cho phép sửa thời gian bán.']);
         }

@@ -81,6 +81,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::delete('customers/{customer}/notes/{note}', [CustomerProfileController::class, 'destroyNote']);
 
     Route::get('pos/summary', [PosController::class, 'summary']);
+    Route::get('pos/catalog', [PosController::class, 'catalog'])->middleware('throttle:30,1,sales.pos.catalog');
     Route::get('pos/shifts/current', [CashShiftController::class, 'current']);
     Route::get('pos/shifts/voucher-types', [CashShiftController::class, 'voucherTypes']);
     Route::get('pos/shifts', [CashShiftController::class, 'index']);
