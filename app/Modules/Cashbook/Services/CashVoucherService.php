@@ -51,6 +51,7 @@ class CashVoucherService
         [CashVoucher::PAYMENT, 'Phí vận chuyển', true, 'sales'],
         [CashVoucher::PAYMENT, 'Vật tư đóng gói', true, 'sales'],
         [CashVoucher::PAYMENT, 'Lương nhân viên', true, 'operating'],
+        [CashVoucher::PAYMENT, 'Tạm ứng lương', false, null],
         [CashVoucher::PAYMENT, 'Thuê mặt bằng', true, 'operating'],
         [CashVoucher::PAYMENT, 'Điện, nước, internet', true, 'operating'],
         [CashVoucher::PAYMENT, 'Phần mềm, dịch vụ', true, 'operating'],
