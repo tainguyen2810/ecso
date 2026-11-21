@@ -39,6 +39,8 @@ export const useAuthStore = defineStore('auth', () => {
         } finally {
             user.value = null;
             setApiTenant(null);
+            // The counter's offline copy of the account answers (public/sw.js) goes with the session.
+            navigator.serviceWorker?.controller?.postMessage('clear-private');
         }
     }
 

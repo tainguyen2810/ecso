@@ -80,7 +80,9 @@ class ManualOrderService
             $channel = SalesChannel::query()->where('ulid', $data['channel_id'])->where('is_active', true)->first()
                 ?? throw ValidationException::withMessages(['channel_id' => 'Kênh bán không tồn tại hoặc đã tắt.']);
             $warehouse = $this->warehouse($data['warehouse_id'] ?? null, $channel);
-            $shift = $this->counterShift((bool) ($data['counter'] ?? false));
+            $offline = ! empty($data['offline']) && ! empty($data['counter']);
+            // An offline sale already happened: it goes to the cashier's open shift if any, and is not refused without one.
+            $shift = $this->counterShift((bool) ($data['counter'] ?? false) && ! $offline);
             $customer = $this->customer($data);
             $target = match ($data['stage'] ?? 'pending') {
                 'confirmed' => OrderStatus::READY_TO_PACK,
@@ -107,6 +109,8 @@ class ManualOrderService
                 'refunded_amount' => 0,
                 'raw_status' => OrderStatus::PENDING_CONFIRMATION,
                 'status' => OrderStatus::PENDING_CONFIRMATION,
+                // The till's own key for the sale: sent again (online or after going offline) it finds this order.
+                'raw' => ! empty($data['counter']) && ! empty($data['offline_key']) ? ['offline_key' => (string) $data['offline_key']] : null,
             ]);
             $this->fillDetails($order, $data, $customer);
             $order->save();
@@ -138,8 +142,14 @@ class ManualOrderService
 
             foreach ($data['payments'] ?? [] as $payment) {
                 if ((float) $payment['amount'] > 0) {
-                    $this->payments->record($order, $payment);
+                    $this->payments->record($order, $offline && isset($data['placed_at']) ? [...$payment, 'paid_at' => $data['placed_at']] : $payment);
                 }
+            }
+            if ($offline && isset($data['placed_at'])) {
+                // Delivered (and paid) when the till sold it, not when it came back online.
+                $at = now()->parse($data['placed_at']);
+                $order->refresh();
+                $order->forceFill(array_filter(['delivered_at' => $order->delivered_at ? $at : null, 'completed_at' => $order->completed_at ? $at : null]))->save();
             }
 
             $tenantId = $order->tenant_id;
@@ -563,6 +573,12 @@ class ManualOrderService
      * The seller's open shift, so the sale and its money count in that shift. A till sale (POS screen) is refused
      * without one when the shop requires shifts; an order typed in the back office never needs one.
      */
+    /** The order an offline sale already made, by the key the till gave it. */
+    public function findOffline(string $key): ?Order
+    {
+        return Order::query()->where('marketplace', Order::SOURCE_MANUAL)->where('raw->offline_key', $key)->first();
+    }
+
     private function counterShift(bool $atCounter): ?CashShift
     {
         if (! Auth::check()) {

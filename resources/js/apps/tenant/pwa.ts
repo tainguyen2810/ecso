@@ -65,7 +65,7 @@ export function usePwaInstall() {
     return { canInstall, isIos, standalone, install };
 }
 
-/** Registers the service worker that makes the app installable (no offline cache yet). */
+/** Registers the service worker: installable app, order notifications, and the counter opening without network. */
 export function registerServiceWorker(): void {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator) || !window.isSecureContext) return;
     window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));

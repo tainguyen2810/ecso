@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { ArrowLeft, Banknote, Clock, CreditCard, History, Minus, NotebookPen, Plus, Printer, QrCode, ScanBarcode, Store, Trash2, UserRound, Wallet, X } from 'lucide-vue-next';
+import { ArrowLeft, Banknote, Clock, CloudOff, CreditCard, History, Minus, NotebookPen, Plus, Printer, QrCode, RefreshCw, ScanBarcode, Store, Trash2, UserRound, Wallet, X } from 'lucide-vue-next';
 import { RouterLink, useRouter } from 'vue-router';
 import Button from '@/shared/ui/Button.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
 import Input from '@/shared/ui/Input.vue';
-import { api, ApiError, idempotent, newIdempotencyKey } from '@/shared/lib/api';
+import { api, ApiError, getApiTenant, idempotent, newIdempotencyKey } from '@/shared/lib/api';
 import { cn, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
@@ -16,10 +16,13 @@ import { printShopFrom } from '../orders/printShop';
 import { useSettingsStore } from '@/shared/stores/settings';
 import { addToCart, applyGroup, cartTotals, emptyCart, quickCash, splitPayments, syncGroupDiscount, type Cart } from './pos';
 import ShiftPanel from './ShiftPanel.vue';
+import OfflineQueue from './OfflineQueue.vue';
+import { findByCode, isNetworkError, loadCatalog, loadQueue, loadSetup, offlineNumber, pendingCount, failedCount, pruneSent, saveCatalog, saveQueue, saveSetup, searchCatalog, takeStock, type CatalogItem, type OfflineSale } from './offline';
 import { previewPromotions, type PromotionPreview } from '../promotions/promotions';
 import type { CashShift, Customer, OrderDetail, SalesChannel, Variant, Warehouse } from '@/shared/types';
 
 const STORAGE_KEY = 'ecso.pos.carts';
+const tenantKey = getApiTenant() ?? 'default';
 const toast = useToast();
 const tenant = useTenantStore();
 const auth = useAuthStore();
@@ -49,8 +52,8 @@ let promoSeq = 0;
 async function loadPromo() {
     const seq = ++promoSeq;
     const c = cart.value;
-    if (!c.lines.length) {
-        promo.value = null;
+    if (!c.lines.length || !online.value) {
+        promo.value = null; // offline: no promotions, the server is told so when the sale is sent
         return;
     }
     try {
@@ -90,6 +93,90 @@ const suggestedOpening = ref('0');
 const shiftOpen = ref(false);
 const shiftLoaded = ref(false);
 
+// Bán khi mất mạng: the till keeps selling from the catalog on this device and sends the sales once back online.
+const online = ref(typeof navigator === 'undefined' ? true : navigator.onLine);
+const catalog = ref<CatalogItem[]>([]);
+const catalogAt = ref<string | null>(null);
+const queue = ref<OfflineSale[]>(pruneSent(loadQueue(tenantKey)));
+const queueOpen = ref(false);
+const syncing = ref(false);
+const pending = computed(() => pendingCount(queue.value));
+const failed = computed(() => failedCount(queue.value));
+watch(queue, (q) => saveQueue(tenantKey, q), { deep: true });
+
+function goOffline() {
+    if (online.value) toast.error('Mất kết nối mạng. Vẫn bán bình thường, đơn sẽ tự gửi khi có mạng lại.');
+    online.value = false;
+}
+async function goOnline() {
+    online.value = true;
+    await syncQueue();
+    refreshCatalog();
+    if (!shiftLoaded.value) loadShift().catch(() => {});
+}
+
+/** Downloads the catalog of the counter's warehouse for offline selling (in the background, every 15 minutes). */
+async function refreshCatalog() {
+    if (!warehouseId.value || !online.value) return;
+    const wh = warehouseId.value;
+    try {
+        const { data } = await api.get('/pos/catalog', { params: { warehouse: wh } });
+        if (wh !== warehouseId.value) return;
+        catalog.value = data.data;
+        catalogAt.value = data.meta.at;
+        saveCatalog(tenantKey, wh, data.data, data.meta.at);
+    } catch (e) {
+        if (isNetworkError(e)) goOffline();
+    }
+}
+function useCachedCatalog() {
+    const cached = warehouseId.value ? loadCatalog(tenantKey, warehouseId.value) : null;
+    catalog.value = cached?.items ?? [];
+    catalogAt.value = cached?.at ?? null;
+}
+let catalogTimer: ReturnType<typeof setInterval> | undefined;
+
+/** Sends the sales kept offline, oldest first; stops at the first connection problem and tries again later. */
+async function syncQueue() {
+    if (syncing.value || !online.value) return;
+    syncing.value = true;
+    let sent = 0;
+    try {
+        for (const sale of queue.value.filter((s) => s.status === 'pending')) {
+            try {
+                const { data } = await api.post('/sales-orders', sale.payload, idempotent(`${sale.key}-off`));
+                sale.status = 'sent';
+                sale.order_number = data.data.external_order_id;
+                sale.error = null;
+                sent++;
+            } catch (e) {
+                if (isNetworkError(e)) {
+                    goOffline();
+                    break;
+                }
+                const err = e as ApiError;
+                sale.status = 'failed';
+                sale.error = err.field('stock') ?? err.field('payments') ?? collectFirst(err) ?? err.message;
+            }
+        }
+    } finally {
+        syncing.value = false;
+    }
+    if (sent) toast.success(`Đã gửi ${sent} đơn bán lúc mất mạng.`);
+    if (failed.value) toast.error(`${failed.value} đơn bán lúc mất mạng chưa gửi được. Bấm vào thanh báo để xem.`);
+}
+
+/** Sends one kept sale again; with `asPending` it goes in as an order waiting to be handled (e.g. stock was short). */
+async function retrySale(sale: OfflineSale, asPending = false) {
+    if (asPending) sale.payload = { ...sale.payload, stage: 'pending' };
+    sale.status = 'pending';
+    sale.error = null;
+    await syncQueue();
+}
+function dropSale(sale: OfflineSale) {
+    queue.value = queue.value.filter((s) => s.key !== sale.key);
+}
+
 function freshCart(no: number): Cart {
     const c = emptyCart(no);
     const m = settings.data?.payments.default_pos;
@@ -115,21 +202,44 @@ onMounted(async () => {
     } catch {
         /* ignore */
     }
-    const [c, w, s] = await Promise.all([api.get('/sales-channels'), api.get('/warehouses'), settings.load()]);
-    autoPrint.value = s.sales.pos_auto_print;
-    // Empty carts start on the counter's default method.
-    carts.value.forEach((ct) => !ct.lines.length && posMethods.value.includes(s.payments.default_pos as never) && (ct.method = s.payments.default_pos as Cart['method']));
-    channels.value = (c.data.data as SalesChannel[]).filter((ch) => ch.is_active);
-    warehouses.value = (w.data.data as Warehouse[]).filter((x) => x.purpose !== 'defective');
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    window.addEventListener('keydown', onKey);
+    try {
+        const [c, w, s] = await Promise.all([api.get('/sales-channels'), api.get('/warehouses'), settings.load()]);
+        autoPrint.value = s.sales.pos_auto_print;
+        // Empty carts start on the counter's default method.
+        carts.value.forEach((ct) => !ct.lines.length && posMethods.value.includes(s.payments.default_pos as never) && (ct.method = s.payments.default_pos as Cart['method']));
+        channels.value = (c.data.data as SalesChannel[]).filter((ch) => ch.is_active);
+        warehouses.value = (w.data.data as Warehouse[]).filter((x) => x.purpose !== 'defective');
+        saveSetup(tenantKey, { channels: channels.value, warehouses: warehouses.value });
+    } catch (e) {
+        if (!isNetworkError(e)) throw e;
+        // Opened without network: the counter setup this device kept last time.
+        goOffline();
+        const saved = loadSetup<{ channels: SalesChannel[]; warehouses: Warehouse[] }>(tenantKey);
+        channels.value = saved?.channels ?? [];
+        warehouses.value = saved?.warehouses ?? [];
+    }
     const pos = channels.value.find((ch) => ch.type === 'pos') ?? channels.value[0];
     channelId.value = pos?.id ?? '';
     warehouseId.value = pos?.warehouse?.id ?? warehouses.value.find((x) => x.is_default)?.id ?? warehouses.value[0]?.id ?? '';
+    useCachedCatalog();
     await Promise.all([runSearch(), loadShift()]);
-    if (!shift.value) shiftOpen.value = true;
-    window.addEventListener('keydown', onKey);
+    if (shiftLoaded.value && !shift.value) shiftOpen.value = true;
     focusSearch();
+    if (online.value) {
+        refreshCatalog();
+        syncQueue();
+    }
+    catalogTimer = setInterval(refreshCatalog, 15 * 60 * 1000);
 });
-onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
+onBeforeUnmount(() => {
+    window.removeEventListener('keydown', onKey);
+    window.removeEventListener('online', goOnline);
+    window.removeEventListener('offline', goOffline);
+    clearInterval(catalogTimer);
+});
 
 function focusSearch() {
     nextTick(() => (searchInput.value?.$el as HTMLInputElement | undefined)?.focus?.() ?? document.querySelector<HTMLInputElement>('[data-testid="pos-search"]')?.focus());
@@ -145,12 +255,27 @@ watch(search, () => {
     clearTimeout(timer);
     timer = setTimeout(runSearch, 200);
 });
-watch(warehouseId, runSearch);
+watch(warehouseId, (wh, old) => {
+    if (old === undefined || old === '') return;
+    useCachedCatalog();
+    refreshCatalog();
+    runSearch();
+});
 
 async function runSearch() {
     if (!warehouseId.value) return;
-    const { data } = await api.get('/variants', { params: { q: search.value || undefined, warehouse: warehouseId.value, sellable: 1 } });
-    results.value = data.data;
+    if (!online.value) {
+        results.value = searchCatalog(catalog.value, search.value);
+        return;
+    }
+    try {
+        const { data } = await api.get('/variants', { params: { q: search.value || undefined, warehouse: warehouseId.value, sellable: 1 } });
+        results.value = data.data;
+    } catch (e) {
+        if (!isNetworkError(e)) throw e;
+        goOffline();
+        results.value = searchCatalog(catalog.value, search.value);
+    }
 }
 
 /** Scanner: types the code then Enter. An exact barcode/SKU match is added at once. */
@@ -158,7 +283,7 @@ async function onSearchEnter() {
     clearTimeout(timer);
     await runSearch();
     const term = search.value.trim().toLowerCase();
-    const exact = results.value.find((v) => v.barcode?.toLowerCase() === term || v.sku.toLowerCase() === term) ?? (results.value.length === 1 ? results.value[0] : undefined);
+    const exact = (!online.value ? findByCode(catalog.value, term) : undefined) ?? results.value.find((v) => v.barcode?.toLowerCase() === term || v.sku.toLowerCase() === term) ?? (results.value.length === 1 ? results.value[0] : undefined);
     if (exact) {
         add(exact);
         search.value = '';
@@ -191,9 +316,15 @@ let customerTimer: ReturnType<typeof setTimeout> | undefined;
 watch(customerQuery, (q) => {
     clearTimeout(customerTimer);
     if (!q.trim()) return void (customerResults.value = []);
+    if (!online.value) return void (customerResults.value = []);
     customerTimer = setTimeout(async () => {
-        const { data } = await api.get('/customers', { params: { q, per_page: 6 } });
-        customerResults.value = data.data;
+        try {
+            const { data } = await api.get('/customers', { params: { q, per_page: 6 } });
+            customerResults.value = data.data;
+        } catch (e) {
+            if (!isNetworkError(e)) throw e;
+            goOffline();
+        }
     }, 250);
 });
 
@@ -257,7 +388,9 @@ async function pay() {
     paying.value = true;
     error.value = null;
     clearTimeout(promoTimer);
+    if (!online.value) return keepOffline();
     await loadPromo(); // the amount taken must match the promotions the server applies
+    if (!online.value) return keepOffline(); // the connection went while checking promotions
     const collected = Math.min(received.value, totals.value.total);
     // Same key on every retry of this cart: a sale that went through but whose answer was lost is not sold again.
     const key = (cart.value.key ??= newIdempotencyKey());
@@ -267,6 +400,7 @@ async function pay() {
             warehouse_id: warehouseId.value,
             stage: 'completed',
             counter: true,
+            offline_key: key,
             customer_id: cart.value.customer?.id ?? null,
             discount: Number(cart.value.discount) || 0,
             coupon_code: cart.value.coupon?.trim() || null,
@@ -283,6 +417,11 @@ async function pay() {
         await runSearch();
         focusSearch();
     } catch (e) {
+        if (isNetworkError(e)) {
+            // No answer: keep the sale on this device; the server finds it by its key if it did get through.
+            goOffline();
+            return keepOffline();
+        }
         const err = e as ApiError;
         error.value = err.field('stock') ?? err.field('payments') ?? collectFirst(err) ?? err.message;
     } finally {
@@ -290,16 +429,93 @@ async function pay() {
     }
 }
 
+/**
+ * Sale while offline: kept on this device with the time it was made, at the prices on screen and without
+ * promotions, coupon or points (they need the server). The receipt prints from what the till knows.
+ */
+function keepOffline() {
+    try {
+        const c = cart.value;
+        const t = cartTotals({ ...c, discount: Number(c.discount) || 0 }, taxRule.value);
+        const pay = split.value && !split.value.error ? split.value : null;
+        const got = pay ? pay.paid : c.received === '' ? t.total : Number(c.received) || 0;
+        if (got < t.total && !c.customer) {
+            error.value = 'Khách lẻ phải thanh toán đủ. Chọn khách hàng để ghi nợ phần còn lại.';
+            return;
+        }
+        const collected = Math.min(got, t.total);
+        const key = (c.key ??= newIdempotencyKey());
+        const lines = c.lines.map((l) => ({ variant_id: l.variant_id, quantity: l.quantity, unit_price: l.unit_price, discount: l.discount }));
+        const payments = pay ? pay.payments : collected > 0 ? [{ method: c.method, amount: collected }] : [];
+        const number = offlineNumber(queue.value);
+        const now = new Date();
+        queue.value.push({
+            key,
+            number,
+            created_at: now.toISOString(),
+            status: 'pending',
+            summary: { items: t.quantity, total: t.total, customer: c.customer?.name ?? null, method: c.method },
+            payload: {
+                channel_id: channelId.value, warehouse_id: warehouseId.value, stage: 'completed', counter: true, offline: true, offline_key: key,
+                placed_at: now.toISOString(), promotions_off: true, coupon_code: null, points_used: 0,
+                customer_id: c.customer?.id ?? null, discount: Number(c.discount) || 0, lines, payments,
+            },
+        });
+        takeStock(catalog.value, lines);
+        saveCatalog(tenantKey, warehouseId.value, catalog.value, catalogAt.value ?? now.toISOString());
+        const back = Math.max(0, got - t.total);
+        toast.success(`Đã lưu đơn ${number} trên máy${back > 0 ? ` · trả lại khách ${formatMoney(back)}` : ''}. Sẽ tự gửi khi có mạng.`);
+        if (autoPrint.value) printInvoice(offlineReceipt(number, now, t, payments, c), printShopFrom(settings.data, tenant.current?.name ?? ''), 'k80');
+        carts.value[active.value] = freshCart(c.no);
+        results.value = searchCatalog(catalog.value, search.value);
+        focusSearch();
+    } finally {
+        paying.value = false;
+    }
+}
+
+/** What the K80 receipt needs, from the cart (the real order code comes once the sale is sent). */
+function offlineReceipt(number: string, at: Date, t: ReturnType<typeof cartTotals>, payments: { method: string; amount: number }[], c: Cart): OrderDetail {
+    const paid = payments.reduce((s, p) => s + p.amount, 0);
+    return {
+        external_order_id: number,
+        placed_at: at.toISOString(),
+        channel: channels.value.find((ch) => ch.id === channelId.value) ?? null,
+        buyer_name: c.customer?.name ?? null,
+        buyer_phone: c.customer?.phone ?? null,
+        shipping_address: null,
+        buyer_note: 'Bán khi mất mạng, mã đơn chính thức có khi gửi lên hệ thống.',
+        items: c.lines.map((l) => ({ name: l.name, variant_name: null, seller_sku: l.sku, variant: { sku: l.sku }, quantity: l.quantity, unit_price: String(l.unit_price), discount: String(l.discount) })),
+        subtotal: String(t.subtotal),
+        shipping_fee: '0',
+        discount: String(Number(c.discount) || 0),
+        tax_amount: String(t.tax),
+        tax_rate: String(taxRule.value.rate),
+        prices_include_tax: taxRule.value.included,
+        total: String(t.total),
+        paid_amount: String(paid),
+        payments: payments.map((p) => ({ kind: 'payment', method: p.method, amount: String(p.amount), voided_at: null })),
+    } as unknown as OrderDetail;
+}
+
 function collectFirst(err: ApiError): string | null {
     const errors = err.body.errors as Record<string, string[]> | undefined;
     return errors ? (Object.values(errors)[0]?.[0] ?? null) : null;
 }
 
-async function loadShift() {
-    const { data } = await api.get('/pos/shifts/current', { params: { warehouse: warehouseId.value || undefined } });
-    shift.value = data.data;
-    suggestedOpening.value = data.meta.suggested_opening;
-    shiftLoaded.value = true;
+async function loadShift(): Promise<void> {
+    try {
+        const { data } = await api.get('/pos/shifts/current', { params: { warehouse: warehouseId.value || undefined } });
+        shift.value = data.data;
+        suggestedOpening.value = data.meta.suggested_opening;
+        shiftLoaded.value = true;
+        saveSetup(`${tenantKey}.shift`, { channels: [], warehouses: [], shift: data.data });
+    } catch (e) {
+        if (!isNetworkError(e)) throw e;
+        // Offline: show the shift this device saw last; the server puts offline sales in the open shift when sent.
+        shift.value = loadSetup<{ shift: CashShift | null }>(`${tenantKey}.shift`)?.shift ?? null;
+        goOffline();
+    }
 }
 
 async function openShiftDialog() {
@@ -370,6 +586,18 @@ const warehouseOptions = computed(() => warehouses.value.filter((w) => w.status 
                 <button type="button" class="grid size-9 shrink-0 place-items-center rounded-lg bg-white/10 hover:bg-white/15" title="Thêm đơn chờ" data-testid="pos-new-cart" @click="newCart"><Plus class="size-4" /></button>
             </div>
             <div class="ml-auto flex flex-wrap items-center gap-1">
+                <button
+                    v-if="!online || pending || failed"
+                    type="button"
+                    :class="cn('flex h-9 items-center gap-1.5 rounded-lg px-3 font-medium', !online ? 'bg-amber-400 text-slate-900 hover:bg-amber-300' : failed ? 'bg-rose-500 text-white hover:bg-rose-400' : 'bg-white/10 hover:bg-white/15')"
+                    data-testid="pos-offline"
+                    @click="queueOpen = true"
+                >
+                    <CloudOff v-if="!online" class="size-4" /><RefreshCw v-else :class="cn('size-4', syncing && 'animate-spin')" />
+                    <span v-if="!online">Mất mạng · bán trên máy<template v-if="pending"> · {{ pending }} đơn chờ gửi</template></span>
+                    <span v-else-if="failed">{{ failed }} đơn chưa gửi được</span>
+                    <span v-else>Đang gửi {{ pending }} đơn</span>
+                </button>
                 <label class="flex h-9 items-center gap-1.5 rounded-lg px-2 hover:bg-white/10">
                     <Store class="size-4 shrink-0 text-slate-400" />
                     <select v-model="channelId" class="max-w-36 cursor-pointer appearance-none bg-transparent outline-none" aria-label="Kênh bán">
@@ -531,7 +759,7 @@ const warehouseOptions = computed(() => warehouses.value.filter((w) => w.status 
                             </span>
                         </div>
                         <div v-if="pointsDiscount > 0" class="flex justify-between text-emerald-700"><span>Trừ điểm</span><span class="tabular-nums">−{{ formatMoney(pointsDiscount) }}</span></div>
-                        <div class="flex items-center justify-between gap-2"><span class="text-muted-foreground">Mã giảm giá</span><input v-model="cart.coupon" placeholder="Nhập mã" maxlength="40" class="h-9 w-32 rounded-lg border bg-white px-2.5 text-right uppercase" data-testid="pos-coupon" /></div>
+                        <div class="flex items-center justify-between gap-2"><span class="text-muted-foreground">Mã giảm giá</span><input v-model="cart.coupon" :disabled="!online" :placeholder="online ? 'Nhập mã' : 'Cần có mạng'" maxlength="40" class="h-9 w-32 rounded-lg border bg-white px-2.5 text-right uppercase" data-testid="pos-coupon" /></div>
                         <p v-if="cart.coupon?.trim() && promo?.code_error" class="text-right text-xs text-destructive">{{ promo.code_error }}</p>
                         <div v-if="taxRule.rate > 0" class="flex justify-between text-muted-foreground" data-testid="pos-tax"><span>{{ taxRule.included ? 'Trong đó' : 'Cộng' }} thuế GTGT {{ taxRule.rate }}%</span><span class="tabular-nums">{{ formatMoney(totals.tax) }}</span></div>
                         <div class="flex items-end justify-between border-t pt-3">
@@ -610,6 +838,10 @@ const warehouseOptions = computed(() => warehouses.value.filter((w) => w.status 
             </aside>
         </div>
     </div>
+
+    <Dialog v-model:open="queueOpen" title="Đơn bán lúc mất mạng" description="Lưu trên máy này và tự gửi lên hệ thống khi có mạng. Không xoá dữ liệu trình duyệt khi còn đơn chờ gửi." size="lg">
+        <OfflineQueue :queue="queue" :online="online" :syncing="syncing" :catalog-at="catalogAt" :catalog-count="catalog.length" @sync="syncQueue" @retry="retrySale" @drop="dropSale" />
+    </Dialog>
 
     <Dialog v-model:open="shiftOpen" :title="closedShift ? `Đã đóng ca ${closedShift.number}` : shift ? 'Ca bán hàng' : 'Mở ca bán hàng'" size="lg">
         <ShiftPanel :shift="closedShift ?? shift" :warehouse-id="warehouseId" :suggested-opening="suggestedOpening" @changed="onShiftChanged" />
