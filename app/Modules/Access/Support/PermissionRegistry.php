@@ -86,6 +86,7 @@ final class PermissionRegistry
         'members' => [
             'members.view' => 'Xem nhân viên',
             'members.manage' => 'Mời, phân quyền nhân viên',
+            'staff.manage' => 'Chấm công, hoa hồng, bảng lương của mọi nhân viên',
         ],
         'billing' => [
             'billing.view' => 'Xem gói dịch vụ, hóa đơn',
