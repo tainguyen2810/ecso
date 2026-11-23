@@ -31,6 +31,8 @@ export interface VoucherRow {
     voided_at: string | null;
     void_reason: string | null;
     status: VoucherStatus;
+    /** Brought over from the previous software (Sapo): history, held in no fund here. */
+    imported?: boolean;
 }
 
 export const voucherStatuses: Record<VoucherStatus, { label: string; tone: 'success' | 'warning' | 'danger' | 'muted' }> = {

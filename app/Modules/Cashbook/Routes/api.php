@@ -6,6 +6,7 @@ use App\Modules\Cashbook\Http\Controllers\CashVoucherAttachmentController;
 use App\Modules\Cashbook\Http\Controllers\CashVoucherController;
 use App\Modules\Cashbook\Http\Controllers\CashVoucherTypeController;
 use App\Modules\Cashbook\Http\Controllers\CodReconciliationController;
+use App\Modules\Cashbook\Http\Controllers\SapoVoucherImportController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
@@ -27,6 +28,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::post('cod-reconciliations', [CodReconciliationController::class, 'store'])->middleware('idempotent');
     Route::get('cod-reconciliations/{codReconciliation}', [CodReconciliationController::class, 'show']);
     Route::post('cod-reconciliations/{codReconciliation}/void', [CodReconciliationController::class, 'void']);
+    Route::post('cash-vouchers/import/sapo', [SapoVoucherImportController::class, 'import'])->middleware('throttle:30,1,cashbook.vouchers.import-sapo');
     Route::get('cash-vouchers/staff', [CashVoucherController::class, 'staff']);
     Route::get('cash-vouchers', [CashVoucherController::class, 'index']);
     Route::post('cash-vouchers', [CashVoucherController::class, 'store'])->middleware('idempotent');

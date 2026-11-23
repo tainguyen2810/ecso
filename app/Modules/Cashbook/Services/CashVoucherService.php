@@ -231,6 +231,9 @@ class CashVoucherService
             if ($voucher->status === CashVoucher::PENDING) {
                 throw ValidationException::withMessages(['voucher' => 'Phiếu đang chờ duyệt: dùng "Từ chối" thay vì hủy.']);
             }
+            if ($voucher->imported_from !== null) {
+                throw ValidationException::withMessages(['voucher' => 'Phiếu chuyển từ phần mềm cũ, không hủy ở đây được.']);
+            }
             // The drawer count of the shift already includes this money: voiding only the voucher would split them.
             if (DB::table('cash_shift_movements')->where('cash_voucher_id', $voucher->id)->exists()) {
                 throw ValidationException::withMessages(['voucher' => 'Phiếu này ghi từ thu chi trong ca POS, đã tính vào két của ca. Không hủy riêng được; lập phiếu ngược lại nếu ghi nhầm.']);

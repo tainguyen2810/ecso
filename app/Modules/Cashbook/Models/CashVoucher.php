@@ -26,6 +26,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $approved_at
  * @property Carbon|null $voided_at
  * @property bool $void_reversed
+ * @property string|null $imported_from 'sapo': brought over from the previous software (no fund here)
  */
 class CashVoucher extends Model
 {

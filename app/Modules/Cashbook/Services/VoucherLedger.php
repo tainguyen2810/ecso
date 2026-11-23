@@ -74,7 +74,7 @@ class VoucherLedger
     {
         $tenant = $this->context->id();
         $columns = 'id, number, direction, type_id, type_name, counts_in_pnl, party_kind, party_id, party_name, method, amount, paid_at, '
-            .'document_kind, document_id, document_number, reference, note, created_by, voided_at, void_reason, created_at, account_key, account_id, account_name, counter_account_name, status';
+            .'document_kind, document_id, document_number, reference, note, created_by, voided_at, void_reason, created_at, account_key, account_id, account_name, counter_account_name, status, imported';
 
         $vouchers = DB::table('cash_vouchers as cv')
             ->join('cash_voucher_types as t', 't.id', '=', 'cv.cash_voucher_type_id')
@@ -85,9 +85,10 @@ class VoucherLedger
             ->where('cv.tenant_id', $tenant)
             ->selectRaw("'voucher' as source, cv.ulid as id, cv.number, cv.direction, t.ulid as type_id, COALESCE(cv.type_name, t.name) as type_name, cv.counts_in_pnl, cv.party_kind, "
                 .'COALESCE(c.ulid, s.ulid) as party_id, cv.party_name, cv.method, cv.amount, cv.paid_at, NULL as document_kind, NULL as document_id, '
-                .'NULL as document_number, cv.reference, cv.note, u.name as created_by, cv.voided_at, cv.void_reason, cv.created_at, '
+                .'NULL as document_number, cv.reference, cv.note, COALESCE(u.name, CASE WHEN cv.imported_from IS NOT NULL THEN \'Chuyển từ Sapo\' END) as created_by, cv.voided_at, cv.void_reason, cv.created_at, '
                 .'acc.id as account_key, acc.ulid as account_id, acc.name as account_name, NULL as counter_account_name, '
-                ."CASE WHEN cv.status <> 'completed' THEN cv.status WHEN cv.voided_at IS NULL THEN 'completed' WHEN cv.void_reversed = 1 THEN 'reversed' ELSE 'voided' END as status");
+                ."CASE WHEN cv.status <> 'completed' THEN cv.status WHEN cv.voided_at IS NULL THEN 'completed' WHEN cv.void_reversed = 1 THEN 'reversed' ELSE 'voided' END as status, "
+                .'CASE WHEN cv.imported_from IS NULL THEN 0 ELSE 1 END as imported');
 
         // The void of a voucher whose day was closed: the opposite movement, on the day of the void.
         $reversals = DB::table('cash_vouchers as cv')
@@ -101,7 +102,7 @@ class VoucherLedger
                 ."t.ulid as type_id, CONCAT('Hủy phiếu ', cv.number, ' (kỳ đã khóa)') as type_name, cv.counts_in_pnl, cv.party_kind, "
                 ."COALESCE(c.ulid, s.ulid) as party_id, cv.party_name, cv.method, cv.amount, cv.voided_at as paid_at, 'voucher' as document_kind, cv.ulid as document_id, "
                 .'cv.number as document_number, cv.reference, cv.void_reason as note, u.name as created_by, NULL as voided_at, NULL as void_reason, cv.voided_at as created_at, '
-                ."acc.id as account_key, acc.ulid as account_id, acc.name as account_name, NULL as counter_account_name, 'completed' as status");
+                ."acc.id as account_key, acc.ulid as account_id, acc.name as account_name, NULL as counter_account_name, 'completed' as status, 0 as imported");
 
         $orders = DB::table('order_payments as op')
             ->join('orders as o', 'o.id', '=', 'op.order_id')
@@ -116,7 +117,7 @@ class VoucherLedger
                 ."'customer' as party_kind, c.ulid as party_id, COALESCE(c.name, o.buyer_name, 'Khách lẻ') as party_name, op.method, op.amount, op.paid_at, "
                 ."'order' as document_kind, o.ulid as document_id, o.external_order_id as document_number, op.reference, op.note, u.name as created_by, "
                 .'op.voided_at, op.void_reason, op.created_at, acc.id as account_key, acc.ulid as account_id, acc.name as account_name, NULL as counter_account_name, '
-                ."CASE WHEN op.voided_at IS NULL THEN 'completed' ELSE 'voided' END as status");
+                ."CASE WHEN op.voided_at IS NULL THEN 'completed' ELSE 'voided' END as status, 0 as imported");
 
         $suppliers = DB::table('supplier_payments as sp')
             ->join('suppliers as s', 's.id', '=', 'sp.supplier_id')
@@ -132,7 +133,7 @@ class VoucherLedger
                 ."CASE WHEN po.id IS NULL THEN NULL ELSE 'purchase' END as document_kind, po.ulid as document_id, po.number as document_number, "
                 .'sp.reference, sp.note, u.name as created_by, sp.voided_at, sp.void_reason, sp.created_at, '
                 .'acc.id as account_key, acc.ulid as account_id, acc.name as account_name, NULL as counter_account_name, '
-                ."CASE WHEN sp.voided_at IS NULL THEN 'completed' ELSE 'voided' END as status");
+                ."CASE WHEN sp.voided_at IS NULL THEN 'completed' ELSE 'voided' END as status, 0 as imported");
 
         // Cash put into or taken out of a cashier's drawer during a shift (POS "Thu/chi trong ca").
         $shiftMoves = DB::table('cash_shift_movements as m')
@@ -145,7 +146,7 @@ class VoucherLedger
                 ."'staff' as party_kind, NULL as party_id, u.name as party_name, 'cash' as method, m.amount, m.created_at as paid_at, "
                 ."'shift' as document_kind, cs.ulid as document_id, cs.number as document_number, NULL as reference, m.reason as note, u.name as created_by, "
                 .'NULL as voided_at, NULL as void_reason, m.created_at, NULL as account_key, NULL as account_id, NULL as account_name, NULL as counter_account_name, '
-                ."'completed' as status");
+                ."'completed' as status, 0 as imported");
 
         $all = $vouchers->unionAll($reversals)->unionAll($orders)->unionAll($suppliers)->unionAll($shiftMoves);
 
@@ -161,7 +162,7 @@ class VoucherLedger
                     ."'other' as party_kind, NULL as party_id, CONCAT(acc.name, ' → ', oth.name) as party_name, 'transfer' as method, tr.amount, tr.transferred_at as paid_at, "
                     ."'transfer' as document_kind, tr.ulid as document_id, tr.number as document_number, tr.reference, tr.note, u.name as created_by, "
                     .'tr.voided_at, tr.void_reason, tr.created_at, acc.id as account_key, acc.ulid as account_id, acc.name as account_name, oth.name as counter_account_name, '
-                    ."CASE WHEN tr.voided_at IS NULL THEN 'completed' ELSE 'voided' END as status"));
+                    ."CASE WHEN tr.voided_at IS NULL THEN 'completed' ELSE 'voided' END as status, 0 as imported"));
         }
 
         return DB::query()->fromSub($all, 'all_vouchers')->selectRaw("source, {$columns}");

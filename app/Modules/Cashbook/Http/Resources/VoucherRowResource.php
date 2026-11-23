@@ -42,6 +42,8 @@ class VoucherRowResource extends JsonResource
             // completed, pending (waiting for approval), rejected, voided, or reversed (voided after its day was
             // closed: still counted that day, the void is a row of its own on the day it was made)
             'status' => $r->status ?? 'completed',
+            // Brought over from the previous software: history, held in no fund here, not voidable.
+            'imported' => (bool) ($r->imported ?? false),
         ];
     }
 }

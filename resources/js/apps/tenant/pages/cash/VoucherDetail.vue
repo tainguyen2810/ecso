@@ -28,7 +28,7 @@ watch(open, () => ((voiding.value = false), (reason.value = ''), (error.value = 
 const v = computed(() => props.voucher);
 const isTransfer = computed(() => v.value?.source === 'transfer');
 const pending = computed(() => v.value?.status === 'pending');
-const canVoid = computed(() => !!v.value && !v.value.voided_at && !pending.value && (isTransfer.value ? tenant.can('finance.accounts') : v.value.source === 'voucher' && tenant.can('finance.vouchers.void')));
+const canVoid = computed(() => !!v.value && !v.value.voided_at && !pending.value && (isTransfer.value ? tenant.can('finance.accounts') : v.value.source === 'voucher' && !v.value.imported && tenant.can('finance.vouchers.void')));
 const canApprove = computed(() => pending.value && tenant.can('finance.approve'));
 /** Sign and colour of the amount: a transfer in the list of every fund is neither money in nor out. */
 const tone = computed(() => (v.value?.direction === 'receipt' ? { sign: '+', cls: 'text-success' } : v.value?.direction === 'payment' ? { sign: '−', cls: 'text-destructive' } : { sign: '', cls: '' }));
@@ -57,7 +57,7 @@ const rows = computed(() => {
         ['Tham chiếu', x.reference],
         ['Diễn giải', x.note],
         ['Kết quả kinh doanh', x.source === 'voucher' ? (x.counts_in_pnl ? 'Có tính' : 'Không tính') : 'Đã tính trong doanh thu, giá vốn'],
-        ['Nguồn', sourceLabels[x.source]],
+        ['Nguồn', x.imported ? 'Chuyển từ Sapo' : sourceLabels[x.source]],
         ['Người lập', x.created_by],
         ['Ngày lập', formatDateTime(x.created_at)],
     ].filter(([, value]) => value);
@@ -203,6 +203,7 @@ async function approve() {
                 <p v-if="attachError" class="mt-2 text-sm text-destructive">{{ attachError }}</p>
             </section>
             <p v-if="isTransfer && !v.voided_at" class="mt-3 text-xs text-muted-foreground">Hủy phiếu chuyển quỹ sẽ hủy luôn phiếu chi phí chuyển đi kèm.</p>
+            <p v-else-if="v.imported" class="mt-3 text-xs text-muted-foreground" data-testid="voucher-imported">Phiếu chuyển từ Sapo: chỉ là lịch sử, tiền đã đi qua quỹ bên Sapo nên không thuộc quỹ nào ở đây và không hủy được.</p>
             <p v-else-if="v.source === 'voucher_reversal'" class="mt-3 text-xs text-muted-foreground">Dòng ghi đảo khi hủy phiếu {{ v.document?.number }} của kỳ đã khóa sổ.</p>
             <p v-else-if="v.source !== 'voucher' && !v.voided_at" class="mt-3 text-xs text-muted-foreground">Phiếu tự động không sửa, hủy ở đây. Mở chứng từ gốc để hủy khoản thanh toán.</p>
             <form v-if="voiding" class="mt-4 flex flex-wrap gap-2" @submit.prevent="doVoid">

@@ -17,6 +17,7 @@ import type { Warehouse } from '@/shared/types';
 import { sapoGoBookmarklet } from './sapoGoExport';
 import { sapoGoOrdersBookmarklet } from './sapoGoOrdersExport';
 import SapoPurchasesMigration from './SapoPurchasesMigration.vue';
+import SapoVouchersMigration from './SapoVouchersMigration.vue';
 
 /** What the server says about one "sapo-don-hang-….json" file (SapoOrderImporter). */
 interface OrderFileResult {
@@ -47,7 +48,7 @@ interface OrderFile { file: File; result: OrderFileResult | null; error: string 
  * Chuyển dữ liệu (C7): bring products and customers over from Sapo or KiotViet by uploading the files those apps
  * export, as they are. Step 1 what, step 2 the file (checked at once), step 3 import.
  */
-type Kind = 'products' | 'customers' | 'orders' | 'purchases';
+type Kind = 'products' | 'customers' | 'orders' | 'purchases' | 'vouchers';
 interface Row { row: number; message: string }
 interface Result {
     message: string;
@@ -85,6 +86,7 @@ const kinds = computed(() => [
     { key: 'customers' as Kind, title: 'Khách hàng và công nợ', hint: 'Sapo: Khách hàng → Xuất file. KiotViet: Khách hàng → Xuất file.', allowed: tenant.can('customers.import') },
     { key: 'orders' as Kind, title: 'Đơn hàng cũ và trả hàng', hint: 'Sapo GO: bấm nút “Lấy đơn hàng Sapo” trong trang Đơn hàng. Chuyển sau sản phẩm và khách hàng.', allowed: tenant.can('orders.create') && tenant.can('customers.import') },
     { key: 'purchases' as Kind, title: 'Nhà cung cấp và nhập hàng', hint: 'Sapo GO: bấm nút “Lấy nhập hàng Sapo” trong trang Nhập hàng. Chuyển sau sản phẩm.', allowed: tenant.can('purchasing.manage') && tenant.can('purchasing.payment') },
+    { key: 'vouchers' as Kind, title: 'Sổ quỹ (phiếu thu, phiếu chi)', hint: 'Sapo GO: bấm nút “Lấy sổ quỹ Sapo” trong trang Sổ quỹ. Lấy các phiếu tự lập như tiền nhà, lương, phí ship.', allowed: tenant.can('finance.vouchers') },
 ]);
 
 /* ---- Đơn hàng cũ (Sapo GO) ---- */
@@ -355,6 +357,7 @@ function downloadProblems() {
             </template>
 
             <SapoPurchasesMigration v-else-if="kind === 'purchases'" />
+            <SapoVouchersMigration v-else-if="kind === 'vouchers'" />
 
             <template v-else>
             <Card class="space-y-3 p-4">
@@ -482,11 +485,12 @@ function downloadProblems() {
                 <li>Khách hàng, kèm nợ cần thu hiện tại thành nợ đầu kỳ.</li>
                 <li>Đơn hàng cũ và trả hàng (Sapo GO): để báo cáo có số của những tháng trước.</li>
                 <li>Nhà cung cấp và nhập hàng (Sapo GO): công nợ nhà cung cấp tính đúng như Sapo.</li>
+                <li>Sổ quỹ (Sapo GO): phiếu thu chi tự lập, để báo cáo lãi lỗ có chi phí cũ.</li>
                 <li>Kiểm tra lại vài sản phẩm, vài khách rồi mới bán.</li>
             </ol>
             <p class="text-muted-foreground">Phiên bản cùng tên sản phẩm được gộp làm một sản phẩm; giá trị thuộc tính thành tên phiên bản.</p>
             <p class="text-muted-foreground">Mỗi chi nhánh Sapo vào một kho EzChat Bán hàng bạn chọn. SKU có dấu cách được đổi dấu cách thành gạch nối; mã vạch trùng chỉ giữ ở SKU đầu tiên. Mọi thay đổi đều được báo trước khi nhập.</p>
-            <p class="text-muted-foreground">Chưa hỗ trợ: phiếu thu chi trong Sổ quỹ, điểm tích lũy (tạo lại bằng cộng điểm tay).</p>
+            <p class="text-muted-foreground">Chưa hỗ trợ: điểm tích lũy (tạo lại bằng cộng điểm tay).</p>
         </Card>
     </div>
 </template>
