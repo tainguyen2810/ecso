@@ -64,6 +64,7 @@ class SalesOrderController extends Controller
         // Editing lines, prices and the buyer of an existing order is order handling, not only selling.
         $this->authorize('create', Order::class);
         $this->authorize('update', $order);
+        $this->refuseImported($order);
         $data = $request->validate([
             ...$this->rules(),
             'version' => ['sometimes', 'integer'], // the version the editor loaded: refused if someone saved since
@@ -80,6 +81,7 @@ class SalesOrderController extends Controller
     {
         $this->authorize('cancel', $order);
         $this->authorize('pay', $order);
+        $this->refuseImported($order);
         $data = $request->validate(['reason' => ['required', 'string', 'max:255']]);
 
         return new ReturnResource($returns->voidSale($order, $data['reason'])->load(['order', 'warehouse', 'lines.item', 'lines.variant']));
@@ -88,6 +90,7 @@ class SalesOrderController extends Controller
     public function action(Request $request, Order $order, string $action, ManualOrderService $orders): OrderResource
     {
         $this->authorize('update', $order);
+        $this->refuseImported($order);
         if ($action === 'cancel') {
             $this->authorize('cancel', $order);
         }
@@ -103,6 +106,7 @@ class SalesOrderController extends Controller
     public function pay(Request $request, Order $order, PaymentService $payments): JsonResponse
     {
         $this->authorize('pay', $order);
+        $this->refuseImported($order);
         $data = $request->validate([
             'kind' => ['nullable', Rule::in([OrderPayment::PAYMENT, OrderPayment::REFUND])],
             'method' => ['required', Rule::in(OrderPayment::METHODS)],
@@ -231,5 +235,14 @@ class SalesOrderController extends Controller
             'lines.*.unit_price' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             'lines.*.discount' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
         ];
+    }
+
+    /**
+     * An order taken from the previous software is history: it was settled there (what is still owed came as the
+     * customer's opening debt), so it is not edited, moved on or paid here.
+     */
+    private function refuseImported(Order $order): void
+    {
+        abort_if($order->imported_from !== null, 422, 'Đơn lấy từ phần mềm cũ chỉ để xem lịch sử, không sửa, không thu tiền được.');
     }
 }

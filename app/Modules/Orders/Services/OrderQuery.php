@@ -46,7 +46,13 @@ class OrderQuery
             $query->where('customer_id', Customer::query()->where('ulid', $customer)->value('id') ?? 0);
         }
         if ($source = $filters['source'] ?? null) {
-            $source === 'manual' ? $query->where('marketplace', Order::SOURCE_MANUAL) : $query->where('marketplace', '!=', Order::SOURCE_MANUAL);
+            match ($source) {
+                'manual' => $query->where('marketplace', Order::SOURCE_MANUAL),
+                // Orders taken from the previous software (Chuyển dữ liệu), e.g. 'sapo'; 'new' = everything else.
+                'sapo' => $query->where('imported_from', 'sapo'),
+                'new' => $query->whereNull('imported_from'),
+                default => $query->where('marketplace', '!=', Order::SOURCE_MANUAL),
+            };
         }
         if ($paymentStatus = $filters['payment_status'] ?? null) {
             $query->where('payment_status', $paymentStatus);
@@ -102,7 +108,8 @@ class OrderQuery
                 // Shopee / TikTok orders: "Chuẩn bị hàng" not done yet; arranged but the marketplace label never printed.
                 'not_arranged' => $query->whereIn('marketplace', MarketplaceShipping::marketplaces())->where('status', OrderStatus::READY_TO_PACK),
                 'label_unprinted' => $query->whereIn('marketplace', MarketplaceShipping::marketplaces())->whereIn('status', MarketplaceShipping::LABEL_FROM)->where('label_print_count', 0),
-                'payment_due' => $query->where('marketplace', Order::SOURCE_MANUAL)->where('status', '!=', OrderStatus::CANCELLED)
+                // Orders taken from the previous software are settled there (what is owed came as opening debt).
+                'payment_due' => $query->where('marketplace', Order::SOURCE_MANUAL)->whereNull('imported_from')->where('status', '!=', OrderStatus::CANCELLED)
                     ->where('payment_status', '!=', Order::PAYMENT_PAID),
                 default => null,
             };
@@ -164,7 +171,7 @@ class OrderQuery
             'amount' => collect($statuses)->reduce(fn (string $t, $s) => bcadd($t, (string) ($byStatus[$s]->amount ?? 0), 2), '0.00'),
         ];
 
-        $due = self::visible(Order::query())->toBase()->where('marketplace', Order::SOURCE_MANUAL)->where('status', '!=', OrderStatus::CANCELLED)
+        $due = self::visible(Order::query())->toBase()->where('marketplace', Order::SOURCE_MANUAL)->whereNull('imported_from')->where('status', '!=', OrderStatus::CANCELLED)
             ->where('payment_status', '!=', Order::PAYMENT_PAID)
             ->selectRaw('count(*) as c, COALESCE(SUM(GREATEST(total - paid_amount, 0)), 0) as amount')->first();
 

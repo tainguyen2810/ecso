@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Chuyển dữ liệu: đơn hàng cũ từ Sapo GO (2026-11-23)
+- Cấu hình › Chuyển dữ liệu có mục **Đơn hàng cũ và trả hàng**. Nút dấu trang "Lấy đơn hàng Sapo" (`sapoGoOrdersExport.ts`) chạy trong trang quản trị Sapo GO đang đăng nhập, đọc `/admin/orders.json`, `/admin/order_returns.json`, nguồn đơn, chi nhánh, nhân viên, lưu thành các file `sapo-don-hang-….json` (2.000 đơn/file, đơn trả ở file cuối). Tên trường của Sapo chỉ nằm trong nút này; file dùng định dạng riêng `ezsell-sapo-go-orders`.
+- `POST /orders/import/sapo` (`SapoOrderImporter`): kiểm tra trước (dry_run) rồi nhập từng file. Đơn nhập là lịch sử: `historical = true`, `imported_from = 'sapo'` (migration mới), không giữ/trừ kho, không đẩy sàn, không gửi tin. Khớp sản phẩm theo SKU rồi mã vạch (dòng không khớp giữ tên, giá), khách theo mã khách rồi số điện thoại (tạo thẻ khi có tên và SĐT), kênh theo nguồn đơn Sapo (kênh chưa có được tạo, để tắt), kho theo tên chi nhánh. Giá vốn dòng: của Sapo nếu có, không thì giá vốn bình quân hiện tại.
+- Đơn hủy, hoàn thành, đã giao được lấy; đơn còn xử lý trên Sapo (nháp, chưa giao, giao dưới 14 ngày) để lại. Nhập lại không tạo trùng (khớp mã đơn Sapo, chỉ cập nhật trạng thái và thanh toán); đơn sàn đã đồng bộ về (mã tham chiếu trùng) bỏ qua. Đơn trả nối vào đơn gốc, trạng thái đã đóng, không cộng kho.
+- Báo cáo tính đơn cũ như đơn kênh riêng (doanh thu lúc giao). Công nợ khách **không** tính đơn cũ (`CustomerDebt`), vì nợ còn lại đã chuyển thành nợ đầu kỳ ở mục Khách hàng. Đơn cũ không sửa, không thu tiền, không hủy bán được.
+- Danh sách đơn hàng: nhãn "Sapo", nút lọc "Đơn cũ từ Sapo" (`source=sapo`); trang đơn có thông báo đơn lịch sử. Chưa chạy với dữ liệu Sapo thật: tên trường đơn hàng của Sapo GO cần đối chiếu với file mẫu.
+
 ### Shopee và TikTok Shop qua EzChat (2026-11-18)
 - EzChat (app.ezchat.vn) làm cổng: EzChat giữ app đối tác Shopee/TikTok, token của shop và URL nhận push duy nhất mỗi sàn cho phép. ECSO chỉ giữ "mã chia sẻ" EzChat cấp cho từng shop (lưu mã hóa như access token) và gọi sàn qua `POST {EZCHAT_URL}/api/banhang/gw/call`, ký HMAC-SHA256 bằng `EZCHAT_SECRET` (= `BANHANG_SECRET` bên EzChat).
 - Kết nối shop: Kết nối Shopee/TikTok → trang EzChat `/connect/banhang` chọn shop → quay lại `/marketplaces/{sàn}/callback` với mã một lần → đổi lấy mã chia sẻ. Ngắt kết nối trong ECSO báo EzChat bỏ chia sẻ.

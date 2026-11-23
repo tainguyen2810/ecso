@@ -66,7 +66,7 @@ class OrderController extends Controller
             ->orderByDesc('id')
             ->paginate((int) ($filters['per_page'] ?? 30));
 
-        return OrderResource::collection($page)->additional(['meta' => ['counts' => $orders->tabCounts($filters, $request->user()->id)]])->response();
+        return OrderResource::collection($page)->additional(['meta' => ['counts' => $orders->tabCounts($filters, $request->user()->id), 'has_imported' => Order::query()->whereNotNull('imported_from')->exists()]])->response();
     }
 
     /** "Orders to handle" strip above the order list. */
@@ -548,9 +548,10 @@ class OrderController extends Controller
         $results = [];
         foreach ($orders as $order) {
             $due = $order->balanceDue();
-            if (! $order->isManual() || $order->status === OrderStatus::CANCELLED || bccomp($due, '0', 2) <= 0) {
+            if (! $order->isManual() || $order->imported_from !== null || $order->status === OrderStatus::CANCELLED || bccomp($due, '0', 2) <= 0) {
                 $results[] = ['id' => $order->ulid, 'ok' => false, 'message' => match (true) {
                     ! $order->isManual() => 'Đơn sàn do sàn thu tiền.',
+                    $order->imported_from !== null => 'Đơn cũ lấy từ phần mềm cũ: khoản còn nợ đã chuyển thành nợ đầu kỳ của khách.',
                     $order->status === OrderStatus::CANCELLED => 'Đơn đã hủy.',
                     default => 'Đơn đã thu đủ tiền.',
                 }];
@@ -612,7 +613,7 @@ class OrderController extends Controller
             'channel' => ['nullable', 'string'],
             'customer' => ['nullable', 'string'],
             'warehouse' => ['nullable', 'string'],
-            'source' => ['nullable', Rule::in(['manual', 'marketplace'])],
+            'source' => ['nullable', Rule::in(['manual', 'marketplace', 'sapo', 'new'])],
             'payment_status' => ['nullable', Rule::in([Order::PAYMENT_UNPAID, Order::PAYMENT_PARTIAL, Order::PAYMENT_PAID])],
             'marketplace' => ['nullable', 'string', 'max:20'],
             'from' => ['nullable', 'date'],

@@ -14,7 +14,8 @@ use Illuminate\Database\Eloquent\Collection;
  * the cash book all use it, so they always show the same figure.
  *
  * Only orders of the seller's own channels count (a marketplace collects its buyers' money), and not orders that were
- * cancelled, fully returned, failed delivery or are cash on delivery (COD money is owed by the carrier, not the buyer).
+ * cancelled, fully returned, failed delivery or are cash on delivery (COD money is owed by the carrier, not the buyer),
+ * nor orders brought over from the previous software (orders.imported_from): their unpaid part came as opening debt.
  *
  *   due of an order   = total − value of its counted returns − (paid − refunded)
  *   debt of a customer = sum of the dues of their orders, never below 0
@@ -79,7 +80,9 @@ final class CustomerDebt
     {
         return $query->where("{$order}.marketplace", Order::SOURCE_MANUAL)
             ->whereNotIn("{$order}.status", self::EXCLUDED_STATUSES)
-            ->where("{$order}.is_cod", false);
+            ->where("{$order}.is_cod", false)
+            // Orders taken from the previous software: what they still owed came over as the opening debt.
+            ->whereNull("{$order}.imported_from");
     }
 
     /**
@@ -127,7 +130,7 @@ final class CustomerDebt
     {
         $excluded = "'".implode("','", self::EXCLUDED_STATUSES)."'";
 
-        return " AND {$order}.marketplace = '".Order::SOURCE_MANUAL."' AND {$order}.status NOT IN ({$excluded}) AND {$order}.is_cod = 0";
+        return " AND {$order}.marketplace = '".Order::SOURCE_MANUAL."' AND {$order}.status NOT IN ({$excluded}) AND {$order}.is_cod = 0 AND {$order}.imported_from IS NULL";
     }
 
     /** What the customer owes now. */

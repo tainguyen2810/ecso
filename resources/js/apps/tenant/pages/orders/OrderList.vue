@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Ban, Banknote, Bookmark, ClipboardList, FilePen, Package, PackageCheck, PackageX, Tag, ScanBarcode, Trash2, ChevronDown, ChevronsRight, Clock, Columns3, Download, Filter, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingBasket, ShoppingCart, UserPlus, X } from 'lucide-vue-next';
+import { Ban, Banknote, Bookmark, ClipboardList, FilePen, Package, PackageCheck, PackageX, Tag, ScanBarcode, Trash2, ChevronDown, ChevronsRight, Clock, Columns3, Download, Filter, History, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingBasket, ShoppingCart, UserPlus, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
@@ -40,6 +40,8 @@ const toast = useToast();
 
 const orders = ref<OrderSummary[]>([]);
 const counts = ref<Record<string, number>>({});
+/** The shop brought orders over from Sapo (Chuyển dữ liệu): offer a chip for them. */
+const hasImported = ref(false);
 const meta = ref({ current_page: 1, last_page: 1, total: 0 });
 const loading = ref(true);
 const loadError = ref<string | null>(null);
@@ -200,6 +202,7 @@ async function load() {
         orders.value = data.data;
         meta.value = data.meta;
         counts.value = data.meta.counts ?? {};
+        hasImported.value = !!data.meta.has_imported;
         selected.value = new Set([...selected.value].filter((id) => orders.value.some((o) => o.id === id)));
     } catch (e) {
         if (seq === loadSeq) loadError.value = (e as ApiError).message;
@@ -490,15 +493,15 @@ const channelChips = computed(() => {
 function pickChannel(key: string) {
     filters.account = '';
     filters.channel = '';
-    if (key === 'manual') {
+    if (key === 'manual' || key === 'sapo') {
         filters.marketplace = '';
-        filters.source = 'manual';
+        filters.source = key;
     } else {
         filters.source = '';
         filters.marketplace = key;
     }
 }
-const channelPicked = (key: string) => (key === '' ? !filters.marketplace && !filters.source : key === 'manual' ? filters.source === 'manual' : filters.marketplace === key);
+const channelPicked = (key: string) => (key === '' ? !filters.marketplace && !filters.source : key === 'manual' || key === 'sapo' ? filters.source === key : filters.marketplace === key);
 
 /** The next step of an order, done from its row (same rules as the bulk actions). */
 const nextAction: Record<string, string> = { PENDING_CONFIRMATION: 'confirm', READY_TO_PACK: 'pack', PACKED: 'handover' };
@@ -703,6 +706,9 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                 <button type="button" :class="cn('flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-sm', channelPicked('manual') ? 'border-slate-900 bg-slate-900 font-medium text-white' : 'bg-card text-slate-700 hover:bg-muted')" data-testid="channel-manual" @click="pickChannel('manual')">
                     <MarketplaceLogo marketplace="manual" name="Kênh bán riêng" size="sm" class="size-4" /> Kênh bán riêng
                 </button>
+                <button v-if="hasImported || filters.source === 'sapo'" type="button" :class="cn('flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-sm', channelPicked('sapo') ? 'border-slate-900 bg-slate-900 font-medium text-white' : 'bg-card text-slate-700 hover:bg-muted')" data-testid="channel-sapo" @click="pickChannel('sapo')">
+                    <History class="size-4" /> Đơn cũ từ Sapo
+                </button>
             </div>
 
             <div v-if="savedViews.length" class="flex flex-wrap items-center gap-2 text-xs" data-testid="saved-views">
@@ -807,6 +813,7 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                                     <MarketplaceLogo :marketplace="o.marketplace" :name="o.shop?.name ?? o.channel?.name ?? marketplaceNames[o.marketplace]" size="sm" />
                                     <span class="font-medium text-primary">{{ o.external_order_id }}</span>
                                     <span v-if="o.external_number && o.external_number !== o.external_order_id" class="font-mono text-xs text-muted-foreground">#{{ o.external_number }}</span>
+                                    <span v-if="o.imported_from === 'sapo'" class="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 text-[11px] font-medium text-emerald-700" title="Đơn cũ lấy từ Sapo: chỉ để xem lịch sử, không trừ kho" data-testid="order-sapo-badge"><History class="size-3" /> Sapo</span>
                                     <template v-if="compact">
                                         <span v-if="o.flags.shortage" class="rounded-full bg-rose-50 px-1.5 text-[11px] text-rose-600">Thiếu hàng</span>
                                         <span v-if="o.flags.awaiting_purchase" class="rounded-full bg-blue-50 px-1.5 text-[11px] text-blue-700">Chờ nhập hàng</span>

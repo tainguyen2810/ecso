@@ -251,6 +251,8 @@ export interface OrderSummary {
     refund_status?: 'none' | 'partial' | 'full';
     balance_due?: string | null;
     external_order_id: string;
+    /** Taken from the previous software (Cấu hình › Chuyển dữ liệu), e.g. 'sapo': history only, never moves stock. */
+    imported_from?: string | null;
     status: string;
     version?: number;
     tax_rate?: string;
