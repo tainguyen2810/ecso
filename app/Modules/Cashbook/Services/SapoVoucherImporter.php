@@ -141,7 +141,7 @@ class SapoVoucherImporter
             'party_kind' => $kind,
             'customer_id' => $customer?->id,
             'supplier_id' => $supplier?->id,
-            'party_name' => $this->text($data['party_name'] ?? null, 255) ?? $customer?->name ?? $supplier?->name ?? 'Không rõ',
+            'party_name' => $this->text($data['party_name'] ?? null, 255) ?? $customer->name ?? $supplier->name ?? 'Không rõ',
             'method' => $this->method($data['method'] ?? null),
             'amount' => $amount,
             'counts_in_pnl' => is_bool($data['counts_in_pnl'] ?? null) ? $data['counts_in_pnl'] : $type->counts_in_pnl,
