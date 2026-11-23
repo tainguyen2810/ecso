@@ -124,6 +124,8 @@ class VoucherLedger
             ->leftJoin('users as u', 'u.id', '=', 'sp.created_by')
             ->leftJoin('cash_accounts as acc', 'acc.id', '=', 'sp.cash_account_id')
             ->where('sp.tenant_id', $tenant)
+            // Payments brought over from the previous software were made from its funds, not this cash book.
+            ->whereNull('sp.imported_from')
             ->selectRaw("'supplier_payment' as source, sp.ulid as id, NULL as number, CASE WHEN sp.kind = 'refund' THEN 'receipt' ELSE 'payment' END as direction, "
                 ."NULL as type_id, CASE WHEN sp.kind = 'refund' THEN 'Nhà cung cấp hoàn tiền' ELSE 'Trả tiền nhà cung cấp' END as type_name, "
                 ."0 as counts_in_pnl, 'supplier' as party_kind, s.ulid as party_id, s.name as party_name, sp.method, sp.amount, sp.paid_at, "

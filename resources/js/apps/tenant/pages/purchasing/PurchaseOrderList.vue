@@ -147,6 +147,7 @@ const newLink = computed(() => (ordering.value ? { path: '/purchasing/new', quer
                     <tr v-for="po in rows" :key="po.id" class="hover:bg-muted/30">
                         <td class="px-4 py-3">
                             <RouterLink :to="`/purchasing/${po.id}`" class="font-medium text-primary hover:underline">{{ po.number }}</RouterLink>
+                            <Badge v-if="po.imported_from" class="ml-1.5" title="Chuyển từ Sapo">Sapo</Badge>
                             <p v-if="po.reference" class="text-xs text-muted-foreground">{{ po.reference }}</p>
                         </td>
                         <td class="whitespace-nowrap px-4 py-3 text-muted-foreground">{{ formatDateTime(po.created_at) }}</td>
@@ -157,7 +158,7 @@ const newLink = computed(() => (ordering.value ? { path: '/purchasing/new', quer
                         <td v-if="!ordering" class="px-4 py-3"><Badge :tone="receiveStatus(po.status).tone">{{ receiveStatus(po.status).label }}</Badge></td>
                         <td class="px-4 py-3">{{ ordering ? (po.expected_at ? formatDate(po.expected_at) : '—') : po.warehouse?.name }}</td>
                         <td class="px-4 py-3">{{ po.supplier?.name }}</td>
-                        <td class="px-4 py-3 text-muted-foreground">{{ po.created_by ?? '—' }}</td>
+                        <td class="px-4 py-3 text-muted-foreground">{{ po.created_by ?? (po.imported_from ? 'Sapo' : '—') }}</td>
                         <td class="px-4 py-3 text-right font-semibold tabular-nums">{{ formatMoney(po.total) }}</td>
                         <td v-if="!ordering" class="px-4 py-3 text-right tabular-nums" :class="owed(po) > 0 ? 'font-medium text-destructive' : 'text-muted-foreground'">{{ owed(po) > 0 ? formatMoney(owed(po)) : '—' }}</td>
                     </tr>

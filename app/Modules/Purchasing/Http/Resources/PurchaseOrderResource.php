@@ -22,6 +22,7 @@ class PurchaseOrderResource extends JsonResource
             'id' => $this->ulid,
             'number' => $this->number,
             'status' => $this->status,
+            'imported_from' => $this->imported_from,
             'supplier' => $this->whenLoaded('supplier', fn () => [
                 'id' => $this->supplier->ulid,
                 'code' => $this->supplier->code,
@@ -58,7 +59,7 @@ class PurchaseOrderResource extends JsonResource
             // Set by the caller from SupplierAllocation: still owed once money paid on account is counted.
             'allocation' => $this->when(self::$allocation !== null, fn () => self::$allocation[$this->id] ?? null),
             'note' => $this->note,
-            'editable' => app(PurchaseService::class)->editable($this->resource),
+            'editable' => $this->imported_from === null && app(PurchaseService::class)->editable($this->resource),
             'created_by' => $this->whenLoaded('creator', fn () => $this->creator?->name),
             'created_at' => $this->created_at?->toIso8601String(),
             'lines_count' => $this->whenCounted('lines'),

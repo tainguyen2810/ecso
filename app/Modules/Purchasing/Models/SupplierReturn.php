@@ -10,7 +10,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-/** Goods sent back to a supplier. Stock leaves the warehouse when the return is recorded. */
+/**
+ * Goods sent back to a supplier. Stock leaves the warehouse when the return is recorded.
+ *
+ * @property string|null $imported_from 'sapo': brought over from the previous software (no stock moved)
+ */
 class SupplierReturn extends Model
 {
     use BelongsToTenant, HasPublicUlid;

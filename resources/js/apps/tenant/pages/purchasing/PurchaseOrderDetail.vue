@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { ArrowLeft, Ban, Check, CircleCheck, Copy, PackageCheck, Pencil, Printer, Send, Tags, Undo2, Wallet } from 'lucide-vue-next';
+import { ArrowLeft, Ban, Check, CircleCheck, Copy, History, PackageCheck, Pencil, Printer, Send, Tags, Undo2, Wallet } from 'lucide-vue-next';
 import { useRoute, useRouter } from 'vue-router';
 import PageHeader from '../../PageHeader.vue';
 import SupplierPaymentDialog from './SupplierPaymentDialog.vue';
 import LotSplitEditor from '../../components/LotSplitEditor.vue';
 import { blankLot, lotPayload, type LotDraft } from '../inventory/lots';
+import Alert from '@/shared/ui/Alert.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -224,6 +225,7 @@ async function voidPayment(id: string) {
                 <Badge :tone="tradeStatus(po.status).tone">{{ tradeStatus(po.status).label }}</Badge>
                 <Badge :tone="receiveStatus(po.status).tone">{{ receiveStatus(po.status).label }}</Badge>
                 <Badge :tone="poStatus[po.status]?.tone" data-testid="po-status">{{ poStatus[po.status]?.label }}</Badge>
+                <Badge v-if="po.imported_from" tone="info" data-testid="po-imported"><History class="mr-1 size-3" /> Từ Sapo</Badge>
             </template>
             <Button v-if="tenant.can('purchasing.manage')" variant="outline" data-testid="po-copy" @click="copyOrder"><Copy /> Sao chép</Button>
             <RouterLink
@@ -242,6 +244,9 @@ async function voidPayment(id: string) {
             <Button v-if="['draft', 'ordered'].includes(po.status) && tenant.can('purchasing.manage')" variant="ghost" :loading="busy" @click="act('cancel')"><Ban /> Hủy</Button>
         </PageHeader>
 
+        <Alert v-if="po.imported_from" tone="blue" class="mb-4">
+            Đơn nhập chuyển từ Sapo: hàng đã nhập kho bên Sapo nên đơn này không cộng tồn kho, các khoản đã trả lấy từ quỹ của Sapo nên không vào Sổ quỹ. Phần còn nợ nhà cung cấp vẫn thanh toán ở đây như bình thường.
+        </Alert>
         <Card class="mb-4">
             <ol class="flex items-start px-4 py-4 sm:px-10" data-testid="po-steps">
                 <li v-for="(s, i) in steps" :key="s.label" class="relative flex flex-1 flex-col items-center gap-1 text-center text-xs">
@@ -334,13 +339,14 @@ async function voidPayment(id: string) {
                             <div class="text-right tabular-nums"><div>{{ formatNumber(r.total_quantity) }} sp</div><div class="text-xs text-muted-foreground">{{ formatMoney(r.total_value) }}</div></div>
                         </li>
                     </ul>
+                    <p v-else-if="po.imported_from && po.received_at" class="px-5 py-4 text-sm text-muted-foreground">Đã nhập kho bên Sapo lúc {{ formatDateTime(po.received_at) }}.</p>
                     <p v-else class="px-5 py-4 text-sm text-muted-foreground">Chưa nhập kho.</p>
                 </Card>
                 <Card :caps="false" title="Thanh toán">
                     <ul v-if="po.payments?.length" class="divide-y text-sm">
                         <li v-for="p in po.payments" :key="p.id" class="flex items-center justify-between gap-2 px-5 py-2.5" :class="p.voided_at && 'opacity-50'">
-                            <div :class="p.voided_at && 'line-through'"><div>{{ supplierPaymentMethods[p.method] }}<span v-if="p.reference" class="text-muted-foreground"> · {{ p.reference }}</span></div><div class="text-xs text-muted-foreground">{{ formatDateTime(p.paid_at) }} · {{ p.created_by }}</div></div>
-                            <div class="flex items-center gap-2"><span class="tabular-nums">{{ formatMoney(p.amount) }}</span><button v-if="!p.voided_at && tenant.can('purchasing.payment')" class="text-xs text-muted-foreground hover:text-destructive" @click="voidPayment(p.id)">Hủy</button></div>
+                            <div :class="p.voided_at && 'line-through'"><div>{{ supplierPaymentMethods[p.method] }}<span v-if="p.reference" class="text-muted-foreground"> · {{ p.reference }}</span></div><div class="text-xs text-muted-foreground">{{ formatDateTime(p.paid_at) }} · {{ p.created_by ?? (p.imported_from ? 'Chuyển từ Sapo' : '') }}</div></div>
+                            <div class="flex items-center gap-2"><span class="tabular-nums">{{ formatMoney(p.amount) }}</span><button v-if="!p.voided_at && !p.imported_from && tenant.can('purchasing.payment')" class="text-xs text-muted-foreground hover:text-destructive" @click="voidPayment(p.id)">Hủy</button></div>
                         </li>
                     </ul>
                     <p v-else class="px-5 py-4 text-sm text-muted-foreground">Chưa thanh toán cho nhà cung cấp.</p>

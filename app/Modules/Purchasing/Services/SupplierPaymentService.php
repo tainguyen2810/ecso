@@ -111,6 +111,9 @@ class SupplierPaymentService
             if ($payment->voided_at) {
                 throw ValidationException::withMessages(['payment' => 'Phiếu chi đã hủy.']);
             }
+            if ($payment->imported_from !== null) {
+                throw ValidationException::withMessages(['payment' => 'Khoản trả này chuyển từ phần mềm cũ, không hủy ở đây được.']);
+            }
             PeriodLock::assertOpen($payment->paid_at, 'payment', 'hủy');
             $payment->forceFill(['voided_at' => now(), 'voided_by' => Auth::id(), 'void_reason' => $reason])->save();
             if ($po) {
