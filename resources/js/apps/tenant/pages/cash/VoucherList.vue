@@ -237,6 +237,7 @@ async function exportCsv() {
                         <td class="px-4 py-2.5">
                             <div class="font-mono text-xs font-medium" :class="v.voided_at && 'line-through'">{{ v.number ?? v.document?.number ?? 'Tự động' }}</div>
                             <div v-if="v.source !== 'voucher'" class="text-xs text-muted-foreground">{{ sourceLabels[v.source] }}</div>
+                            <Badge v-else-if="v.imported" tone="info" class="mt-0.5">Sapo</Badge>
                         </td>
                         <td class="whitespace-nowrap px-4 py-2.5">{{ formatDateTime(v.paid_at) }}<div class="text-xs text-muted-foreground">{{ v.created_by }}</div></td>
                         <td class="px-4 py-2.5">{{ v.type.name }}<div v-if="v.note" class="max-w-56 truncate text-xs text-muted-foreground">{{ v.note }}</div></td>

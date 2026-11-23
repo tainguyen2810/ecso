@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Chuyển dữ liệu: sổ quỹ (phiếu thu, phiếu chi) từ Sapo GO (2026-11-23)
+- Cấu hình › Chuyển dữ liệu có mục **Sổ quỹ (phiếu thu, phiếu chi)** (`SapoVouchersMigration.vue`). Nút dấu trang "Lấy sổ quỹ Sapo" (`sapoGoVouchersExport.ts`) đọc `/admin/receipt_vouchers.json` và `/admin/payment_vouchers.json`, bỏ các phiếu Sapo tự tạo cho đơn hàng, đơn nhập, đơn trả (loại "Tự động" hoặc chứng từ gốc SON/PON/SRN/PRN…) vì các khoản đó đã sang cùng đơn, rồi lưu `sapo-so-quy-….json` (định dạng `ezsell-sapo-go-vouchers`).
+- `POST /cash-vouchers/import/sapo` (`SapoVoucherImporter`, quyền `finance.vouchers`): kiểm tra trước rồi nhập. Phiếu giữ mã Sapo, `imported_from = 'sapo'` (migration mới), không gắn quỹ: số dư quỹ, Sổ quỹ và Thu chi theo loại (`CashFlows`) không tính; danh sách Thu chi có nhãn "Sapo", người lập "Chuyển từ Sapo"; báo cáo lãi lỗ và sổ chi phí có tính. Loại phiếu khớp theo tên (không phân biệt hoa thường; tên viết hoa toàn bộ được đổi sang chữ thường), loại chưa có được tạo. Phiếu đã hủy bỏ qua; nhập lại không tạo trùng; phiếu chuyển từ Sapo không hủy được.
+- Chưa chạy với dữ liệu Sapo thật: tên trường phiếu thu chi của Sapo GO cần đối chiếu với file mẫu.
+
 ### Chuyển dữ liệu: nhà cung cấp và nhập hàng từ Sapo GO (2026-11-23)
 - Cấu hình › Chuyển dữ liệu có mục **Nhà cung cấp và nhập hàng** (`SapoPurchasesMigration.vue`). Nút dấu trang "Lấy nhập hàng Sapo" (`sapoGoPurchasesExport.ts`) đọc `/admin/suppliers.json`, `/admin/purchase_orders.json` (đơn thiếu dòng hàng thì đọc riêng từng đơn), `/admin/supplier_returns.json`, chi nhánh, nhân viên và lưu file `sapo-nhap-hang-….json` (định dạng `ezsell-sapo-go-purchases`).
 - `POST /purchase-orders/import/sapo` (`SapoPurchaseImporter`): kiểm tra trước rồi nhập. NCC khớp theo mã Sapo rồi tên (NCC mới giữ mã Sapo). Đơn đã nhập đủ → Đã nhập, nhập một phần mà Sapo đã đóng → Đã đóng, đã hủy giữ làm lịch sử; đơn còn chờ hàng để lại. `imported_from = 'sapo'` trên `purchase_orders`, `supplier_returns`, `supplier_payments` (migration mới). Không tạo phiếu nhập kho: không đổi tồn kho, giá vốn.
