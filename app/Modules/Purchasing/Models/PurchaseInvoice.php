@@ -6,6 +6,7 @@ use App\Modules\Tenancy\Concerns\BelongsToTenant;
 use App\Shared\Concerns\HasPublicUlid;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * "Hoá đơn mua vào": one e-invoice a supplier issued to the business. status: open (not in a purchase order yet),
@@ -13,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *
  * @property array<int, array<string, mixed>> $lines
  * @property array<int, string>|null $issues
- * @property \Illuminate\Support\Carbon|null $issued_on
+ * @property Carbon|null $issued_on
  */
 class PurchaseInvoice extends Model
 {
