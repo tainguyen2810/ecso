@@ -22,6 +22,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $closed_at
  * @property bool $extra_cost_to_supplier
  * @property bool $vat_in_cost
+ * @property string|null $imported_from 'sapo': brought over from the previous software
  */
 class PurchaseOrder extends Model
 {

@@ -11,22 +11,25 @@ use Illuminate\Support\Facades\Schema;
  */
 return new class extends Migration
 {
-    /** @var list<string> */
-    private array $tables = ['purchase_orders', 'supplier_returns', 'supplier_payments'];
-
     public function up(): void
     {
-        foreach ($this->tables as $name) {
-            Schema::table($name, function (Blueprint $table) use ($name) {
-                $table->string('imported_from', 20)->nullable();
-                $table->index(['tenant_id', 'imported_from'], $name.'_tenant_imported_index');
-            });
-        }
+        Schema::table('purchase_orders', function (Blueprint $table) {
+            $table->string('imported_from', 20)->nullable();
+            $table->index(['tenant_id', 'imported_from'], 'purchase_orders_tenant_imported_index');
+        });
+        Schema::table('supplier_returns', function (Blueprint $table) {
+            $table->string('imported_from', 20)->nullable();
+            $table->index(['tenant_id', 'imported_from'], 'supplier_returns_tenant_imported_index');
+        });
+        Schema::table('supplier_payments', function (Blueprint $table) {
+            $table->string('imported_from', 20)->nullable();
+            $table->index(['tenant_id', 'imported_from'], 'supplier_payments_tenant_imported_index');
+        });
     }
 
     public function down(): void
     {
-        foreach ($this->tables as $name) {
+        foreach (['purchase_orders', 'supplier_returns', 'supplier_payments'] as $name) {
             Schema::table($name, function (Blueprint $table) use ($name) {
                 $table->dropIndex($name.'_tenant_imported_index');
                 $table->dropColumn('imported_from');

@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
  * @property string $kind
  * @property Carbon $paid_at
  * @property Carbon|null $voided_at
+ * @property string|null $imported_from 'sapo': brought over from the previous software
  */
 class SupplierPayment extends Model
 {

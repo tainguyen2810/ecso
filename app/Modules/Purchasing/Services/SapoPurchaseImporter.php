@@ -428,7 +428,7 @@ class SapoPurchaseImporter
                 'number' => $code,
                 'supplier_id' => $supplier->id,
                 'purchase_order_id' => $po?->id,
-                'warehouse_id' => $po?->warehouse_id ?? $this->warehouse($data['location'] ?? null),
+                'warehouse_id' => $po->warehouse_id ?? $this->warehouse($data['location'] ?? null),
                 'total' => $total,
                 'reason' => $this->text($data['reason'] ?? null, 500),
                 'imported_from' => self::SOURCE,
