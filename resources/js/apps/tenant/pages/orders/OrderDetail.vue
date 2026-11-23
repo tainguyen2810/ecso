@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { AlertTriangle, ArrowLeft, Ban, Banknote, Check, Clock, Copy, Link2, Mail, MapPin, MessageSquare, PackageCheck, Pencil, Printer, ReceiptText, RefreshCw, Repeat, Tag, Truck, Undo2, UserRound, Wallet, Warehouse, X } from 'lucide-vue-next';
+import { AlertTriangle, ArrowLeft, Ban, Banknote, Check, Clock, Copy, History, Link2, Mail, MapPin, MessageSquare, PackageCheck, Pencil, Printer, ReceiptText, RefreshCw, Repeat, Tag, Truck, Undo2, UserRound, Wallet, Warehouse, X } from 'lucide-vue-next';
 import TagInput from '../../components/TagInput.vue';
 import Alert from '@/shared/ui/Alert.vue';
 import Badge from '@/shared/ui/Badge.vue';
@@ -63,7 +63,7 @@ const canCreateReturn = computed(() => tenant.can('orders.update') || tenant.can
 
 // "Hủy hóa đơn": a completed sale rung up by mistake goes back to stock and the money back to the buyer in one step.
 const canVoidSale = computed(
-    () => isManual.value && order.value?.status === 'COMPLETED' && order.value?.return_state === 'none' && tenant.can('orders.cancel') && tenant.can('orders.payment'),
+    () => isManual.value && !imported.value && order.value?.status === 'COMPLETED' && order.value?.return_state === 'none' && tenant.can('orders.cancel') && tenant.can('orders.payment'),
 );
 const voidSaleOpen = ref(false);
 const voidSaleReason = ref('');
@@ -125,6 +125,8 @@ async function saveMeta() {
 }
 
 const isManual = computed(() => order.value?.source === 'manual');
+/** Taken from Sapo (Chuyển dữ liệu): history only, settled there, so nothing here changes it. */
+const imported = computed(() => !!order.value?.imported_from);
 /** The seller's own WooCommerce website: full contact, payment details and refunds made on the website. */
 const isWebsite = computed(() => order.value?.marketplace === 'woocommerce');
 const addressLine = (a?: Record<string, string>) => (a ? [a.address_1, a.address_2, a.city, a.state].filter(Boolean).join(', ') : '');
@@ -133,6 +135,7 @@ const billingAddress = computed(() => {
     return line && line !== order.value?.shipping_address ? line : '';
 });
 const actionList = computed(() => {
+    if (imported.value) return [];
     const entries = Object.entries(order.value?.actions ?? {}).filter(([action, a]) => a.allowed && (action !== 'cancel' || tenant.can('orders.cancel')));
     return isManual.value ? entries.sort(([a], [b]) => manualActionOrder.indexOf(a) - manualActionOrder.indexOf(b)) : entries;
 });
@@ -369,7 +372,7 @@ async function createReturn() {
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                     <Button v-if="!isManual" variant="outline" size="sm" :loading="busy === 'sync'" @click="sync"><RefreshCw /> Đồng bộ từ sàn</Button>
-                    <Button v-if="isManual && order.editable && tenant.can('orders.create') && tenant.can('orders.update')" variant="outline" size="sm" data-testid="edit-order" @click="$router.push(`/orders/${order.id}/edit`)"><Pencil /> Sửa đơn</Button>
+                    <Button v-if="isManual && !imported && order.editable && tenant.can('orders.create') && tenant.can('orders.update')" variant="outline" size="sm" data-testid="edit-order" @click="$router.push(`/orders/${order.id}/edit`)"><Pencil /> Sửa đơn</Button>
                     <Button v-if="isManual" variant="outline" size="sm" data-testid="print-invoice" @click="printOpen = true"><ReceiptText /> In đơn hàng</Button>
                     <Button v-if="tenant.can('orders.print')" variant="outline" size="sm" :loading="busy === 'print'" @click="print"><Printer /> In phiếu</Button>
                     <Button v-if="canVoidSale" variant="outline" size="sm" class="text-rose-600 hover:text-rose-700" data-testid="void-sale" @click="openVoidSale"><Ban /> Hủy hóa đơn</Button>
@@ -413,6 +416,9 @@ async function createReturn() {
             </div>
             <Alert v-for="x in order.exchanged_from ?? []" :key="x.id" :icon="Repeat" tone="blue" data-testid="exchanged-from">
                 Đơn đổi hàng từ phiếu trả <RouterLink :to="`/returns/${x.id}`" class="font-mono font-medium hover:underline">{{ x.number }}</RouterLink> của đơn <RouterLink :to="`/orders/${x.order.id}`" class="font-mono font-medium hover:underline">{{ x.order.external_order_id }}</RouterLink><template v-if="Number(x.credit) > 0">: hàng trả được trừ {{ formatMoney(x.credit) }} vào đơn này</template>.
+            </Alert>
+            <Alert v-if="imported" :icon="History" tone="green" data-testid="imported-order">
+                Đơn cũ lấy từ Sapo: chỉ để xem lịch sử và tính vào báo cáo. Đơn này không trừ kho, không sửa, không thu tiền ở đây. Khoản khách còn nợ đã chuyển sang thành nợ đầu kỳ của khách.
             </Alert>
             <Alert v-if="order.sync_warning" :icon="AlertTriangle" tone="amber" data-testid="sync-warning">{{ order.sync_warning }}</Alert>
             <Alert v-if="order.flags.shortage" :icon="AlertTriangle" tone="red">
@@ -511,7 +517,7 @@ async function createReturn() {
                     <OrderPayoutCard v-if="!isManual && order.payout && order.status !== 'CANCELLED'" :order-id="order.id" :payout="order.payout" :marketplace-name="marketplaceNames[order.marketplace] ?? order.marketplace" />
                 </Card>
 
-                <OrderShipmentsCard :order-id="order.id" :order-code="order.external_order_id" :shipments="order.shipments ?? []" :ships-itself="shipsItself" :order-status="order.status" @changed="load" />
+                <OrderShipmentsCard v-if="!imported" :order-id="order.id" :order-code="order.external_order_id" :shipments="order.shipments ?? []" :ships-itself="shipsItself" :order-status="order.status" @changed="load" />
 
                 <Card caps title="Lịch sử trạng thái">
                     <ol class="relative px-5 py-4 text-sm before:absolute before:bottom-6 before:left-[23px] before:top-6 before:border-l before:border-dashed before:border-blue-200" data-testid="order-history">
@@ -610,7 +616,7 @@ async function createReturn() {
                 </Card>
 
                 <Card v-if="isManual" caps title="Thanh toán" data-testid="payments-card">
-                    <template v-if="tenant.can('orders.payment')" #actions>
+                    <template v-if="tenant.can('orders.payment') && !imported" #actions>
                         <div class="flex gap-1">
                             <Button v-if="Number(order.balance_due ?? 0) > 0" size="sm" data-testid="add-payment" @click="openPay('payment')"><Banknote /> Thu tiền</Button>
                             <Button v-if="Number(order.paid_amount ?? 0) > Number(order.refunded_amount ?? 0)" size="sm" variant="outline" data-testid="add-refund" @click="openPay('refund')">Hoàn tiền</Button>
