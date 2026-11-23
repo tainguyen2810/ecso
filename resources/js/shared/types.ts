@@ -863,6 +863,7 @@ export interface SupplierPaymentData {
     created_by?: string | null;
     voided_at: string | null;
     void_reason: string | null;
+    imported_from?: string | null;
     order?: { id: string; number: string } | null;
 }
 
@@ -895,6 +896,8 @@ export interface PurchaseOrderData {
     id: string;
     number: string;
     status: string;
+    /** "sapo": brought over from the previous software (history: no stock moved, payments outside the cash book). */
+    imported_from?: string | null;
     supplier?: { id: string; code: string; name: string; contact_name?: string | null; phone?: string | null; email?: string | null; address?: string | null; tax_code?: string | null };
     warehouse?: { id: string; code: string; name: string };
     expected_at: string | null;

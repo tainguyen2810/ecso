@@ -22,6 +22,7 @@ class SupplierPaymentResource extends JsonResource
             'created_by' => $this->whenLoaded('creator', fn () => $this->creator?->name),
             'voided_at' => $this->voided_at?->toIso8601String(),
             'void_reason' => $this->void_reason,
+            'imported_from' => $this->imported_from,
             'order' => $this->whenLoaded('order', fn () => $this->order ? ['id' => $this->order->ulid, 'number' => $this->order->number] : null),
         ];
     }

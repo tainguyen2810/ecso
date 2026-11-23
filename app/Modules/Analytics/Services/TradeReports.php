@@ -236,13 +236,24 @@ class TradeReports
      */
     public function purchases(CarbonImmutable $from, CarbonImmutable $to, string $by = 'supplier'): array
     {
-        $base = DB::table('stock_receipt_lines as l')
+        $receipts = DB::table('stock_receipt_lines as l')
             ->join('stock_receipts as r', 'r.id', '=', 'l.stock_receipt_id')
-            ->leftJoin('purchase_orders as po', 'po.id', '=', 'r.purchase_order_id')
             ->where('r.tenant_id', $this->tenant())
             ->where('r.source', '!=', 'opening')
-            ->whereBetween('r.created_at', [$from, $to]);
-        $metrics = 'COUNT(DISTINCT r.id) as receipts, SUM(l.quantity) as quantity, SUM(l.quantity * l.unit_cost) as value';
+            ->whereBetween('r.created_at', [$from, $to])
+            ->selectRaw("CONCAT('r', r.id) as receipt, r.created_at, r.purchase_order_id, l.product_variant_id, l.quantity, l.unit_cost");
+        // Purchase orders brought over from the previous software were received there: no receipt here, the order
+        // stands for it.
+        $imported = DB::table('purchase_order_lines as l')
+            ->join('purchase_orders as o', 'o.id', '=', 'l.purchase_order_id')
+            ->where('o.tenant_id', $this->tenant())
+            ->whereNotNull('o.imported_from')
+            ->where('l.received_qty', '>', 0)
+            ->whereBetween('o.received_at', [$from, $to])
+            ->selectRaw("CONCAT('o', o.id) as receipt, o.received_at as created_at, o.id as purchase_order_id, l.product_variant_id, l.received_qty as quantity, l.unit_cost");
+        $base = DB::query()->fromSub($receipts->unionAll($imported), 'l')
+            ->leftJoin('purchase_orders as po', 'po.id', '=', 'l.purchase_order_id');
+        $metrics = 'COUNT(DISTINCT l.receipt) as receipts, SUM(l.quantity) as quantity, SUM(l.quantity * l.unit_cost) as value';
 
         $returns = DB::table('supplier_returns as sr')->where('sr.tenant_id', $this->tenant())->whereBetween('sr.created_at', [$from, $to]);
 
@@ -256,7 +267,7 @@ class TradeReports
             $ids = DB::table('product_variants')->whereIn('ulid', $rows->pluck('id'))->pluck('id', 'ulid');
             $key = fn ($r) => $ids[$r->id] ?? null;
         } elseif ($by === 'day') {
-            $rows = (clone $base)->groupByRaw(ReportRange::day('r.created_at', $from))->selectRaw(ReportRange::day('r.created_at', $from)." as label, NULL as id, NULL as sku, {$metrics}")->orderBy('label')->get();
+            $rows = (clone $base)->groupByRaw(ReportRange::day('l.created_at', $from))->selectRaw(ReportRange::day('l.created_at', $from)." as label, NULL as id, NULL as sku, {$metrics}")->orderBy('label')->get();
             $returned = (clone $returns)->groupByRaw(ReportRange::day('sr.created_at', $from))->selectRaw(ReportRange::day('sr.created_at', $from).' as k, SUM(sr.total) as value')->pluck('value', 'k');
             $key = fn ($r) => $r->label;
         } else {
