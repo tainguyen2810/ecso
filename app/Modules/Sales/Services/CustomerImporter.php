@@ -67,7 +67,7 @@ class CustomerImporter
     public const MAX_ROWS = 5000;
 
     /** Rows of one file imported in the background (config ecso.customer_import.background_rows). */
-    public const BACKGROUND_MAX_ROWS = 30000;
+    public const BACKGROUND_MAX_ROWS = 200000;
 
     public static function syncRows(): int
     {

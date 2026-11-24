@@ -50,10 +50,11 @@ class ImportCustomersJob implements ShouldQueue
         if ($import === null) {
             return;
         }
-        // 30 000 rows and their checks are held in memory at once (about 120 MB measured).
+        // Every row and its checks are held in memory at once: 45 000 rows took about 185 MB and 3 minutes to import
+        // (measured), so a file at the 200 000-row limit needs about 800 MB and 15 minutes (timeout 30 minutes).
         $limit = (string) ini_get('memory_limit');
-        if ($limit !== '-1' && $this->bytes($limit) < 512 * 1024 * 1024) {
-            ini_set('memory_limit', '512M');
+        if ($limit !== '-1' && $this->bytes($limit) < 1024 * 1024 * 1024) {
+            ini_set('memory_limit', '1G');
         }
 
         TenantContext::run(Tenant::query()->findOrFail($import->tenant_id), function () use ($import, $importer, $audit) {

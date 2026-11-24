@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Nhập khách hàng: file tới 200.000 dòng (2026-11-24)
+- Giới hạn nhập chạy ngầm nâng từ 30.000 lên 200.000 dòng (`ecso.customer_import.background_rows`, `CUSTOMER_IMPORT_BACKGROUND_ROWS`), đủ cho file khách hàng Sapo khoảng 40.000 dòng. Việc chạy ngầm nâng bộ nhớ lên 1 GB. Đo thử 45.000 dòng: kiểm tra 2 giây, nhập khoảng 3 phút, 185 MB.
+
 ### Nhập khách hàng file lớn: hiện tiến độ ngay tại chỗ (2026-11-24)
 - Cấu hình › Chuyển dữ liệu › Khách hàng: file trên 5.000 dòng không còn chỉ báo "đang kiểm tra nền" rồi im lặng; tiến độ kiểm tra, kết quả và nút Nhập hiện ngay trong trang (`CustomerImportJobStatus.vue`, dùng chung với hộp Nhập file ở Khách hàng). Danh sách khách hàng cũng báo khi file đang kiểm tra hoặc đã kiểm tra xong.
 - Sau 1 phút mà việc chạy ngầm chưa bắt đầu thì báo bộ chạy ngầm (Horizon) có thể đang tắt. `CustomerImportResource` thêm `updated_at`.
