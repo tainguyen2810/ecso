@@ -512,6 +512,7 @@ export interface CustomerImportJob {
     started_at: string | null;
     finished_at: string | null;
     created_at: string | null;
+    updated_at?: string | null;
 }
 
 export interface CustomerTask {

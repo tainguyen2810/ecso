@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 import { Bookmark, CheckCircle2, Download, FileSpreadsheet, TriangleAlert, Upload } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
@@ -13,7 +13,8 @@ import { api, ApiError } from '@/shared/lib/api';
 import { formatNumber } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
-import type { Warehouse } from '@/shared/types';
+import type { CustomerImportJob, Warehouse } from '@/shared/types';
+import CustomerImportJobStatus from '../customers/CustomerImportJobStatus.vue';
 import { sapoGoBookmarklet } from './sapoGoExport';
 import { sapoGoOrdersBookmarklet } from './sapoGoOrdersExport';
 import SapoPurchasesMigration from './SapoPurchasesMigration.vue';
@@ -194,6 +195,37 @@ const ignored = computed(() => (check.value?.columns ?? []).filter((c) => !c.key
 const problems = computed(() => [...(check.value?.errors ?? []), ...(check.value?.skipped ?? [])]);
 const ready = computed(() => !!check.value && !check.value.errors.length && !check.value.queued && (check.value.created + check.value.updated) > 0);
 
+/** A customer file too big to import while waiting: checked, then imported, in the background; followed here. */
+const job = ref<CustomerImportJob | null>(null);
+const jobRunning = computed(() => !!job.value && ['pending_check', 'checking', 'queued', 'importing'].includes(job.value.status));
+let jobTimer: ReturnType<typeof setTimeout> | undefined;
+async function followJob() {
+    clearTimeout(jobTimer);
+    if (!job.value) return;
+    try {
+        const before = job.value.status;
+        job.value = (await api.get(`/customers/imports/${job.value.id}`)).data.data;
+        if (before !== 'done' && job.value?.status === 'done') toast.success(`Đã thêm ${formatNumber(job.value.created)} khách mới, cập nhật ${formatNumber(job.value.updated)} khách.`);
+    } catch {
+        // tried again on the next tick
+    }
+    if (jobRunning.value) jobTimer = setTimeout(followJob, 2000);
+}
+const jobBusy = ref(false);
+async function runJob() {
+    if (!job.value) return;
+    jobBusy.value = true;
+    try {
+        job.value = (await api.post(`/customers/imports/${job.value.id}/run`)).data.data;
+        followJob();
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    } finally {
+        jobBusy.value = false;
+    }
+}
+onBeforeUnmount(() => clearTimeout(jobTimer));
+
 onMounted(async () => {
     if (tenant.can('inventory.receive')) {
         warehouses.value = (await api.get('/warehouses')).data.data;
@@ -210,6 +242,8 @@ function reset() {
     branchChoice.value = {};
     check.value = null;
     done.value = null;
+    job.value = null;
+    clearTimeout(jobTimer);
 }
 
 function onFile(e: Event) {
@@ -218,6 +252,8 @@ function onFile(e: Event) {
     input.value = '';
     branchChoice.value = {};
     done.value = null;
+    job.value = null;
+    clearTimeout(jobTimer);
     if (file.value) send(true);
 }
 
@@ -237,6 +273,8 @@ async function send(dryRun: boolean) {
         const { data } = await api.post(kind.value === 'products' ? '/products/import' : '/customers/import', body);
         if (data.queued) {
             check.value = { created: 0, updated: 0, errors: [], message: '', queued: true };
+            job.value = data.import;
+            followJob();
         } else if (dryRun) {
             check.value = data;
             for (const b of (data as Result).branches ?? []) {
@@ -408,7 +446,10 @@ function downloadProblems() {
                 <p v-if="busy" class="text-sm text-muted-foreground">Đang đọc file…</p>
 
                 <template v-if="check && !busy">
-                    <Alert v-if="check.queued" tone="blue">File lớn: hệ thống đang kiểm tra nền. Xem tiến độ và bấm nhập ở <RouterLink to="/customers" class="underline">danh sách khách hàng</RouterLink>.</Alert>
+                    <template v-if="check.queued">
+                        <Alert tone="blue">File lớn: kiểm tra và nhập chạy ngầm trên máy chủ. Tiến độ hiện ngay dưới đây (cũng xem được ở <RouterLink to="/customers" class="underline">danh sách khách hàng</RouterLink>).</Alert>
+                        <CustomerImportJobStatus v-if="job" :job="job" />
+                    </template>
                     <template v-else>
                         <div class="flex flex-wrap items-center gap-2 text-sm" data-testid="migrate-summary">
                             <Badge v-if="check.source" tone="info" data-testid="migrate-source">File {{ SOURCES[check.source] }}</Badge>
@@ -468,7 +509,8 @@ function downloadProblems() {
                     <h2 class="font-semibold">3. Nhập vào EzChat Bán hàng</h2>
                     <p class="text-sm text-muted-foreground">SKU, mã khách hoặc số điện thoại đã có sẽ được cập nhật, không tạo trùng. Tồn đầu kỳ và nợ đầu kỳ chỉ ghi một lần.</p>
                 </div>
-                <Button :disabled="!ready" :loading="busy" data-testid="migrate-run" @click="send(false)">Nhập {{ check && ready ? formatNumber(check.created + check.updated) : '' }} dòng</Button>
+                <Button v-if="job" :disabled="job.status !== 'checked'" :loading="jobBusy || jobRunning" data-testid="migrate-run" @click="runJob">{{ job.status === 'done' ? 'Đã nhập xong' : `Nhập ${job.status === 'checked' ? formatNumber(job.total) : ''} dòng` }}</Button>
+                    <Button v-else :disabled="!ready" :loading="busy" data-testid="migrate-run" @click="send(false)">Nhập {{ check && ready ? formatNumber(check.created + check.updated) : '' }} dòng</Button>
             </Card>
 
             <Alert v-if="done" tone="green" :icon="CheckCircle2" data-testid="migrate-done">

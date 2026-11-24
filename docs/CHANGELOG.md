@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Nhập khách hàng file lớn: hiện tiến độ ngay tại chỗ (2026-11-24)
+- Cấu hình › Chuyển dữ liệu › Khách hàng: file trên 5.000 dòng không còn chỉ báo "đang kiểm tra nền" rồi im lặng; tiến độ kiểm tra, kết quả và nút Nhập hiện ngay trong trang (`CustomerImportJobStatus.vue`, dùng chung với hộp Nhập file ở Khách hàng). Danh sách khách hàng cũng báo khi file đang kiểm tra hoặc đã kiểm tra xong.
+- Sau 1 phút mà việc chạy ngầm chưa bắt đầu thì báo bộ chạy ngầm (Horizon) có thể đang tắt. `CustomerImportResource` thêm `updated_at`.
+
 ### Chuyển dữ liệu: sổ quỹ (phiếu thu, phiếu chi) từ Sapo GO (2026-11-23)
 - Cấu hình › Chuyển dữ liệu có mục **Sổ quỹ (phiếu thu, phiếu chi)** (`SapoVouchersMigration.vue`). Nút dấu trang "Lấy sổ quỹ Sapo" (`sapoGoVouchersExport.ts`) đọc `/admin/receipt_vouchers.json` và `/admin/payment_vouchers.json`, bỏ các phiếu Sapo tự tạo cho đơn hàng, đơn nhập, đơn trả (loại "Tự động" hoặc chứng từ gốc SON/PON/SRN/PRN…) vì các khoản đó đã sang cùng đơn, rồi lưu `sapo-so-quy-….json` (định dạng `ezsell-sapo-go-vouchers`).
 - `POST /cash-vouchers/import/sapo` (`SapoVoucherImporter`, quyền `finance.vouchers`): kiểm tra trước rồi nhập. Phiếu giữ mã Sapo, `imported_from = 'sapo'` (migration mới), không gắn quỹ: số dư quỹ, Sổ quỹ và Thu chi theo loại (`CashFlows`) không tính; danh sách Thu chi có nhãn "Sapo", người lập "Chuyển từ Sapo"; báo cáo lãi lỗ và sổ chi phí có tính. Loại phiếu khớp theo tên (không phân biệt hoa thường; tên viết hoa toàn bộ được đổi sang chữ thường), loại chưa có được tạo. Phiếu đã hủy bỏ qua; nhập lại không tạo trùng; phiếu chuyển từ Sapo không hủy được.
