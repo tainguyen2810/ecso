@@ -105,6 +105,13 @@ it('does not make the same order twice and brings payments up to date', function
         ->and(Supplier::withoutGlobalScopes()->where('tenant_id', $this->tenant->id)->count())->toBe(1);
 });
 
+it('finds a product whose Sapo SKU had a space the product import turned into "-"', function () {
+    makeVariant($this->tenant, 'CU-GF63-8rd', ['product_name' => 'Cục sạc GF63']);
+    $check = $this->api->postJson('/api/v1/purchase-orders/import/sapo', ['file' => sapoPurchasesFile([sapoPurchase('PON009', ['lines' => [['sku' => 'CU-GF63 8rd', 'name' => 'Cục sạc GF63', 'quantity' => 1, 'price' => 1000]]])]), 'dry_run' => true])->assertOk();
+
+    expect($check->json('unmatched_lines'))->toBe(0);
+});
+
 it('links returns to their order, lowers the debt and keeps stock', function () {
     $this->api->postJson('/api/v1/purchase-orders/import/sapo', ['file' => sapoPurchasesFile(
         [sapoPurchase('PON001', ['paid' => 0, 'payments' => []])],

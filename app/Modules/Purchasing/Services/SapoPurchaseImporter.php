@@ -3,6 +3,7 @@
 namespace App\Modules\Purchasing\Services;
 
 use App\Modules\Catalog\Models\ProductVariant;
+use App\Modules\Catalog\Services\ProductImporter;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Support\DocumentNumber;
 use App\Modules\Purchasing\Models\PurchaseOrder;
@@ -574,7 +575,10 @@ class SapoPurchaseImporter
             }
             $key = $field.':'.$value;
             if (! array_key_exists($key, $this->variants)) {
-                $this->variants[$key] = ProductVariant::query()->where($field, $value)->first();
+                // The product import turned spaces and other odd characters of a Sapo SKU into "-": look for that too.
+                $tidy = $field === 'sku' ? mb_strtolower(ProductImporter::tidySku($value)) : $value;
+                $this->variants[$key] = ProductVariant::query()->where($field, $value)->first()
+                    ?? ($tidy !== $value ? ProductVariant::query()->where($field, $tidy)->first() : null);
             }
             if ($this->variants[$key] !== null) {
                 return $this->variants[$key];
