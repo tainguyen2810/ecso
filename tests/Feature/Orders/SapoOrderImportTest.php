@@ -91,6 +91,13 @@ it('does not make the same order twice and brings a finished order up to date', 
         ->and(($this->orders)()->where('external_order_id', 'SON1')->value('payment_status'))->toBe(Order::PAYMENT_PAID);
 });
 
+it('finds a product whose Sapo SKU had a space the product import turned into "-"', function () {
+    makeVariant($this->tenant, 'CU-GF63-8rd', ['product_name' => 'Cục sạc GF63']);
+    $check = $this->api->postJson('/api/v1/orders/import/sapo', ['file' => sapoOrdersFile([sapoOrder('SON9', ['lines' => [['sku' => 'CU-GF63 8rd', 'name' => 'Cục sạc GF63']]])]), 'dry_run' => true])->assertOk();
+
+    expect($check->json('unmatched_lines'))->toBe(0);
+});
+
 it('leaves out a marketplace order that already came in through the shop connection', function () {
     $shop = fakeShop($this->tenant);
     $synced = fakeOrder($shop, [[$this->usb, 1]]);

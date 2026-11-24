@@ -483,7 +483,8 @@ class ProductImporter
     }
 
     /** "LCD PL241V8" → "LCD-PL241V8"; a SKU that cannot be mended is returned as it is, for the check to report. */
-    private static function tidySku(string $sku): string
+    /** The SKU as the import saves it: characters other than letters, digits and . _ - / become "-". */
+    public static function tidySku(string $sku): string
     {
         $sku = trim($sku);
         if ($sku === '' || preg_match('/^[\pL\pN._\-\/]+$/u', $sku)) {
