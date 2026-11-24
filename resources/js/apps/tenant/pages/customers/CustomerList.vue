@@ -162,8 +162,8 @@ async function watchImport() {
         const { data } = await api.get('/customers/imports/latest');
         const was = importJob.value?.status;
         const job: CustomerImportJob | null = data.data;
-        const active = !!job && ['queued', 'importing'].includes(job.status);
-        importJob.value = active || (job && was && was !== job.status) ? job : null;
+        const active = !!job && ['pending_check', 'checking', 'queued', 'importing'].includes(job.status);
+        importJob.value = active || job?.status === 'checked' || (job && was && was !== job.status) ? job : null;
         if (was && was !== 'done' && job?.status === 'done') load();
         if (active) importTimer = setTimeout(watchImport, 4000);
     } catch {
@@ -264,7 +264,13 @@ async function exportFile(onlySelected: boolean) {
     <CustomersNav />
 
     <div v-if="importJob" class="mb-3 rounded-md border px-3 py-2 text-sm" :class="importJob.status === 'failed' ? 'border-destructive/30 bg-destructive/5 text-destructive' : 'bg-muted/40'" data-testid="customer-import-banner">
-        <template v-if="importJob.status === 'queued' || importJob.status === 'importing'">
+        <template v-if="importJob.status === 'pending_check' || importJob.status === 'checking'">
+            Đang kiểm tra tệp <b>{{ importJob.file_name }}</b> (chạy ngầm). Kiểm tra xong, mở "Nhập file" để bấm nhập.
+        </template>
+        <template v-else-if="importJob.status === 'checked'">
+            Tệp <b>{{ importJob.file_name }}</b> đã kiểm tra xong: {{ formatNumber(importJob.total) }} dòng. <button type="button" class="underline" @click="importOpen = true">Mở để nhập</button>
+        </template>
+        <template v-else-if="importJob.status === 'queued' || importJob.status === 'importing'">
             Đang nhập tệp <b>{{ importJob.file_name }}</b>: {{ formatNumber(importJob.processed) }} / {{ formatNumber(importJob.total) }} dòng. Khách mới chỉ hiện khi đã nhập xong toàn bộ.
         </template>
         <template v-else-if="importJob.status === 'done'">

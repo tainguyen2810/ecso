@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { CheckCircle2, Download, FileSpreadsheet, Loader2, XCircle } from 'lucide-vue-next';
+import { CheckCircle2, Download, FileSpreadsheet, XCircle } from 'lucide-vue-next';
 import Button from '@/shared/ui/Button.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
+import CustomerImportJobStatus from './CustomerImportJobStatus.vue';
 import { api, ApiError, downloadFile } from '@/shared/lib/api';
 import { formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
@@ -28,7 +29,6 @@ const busy = ref(false);
 // and can be closed meanwhile (the customer list shows how far it got).
 const job = ref<CustomerImportJob | null>(null);
 const running = computed(() => !!job.value && ['pending_check', 'checking', 'queued', 'importing'].includes(job.value.status));
-const percent = computed(() => (job.value && job.value.total ? Math.min(100, Math.round((job.value.processed / job.value.total) * 100)) : 0));
 let timer: ReturnType<typeof setTimeout> | undefined;
 
 async function follow() {
@@ -140,43 +140,7 @@ function onFile(e: Event) {
 
             <div v-if="busy && !preview && !job" class="text-sm text-muted-foreground">Đang kiểm tra file…</div>
 
-            <div v-if="job" class="space-y-2 rounded-md border p-3 text-sm" data-testid="customer-import-job">
-                <p class="font-medium">{{ job.file_name }}</p>
-                <template v-if="job.status === 'pending_check' || job.status === 'checking'">
-                    <p class="flex items-center gap-2 text-muted-foreground"><Loader2 class="size-4 animate-spin" /> Đang kiểm tra toàn bộ file (chạy ngầm, có thể đóng cửa sổ này)…</p>
-                </template>
-                <template v-else-if="job.status === 'checked'">
-                    <div class="flex items-start gap-3 rounded-md bg-success/10 p-3">
-                        <CheckCircle2 class="mt-0.5 size-5 text-success" />
-                        <div>
-                            <p class="font-medium">File hợp lệ: {{ formatNumber(job.total) }} dòng</p>
-                            <p class="text-muted-foreground">Sẽ thêm {{ formatNumber(job.created) }} khách mới và cập nhật {{ formatNumber(job.updated) }} khách. Bấm "Nhập dữ liệu" để nhập (chạy ngầm, tệp được giữ 24 giờ).</p>
-                        </div>
-                    </div>
-                </template>
-                <template v-else-if="job.status === 'queued' || job.status === 'importing'">
-                    <p class="flex items-center gap-2 text-muted-foreground"><Loader2 class="size-4 animate-spin" /> Đang nhập {{ formatNumber(job.processed) }} / {{ formatNumber(job.total) }} dòng. Có thể đóng cửa sổ này; dữ liệu chỉ hiện khi đã nhập xong toàn bộ.</p>
-                    <div class="h-2 overflow-hidden rounded-full bg-muted"><div class="h-full bg-primary transition-all" :style="{ width: `${percent}%` }" /></div>
-                </template>
-                <template v-else-if="job.status === 'done'">
-                    <div class="flex items-start gap-3 rounded-md bg-success/10 p-3" data-testid="customer-import-done">
-                        <CheckCircle2 class="mt-0.5 size-5 text-success" />
-                        <p>Đã nhập xong: thêm {{ formatNumber(job.created) }} khách mới, cập nhật {{ formatNumber(job.updated) }} khách.</p>
-                    </div>
-                </template>
-                <template v-else>
-                    <div class="rounded-md border border-destructive/30">
-                        <div class="flex items-center gap-2 border-b border-destructive/20 bg-destructive/5 px-3 py-2 font-medium text-destructive">
-                            <XCircle class="size-4" /> {{ job.message ?? 'Không nhập được.' }}<template v-if="job.error_count"> ({{ formatNumber(job.error_count) }} lỗi)</template>
-                        </div>
-                        <ul v-if="job.errors.length" class="max-h-48 divide-y overflow-y-auto">
-                            <li v-for="(e, i) in job.errors" :key="i" class="flex gap-3 px-3 py-1.5">
-                                <span class="w-16 shrink-0 text-muted-foreground">{{ e.row ? `Dòng ${e.row}` : 'Tệp' }}</span><span>{{ e.message }}</span>
-                            </li>
-                        </ul>
-                    </div>
-                </template>
-            </div>
+            <CustomerImportJobStatus v-if="job" :job="job" />
 
             <div v-if="preview && !job" data-testid="customer-import-preview">
                 <div v-if="!preview.errors.length && preview.total" class="flex items-start gap-3 rounded-md bg-success/10 p-3 text-sm">

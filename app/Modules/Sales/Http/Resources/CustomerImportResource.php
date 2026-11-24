@@ -27,6 +27,8 @@ class CustomerImportResource extends JsonResource
             'started_at' => $this->started_at?->toIso8601String(),
             'finished_at' => $this->finished_at?->toIso8601String(),
             'created_at' => $this->created_at?->toIso8601String(),
+            // Since when it has been in its current state: a job waiting long to be picked up means no worker runs.
+            'updated_at' => $this->updated_at?->toIso8601String(),
         ];
     }
 }
