@@ -117,7 +117,7 @@ function onFile(e: Event) {
 </script>
 
 <template>
-    <Dialog v-model:open="open" size="lg" title="Nhập khách hàng từ file" description="Excel (.xlsx) hoặc CSV, tối đa 30.000 dòng (trên 5.000 dòng thì chạy ngầm). Kiểm tra toàn bộ trước, có lỗi thì không nhập dòng nào.">
+    <Dialog v-model:open="open" size="lg" title="Nhập khách hàng từ file" description="Excel (.xlsx) hoặc CSV, tối đa 200.000 dòng (trên 5.000 dòng thì chạy ngầm). Kiểm tra toàn bộ trước, có lỗi thì không nhập dòng nào.">
         <div class="space-y-4">
             <div class="rounded-md border border-dashed p-4 text-sm">
                 <ul class="list-disc space-y-1 pl-5 text-muted-foreground">

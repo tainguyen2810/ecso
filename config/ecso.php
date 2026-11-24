@@ -59,6 +59,6 @@ return [
     // are checked and imported in the background (CustomerImport).
     'customer_import' => [
         'sync_rows' => (int) env('CUSTOMER_IMPORT_SYNC_ROWS', 5000),
-        'background_rows' => (int) env('CUSTOMER_IMPORT_BACKGROUND_ROWS', 30000),
+        'background_rows' => (int) env('CUSTOMER_IMPORT_BACKGROUND_ROWS', 200000),
     ],
 ];
