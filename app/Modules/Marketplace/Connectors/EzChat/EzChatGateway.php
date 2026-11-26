@@ -59,7 +59,9 @@ class EzChatGateway
      */
     public function call(MarketplaceAccount $account, string $method, string $path, array $query = [], ?array $body = null): array
     {
-        $payload = ['method' => $method, 'path' => $path, 'query' => array_map(fn ($v) => is_bool($v) ? ($v ? 'true' : 'false') : (string) $v, $query)];
+        // An object even when empty: EzChat checks "query" is a map, and an empty PHP array would go out as [] (every
+        // POST without query was refused with "Request validation failed").
+        $payload = ['method' => $method, 'path' => $path, 'query' => (object) array_map(fn ($v) => is_bool($v) ? ($v ? 'true' : 'false') : (string) $v, $query)];
         if ($body !== null) {
             $payload['body'] = $body;
         }

@@ -24,6 +24,9 @@ class ShopeeConnector extends GatewayConnector
 {
     public const MARKETPLACE = 'shopee';
 
+    /** The "slot" offered when Shopee asks for no pickup time (or offers none): ship_order goes without one. */
+    public const ANY_SLOT = 'shopee';
+
     /** Shopee order_status -> ECSO status (seeded into marketplace_status_maps). */
     public const STATUSES = [
         'UNPAID' => OrderStatus::UNPAID,
@@ -214,6 +217,15 @@ class ShopeeConnector extends GatewayConnector
                 'default' => in_array('pickup_address', $flags, true) || in_array('default_address', $flags, true),
             ];
         }
+        // Shopee asks for a pickup time only for some carriers (info_needed.pickup lists pickup_time_id). When it asks
+        // for none, or offers no time for any address, Shopee books the pickup itself: one slot that sends no time.
+        $timeNeeded = in_array('pickup_time_id', (array) ($needed['pickup'] ?? []), true);
+        if (! $timeNeeded || ! in_array(true, array_map(fn ($a) => $a['slots'] !== [], $addresses), true)) {
+            foreach ($addresses as &$a) {
+                $a['slots'] = $timeNeeded && $a['slots'] !== [] ? $a['slots'] : [['id' => self::ANY_SLOT, 'label' => 'Shopee tự hẹn giờ lấy hàng']];
+            }
+            unset($a);
+        }
         // The shop's pickup address first.
         usort($addresses, fn ($a, $b) => $b['default'] <=> $a['default']);
 
@@ -231,7 +243,7 @@ class ShopeeConnector extends GatewayConnector
             if ($addressId === null) {
                 throw new ConnectorException('Chọn địa chỉ shipper đến lấy hàng.', temporary: false);
             }
-            $body['pickup'] = ['address_id' => (int) $addressId, 'pickup_time_id' => $slotId];
+            $body['pickup'] = ['address_id' => (int) $addressId] + ($slotId === null || $slotId === self::ANY_SLOT ? [] : ['pickup_time_id' => $slotId]);
         } else {
             // A drop-off point is only asked for in some regions; the first branch Shopee offers is used then.
             $res = (array) ($this->gateway->call($account, 'GET', '/api/v2/logistics/get_shipping_parameter', ['order_sn' => $externalOrderId])['response'] ?? []);
