@@ -420,6 +420,30 @@ it('packing a Shopee order asks how it goes, or uses the shop\'s last choice whe
         ->and($order->refresh()->ship_arrangement['method'])->toBe('dropoff');
 });
 
+it('offers Shopee pickup without a time when Shopee asks for none, and ships without pickup_time_id', function () {
+    shopeeShipFake(['GET /api/v2/logistics/get_shipping_parameter' => ['data' => ['data' => ['response' => [
+        'info_needed' => ['pickup' => ['address_id']],
+        'pickup' => ['address_list' => [
+            ['address_id' => 8, 'address' => '12 Lê Lợi', 'city' => 'TP. Hồ Chí Minh', 'address_flag' => ['pickup_address'], 'time_slot_list' => []],
+            ['address_id' => 9, 'address' => '5 Hai Bà Trưng', 'city' => 'TP. Hồ Chí Minh', 'address_flag' => [], 'time_slot_list' => []],
+        ]],
+    ]]]]]);
+    $account = gatewayShop($this->tenant, 'shopee');
+    TenantContext::run($this->tenant, fn () => app(OrderSync::class)->syncOne($account, '2611SHIP1', 'webhook'));
+    $order = Order::withoutGlobalScopes()->where('external_order_id', '2611SHIP1')->sole();
+    $api = actingInTenant($this->owner, $this->tenant);
+
+    $pickup = $api->postJson('/api/v1/orders/ship-options', ['ids' => [$order->ulid]])->assertOk()->json('data.groups.0.options.pickup');
+    expect($pickup['available'])->toBeTrue()->and($pickup['addresses'])->toHaveCount(2)
+        ->and($pickup['addresses'][0]['slots'])->toBe([['id' => 'shopee', 'label' => 'Shopee tự hẹn giờ lấy hàng']])
+        ->and($pickup['addresses'][1]['slots'][0]['id'])->toBe('shopee');
+
+    $choice = ['method' => 'pickup', 'address_id' => '8', 'slot_id' => 'shopee', 'slot_label' => 'Shopee tự hẹn giờ lấy hàng', 'address_label' => '12 Lê Lợi'];
+    $api->postJson('/api/v1/orders/bulk', ['ids' => [$order->ulid], 'action' => 'pack', 'shipping' => [$account->ulid => $choice]])->assertOk()
+        ->assertJsonPath('data.0.ok', true);
+    expect(collect(ezCalls())->firstWhere('key', 'POST /api/v2/logistics/ship_order')['body'])->toBe(['order_sn' => '2611SHIP1', 'pickup' => ['address_id' => 8]]);
+});
+
 it('prepares a TikTok Shop package for drop-off and prints its label from TikTok\'s file link', function () {
     $shipped = false;
     fakeEzChat([

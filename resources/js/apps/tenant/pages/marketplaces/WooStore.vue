@@ -243,7 +243,7 @@ const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].
                     />
                 </div>
                 <div class="grid gap-4 border-t px-5 py-4 sm:grid-cols-2">
-                    <FormField label="Đối soát đơn với website mỗi">
+                    <FormField label="Đối soát dự phòng mỗi" hint="Đơn mới về ngay tức thì qua webhook. Đây chỉ là lần kiểm tra lại định kỳ để bắt đơn bị sót khi webhook lỗi.">
                         <Select :model-value="String(account.order_sync_interval ?? 15)" :disabled="!canEdit" :options="intervals" data-testid="woo-interval" @update:model-value="setSyncInterval" />
                     </FormField>
                     <div class="text-sm">

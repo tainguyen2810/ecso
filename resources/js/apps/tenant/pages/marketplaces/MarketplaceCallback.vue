@@ -4,8 +4,8 @@ import { useRoute, useRouter } from 'vue-router';
 import { CheckCircle2, XCircle } from 'lucide-vue-next';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
-import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
+import ConnectProgress from './ConnectProgress.vue';
 import WooConnectResult from './WooConnectResult.vue';
 import type { MarketplaceAccountData, Warehouse, WooConnectChecks } from '@/shared/types';
 
@@ -42,7 +42,7 @@ onMounted(async () => {
     <div :class="['mx-auto mt-12', isWoo ? 'max-w-2xl' : 'max-w-md']">
         <Card>
             <div class="p-6">
-                <Skeleton v-if="!result" class="mx-auto h-16 w-64" />
+                <ConnectProgress v-if="!result" :woo="isWoo" />
                 <template v-else-if="result.ok && isWoo && result.checks">
                     <div class="mb-4 flex items-center gap-3">
                         <CheckCircle2 class="size-8 shrink-0 text-success" />
