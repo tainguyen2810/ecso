@@ -425,6 +425,21 @@ it('packing a Shopee order asks how it goes, or uses the shop\'s last choice whe
         ->and($order->refresh()->ship_arrangement['method'])->toBe('dropoff');
 });
 
+it('prints the label of an order just prepared even before ECSO read its new status', function () {
+    shopeeShipFake();
+    $account = gatewayShop($this->tenant, 'shopee');
+    TenantContext::run($this->tenant, fn () => app(OrderSync::class)->syncOne($account, '2611SHIP1', 'webhook'));
+    $order = Order::withoutGlobalScopes()->where('external_order_id', '2611SHIP1')->sole();
+    $api = actingInTenant($this->owner, $this->tenant);
+    $choice = ['method' => 'pickup', 'address_id' => '8', 'slot_id' => 'slot-8', 'slot_label' => 'Thứ 5', 'address_label' => '12 Lê Lợi'];
+    $api->postJson('/api/v1/orders/bulk', ['ids' => [$order->ulid], 'action' => 'pack', 'shipping' => [$account->ulid => $choice]])->assertOk();
+    // As when Shopee had not given the tracking number yet at the time of "Chuẩn bị hàng".
+    $order->refresh()->forceFill(['status' => OrderStatus::READY_TO_PACK, 'external_updated_at' => null, 'raw_status' => 'READY_TO_SHIP'])->save();
+
+    $labels = $api->postJson('/api/v1/orders/shipping-labels', ['ids' => [$order->ulid]])->assertOk()->json('data');
+    expect($labels['failed'])->toBe([])->and($labels['files'])->toHaveCount(1)->and($order->refresh()->status)->toBe(OrderStatus::PACKED);
+});
+
 it('reads a Shopee order again when its label is refused: handed to the carrier, the status catches up', function () {
     $state = 'READY_TO_SHIP';
     $detail = function () use (&$state) {
