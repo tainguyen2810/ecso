@@ -16,6 +16,7 @@ class ProductResource extends JsonResource
             'name' => $this->name,
             'description' => $this->description,
             'type' => $this->type ?? Product::TYPE_STANDARD,
+            'subscription' => $this->type === Product::TYPE_SUBSCRIPTION ? $this->resource->subscriptionRules() : null,
             'unit' => $this->unit,
             'tags' => $this->tags ?? [],
             'vat_rate' => $this->vat_rate,

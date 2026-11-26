@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, type Component } from 'vue';
-import { ArrowRightLeft, Boxes, Cable, CreditCard, HandCoins, MessageSquareWarning, Percent, Printer, Receipt, ScrollText, Search, SlidersHorizontal, Sparkles, Store, Users, UsersRound, Wallet, Warehouse } from 'lucide-vue-next';
+import { ArrowRightLeft, Boxes, Cable, CreditCard, HandCoins, MessageSquareWarning, Percent, Printer, Receipt, RefreshCw, ScrollText, Search, SlidersHorizontal, Sparkles, Store, Users, UsersRound, Wallet, Warehouse } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Input from '@/shared/ui/Input.vue';
 import Switch from '@/shared/ui/Switch.vue';
@@ -38,6 +38,7 @@ const groups: { title: string; tiles: Tile[] }[] = [
         tiles: [
             { to: '/settings/sales', icon: SlidersHorizontal, title: 'Cấu hình bán hàng', description: 'Sửa thời gian bán, số liên in, bán tại quầy, lý do hủy và trả hàng', permission: 'settings.manage' },
             { to: '/sales-channels', icon: Store, title: 'Kênh bán riêng', description: 'Quầy, cửa hàng, Facebook, Zalo, website', permission: 'orders.view' },
+            { to: '/settings/subscriptions', icon: RefreshCw, title: 'Thuê bao', description: 'Ngày nhắc khách gia hạn, gửi qua Zalo, báo nhân viên', permission: 'settings.manage' },
             { to: '/settings/connections', icon: Cable, title: 'Kết nối dịch vụ', description: 'Vận chuyển, hóa đơn điện tử, Zalo của shop', permission: 'settings.manage' },
             { to: '/settings/sales#reasons', icon: MessageSquareWarning, title: 'Lý do hủy, trả hàng', description: 'Danh sách lý do chọn khi hủy đơn hoặc nhận hàng trả', permission: 'settings.manage' },
             { to: '/cash/types', icon: Receipt, title: 'Loại phiếu thu chi', description: 'Phân loại phiếu thu, phiếu chi', permission: 'finance.view' },

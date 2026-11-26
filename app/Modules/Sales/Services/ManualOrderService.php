@@ -25,6 +25,7 @@ use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\OrderPayment;
 use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Sales\Promotions\OrderPromotions;
+use App\Modules\Sales\Subscriptions\SubscriptionService;
 use App\Modules\Sales\Support\PhoneNumber;
 use App\Modules\Tenancy\Support\TenantSettings;
 use Illuminate\Support\Collection;
@@ -69,6 +70,7 @@ class ManualOrderService
         private readonly VnAddress $addresses,
         private readonly OrderPromotions $promotions,
         private readonly LoyaltyService $loyalty,
+        private readonly SubscriptionService $subscriptions,
     ) {}
 
     /**
@@ -133,6 +135,8 @@ class ManualOrderService
                 $this->exchanges->attach($return, $order);
                 $order->refresh();
             }
+
+            $this->subscriptions->syncOrder($order);
 
             // A walk-in buyer who takes the goods must pay in full: there is nobody to record the debt against.
             $paying = collect($data['payments'] ?? [])->reduce(fn (string $sum, $p) => bcadd($sum, (string) $p['amount'], 2), (string) $order->paid_amount);
@@ -206,6 +210,7 @@ class ManualOrderService
             $this->refreshTotals($order);
             $this->stock->apply($order);
             $this->payments->recompute($order);
+            $this->subscriptions->syncOrder($order);
 
             if (bccomp((string) $order->paid_amount, (string) $order->total, 2) > 0) {
                 $order->forceFill(['sync_warning' => 'Khách đã trả nhiều hơn tổng tiền mới của đơn: cần hoàn lại phần chênh lệch.'])->save();
@@ -244,6 +249,7 @@ class ManualOrderService
             }
 
             $this->moveTo($order, $to, $params['reason'] ?? null);
+            $this->subscriptions->syncOrder($order);
 
             if ($action === 'cancel' && bccomp((string) $order->paid_amount, (string) $order->refunded_amount, 2) > 0) {
                 $order->forceFill(['sync_warning' => 'Đơn đã hủy nhưng khách đã trả tiền: hãy ghi nhận hoàn tiền.'])->save();
@@ -377,7 +383,7 @@ class ManualOrderService
     }
 
     /**
-     * @param  array<int, array{variant_id?: string|null, name?: string|null, quantity: int, unit_price?: string|int|float|null, discount?: string|int|float|null}>  $lines
+     * @param  array<int, array{variant_id?: string|null, name?: string|null, quantity: int, unit_price?: string|int|float|null, discount?: string|int|float|null, start?: string|null, label?: string|null, subscription_id?: string|null}>  $lines
      */
     private function replaceItems(Order $order, array $lines): void
     {
@@ -417,6 +423,34 @@ class ManualOrderService
             $discount = bcadd((string) ($line['discount'] ?? 0), '0', 2);
             if (bccomp($discount, bcmul($price, (string) $line['quantity'], 2), 2) > 0) {
                 throw ValidationException::withMessages(["lines.{$i}.discount" => 'Giảm giá lớn hơn thành tiền.']);
+            }
+
+            // Dịch vụ / thuê bao: the SKU stays on the line (service_variant_id) but not as product_variant_id, so the
+            // stock engine, packing and returns see a service line and never hold or move stock for it.
+            if ($variant->product?->isNonStock()) {
+                $item = new OrderItem;
+                $item->forceFill([
+                    'order_id' => $order->id,
+                    'external_item_id' => (string) ($i + 1).'-'.$order->version,
+                    'product_variant_id' => null,
+                    'service_variant_id' => $variant->id,
+                    'seller_sku' => $variant->sku,
+                    'name' => $variant->product->name ?? $variant->sku,
+                    'variant_name' => $variant->name,
+                    'quantity' => (int) $line['quantity'],
+                    'unit_price' => $price,
+                    'discount' => $discount,
+                    'mapping_status' => OrderItem::SERVICE,
+                    'subscription' => $variant->product->isSubscription() ? array_filter([
+                        // Two of the 12-month plan is 24 months on one subscription.
+                        'months' => max(1, (int) ($variant->period_months ?? 1)) * max(1, (int) $line['quantity']),
+                        'start' => $line['start'] ?? null,
+                        'label' => isset($line['label']) ? (trim((string) $line['label']) ?: null) : null,
+                        'subscription_id' => $line['subscription_id'] ?? null,
+                    ], fn ($v) => $v !== null) : null,
+                ])->save();
+
+                continue;
             }
 
             $item = new OrderItem;
@@ -505,8 +539,10 @@ class ManualOrderService
 
     private function currentLines(Order $order): array
     {
-        return $order->items()->whereNull('promotion_id')->with('variant')->get()->map(fn (OrderItem $i) => $i->variant === null
-            ? ['variant_id' => null, 'name' => $i->name, 'quantity' => $i->quantity, 'unit_price' => (string) $i->unit_price, 'discount' => (string) $i->discount]
+        return $order->items()->whereNull('promotion_id')->with(['variant', 'serviceVariant'])->get()->map(fn (OrderItem $i) => $i->variant === null
+            ? ($i->serviceVariant !== null
+                ? ['variant_id' => $i->serviceVariant->ulid, 'quantity' => $i->quantity, 'unit_price' => (string) $i->unit_price, 'discount' => (string) $i->discount, ...array_intersect_key((array) $i->subscription, array_flip(['start', 'label', 'subscription_id']))]
+                : ['variant_id' => null, 'name' => $i->name, 'quantity' => $i->quantity, 'unit_price' => (string) $i->unit_price, 'discount' => (string) $i->discount])
             : ['variant_id' => $i->variant->ulid, 'quantity' => $i->quantity, 'unit_price' => (string) $i->unit_price, 'discount' => (string) $i->discount],
         )->all();
     }

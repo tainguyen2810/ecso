@@ -18,11 +18,12 @@ trait ResolvesLines
      */
     protected function resolveLines(array $lines): array
     {
-        $ids = ProductVariant::query()->whereIn('ulid', array_column($lines, 'variant_id'))->pluck('id', 'ulid');
+        // Services and subscriptions hold no stock: they cannot be received, counted or moved.
+        $ids = ProductVariant::query()->stocked()->whereIn('ulid', array_column($lines, 'variant_id'))->pluck('id', 'ulid');
 
         foreach ($lines as $i => $line) {
             if (! isset($ids[$line['variant_id']])) {
-                throw ValidationException::withMessages(["lines.{$i}.variant_id" => 'SKU không tồn tại.']);
+                throw ValidationException::withMessages(["lines.{$i}.variant_id" => 'SKU không tồn tại hoặc là dịch vụ, thuê bao (không có tồn kho).']);
             }
             $lines[$i]['variant_id'] = $ids[$line['variant_id']];
         }

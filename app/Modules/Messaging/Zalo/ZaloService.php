@@ -22,6 +22,7 @@ class ZaloService
         'shipped' => 'Đã giao cho vận chuyển',
         'delivered' => 'Giao thành công',
         'payment_reminder' => 'Nhắc thanh toán (đơn còn nợ quá 3 ngày)',
+        'renewal_reminder' => 'Nhắc gia hạn thuê bao (theo Cấu hình › Thuê bao)',
     ];
 
     /** What EzSell can put in a template parameter. */
@@ -35,6 +36,10 @@ class ZaloService
         'tracking' => 'Mã vận đơn',
         'phone' => 'Số điện thoại khách',
         'shop_name' => 'Tên cửa hàng',
+        'service_name' => 'Tên dịch vụ thuê bao',
+        'service_label' => 'Dùng cho (tên miền, văn phòng…)',
+        'expiry_date' => 'Ngày hết hạn thuê bao',
+        'renew_price' => 'Giá gia hạn',
     ];
 
     public function __construct(private readonly ZaloClient $client) {}
@@ -195,6 +200,49 @@ class ZaloService
         } catch (ZaloException $e) {
             $log->fill(['status' => ZaloMessage::FAILED, 'error' => mb_substr($e->getMessage(), 0, 255)]);
             Log::info('zalo.zns.failed', ['order' => $order->id, 'event' => $event, 'code' => $e->getCode()]);
+        }
+        $log->save();
+
+        return $log;
+    }
+
+    /**
+     * "Nhắc gia hạn": the renewal reminder template for one subscription. Several reminders go out for the same end
+     * date (7 days, 1 day…), so the caller decides when; the log row is kept like the order messages.
+     *
+     * @param  array<string, string>  $values  service_name, service_label, expiry_date, renew_price, customer_name, phone
+     */
+    public function sendReminder(string $rawPhone, array $values, string $trackingId, ?int $orderId = null): ?ZaloMessage
+    {
+        $account = $this->account();
+        if ($account === null || $account->status === 'disconnected') {
+            return null;
+        }
+        $rule = $this->ruleFor($account, 'renewal_reminder');
+        $phone = self::phone($rawPhone);
+        if ($rule === null || $phone === null) {
+            return null;
+        }
+        $template = collect($account->templates ?? [])->firstWhere('id', $rule['template_id']);
+        $values += ['shop_name' => app(TenantContext::class)->tenant()->name, 'phone' => $rawPhone];
+        $data = [];
+        foreach ($rule['params'] as $param => $field) {
+            if ($field !== '') {
+                $data[$param] = (string) ($values[$field] ?? '');
+            }
+        }
+        $log = new ZaloMessage([
+            'order_id' => $orderId, 'event' => 'renewal_reminder', 'template_id' => (string) $rule['template_id'], 'template_name' => $template['name'] ?? null,
+            'phone_masked' => substr($phone, 0, 4).'***'.substr($phone, -3), 'buyer_name' => mb_substr((string) ($values['customer_name'] ?? ''), 0, 150),
+        ]);
+        try {
+            $answer = $this->client->post($account, ZaloClient::BUSINESS.'/message/template', [
+                'phone' => $phone, 'template_id' => (string) $rule['template_id'], 'template_data' => $data, 'tracking_id' => $trackingId,
+            ]);
+            $log->fill(['status' => ZaloMessage::SENT, 'msg_id' => isset($answer['msg_id']) ? (string) $answer['msg_id'] : null]);
+        } catch (ZaloException $e) {
+            $log->fill(['status' => ZaloMessage::FAILED, 'error' => mb_substr($e->getMessage(), 0, 255)]);
+            Log::info('zalo.zns.failed', ['event' => 'renewal_reminder', 'code' => $e->getCode()]);
         }
         $log->save();
 

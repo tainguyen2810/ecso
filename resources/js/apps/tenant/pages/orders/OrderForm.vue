@@ -28,7 +28,7 @@ import { channelTypes, paymentMethods } from './labels';
 import CarrierQuotePicker from '../shipments/CarrierQuotePicker.vue';
 import ParcelOptionsPanel from '../shipments/ParcelOptionsPanel.vue';
 import { choiceOf, loadCarrierAccounts, type CarrierAccountData, type CarrierChoice, type ParcelOptions, type QuoteResult } from '../shipments/carriers';
-import type { Customer, CustomerSummary, OrderDetail, OrderReturnData, SalesChannel, Variant, Warehouse } from '@/shared/types';
+import type { Customer, CustomerSummary, OrderDetail, OrderReturnData, SalesChannel, SubscriptionRow, Variant, Warehouse } from '@/shared/types';
 import DateInput from '@/shared/ui/DateInput.vue';
 import { previewPromotions, type PromotionPreview } from '../promotions/promotions';
 
@@ -46,6 +46,11 @@ interface Line {
     quantity: number | string;
     unit_price: number | string;
     discount: number | string;
+    /** A SKU of a Dịch vụ / Thuê bao product: sold from the catalog, no stock. */
+    nonStock?: boolean;
+    product_id?: string;
+    /** Thuê bao: the cycle of the plan, when it starts (empty = after the current end) and what it is for. */
+    sub?: { months: number; start: string; label: string; subscription_id: string } | null;
 }
 let nextUid = 1;
 
@@ -233,9 +238,19 @@ async function loadOrder(id: string, asCopy = false) {
     customer.value = o.customer ? { ...o.customer, phone: null, address: null } : null;
     lines.value = o.items.map((i) => ({
         uid: nextUid++,
-        kind: i.variant ? 'sku' : 'service',
-        variant_id: i.variant?.id ?? '',
-        sku: i.variant?.sku ?? '',
+        kind: i.variant || i.service_variant ? 'sku' : 'service',
+        variant_id: i.variant?.id ?? i.service_variant?.id ?? '',
+        sku: i.variant?.sku ?? i.service_variant?.sku ?? '',
+        nonStock: !!i.service_variant,
+        sub:
+            i.service_variant?.type === 'subscription'
+                ? {
+                      months: i.subscription?.months ?? i.service_variant.period_months ?? 1,
+                      start: asCopy ? '' : (i.subscription?.start ?? ''),
+                      label: i.subscription?.label ?? '',
+                      subscription_id: i.subscription?.subscription_id ?? '',
+                  }
+                : null,
         name: i.name + (i.variant_name ? ` · ${i.variant_name}` : ''),
         image: null,
         available: null,
@@ -314,7 +329,9 @@ function place(line: Line) {
 }
 
 function add(v: Variant) {
-    const existing = view.split ? undefined : lines.value.find((l) => l.kind === 'sku' && l.variant_id === v.id);
+    const type = v.product?.type;
+    const isSub = type === 'subscription';
+    const existing = view.split || isSub ? undefined : lines.value.find((l) => l.kind === 'sku' && l.variant_id === v.id);
     if (existing) {
         existing.quantity = num(existing.quantity) + 1;
         return;
@@ -327,7 +344,10 @@ function add(v: Variant) {
         sku: v.sku,
         name: (v.product?.name ?? '') + (v.name ? ` · ${v.name}` : ''),
         image: v.product?.image ?? null,
-        available: v.stock?.available ?? null,
+        available: type === 'service' || isSub ? null : (v.stock?.available ?? null),
+        nonStock: type === 'service' || isSub,
+        product_id: v.product?.id,
+        sub: isSub ? { months: v.period_months ?? 1, start: '', label: '', subscription_id: subsOf(v.product?.id)[0]?.id ?? '' } : null,
         ...prices,
         quantity: 1,
         unit_price: tierPrice(prices),
@@ -374,7 +394,7 @@ const stockOpen = ref(false);
 const stockRows = ref<{ line: Line; balances: { warehouse: { id: string; name: string }; on_hand: number; reserved: number; available: number }[] }[]>([]);
 async function openStock() {
     stockOpen.value = true;
-    const skuLines = lines.value.filter((l) => l.kind === 'sku');
+    const skuLines = lines.value.filter((l) => l.kind === 'sku' && !l.nonStock);
     stockRows.value = await Promise.all(
         skuLines.map((line) => api.get(`/inventory/variants/${line.variant_id}/card`).then(({ data }) => ({ line, balances: data.balances })).catch(() => ({ line, balances: [] }))),
     );
@@ -530,6 +550,56 @@ const creditWarning = computed(() => {
     return after > limit ? `Khách đang nợ ${formatMoney(customerTerms.value!.debt)}, thêm đơn này sẽ là ${formatMoney(after)}, vượt hạn mức ${formatMoney(limit)}.` : null;
 });
 
+// Thuê bao of the chosen customer: a plan line renews one of them (nối tiếp from its end) or starts a new one.
+const customerSubs = ref<SubscriptionRow[]>([]);
+watch(
+    () => customer.value?.id,
+    async (id) => {
+        customerSubs.value = [];
+        if (!id || !tenant.can('orders.view')) return;
+        const { data } = await api.get('/subscriptions', { params: { customer: id, tab: 'all', per_page: 50 } }).catch(() => ({ data: { data: [] } }));
+        if (customer.value?.id !== id) return;
+        customerSubs.value = (data.data as SubscriptionRow[]).filter((s) => s.status !== 'cancelled');
+        for (const l of lines.value) {
+            if (!l.sub) continue;
+            if (!subsOf(l.product_id).some((s) => s.id === l.sub!.subscription_id)) l.sub.subscription_id = editId.value ? l.sub.subscription_id : (subsOf(l.product_id)[0]?.id ?? '');
+        }
+    },
+);
+function subsOf(productId: string | undefined): SubscriptionRow[] {
+    return productId ? customerSubs.value.filter((s) => s.product?.id === productId) : [];
+}
+const formatDay = (d: string) => d.split('-').reverse().join('/');
+function isoDay(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+/** Start + months − 1 day, the way the server counts a period (31/01 + 1 month ends 28/02). */
+function periodEnd(start: string, months: number): string {
+    const [y, m, d] = start.split('-').map(Number) as [number, number, number];
+    const target = new Date(y, m - 1 + months, 1);
+    const last = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+    return isoDay(new Date(target.getFullYear(), target.getMonth(), Math.min(d, last) - 1));
+}
+/** What the line will give: the period it adds, from the old end when it renews (no day lost). */
+function subHint(l: Line): string {
+    if (!l.sub) return '';
+    if (!customer.value) return 'Chọn khách hàng: thuê bao cần biết ai dùng để nhắc gia hạn.';
+    const months = l.sub.months * Math.max(1, num(l.quantity));
+    const target = customerSubs.value.find((s) => s.id === l.sub!.subscription_id);
+    let start = l.sub.start;
+    let how = '';
+    if (!start && target?.ends_on && (target.days_left ?? 0) >= -target.grace_days) {
+        const next = new Date(`${target.ends_on}T00:00:00`);
+        next.setDate(next.getDate() + 1);
+        start = isoDay(next);
+        how = ` Nối tiếp ngày hết hạn ${formatDay(target.ends_on)}, không mất ngày nào.`;
+    }
+    start ||= isoDay(new Date());
+    const range = `${formatDay(start)} → ${formatDay(periodEnd(start, months))}`;
+    const pending = target?.pending_order && !editId.value ? ` Lưu ý: đã có đơn ${target.pending_order.number} chờ xác nhận cho thuê bao này.` : '';
+    return target ? `Gia hạn ${target.code}: ${months} tháng, ${range}.${how}${pending}` : `Thuê bao mới: ${months} tháng, ${range}.`;
+}
+
 function clearCustomer() {
     customer.value = null;
     customerTerms.value = null;
@@ -652,6 +722,7 @@ async function submit() {
         deliver_on: form.deliver_on || null,
         lines: lines.value.map((l) => ({
             ...(l.kind === 'service' ? { name: l.name.trim() } : { variant_id: l.variant_id }),
+            ...(l.sub ? { start: l.sub.start || null, label: l.sub.label.trim() || null, subscription_id: l.sub.subscription_id || null } : {}),
             quantity: num(l.quantity),
             unit_price: num(l.unit_price),
             discount: num(l.discount),
@@ -707,7 +778,7 @@ const pushError = ref<string | null>(null);
 const codAmount = computed(() => (form.is_cod ? remaining.value : 0));
 const quoteMissing = computed(() => {
     if (!form.address.province_code || !form.address.ward_code) return 'Chọn tỉnh/thành và phường/xã của người nhận để xem giá.';
-    if (!lines.value.some((l) => l.kind === 'sku' && l.variant_id)) return 'Thêm sản phẩm để tính khối lượng.';
+    if (!lines.value.some((l) => l.kind === 'sku' && l.variant_id && !l.nonStock)) return 'Thêm sản phẩm để tính khối lượng.';
     return null;
 });
 let quoteSeq = 0;
@@ -721,7 +792,7 @@ async function loadQuote() {
             warehouse_id: form.warehouse_id || null,
             province_code: form.address.province_code,
             ward_code: form.address.ward_code,
-            items: lines.value.filter((l) => l.kind === 'sku' && l.variant_id).map((l) => ({ variant_id: l.variant_id, quantity: Math.max(1, num(l.quantity)) })),
+            items: lines.value.filter((l) => l.kind === 'sku' && l.variant_id && !l.nonStock).map((l) => ({ variant_id: l.variant_id, quantity: Math.max(1, num(l.quantity)) })),
             cod_amount: codAmount.value,
             ...Object.fromEntries(Object.entries(parcel.value).filter(([, v]) => v !== null && v !== undefined && v !== '')),
         });
@@ -838,7 +909,7 @@ async function saveDraft() {
                 <div class="flex items-center gap-3 text-sm">
                     <label class="flex items-center gap-1.5" title="Quét/chọn lại cùng SKU sẽ thêm dòng mới thay vì cộng số lượng"><input v-model="view.split" type="checkbox" class="size-4" /> Tách dòng</label>
                     <span class="h-4 w-px bg-border" />
-                    <button v-if="tenant.can('inventory.view')" type="button" class="font-medium text-primary hover:underline disabled:opacity-50" :disabled="!lines.some((l) => l.kind === 'sku')" data-testid="check-stock" @click="openStock">Kiểm tra tồn kho</button>
+                    <button v-if="tenant.can('inventory.view')" type="button" class="font-medium text-primary hover:underline disabled:opacity-50" :disabled="!lines.some((l) => l.kind === 'sku' && !l.nonStock)" data-testid="check-stock" @click="openStock">Kiểm tra tồn kho</button>
                     <span class="h-4 w-px bg-border" />
                     <button type="button" class="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground" title="Tùy chỉnh hiển thị" data-testid="lines-settings" @click="openView('columns')"><Settings2 class="size-4" /></button>
                 </div>
@@ -883,7 +954,26 @@ async function saveDraft() {
                                 </template>
                                 <template v-else>
                                     <p class="max-w-80 truncate font-medium" :title="l.name">{{ l.name }}</p>
-                                    <p v-if="view.columns.sku" class="font-mono text-[11px] text-primary">{{ l.sku }}</p>
+                                    <p v-if="view.columns.sku" class="font-mono text-[11px] text-primary">{{ l.sku }}<span v-if="l.nonStock" class="font-sans text-muted-foreground"> · {{ l.sub ? `Thuê bao ${l.sub.months * Math.max(1, num(l.quantity))} tháng` : 'Dịch vụ' }} · không trừ kho</span></p>
+                                    <div v-if="l.sub" class="mt-1.5 flex flex-wrap items-end gap-2 rounded-md border border-blue-100 bg-blue-50/50 p-2 text-xs" :data-testid="`sub-line-${i}`">
+                                        <label v-if="subsOf(l.product_id).length" class="grid gap-0.5">
+                                            <span class="text-muted-foreground">Gia hạn cho</span>
+                                            <select v-model="l.sub.subscription_id" class="h-8 max-w-56 rounded-md border border-input bg-card px-1.5" :data-testid="`sub-target-${i}`">
+                                                <option v-for="s in subsOf(l.product_id)" :key="s.id" :value="s.id">{{ s.code }}{{ s.label ? ` · ${s.label}` : '' }}{{ s.ends_on ? ` · hết ${formatDay(s.ends_on)}` : '' }}</option>
+                                                <option value="">Thuê bao mới</option>
+                                            </select>
+                                        </label>
+                                        <label v-if="!l.sub.subscription_id" class="grid gap-0.5">
+                                            <span class="text-muted-foreground">Dùng cho</span>
+                                            <input v-model="l.sub.label" maxlength="150" placeholder="VD: tên miền, số máy" class="h-8 w-44 rounded-md border border-input bg-card px-2" :data-testid="`sub-label-${i}`" />
+                                        </label>
+                                        <label class="grid gap-0.5">
+                                            <span class="text-muted-foreground">Bắt đầu từ</span>
+                                            <DateInput v-model="l.sub.start" class="w-40" placeholder="Nối tiếp" :data-testid="`sub-start-${i}`" />
+                                        </label>
+                                        <p class="basis-full text-muted-foreground" :data-testid="`sub-hint-${i}`">{{ subHint(l) }}</p>
+                                        <p v-if="error?.field(`lines.${i}.start`)" class="basis-full text-destructive">{{ error.field(`lines.${i}.start`) }}</p>
+                                    </div>
                                 </template>
                             </td>
                             <td v-if="view.columns.available" class="px-3 py-2.5 text-right tabular-nums">
@@ -1045,6 +1135,15 @@ async function saveDraft() {
                             </div>
                         </div>
                         <Button variant="ghost" size="icon" class="size-7" title="Bỏ chọn" @click="clearCustomer"><X /></Button>
+                    </div>
+                    <div v-if="customer && customerSubs.length" class="rounded-lg border px-3 py-2 text-xs" data-testid="customer-subscriptions">
+                        <p class="mb-1 font-medium">Thuê bao đang dùng</p>
+                        <RouterLink v-for="s in customerSubs.slice(0, 4)" :key="s.id" :to="`/subscriptions/${s.id}`" class="flex items-center justify-between gap-2 py-0.5 hover:text-primary">
+                            <span class="truncate">{{ s.product?.name }}<template v-if="s.label"> · {{ s.label }}</template></span>
+                            <span :class="cn('shrink-0 tabular-nums', s.days_left !== null && s.days_left < 0 ? 'text-destructive' : s.days_left !== null && s.days_left <= 30 ? 'text-amber-600' : 'text-muted-foreground')">
+                                {{ s.ends_on ? `hết ${formatDay(s.ends_on)}` : 'chờ xác nhận' }}
+                            </span>
+                        </RouterLink>
                     </div>
                     <p v-if="customer && creditWarning" class="flex items-start gap-1.5 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800" data-testid="credit-warning"><AlertTriangle class="mt-px size-3.5 shrink-0" /> {{ creditWarning }}</p>
                     <template v-if="!customer && !newCustomer.enabled">

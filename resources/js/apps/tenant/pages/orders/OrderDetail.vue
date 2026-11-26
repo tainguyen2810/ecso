@@ -343,6 +343,7 @@ async function createReturn() {
         busy.value = null;
     }
 }
+const fmtDay = (d: string | null | undefined) => (d ? d.split('-').reverse().join('/') : '…');
 </script>
 
 <template>
@@ -450,9 +451,17 @@ async function createReturn() {
                                     <td class="px-5 py-3">
                                         <div class="font-medium">{{ i.name }} <Badge v-if="i.is_gift" tone="success" data-testid="gift-line">Quà tặng</Badge></div>
                                         <div class="text-xs text-muted-foreground">{{ i.variant_name }}<template v-if="!isManual"> · SKU sàn: {{ i.seller_sku ?? '—' }}</template><template v-else-if="Number(i.discount) > 0"> · giảm {{ formatMoney(i.discount) }}</template></div>
+                                        <div v-if="i.subscription?.period" class="mt-1 text-xs" data-testid="item-subscription">
+                                            <RouterLink v-if="i.subscription.period.subscription" :to="`/subscriptions/${i.subscription.period.subscription.id}`" class="font-medium text-primary hover:underline">{{ i.subscription.period.subscription.code }}</RouterLink>
+                                            <template v-if="i.subscription.label"> · {{ i.subscription.label }}</template>
+                                            · {{ i.subscription.period.starts_on ? `${fmtDay(i.subscription.period.starts_on)} → ${fmtDay(i.subscription.period.ends_on)}` : `${i.subscription.months} tháng` }}
+                                            <span v-if="i.subscription.period.status === 'pending'" class="text-amber-600"> · chờ xác nhận đơn</span>
+                                            <span v-else-if="i.subscription.period.status === 'void'" class="text-destructive"> · đã bỏ</span>
+                                        </div>
                                     </td>
                                     <td class="px-4 py-3">
                                         <RouterLink v-if="i.variant" :to="`/inventory/sku/${i.variant.id}`" class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-700 hover:text-primary">{{ i.variant.sku }}</RouterLink>
+                                        <span v-else-if="i.service_variant" class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-700" :title="i.service_variant.type === 'subscription' ? 'Thuê bao, không trừ kho' : 'Dịch vụ, không trừ kho'">{{ i.service_variant.sku }}</span>
                                         <Badge v-else :tone="mappingStatus[i.mapping_status]?.tone">{{ mappingStatus[i.mapping_status]?.label }}</Badge>
                                     </td>
                                     <td class="px-4 py-3 text-right font-medium tabular-nums">

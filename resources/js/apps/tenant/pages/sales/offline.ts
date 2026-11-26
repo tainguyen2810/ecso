@@ -16,7 +16,7 @@ export interface CatalogItem {
     name: string | null;
     ref_price: string | number | null;
     wholesale_price: string | number | null;
-    product: { id: string; name: string; image: string | null };
+    product: { id: string; name: string; image: string | null; type?: string };
     stock: { available: number };
 }
 
