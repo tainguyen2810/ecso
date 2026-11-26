@@ -67,6 +67,11 @@ function fakeEzChat(array $answers): void
         if (! hash_equals(hash_hmac('sha256', "{$ts}.{$path}.{$r->body()}", EZ_SECRET), $r->header('X-Banhang-Signature')[0] ?? '')) {
             return Http::response(['error' => ['code' => 'UNAUTHORIZED', 'message' => 'Invalid signature']], 401);
         }
+        // As EzChat's schema: "query" must be a map, never a JSON list.
+        $raw = json_decode($r->body());
+        if ($path === '/api/banhang/gw/call' && ! is_object($raw->query ?? null)) {
+            return Http::response(['error' => ['code' => 'VALIDATION_ERROR', 'message' => 'Request validation failed']], 400);
+        }
         $key = $path === '/api/banhang/gw/call' ? $r['method'].' '.$r['path'] : $path;
         $calls = &ezCalls();
         $calls[] = ['key' => $key, 'query' => $r['query'] ?? [], 'body' => $r['body'] ?? null, 'token' => $r->header('Authorization')[0] ?? null];
