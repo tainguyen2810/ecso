@@ -9,6 +9,7 @@ use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Tenancy\Support\TenantSettings;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -29,6 +30,7 @@ class MarketplaceShipping
         private readonly ConnectorRegistry $connectors,
         private readonly AuditLogger $audit,
         private readonly OrderSync $sync,
+        private readonly LabelExtras $extras,
     ) {}
 
     /**
@@ -239,6 +241,7 @@ class MarketplaceShipping
     {
         $files = [];
         $failed = [];
+        $extras = (array) TenantSettings::current()->get('print.label_extras');
         foreach ($orders as $order) {
             $connector = $this->connector($order);
             if ($connector !== null && ! in_array($order->status, self::LABEL_FROM, true) && $order->ship_arrangement !== null) {
@@ -256,7 +259,7 @@ class MarketplaceShipping
             };
             if ($message === null) {
                 try {
-                    $files[] = ['id' => $order->ulid, 'external_order_id' => $order->external_order_id, 'pdf' => base64_encode($connector->shippingLabel($order->account, $order->external_order_id))];
+                    $files[] = ['id' => $order->ulid, 'external_order_id' => $order->external_order_id, 'pdf' => base64_encode($connector->shippingLabel($order->account, $order->external_order_id)), 'extras' => $this->extras->for($order, $extras)];
 
                     continue;
                 } catch (ConnectorException $e) {

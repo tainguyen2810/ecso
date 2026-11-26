@@ -1,4 +1,6 @@
 
+import type { LabelExtras } from './labelExtras';
+
 /** Paper for marketplace labels: A6 (thermal printer, one label a sheet), A5 (2 a page), A4 (4 a page). */
 export type LabelPaper = 'a6' | 'a5' | 'a4';
 
@@ -25,15 +27,30 @@ export function fitInCell(page: { width: number; height: number }, cell: { x: nu
 
 const fromBase64 = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 
+/** One label as the server sends it: the marketplace's PDF and, when the shop turned it on, text to add to it. */
+export interface LabelFile {
+    pdf: string;
+    extras?: LabelExtras | null;
+}
+
+/** The label PDF, with the shop's extra text written into its blank space when there is any. */
+async function labelBytes(file: string | LabelFile): Promise<Uint8Array> {
+    const f = typeof file === 'string' ? { pdf: file } : file;
+    const bytes = fromBase64(f.pdf);
+    if (!f.extras) return bytes;
+    const { stampLabel } = await import('./labelExtras');
+    return stampLabel(bytes, f.extras);
+}
+
 /**
  * One PDF of the labels of many orders (Shopee and TikTok alike), in the given order. A6 keeps each label page as the
  * marketplace made it; A5 and A4 put 2 or 4 on a sheet, left to right then top to bottom.
  */
-export async function mergeLabels(files: string[], paper: LabelPaper): Promise<Uint8Array> {
+export async function mergeLabels(files: (string | LabelFile)[], paper: LabelPaper): Promise<Uint8Array> {
     // pdf-lib (~500 KB) is loaded only when labels are printed, not with the order pages.
     const { PDFDocument } = await import('pdf-lib');
     const out = await PDFDocument.create();
-    const sources = await Promise.all(files.map((f) => PDFDocument.load(fromBase64(f), { ignoreEncryption: true })));
+    const sources = await Promise.all(files.map(async (f) => PDFDocument.load(await labelBytes(f), { ignoreEncryption: true })));
     if (paper === 'a6') {
         for (const src of sources) {
             const pages = await out.copyPages(src, src.getPageIndices());
