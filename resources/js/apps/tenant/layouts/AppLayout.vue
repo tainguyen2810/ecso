@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Check, ChevronDown, ChevronRight, ChevronsUpDown, LogOut, Plus, ScanBarcode, Search } from 'lucide-vue-next';
+import { Check, ChevronDown, ChevronRight, ChevronsUpDown, LogOut, PanelLeftClose, PanelLeftOpen, Plus, ScanBarcode, Search } from 'lucide-vue-next';
 import { useAuthStore } from '@/shared/stores/auth';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useGoShortcuts } from '@/shared/composables/useShortcuts';
@@ -28,6 +28,43 @@ const toast = useToast();
 const switcherOpen = ref(false);
 const mobileOpen = ref(false);
 const searchOpen = ref(false);
+
+/** "Thu gọn menu" (wide screens): icons only, remembered on this browser. */
+const COLLAPSED_KEY = 'ecso.sidebar.collapsed';
+const collapsed = ref(readCollapsed());
+function readCollapsed(): boolean {
+    try {
+        return localStorage.getItem(COLLAPSED_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+function toggleCollapsed() {
+    collapsed.value = !collapsed.value;
+    flyout.value = null;
+    switcherOpen.value = false;
+    try {
+        localStorage.setItem(COLLAPSED_KEY, collapsed.value ? '1' : '0');
+    } catch {
+        // Private window: the menu still folds, it is just not remembered.
+    }
+}
+/** Folded menu: the item whose sub-pages show beside the menu. */
+const flyout = ref<{ item: NavItem; top: number } | null>(null);
+let flyoutTimer: ReturnType<typeof setTimeout> | undefined;
+function showFlyout(item: NavItem, e: Event) {
+    clearTimeout(flyoutTimer);
+    const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const rows = (item.children?.length ?? 0) * 32 + 40;
+    flyout.value = { item, top: Math.max(8, Math.min(box.top, window.innerHeight - rows - 8)) };
+}
+function keepFlyout() {
+    clearTimeout(flyoutTimer);
+}
+function leaveFlyout() {
+    clearTimeout(flyoutTimer);
+    flyoutTimer = setTimeout(() => (flyout.value = null), 150);
+}
 
 const canSee = (i: NavItem) => tenant.can(i.permission) || (i.anyPermission ?? []).some((p) => tenant.can(p));
 const visibleGroups = computed(() =>
@@ -145,27 +182,41 @@ useGoShortcuts(
         <aside
             :class="
                 cn(
-                    'fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-slate-200 bg-white text-slate-700 transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0',
+                    'fixed inset-y-0 left-0 z-40 flex w-60 flex-col bg-[#182537] text-slate-300 transition-[transform,width] duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0',
                     mobileOpen ? 'translate-x-0' : '-translate-x-full',
+                    collapsed && 'lg:w-[68px]',
                 )
             "
+            data-testid="sidebar"
+            :data-collapsed="collapsed || undefined"
         >
-            <div class="relative border-b border-slate-200 p-3">
+            <div :class="cn('relative flex items-center gap-1 border-b border-white/10 p-3', collapsed && 'lg:flex-col lg:px-2')">
                 <button
-                    class="flex w-full items-center gap-2.5 rounded-lg p-2 text-left hover:bg-slate-100"
+                    :class="cn('flex min-w-0 flex-1 items-center gap-2.5 rounded-lg p-2 text-left hover:bg-white/5', collapsed && 'lg:flex-none lg:p-1')"
                     data-testid="tenant-switcher"
+                    :title="collapsed ? tenant.current?.name : undefined"
                     @click="switcherOpen = !switcherOpen"
                 >
                     <span class="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-xs font-semibold text-white">
                         {{ initials(tenant.current?.name ?? '?') }}
                     </span>
-                    <span class="min-w-0 flex-1">
-                        <span class="block truncate text-sm font-semibold text-slate-900">{{ tenant.current?.name }}</span>
-                        <span class="block truncate text-xs text-slate-500">{{ tenant.context?.role.name }}</span>
+                    <span :class="cn('min-w-0 flex-1', collapsed && 'lg:hidden')">
+                        <span class="block truncate text-sm font-semibold text-white">{{ tenant.current?.name }}</span>
+                        <span class="block truncate text-xs text-slate-400">{{ tenant.context?.role.name }}</span>
                     </span>
-                    <ChevronsUpDown class="size-4 text-slate-400" />
+                    <ChevronsUpDown :class="cn('size-4 text-slate-500', collapsed && 'lg:hidden')" />
                 </button>
-                <div v-if="switcherOpen" class="absolute left-3 right-3 top-full z-50 mt-1 rounded-md border bg-card p-1 text-foreground shadow-lg">
+                <button
+                    type="button"
+                    class="hidden size-8 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-white/10 hover:text-white lg:grid"
+                    :title="collapsed ? 'Mở rộng menu' : 'Thu gọn menu'"
+                    :aria-label="collapsed ? 'Mở rộng menu' : 'Thu gọn menu'"
+                    data-testid="sidebar-toggle"
+                    @click="toggleCollapsed"
+                >
+                    <PanelLeftOpen v-if="collapsed" class="size-[18px]" /><PanelLeftClose v-else class="size-[18px]" />
+                </button>
+                <div v-if="switcherOpen" :class="cn('absolute left-3 right-3 top-full z-50 mt-1 rounded-md border bg-card p-1 text-foreground shadow-lg', collapsed && 'lg:right-auto lg:w-60')">
                     <p class="px-2 py-1.5 text-xs font-medium text-muted-foreground">Doanh nghiệp của bạn</p>
                     <button
                         v-for="t in tenant.tenants"
@@ -184,61 +235,74 @@ useGoShortcuts(
                 </div>
             </div>
 
-            <div v-if="tenant.can('orders.create')" class="px-3 pt-3">
-                <RouterLink to="/orders/new" class="flex h-9 items-center justify-center gap-2 rounded-lg bg-primary text-sm font-medium text-white shadow-sm hover:bg-primary/90" data-testid="sidebar-new-order" @click="mobileOpen = false">
-                    <Plus class="size-4" /> Tạo đơn
+            <div v-if="tenant.can('orders.create')" :class="cn('px-3 pt-3', collapsed && 'lg:px-2')">
+                <RouterLink to="/orders/new" class="flex h-9 items-center justify-center gap-2 rounded-lg bg-primary text-sm font-medium text-white shadow-sm hover:bg-primary/90" data-testid="sidebar-new-order" :title="collapsed ? 'Tạo đơn' : undefined" @click="mobileOpen = false">
+                    <Plus class="size-4 shrink-0" /> <span :class="collapsed ? 'lg:hidden' : ''">Tạo đơn</span>
                 </RouterLink>
             </div>
 
-            <nav class="flex-1 overflow-y-auto px-3 py-3">
-                <div v-for="(group, i) in visibleGroups" :key="group.label" :class="i > 0 && 'mt-4'">
-                    <p v-if="i > 0" class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{{ group.label }}</p>
+            <nav :class="cn('sidebar-scroll flex-1 overflow-y-auto px-3 py-3', collapsed && 'lg:px-2')" @scroll="flyout = null">
+                <div v-for="(group, i) in visibleGroups" :key="group.label" :class="i > 0 && 'mt-3 border-t border-white/10 pt-3'">
+                    <p v-if="i > 0" :class="cn('px-3 pb-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-200', collapsed && 'lg:hidden')">{{ group.label }}</p>
                     <div v-for="item in group.items" :key="item.name">
                         <button
                             v-if="item.name === 'connect-channel'"
                             type="button"
-                            class="mt-1 flex w-full items-center gap-3 rounded-lg border border-dashed border-primary/30 bg-primary/5 px-3 py-2 text-left text-sm font-medium text-primary hover:bg-primary/10"
+                            :class="cn('mt-1 flex w-full items-center gap-3 rounded-lg border border-dashed border-white/20 px-3 py-2 text-left text-sm font-medium text-slate-300 hover:border-white/40 hover:bg-white/5 hover:text-white', collapsed && 'lg:justify-center lg:px-0')"
                             data-testid="nav-connect-channel"
+                            :title="collapsed ? (hasChannel ? 'Kết nối thêm kênh' : 'Kết nối kênh bán đầu tiên') : undefined"
                             @click="connectOpen = true; mobileOpen = false"
                         >
                             <Plus class="size-[18px] shrink-0" :stroke-width="1.75" />
-                            <span class="flex-1 truncate">{{ hasChannel ? 'Kết nối thêm kênh' : 'Kết nối kênh bán đầu tiên' }}</span>
+                            <span :class="cn('flex-1 truncate', collapsed && 'lg:hidden')">{{ hasChannel ? 'Kết nối thêm kênh' : 'Kết nối kênh bán đầu tiên' }}</span>
                         </button>
                         <div
                             v-else
                             :class="
                                 cn(
-                                    'group flex items-center rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900',
-                                    isActive(item) && (item.children?.length ? 'text-primary hover:text-primary' : 'bg-primary/10 text-primary hover:bg-primary/10 hover:text-primary'),
+                                    'group flex items-center rounded-lg text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-white',
+                                    isActive(item) && (item.children?.length && !collapsed ? 'text-white' : 'bg-[#0088ff] text-white hover:bg-[#0088ff]'),
                                 )
                             "
+                            @mouseenter="collapsed && item.children?.length ? showFlyout(item, $event) : (flyout = null)"
+                            @mouseleave="leaveFlyout"
                         >
-                            <!-- Like Sapo: an item with a sub-menu only opens / closes it; its pages are the sub-items. -->
+                            <!-- Like Sapo: an item with a sub-menu only opens / closes it; its pages are the sub-items. Folded, they open beside it. -->
                             <button
                                 v-if="item.children?.length"
                                 type="button"
-                                class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left"
+                                :class="cn('flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-left', collapsed && 'lg:justify-center lg:px-0')"
                                 :aria-expanded="open.has(item.name)"
-                                @click="toggleOpen(item.name)"
+                                :title="collapsed ? item.label : undefined"
+                                @click="collapsed ? showFlyout(item, $event) : toggleOpen(item.name)"
                             >
-                                <component :is="item.icon" :class="cn('size-[18px] shrink-0', isActive(item) ? 'text-primary' : 'text-slate-400')" :stroke-width="1.75" />
-                                <span class="flex-1 truncate">{{ item.label }}</span>
-                                <ChevronDown v-if="open.has(item.name)" class="size-4 text-slate-400" /><ChevronRight v-else class="size-4 text-slate-400" />
+                                <component :is="item.icon" :class="cn('size-[18px] shrink-0', isActive(item) ? 'text-white' : 'text-slate-400 group-hover:text-white')" :stroke-width="1.75" />
+                                <span :class="cn('flex-1 truncate', collapsed && 'lg:hidden')">{{ item.label }}</span>
+                                <span :class="collapsed ? 'lg:hidden' : ''">
+                                    <ChevronDown v-if="open.has(item.name)" class="size-4 text-slate-400" /><ChevronRight v-else class="size-4 text-slate-400" />
+                                </span>
                             </button>
-                            <RouterLink v-else :to="item.path" class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2" :data-testid="item.marketplace ? `nav-${item.marketplace}` : undefined" @click="mobileOpen = false">
+                            <RouterLink
+                                v-else
+                                :to="item.path"
+                                :class="cn('flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5', collapsed && 'lg:justify-center lg:px-0')"
+                                :title="collapsed ? item.label : undefined"
+                                :data-testid="item.marketplace ? `nav-${item.marketplace}` : undefined"
+                                @click="mobileOpen = false"
+                            >
                                 <MarketplaceLogo v-if="item.marketplace" :marketplace="item.marketplace" :name="item.label" size="sm" :class="cn('size-[18px]', !shopCounts[item.marketplace] && 'opacity-40')" />
-                                <component :is="item.icon" v-else :class="cn('size-[18px] shrink-0', isActive(item) ? 'text-primary' : 'text-slate-400')" :stroke-width="1.75" />
-                                <span :class="cn('flex-1 truncate', item.marketplace && !shopCounts[item.marketplace] && !isActive(item) && 'text-slate-400')">{{ item.label }}</span>
-                                <span v-if="item.marketplace" class="shrink-0 text-[11px] font-normal text-slate-400">{{ shopCountLabel(item.marketplace) }}</span>
-                                <Badge v-if="item.phase" tone="muted" class="px-1.5 text-[10px]">{{ item.phase > 8 ? "Sau MVP" : "P" + item.phase }}</Badge>
+                                <component :is="item.icon" v-else :class="cn('size-[18px] shrink-0', isActive(item) ? 'text-white' : 'text-slate-400 group-hover:text-white')" :stroke-width="1.75" />
+                                <span :class="cn('flex-1 truncate', item.marketplace && !shopCounts[item.marketplace] && !isActive(item) && 'text-slate-500', collapsed && 'lg:hidden')">{{ item.label }}</span>
+                                <span v-if="item.marketplace" :class="cn('shrink-0 text-[11px] font-normal', isActive(item) ? 'text-white/80' : 'text-slate-500', collapsed && 'lg:hidden')">{{ shopCountLabel(item.marketplace) }}</span>
+                                <Badge v-if="item.phase" tone="muted" :class="cn('px-1.5 text-[10px]', collapsed && 'lg:hidden')">{{ item.phase > 8 ? "Sau MVP" : "P" + item.phase }}</Badge>
                             </RouterLink>
                         </div>
-                        <div v-if="item.children?.length && open.has(item.name)" class="mb-1 ml-[21px] mt-0.5 space-y-px border-l border-slate-200 pl-2">
+                        <div v-if="item.children?.length && open.has(item.name)" :class="cn('mb-1 ml-[21px] mt-0.5 space-y-px border-l border-white/10 pl-2', collapsed && 'lg:hidden')">
                             <RouterLink
                                 v-for="c in item.children"
                                 :key="c.path"
                                 :to="c.path"
-                                :class="cn('block rounded-md px-2.5 py-1.5 text-[13px] text-slate-600 hover:bg-slate-100 hover:text-slate-900', activeChild === c.path && 'bg-primary/10 font-medium text-primary hover:bg-primary/10 hover:text-primary')"
+                                :class="cn('block rounded-md px-2.5 py-1.5 text-[13px] text-slate-400 hover:bg-white/5 hover:text-white', activeChild === c.path && 'bg-[#0088ff] font-medium text-white hover:bg-[#0088ff] hover:text-white')"
                                 @click="mobileOpen = false"
                             >
                                 {{ c.label }}
@@ -248,14 +312,35 @@ useGoShortcuts(
                 </div>
             </nav>
 
-            <div class="border-t border-slate-200 p-3">
-                <div class="flex items-center gap-2.5 rounded-lg p-2">
-                    <span class="flex size-8 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">{{ initials(auth.user?.name ?? '') }}</span>
-                    <span class="min-w-0 flex-1">
-                        <span class="block truncate text-sm font-medium text-slate-900">{{ auth.user?.name }}</span>
-                        <span class="block truncate text-xs text-slate-500">{{ auth.user?.email }}</span>
+            <!-- Folded menu: the sub-pages of the item under the mouse, beside the menu. -->
+            <div
+                v-if="collapsed && flyout"
+                class="fixed z-50 hidden w-56 rounded-lg border border-white/10 bg-[#182537] p-1.5 shadow-xl lg:block"
+                :style="{ top: `${flyout.top}px`, left: '72px' }"
+                data-testid="sidebar-flyout"
+                @mouseenter="keepFlyout"
+                @mouseleave="leaveFlyout"
+            >
+                <p class="px-2.5 pb-1 pt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">{{ flyout.item.label }}</p>
+                <RouterLink
+                    v-for="c in flyout.item.children"
+                    :key="c.path"
+                    :to="c.path"
+                    :class="cn('block rounded-md px-2.5 py-1.5 text-[13px] text-slate-300 hover:bg-white/10 hover:text-white', activeChild === c.path && 'bg-[#0088ff] font-medium text-white hover:bg-[#0088ff]')"
+                    @click="flyout = null"
+                >
+                    {{ c.label }}
+                </RouterLink>
+            </div>
+
+            <div :class="cn('border-t border-white/10 p-3', collapsed && 'lg:px-2')">
+                <div :class="cn('flex items-center gap-2.5 rounded-lg p-2', collapsed && 'lg:flex-col lg:p-0')">
+                    <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-slate-200" :title="collapsed ? auth.user?.name : undefined">{{ initials(auth.user?.name ?? '') }}</span>
+                    <span :class="cn('min-w-0 flex-1', collapsed && 'lg:hidden')">
+                        <span class="block truncate text-sm font-medium text-white">{{ auth.user?.name }}</span>
+                        <span class="block truncate text-xs text-slate-400">{{ auth.user?.email }}</span>
                     </span>
-                    <button class="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Đăng xuất" @click="logout">
+                    <button class="rounded p-1.5 text-slate-400 hover:bg-white/10 hover:text-white" title="Đăng xuất" @click="logout">
                         <LogOut class="size-4" />
                     </button>
                 </div>

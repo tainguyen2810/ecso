@@ -58,3 +58,9 @@
         @apply border-border;
     }
 }
+
+/* Dark sidebar (like Sapo): a thin scrollbar that does not light up the menu. */
+.sidebar-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(255 255 255 / 0.15) transparent;
+}
