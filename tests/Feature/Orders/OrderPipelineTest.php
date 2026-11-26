@@ -123,6 +123,23 @@ it('releases reservations when cancelled before shipping, only once', function (
         ->and($order->refresh()->status)->toBe(OrderStatus::CANCELLED);
 });
 
+it('takes a cancel on the way (Shopee/TikTok cancel a parcel in transit) as goods coming back, one return only', function () {
+    $order = fakeOrder($this->shop, [[$this->shirt, 2]]);
+    $this->fake->setStatus($order->external_order_id, 'fake_in_transit');
+    $this->fake->setStatus($order->external_order_id, 'fake_cancelled');
+
+    expect($order->refresh()->status)->toBe(OrderStatus::CANCELLED)->and($order->sync_warning)->toBeNull()
+        ->and(stockOf($this, $this->shirt))->toBe([8, 0])
+        ->and(OrderReturn::withoutGlobalScopes()->where('order_id', $order->id)->sole()->type)->toBe(OrderReturn::TYPE_CANCEL_AFTER_SHIP);
+
+    // Failed first, then cancelled: the failed-delivery return stays the only one.
+    $other = fakeOrder($this->shop, [[$this->shirt, 1]]);
+    $this->fake->setStatus($other->external_order_id, 'fake_failed');
+    $this->fake->setStatus($other->external_order_id, 'fake_cancelled');
+    expect($other->refresh()->status)->toBe(OrderStatus::CANCELLED)
+        ->and(OrderReturn::withoutGlobalScopes()->where('order_id', $other->id)->sole()->type)->toBe(OrderReturn::TYPE_FAILED_DELIVERY);
+});
+
 it('does not add stock back for a cancel after handover until the parcel is inspected', function () {
     $order = fakeOrder($this->shop, [[$this->shirt, 2]]);
     $this->fake->setStatus($order->external_order_id, 'fake_shipped');
