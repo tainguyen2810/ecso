@@ -8,7 +8,7 @@ import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useAuthStore } from '@/shared/stores/auth';
 import { downloadPickList } from './packing';
-import { labelPapers, mergeLabels, printPdf, type LabelPaper } from './shippingLabels';
+import { labelPapers, mergeLabels, printPdf, type LabelFile, type LabelPaper } from './shippingLabels';
 
 /**
  * "In phiếu sàn": the shipping labels Shopee / TikTok issued for the orders, merged into one PDF on A6, A5 or A4.
@@ -45,14 +45,14 @@ async function print() {
     }
     try {
         // The server makes at most 50 labels a call.
-        const files: { id: string; pdf: string }[] = [];
+        const files: (LabelFile & { id: string })[] = [];
         for (let i = 0; i < props.ids.length; i += 50) {
             const { data } = await api.post('/orders/shipping-labels', { ids: props.ids.slice(i, i + 50), sort: byProduct.value ? 'product' : null });
             files.push(...data.data.files);
             failed.value.push(...data.data.failed);
         }
         if (files.length) {
-            printPdf(await mergeLabels(files.map((f) => f.pdf), paper.value));
+            printPdf(await mergeLabels(files, paper.value));
             toast.success(`Đã mở ${files.length} phiếu sàn để in.`);
             emit('printed');
         }

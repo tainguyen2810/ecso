@@ -493,6 +493,34 @@ it('offers Shopee pickup without a time when Shopee asks for none, and ships wit
     expect(collect(ezCalls())->firstWhere('key', 'POST /api/v2/logistics/ship_order')['body'])->toBe(['order_sn' => '2611SHIP1', 'pickup' => ['address_id' => 8]]);
 });
 
+it('sends the text the shop chose for its labels with each label, off until turned on and only for the chosen shops', function () {
+    shopeeShipFake();
+    $account = gatewayShop($this->tenant, 'shopee');
+    TenantContext::run($this->tenant, fn () => app(OrderSync::class)->syncOne($account, '2611SHIP1', 'webhook'));
+    $order = Order::withoutGlobalScopes()->where('external_order_id', '2611SHIP1')->sole();
+    $api = actingInTenant($this->owner, $this->tenant);
+    $choice = ['method' => 'pickup', 'address_id' => '8', 'slot_id' => 'slot-8', 'slot_label' => 'Thứ 5', 'address_label' => '12 Lê Lợi'];
+    $api->postJson('/api/v1/orders/bulk', ['ids' => [$order->ulid], 'action' => 'pack', 'shipping' => [$account->ulid => $choice]])->assertOk()->assertJsonPath('data.0.ok', true);
+    $order->refresh()->forceFill(['buyer_note' => 'Gói kỹ giúp em'])->save();
+    $label = fn () => $api->postJson('/api/v1/orders/shipping-labels', ['ids' => [$order->ulid]])->assertOk()->json('data.files.0');
+
+    // Off by default: the label is printed exactly as Shopee made it.
+    expect($label()['extras'])->toBeNull();
+
+    $settings = ['picklist' => true, 'note' => true, 'warehouse' => false, 'notice' => true, 'notice_text' => "QUÝ KHÁCH VUI LÒNG QUAY VIDEO KHI KHUI HÀNG\nCảm ơn {ten_khach}, đơn {ma_don}", 'notice_box' => true, 'size' => 'lg', 'accounts' => null];
+    $api->putJson('/api/v1/tenant/settings/print', ['label_extras' => $settings])->assertOk()->assertJsonPath('data.print.label_extras.size', 'lg');
+    $extras = $label()['extras'];
+    expect($extras['notice']['lines'][0])->toBe('QUÝ KHÁCH VUI LÒNG QUAY VIDEO KHI KHUI HÀNG')
+        ->and($extras['notice']['lines'][1])->toContain('đơn 2611SHIP1')->and($extras['notice']['box'])->toBeTrue()
+        ->and($extras['picklist'][0])->toMatchArray(['name' => 'Áo thun', 'quantity' => 1])
+        ->and($extras['note'])->toBe('Khách nhắn: Gói kỹ giúp em')->and($extras['warehouse'])->toBeNull()->and($extras['size'])->toBe('lg');
+
+    // Only the chosen shops.
+    $api->putJson('/api/v1/tenant/settings/print', ['label_extras' => [...$settings, 'accounts' => ['01OTHERSHOP']]])->assertOk();
+    expect($label()['extras'])->toBeNull();
+    $api->putJson('/api/v1/tenant/settings/print', ['label_extras' => [...$settings, 'size' => 'huge']])->assertStatus(422);
+});
+
 it('prepares a TikTok Shop package for drop-off and prints its label from TikTok\'s file link', function () {
     $shipped = false;
     fakeEzChat([
