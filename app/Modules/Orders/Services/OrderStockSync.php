@@ -123,7 +123,8 @@ class OrderStockSync
     {
         $snapshot = $this->ledger->snapshot(Order::STOCK_REFERENCE, $ids);
 
-        if (collect($snapshot)->contains(fn ($r) => $r['status'] === 'consumed')) {
+        // A failed delivery already opened the return the parcel comes back on: no second one.
+        if (collect($snapshot)->contains(fn ($r) => $r['status'] === 'consumed') && ! OrderReturn::query()->where('order_id', $order->id)->exists()) {
             $this->returns->openAutomatic($order, OrderReturn::TYPE_CANCEL_AFTER_SHIP, 'cancel-after-ship', 'Đơn bị hủy sau khi đã bàn giao vận chuyển');
         }
 

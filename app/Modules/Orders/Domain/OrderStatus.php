@@ -54,11 +54,12 @@ final class OrderStatus
         self::READY_TO_PACK => [self::PACKED, self::CANCELLED],
         self::PACKED => [self::HANDED_OVER, self::CANCELLED],
         self::HANDED_OVER => [self::IN_TRANSIT, self::DELIVERED, self::FAILED_DELIVERY, self::CANCELLED],
-        self::IN_TRANSIT => [self::DELIVERED, self::FAILED_DELIVERY],
+        // Shopee/TikTok cancel a parcel on its way (buyer refused, carrier gave up): it comes back as a return.
+        self::IN_TRANSIT => [self::DELIVERED, self::FAILED_DELIVERY, self::CANCELLED],
         self::DELIVERED => [self::COMPLETED, self::RETURN_REQUESTED],
         self::COMPLETED => [self::RETURN_REQUESTED],
         // A failed attempt is not final: the carrier may try again (giao lại) and deliver.
-        self::FAILED_DELIVERY => [self::RETURNED, self::IN_TRANSIT, self::DELIVERED],
+        self::FAILED_DELIVERY => [self::RETURNED, self::IN_TRANSIT, self::DELIVERED, self::CANCELLED],
         self::RETURN_REQUESTED => [self::RETURNED, self::COMPLETED],
         self::CANCELLED => [],
         self::RETURNED => [],
