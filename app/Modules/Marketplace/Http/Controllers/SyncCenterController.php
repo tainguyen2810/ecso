@@ -166,7 +166,7 @@ class SyncCenterController extends Controller
     public function syncNow(MarketplaceAccount $account): JsonResponse
     {
         $this->authorize('operateSync', MarketplaceAccount::class);
-        abort_unless($account->isActive() && $account->sync_enabled && $account->syncs('sync_orders'), 422, 'Shop chưa kết nối hoặc đang tắt đồng bộ đơn.');
+        abort_unless($account->isActive() && $account->syncs('sync_orders'), 422, 'Shop chưa kết nối hoặc đang tắt đồng bộ đơn.');
         ReconcileShopJob::dispatch($account->id, 'user');
         $this->audit->record('sync.sync_now', $account, []);
 

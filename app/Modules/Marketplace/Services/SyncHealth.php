@@ -85,7 +85,7 @@ class SyncHealth
     public function overdueReconciles(?int $tenantId = null): int
     {
         $accounts = MarketplaceAccount::query()->withoutGlobalScopes()->when($tenantId, fn ($q) => $q->where('tenant_id', $tenantId))
-            ->where('status', MarketplaceAccount::CONNECTED)->where('sync_enabled', true)->get();
+            ->where('status', MarketplaceAccount::CONNECTED)->get();
 
         return $accounts->filter(function (MarketplaceAccount $account) {
             if (! $account->syncs('sync_orders') || ! $this->connectors->has($account->marketplace)

@@ -24,7 +24,7 @@ class ReconcileOrdersCommand extends Command
     public function handle(ConnectorRegistry $connectors, OrderSync $sync): int
     {
         $accounts = MarketplaceAccount::query()->withoutGlobalScopes()
-            ->where('status', MarketplaceAccount::CONNECTED)->where('sync_enabled', true)
+            ->where('status', MarketplaceAccount::CONNECTED)
             ->when($this->option('account'), fn ($q, $ulid) => $q->where('ulid', $ulid))->get();
 
         foreach ($accounts as $account) {

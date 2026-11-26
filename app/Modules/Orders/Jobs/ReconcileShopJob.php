@@ -46,7 +46,7 @@ class ReconcileShopJob implements ShouldBeUnique, ShouldQueue
     public function handle(OrderSync $sync): void
     {
         $account = MarketplaceAccount::query()->withoutGlobalScopes()->find($this->accountId);
-        if (! $account || ! $account->isActive() || ! $account->sync_enabled || ! $account->syncs('sync_orders')) {
+        if (! $account || ! $account->isActive() || ! $account->syncs('sync_orders')) {
             return;
         }
         $tenant = Tenant::query()->find($account->tenant_id);
