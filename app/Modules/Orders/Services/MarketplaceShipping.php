@@ -6,6 +6,7 @@ use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Marketplace\Connectors\ArrangesShipment;
 use App\Modules\Marketplace\Connectors\ConnectorRegistry;
 use App\Modules\Marketplace\Exceptions\ConnectorException;
+use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use Illuminate\Support\Collection;
@@ -27,6 +28,7 @@ class MarketplaceShipping
     public function __construct(
         private readonly ConnectorRegistry $connectors,
         private readonly AuditLogger $audit,
+        private readonly OrderSync $sync,
     ) {}
 
     /**
@@ -87,8 +89,25 @@ class MarketplaceShipping
                 $options = $connector->shipOptions($account, $ready->first()->external_order_id);
                 $error = null;
             } catch (ConnectorException $e) {
+                // Often the order was already prepared in the marketplace's own seller page and ECSO has not heard yet:
+                // read the orders again, set those aside, and ask again for the ones still waiting.
+                [$ready, $done] = $this->refresh($account, $ready);
+                foreach ($done as $order) {
+                    $skipped[] = ['id' => $order->ulid, 'external_order_id' => $order->external_order_id, 'message' => 'Đơn đã được chuẩn bị trên sàn rồi, trạng thái đã cập nhật.'];
+                }
+                if ($ready->isEmpty()) {
+                    continue;
+                }
                 $options = null;
-                $error = $e->getMessage();
+                $error = self::message($e);
+                if ($done !== []) {
+                    try {
+                        $options = $connector->shipOptions($account, $ready->first()->external_order_id);
+                        $error = null;
+                    } catch (ConnectorException $again) {
+                        $error = self::message($again);
+                    }
+                }
             }
             $groups[] = [
                 'account' => ['id' => $account->ulid, 'name' => $account->shop_name, 'marketplace' => $account->marketplace],
@@ -100,6 +119,37 @@ class MarketplaceShipping
         }
 
         return ['groups' => $groups, 'skipped' => $skipped];
+    }
+
+    /**
+     * Reads the orders from the marketplace again: those still waiting to be packed, and those that moved on.
+     *
+     * @param  Collection<int, Order>  $orders
+     * @return array{0: Collection<int, Order>, 1: list<Order>}
+     */
+    private function refresh(MarketplaceAccount $account, Collection $orders): array
+    {
+        $waiting = collect();
+        $done = [];
+        foreach ($orders as $order) {
+            try {
+                $order = $this->sync->syncOne($account, $order->external_order_id, 'user')['order'] ?? $order;
+            } catch (ConnectorException) {
+            }
+            if ($order->status === OrderStatus::READY_TO_PACK) {
+                $waiting->push($order);
+            } else {
+                $done[] = $order;
+            }
+        }
+
+        return [$waiting->values(), $done];
+    }
+
+    /** The marketplace's answer without the API path EzChat puts in front of it. */
+    private static function message(ConnectorException $e): string
+    {
+        return (string) preg_replace('#^/\S+: #', '', $e->getMessage());
     }
 
     /**

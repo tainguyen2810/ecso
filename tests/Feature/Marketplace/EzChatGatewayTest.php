@@ -456,6 +456,56 @@ it('prepares a TikTok Shop package for drop-off and prints its label from TikTok
     expect(base64_decode($labels['files'][0]['pdf']))->toBe('%PDF-1.4 tiktok label');
 });
 
+it('sets aside a Shopee order already prepared in Shopee\'s seller page instead of showing Shopee\'s refusal', function () {
+    $arranged = false;
+    shopeeShipFake([
+        'GET /api/v2/order/get_order_detail' => function () use (&$arranged) {
+            return Http::response(['data' => ['data' => ['response' => ['order_list' => [[
+                'order_sn' => '2611SHIP1', 'order_status' => $arranged ? 'PROCESSED' : 'READY_TO_SHIP', 'create_time' => 1763500000, 'update_time' => 1763500000 + ($arranged ? 60 : 0),
+                'ship_by_date' => 1763600000, 'currency' => 'VND', 'total_amount' => 120000, 'shipping_carrier' => 'SPX Express',
+                'item_list' => [['item_id' => 11, 'item_name' => 'Áo thun', 'model_id' => 0, 'model_quantity_purchased' => 1, 'model_original_price' => 120000, 'model_discounted_price' => 120000]],
+            ]]]]]]);
+        },
+        'GET /api/v2/logistics/get_shipping_parameter' => fn () => Http::response(['error' => ['code' => 'MARKETPLACE_ERROR', 'message' => '/api/v2/logistics/get_shipping_parameter: Package OFG1 not eligible for rescheduling', 'details' => ['auth' => false]]], 424),
+    ]);
+    $account = gatewayShop($this->tenant, 'shopee');
+    TenantContext::run($this->tenant, fn () => app(OrderSync::class)->syncOne($account, '2611SHIP1', 'webhook'));
+    $order = Order::withoutGlobalScopes()->where('external_order_id', '2611SHIP1')->sole();
+    $api = actingInTenant($this->owner, $this->tenant);
+
+    // Still waiting on Shopee too: Shopee's own words, without the API path.
+    $api->postJson('/api/v1/orders/ship-options', ['ids' => [$order->ulid]])->assertOk()
+        ->assertJsonPath('data.groups.0.error', 'Package OFG1 not eligible for rescheduling');
+
+    // Prepared on Shopee meanwhile: no error, the order moves on in ECSO.
+    $arranged = true;
+    $data = $api->postJson('/api/v1/orders/ship-options', ['ids' => [$order->ulid]])->assertOk()->json('data');
+    expect($data['groups'])->toBe([])->and($data['skipped'][0]['message'])->toContain('đã được chuẩn bị trên sàn')
+        ->and($order->refresh()->status)->toBe(OrderStatus::PACKED);
+});
+
+it('ships a TikTok Hoả tốc package as a pickup without a slot when TikTok offers none', function () {
+    fakeEzChat([
+        'GET /order/202309/orders' => ['data' => ['data' => ['orders' => [[
+            'id' => '5790002', 'status' => 'AWAITING_SHIPMENT', 'create_time' => 1763500000, 'update_time' => 1763500000,
+            'payment' => ['currency' => 'VND', 'sub_total' => '99000', 'total_amount' => '99000'], 'packages' => [['id' => 'PKG78']],
+            'line_items' => [['id' => 'L1', 'sku_id' => 'S1', 'product_name' => 'Mũ', 'sale_price' => '99000', 'original_price' => '99000']],
+        ]]]]],
+        'GET /fulfillment/202309/packages/PKG78/handover_time_slots' => fn () => Http::response(['error' => ['code' => 'MARKETPLACE_ERROR', 'message' => '/fulfillment/202309/packages/PKG78/handover_time_slots: Request validation failed', 'details' => ['auth' => false]]], 424),
+    ]);
+    $account = gatewayShop($this->tenant, 'tiktok', '7001');
+    TenantContext::run($this->tenant, fn () => app(OrderSync::class)->syncOne($account, '5790002', 'webhook'));
+    $order = Order::withoutGlobalScopes()->where('external_order_id', '5790002')->sole();
+    $api = actingInTenant($this->owner, $this->tenant);
+
+    $group = $api->postJson('/api/v1/orders/ship-options', ['ids' => [$order->ulid]])->assertOk()->json('data.groups.0');
+    expect($group['error'])->toBeNull()->and($group['options']['pickup']['available'])->toBeTrue()
+        ->and($group['options']['pickup']['addresses'][0]['slots'][0]['id'])->toBe('tiktok');
+
+    $api->postJson("/api/v1/orders/{$order->ulid}/actions/pack", ['shipping' => [$account->ulid => ['method' => 'pickup', 'slot_id' => 'tiktok', 'slot_label' => 'TikTok tự hẹn giờ lấy hàng']]])->assertOk();
+    expect(collect(ezCalls())->firstWhere('key', 'POST /fulfillment/202309/packages/PKG78/ship')['body'])->toBe(['handover_method' => 'PICKUP']);
+});
+
 it('takes Shopee pictures: links the same SKU by itself, makes new products with their pictures, fills products without one', function () {
     Storage::fake('public');
     RemoteImage::$resolver = fn (string $host) => ['93.184.216.34'];
