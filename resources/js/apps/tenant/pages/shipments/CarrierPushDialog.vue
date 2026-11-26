@@ -5,10 +5,11 @@ import Button from '@/shared/ui/Button.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
 import { api, ApiError, idempotent, newIdempotencyKey } from '@/shared/lib/api';
 import { useToast } from '@/shared/composables/useToast';
+import { useSettingsStore } from '@/shared/stores/settings';
 import { formatMoney } from '@/shared/lib/utils';
 import CarrierQuotePicker from './CarrierQuotePicker.vue';
 import ParcelOptionsPanel from './ParcelOptionsPanel.vue';
-import { choiceOf, openLabels, type CarrierChoice, type ParcelOptions, type QuoteResult } from './carriers';
+import { choiceOf, defaultParcel, openLabels, type CarrierChoice, type ParcelOptions, type QuoteResult } from './carriers';
 import type { ShipmentData } from './shipments';
 
 /** "Đẩy qua hãng vận chuyển" for one saved order: parcel on the left, prices on the right, push (and print). */
@@ -17,7 +18,7 @@ const props = defineProps<{ orderId: string; orderCode?: string }>();
 const emit = defineEmits<{ pushed: [shipment: ShipmentData] }>();
 const toast = useToast();
 
-const opts = ref<ParcelOptions>({ required_note: 'view_no_try', payer: 'shop' });
+const opts = ref<ParcelOptions>(defaultParcel());
 const quote = ref<QuoteResult | null>(null);
 const choice = ref<CarrierChoice | null>(null);
 const loading = ref(false);
@@ -39,9 +40,9 @@ async function loadQuote() {
         const { data } = await api.post('/shipping/quotes', { order_id: props.orderId, ...payload() });
         if (mine !== seq) return;
         quote.value = data.data;
-        // Keep the shop's pick when it is still offered; otherwise the cheapest.
+        // Keep the shop's pick when it is still offered; otherwise the default carrier (or the cheapest).
         const still = quote.value!.accounts.some((a) => a.account.id === choice.value?.account_id && a.services.some((s) => s.code === choice.value?.service));
-        if (!still) choice.value = quote.value!.cheapest ? choiceOf(quote.value!.cheapest) : null;
+        if (!still) choice.value = quote.value!.preferred ? choiceOf(quote.value!.preferred) : null;
         else {
             const row = quote.value!.accounts.find((a) => a.account.id === choice.value!.account_id)!.services.find((s) => s.code === choice.value!.service)!;
             choice.value = { ...choice.value!, fee: row.fee };
@@ -52,9 +53,10 @@ async function loadQuote() {
         if (mine === seq) loading.value = false;
     }
 }
-watch(open, (v) => {
+watch(open, async (v) => {
     if (!v) return;
-    opts.value = { required_note: 'view_no_try', payer: 'shop' };
+    await useSettingsStore().load().catch(() => null);
+    opts.value = defaultParcel();
     quote.value = null;
     choice.value = null;
     error.value = null;

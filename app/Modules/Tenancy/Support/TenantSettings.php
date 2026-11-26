@@ -61,6 +61,21 @@ class TenantSettings
         // Tích điểm (C5): 1 point per earn_per đồng paid (shipping left out), each point worth point_value đồng when
         // spent, at most max_redeem_percent of the order; points expire after expire_months (0 = never).
         'loyalty' => ['enabled' => false, 'earn_per' => 100000, 'point_value' => 1000, 'max_redeem_percent' => 50, 'expire_months' => 12, 'with_promotions' => true],
+        // Vận chuyển › Cấu hình giao hàng: the parcel filled in when a shipment is made (each one can still be changed),
+        // the carrier account picked first for each warehouse, and the automatic steps.
+        'shipping' => [
+            'weight_g' => 500,
+            'length_cm' => null,
+            'width_cm' => null,
+            'height_cm' => null,
+            'required_note' => 'view_no_try',
+            'payer' => 'shop',
+            'note' => null,
+            // [{warehouse_id: ulid, account_id: ulid}]; a warehouse with none takes the cheapest price.
+            'default_carriers' => [],
+            'notify_problems' => true,
+            'cancel_with_order' => false,
+        ],
         'print' => [
             'defaults' => ['sale' => 'a5', 'purchase' => 'a4', 'receipt' => 'a4', 'stocktake' => 'a4', 'cash' => 'a5'],
             'show_logo' => true,

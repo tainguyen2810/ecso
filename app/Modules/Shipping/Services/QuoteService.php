@@ -2,11 +2,13 @@
 
 namespace App\Modules\Shipping\Services;
 
+use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Shipping\Connectors\CarrierException;
 use App\Modules\Shipping\Connectors\CarrierRegistry;
 use App\Modules\Shipping\Connectors\Data\ServiceQuote;
 use App\Modules\Shipping\Connectors\Data\ShipmentDraft;
 use App\Modules\Shipping\Models\CarrierAccount;
+use App\Modules\Tenancy\Support\TenantSettings;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -16,7 +18,7 @@ class QuoteService
     public function __construct(private readonly CarrierRegistry $carriers) {}
 
     /**
-     * @return array{accounts: array<int, array<string, mixed>>, cheapest: array<string, mixed>|null, fastest: array<string, mixed>|null}
+     * @return array{accounts: array<int, array<string, mixed>>, cheapest: array<string, mixed>|null, fastest: array<string, mixed>|null, preferred: array<string, mixed>|null}
      */
     public function quote(ShipmentDraft $draft): array
     {
@@ -50,6 +52,21 @@ class QuoteService
         $cheapest = collect($all)->sortBy(fn ($q) => (float) $q['fee'])->first();
         $fastest = collect($all)->filter(fn ($q) => $q['expected_at'] !== null)->sortBy([fn ($a, $b) => strcmp($a['expected_at'], $b['expected_at']), fn ($a, $b) => (float) $a['fee'] <=> (float) $b['fee']])->first();
 
-        return ['accounts' => $rows, 'cheapest' => $cheapest, 'fastest' => $fastest];
+        // Cấu hình giao hàng › Hãng mặc định: the cheapest service of the warehouse's chosen account, else the cheapest.
+        $default = $this->defaultAccount($draft->warehouseId);
+        $preferred = $default ? collect($all)->where('account_id', $default)->sortBy(fn ($q) => (float) $q['fee'])->first() : null;
+
+        return ['accounts' => $rows, 'cheapest' => $cheapest, 'fastest' => $fastest, 'preferred' => $preferred ?? $cheapest];
+    }
+
+    private function defaultAccount(?int $warehouseId): ?string
+    {
+        $picks = (array) (TenantSettings::current()->get('shipping')['default_carriers'] ?? []);
+        if ($picks === []) {
+            return null;
+        }
+        $ulid = $warehouseId ? Warehouse::query()->whereKey($warehouseId)->value('ulid') : null;
+
+        return collect($picks)->firstWhere('warehouse_id', $ulid)['account_id'] ?? null;
     }
 }

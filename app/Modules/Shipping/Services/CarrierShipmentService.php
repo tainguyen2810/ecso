@@ -17,6 +17,7 @@ use App\Modules\Shipping\Connectors\CarrierRegistry;
 use App\Modules\Shipping\Connectors\Data\CreatedShipment;
 use App\Modules\Shipping\Connectors\Data\ShipmentDraft;
 use App\Modules\Shipping\Models\CarrierAccount;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -32,6 +33,23 @@ class CarrierShipmentService
 {
     /** Order statuses a parcel can still be made for: goods not handed over yet. */
     public const PUSHABLE = [OrderStatus::PENDING_CONFIRMATION, OrderStatus::READY_TO_PACK, OrderStatus::PACKED];
+
+    /**
+     * Own orders waiting to be pushed to a carrier ("Chờ đẩy"): no tracking number yet and no live shipment, except a
+     * parcel the carrier refused (it stays here to push again).
+     *
+     * @return Builder<Order>
+     */
+    public static function queueQuery(): Builder
+    {
+        $active = fn ($s) => $s->where('status', '!=', ShipmentStatus::CANCELLED);
+
+        return Order::query()
+            ->where(fn ($q) => $q->where('marketplace', Order::SOURCE_MANUAL)->orWhere('marketplace', 'woocommerce'))
+            ->whereIn('status', self::PUSHABLE)
+            ->whereNull('tracking_number')
+            ->whereDoesntHave('shipments', fn ($s) => $active($s)->where(fn ($w) => $w->where('source', '!=', Shipment::SOURCE_API)->orWhereNotNull('tracking_number')));
+    }
 
     public function __construct(
         private readonly CarrierRegistry $carriers,
@@ -90,6 +108,20 @@ class CarrierShipmentService
         }
 
         return $this->shipments->act($shipment, 'cancel', 'Hủy vận đơn trên '.$this->carriers->get($account->carrier)->label());
+    }
+
+    /**
+     * Takes the parcel back at the carrier after its order was cancelled here (the parcel itself already follows the
+     * order). A carrier that has picked it up refuses; the caller logs that.
+     */
+    public function cancelAtCarrier(Shipment $shipment): void
+    {
+        $account = $this->accountOf($shipment);
+        if ($shipment->tracking_number === null || ! in_array($shipment->status, [ShipmentStatus::PENDING, ShipmentStatus::AWAITING_PICKUP, ShipmentStatus::CANCELLED], true)) {
+            return;
+        }
+        $this->carriers->get($account->carrier)->cancel($account, $shipment);
+        $this->sync->event($shipment, ShipmentStatus::CANCELLED, now(), 'Đơn bị hủy, đã tự hủy vận đơn trên '.$this->carriers->get($account->carrier)->label(), 'auto_cancel:'.$shipment->tracking_number, ShipmentEvent::SOURCE_API);
     }
 
     /**

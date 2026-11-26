@@ -4,6 +4,7 @@ use App\Modules\Shipping\Http\Controllers\CarrierAccountController;
 use App\Modules\Shipping\Http\Controllers\CarrierLabelController;
 use App\Modules\Shipping\Http\Controllers\CarrierShipmentController;
 use App\Modules\Shipping\Http\Controllers\CarrierWebhookController;
+use App\Modules\Shipping\Http\Controllers\ShippingOverviewController;
 use Illuminate\Support\Facades\Route;
 
 // Called by carriers: no session, no tenant header. The token picks the account.
@@ -26,6 +27,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::post('carrier-accounts/{account}/check', [CarrierAccountController::class, 'check'])->middleware(['real-tenant', 'throttle:10,1,shipping.carrier-accounts.check']);
     Route::delete('carrier-accounts/{account}', [CarrierAccountController::class, 'destroy']);
 
+    Route::get('shipping/overview', ShippingOverviewController::class);
     Route::get('carrier-shipments/queue', [CarrierShipmentController::class, 'queue']);
     Route::post('shipping/quotes', [CarrierShipmentController::class, 'quote'])->middleware('throttle:120,1,shipping.quotes');
     Route::post('orders/{order}/carrier-shipments', [CarrierShipmentController::class, 'push'])->middleware(['idempotent', 'throttle:60,1,shipping.push']);

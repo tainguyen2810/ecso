@@ -52,12 +52,7 @@ class CarrierShipmentController extends Controller
         $this->authorize('viewAny', Order::class);
         $data = $request->validate(['q' => ['nullable', 'string', 'max:100'], 'page' => ['nullable', 'integer', 'min:1']]);
         $active = fn ($s) => $s->where('status', '!=', ShipmentStatus::CANCELLED);
-        $page = Order::query()
-            ->where(fn ($q) => $q->where('marketplace', Order::SOURCE_MANUAL)->orWhere('marketplace', 'woocommerce'))
-            ->whereIn('status', CarrierShipmentService::PUSHABLE)
-            ->whereNull('tracking_number')
-            // A parcel the carrier refused stays here to push again; any other live shipment means it is handled.
-            ->whereDoesntHave('shipments', fn ($s) => $active($s)->where(fn ($w) => $w->where('source', '!=', Shipment::SOURCE_API)->orWhereNotNull('tracking_number')))
+        $page = CarrierShipmentService::queueQuery()
             ->when(filled($data['q'] ?? null), fn ($q) => $q->where(fn ($w) => $w->where('external_order_id', 'like', '%'.$data['q'].'%')->orWhere('buyer_name', 'like', '%'.$data['q'].'%')->orWhere('buyer_phone', 'like', '%'.$data['q'].'%')))
             ->with(['warehouse:id,ulid,code,name', 'shipments' => $active])
             ->orderBy('id')

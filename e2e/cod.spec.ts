@@ -5,7 +5,7 @@ const DIR = 'docs/screenshots/cash-cod';
 
 test('COD reconciliation: import a carrier file, preview line by line, book it', async ({ page }) => {
     await login(page, 'owner@demo.test');
-    await page.goto('/cash/cod');
+    await page.goto('/shipping/cod');
     await page.getByTestId('cod-import').click();
     await expect(page.getByTestId('cod-import-dialog')).toBeVisible();
     await page.getByTestId('cod-carrier').selectOption('ghn');

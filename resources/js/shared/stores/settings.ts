@@ -30,9 +30,25 @@ export interface TenantSettingsData {
     sales: { allow_change_sale_time: boolean; invoice_copies: number; pos_require_cash: boolean; pos_auto_print: boolean; pos_require_shift: boolean; marketplace_auto_arrange?: boolean };
     reasons: CancelReason[];
     print: { defaults: Record<'sale' | 'purchase' | 'receipt' | 'stocktake' | 'cash', PrintSize>; show_logo: boolean; show_qr: boolean; show_signatures: boolean; footer: string | null };
+    shipping?: ShippingSettings;
 }
 
-export type SettingsSection = 'store' | 'tax' | 'pricing' | 'payments' | 'sales' | 'reasons' | 'print';
+/** Vận chuyển › Cấu hình giao hàng. */
+export interface ShippingSettings {
+    weight_g: number;
+    length_cm: number | null;
+    width_cm: number | null;
+    height_cm: number | null;
+    required_note: 'view_no_try' | 'try' | 'no_view';
+    payer: 'shop' | 'buyer';
+    note: string | null;
+    /** Carrier account picked first for each warehouse (ulids). */
+    default_carriers: { warehouse_id: string; account_id: string }[];
+    notify_problems: boolean;
+    cancel_with_order: boolean;
+}
+
+export type SettingsSection = 'store' | 'tax' | 'pricing' | 'payments' | 'sales' | 'reasons' | 'print' | 'shipping';
 
 /** Loaded once per business; screens read it to apply the configured defaults and rules. */
 export const useSettingsStore = defineStore('settings', () => {

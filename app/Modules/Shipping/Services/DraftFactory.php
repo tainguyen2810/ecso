@@ -6,6 +6,7 @@ use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Shipping\Connectors\Data\ShipmentDraft;
+use App\Modules\Tenancy\Support\TenantSettings;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -90,7 +91,10 @@ class DraftFactory
     {
         $itemsWeight = array_sum(array_map(fn ($i) => (int) ($i['weight_g'] ?? 0) * (int) $i['quantity'], $base['items']));
         $missingWeight = collect($base['items'])->contains(fn ($i) => empty($i['weight_g']));
-        $weight = (int) ($in['weight_g'] ?? 0) ?: (! $missingWeight && $itemsWeight > 0 ? $itemsWeight : (int) config('shipping.default_weight_g'));
+        // Cấu hình giao hàng: what the shop set fills whatever the dialog left empty.
+        $defaults = (array) TenantSettings::current()->get('shipping');
+        $weight = (int) ($in['weight_g'] ?? 0) ?: (! $missingWeight && $itemsWeight > 0 ? $itemsWeight : ((int) ($defaults['weight_g'] ?? 0) ?: (int) config('shipping.default_weight_g')));
+        $size = fn (string $key) => isset($in[$key]) ? (int) $in[$key] : (isset($defaults[$key]) ? (int) $defaults[$key] : null);
         $money = fn ($v) => number_format((float) $v, 2, '.', '');
 
         return new ShipmentDraft(
@@ -102,14 +106,14 @@ class DraftFactory
             toProvinceCode: $base['to_province_code'],
             toWardCode: $base['to_ward_code'],
             weightG: $weight,
-            lengthCm: isset($in['length_cm']) ? (int) $in['length_cm'] : null,
-            widthCm: isset($in['width_cm']) ? (int) $in['width_cm'] : null,
-            heightCm: isset($in['height_cm']) ? (int) $in['height_cm'] : null,
+            lengthCm: $size('length_cm'),
+            widthCm: $size('width_cm'),
+            heightCm: $size('height_cm'),
             codAmount: $money(array_key_exists('cod_amount', $in) && $in['cod_amount'] !== null ? $in['cod_amount'] : $base['cod_amount']),
             insuredValue: $money(array_key_exists('insured_value', $in) && $in['insured_value'] !== null ? $in['insured_value'] : $base['insured_value']),
-            payer: $in['payer'] ?? 'shop',
-            requiredNote: $in['required_note'] ?? ShipmentDraft::NOTE_VIEW_NO_TRY,
-            note: $in['note'] ?? null,
+            payer: $in['payer'] ?? $defaults['payer'] ?? 'shop',
+            requiredNote: $in['required_note'] ?? $defaults['required_note'] ?? ShipmentDraft::NOTE_VIEW_NO_TRY,
+            note: filled($in['note'] ?? null) ? $in['note'] : ($defaults['note'] ?? null),
             items: $base['items'],
             pickupShift: $in['pickup_shift'] ?? null,
         );

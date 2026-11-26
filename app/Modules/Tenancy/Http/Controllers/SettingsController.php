@@ -6,6 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Geo\Models\Ward;
 use App\Modules\Geo\Services\VnAddress;
+use App\Modules\Inventory\Models\Warehouse;
+use App\Modules\Shipping\Connectors\Data\ShipmentDraft;
+use App\Modules\Shipping\Models\CarrierAccount;
 use App\Modules\Tenancy\Support\TenantContext;
 use App\Modules\Tenancy\Support\TenantSettings;
 use Illuminate\Http\JsonResponse;
@@ -35,6 +38,9 @@ class SettingsController extends Controller
 
         if ($section === 'payments') {
             $this->assertPayments($data);
+        }
+        if ($section === 'shipping' && isset($data['default_carriers'])) {
+            $data['default_carriers'] = $this->defaultCarriers($data['default_carriers']);
         }
         if ($section === 'store' && isset($data['name'])) {
             $tenant->name = $data['name'];
@@ -125,6 +131,28 @@ class SettingsController extends Controller
         }
     }
 
+    /**
+     * Only this store's warehouses and carrier accounts; a row naming something else is refused.
+     *
+     * @param  list<array{warehouse_id: string, account_id: string}>  $rows
+     * @return list<array{warehouse_id: string, account_id: string}>
+     */
+    private function defaultCarriers(array $rows): array
+    {
+        $warehouses = Warehouse::query()->whereIn('ulid', array_column($rows, 'warehouse_id'))->pluck('ulid')->all();
+        $accounts = CarrierAccount::query()->whereIn('ulid', array_column($rows, 'account_id'))->pluck('ulid')->all();
+        foreach ($rows as $i => $row) {
+            if (! in_array($row['warehouse_id'], $warehouses, true)) {
+                throw ValidationException::withMessages(["default_carriers.{$i}.warehouse_id" => 'Kho không tồn tại.']);
+            }
+            if (! in_array($row['account_id'], $accounts, true)) {
+                throw ValidationException::withMessages(["default_carriers.{$i}.account_id" => 'Tài khoản hãng vận chuyển không tồn tại.']);
+            }
+        }
+
+        return array_map(fn ($r) => ['warehouse_id' => $r['warehouse_id'], 'account_id' => $r['account_id']], $rows);
+    }
+
     /** @return array<string, array<string, array<int, mixed>>> */
     private function rules(): array
     {
@@ -181,6 +209,20 @@ class SettingsController extends Controller
                 'reasons.*.label' => ['required', 'string', 'max:100'],
                 'reasons.*.cancel' => ['boolean'],
                 'reasons.*.return' => ['boolean'],
+            ],
+            'shipping' => [
+                'weight_g' => ['sometimes', 'integer', 'min:1', 'max:1000000'],
+                'length_cm' => ['nullable', 'integer', 'min:1', 'max:1000'],
+                'width_cm' => ['nullable', 'integer', 'min:1', 'max:1000'],
+                'height_cm' => ['nullable', 'integer', 'min:1', 'max:1000'],
+                'required_note' => ['sometimes', Rule::in(array_keys(ShipmentDraft::REQUIRED_NOTES))],
+                'payer' => ['sometimes', Rule::in(['shop', 'buyer'])],
+                'note' => ['nullable', 'string', 'max:200'],
+                'default_carriers' => ['sometimes', 'array', 'max:50'],
+                'default_carriers.*.warehouse_id' => ['required', 'string', 'size:26', 'distinct'],
+                'default_carriers.*.account_id' => ['required', 'string', 'size:26'],
+                'notify_problems' => ['sometimes', 'boolean'],
+                'cancel_with_order' => ['sometimes', 'boolean'],
             ],
             'print' => [
                 'defaults' => ['sometimes', 'array'],
