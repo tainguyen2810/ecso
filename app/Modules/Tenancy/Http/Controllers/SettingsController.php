@@ -7,6 +7,7 @@ use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Geo\Models\Ward;
 use App\Modules\Geo\Services\VnAddress;
 use App\Modules\Inventory\Models\Warehouse;
+use App\Modules\Orders\Services\LabelExtras;
 use App\Modules\Shipping\Connectors\Data\ShipmentDraft;
 use App\Modules\Shipping\Models\CarrierAccount;
 use App\Modules\Tenancy\Support\TenantContext;
@@ -231,6 +232,16 @@ class SettingsController extends Controller
                 'show_qr' => ['sometimes', 'boolean'],
                 'show_signatures' => ['sometimes', 'boolean'],
                 'footer' => ['nullable', 'string', 'max:255'],
+                'label_extras' => ['sometimes', 'array'],
+                'label_extras.picklist' => ['boolean'],
+                'label_extras.note' => ['boolean'],
+                'label_extras.warehouse' => ['boolean'],
+                'label_extras.notice' => ['boolean'],
+                'label_extras.notice_text' => ['nullable', 'string', 'max:300'],
+                'label_extras.notice_box' => ['boolean'],
+                'label_extras.size' => [Rule::in(LabelExtras::SIZES)],
+                'label_extras.accounts' => ['nullable', 'array', 'max:50'],
+                'label_extras.accounts.*' => ['string', 'max:30'],
             ],
         ];
     }

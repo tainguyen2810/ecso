@@ -82,6 +82,18 @@ class TenantSettings
             'show_qr' => true,
             'show_signatures' => true,
             'footer' => 'Cảm ơn quý khách!',
+            // Chữ in thêm lên phiếu Shopee / TikTok, into the label's blank space (Orders\Services\LabelExtras). All
+            // off: the label prints exactly as the marketplace made it. accounts: null = every shop, else shop ulids.
+            'label_extras' => [
+                'picklist' => false,
+                'note' => false,
+                'warehouse' => false,
+                'notice' => false,
+                'notice_text' => "QUÝ KHÁCH VUI LÒNG QUAY VIDEO KHI KHUI HÀNG\nVideo giúp shop xử lý đổi trả nhanh khi hàng thiếu hoặc lỗi.",
+                'notice_box' => true,
+                'size' => 'md',
+                'accounts' => null,
+            ],
         ],
     ];
 
