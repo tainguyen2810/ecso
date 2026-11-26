@@ -14,6 +14,7 @@ use App\Modules\Marketplace\Connectors\WooCommerce\WooCommerceConnector;
 use App\Modules\Marketplace\Jobs\SyncListingsJob;
 use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
+use App\Modules\Orders\Models\Order;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -129,6 +130,32 @@ class AccountService
         });
 
         return $account;
+    }
+
+    /**
+     * "Xoá kênh": disconnects the channel, then deletes it with its products, links and sync history. A channel that
+     * still has orders is hidden from the channel list instead: its orders, money and reports stay as they are.
+     *
+     * @return string 'deleted' or 'archived'
+     */
+    public function remove(MarketplaceAccount $account): string
+    {
+        if ($account->status !== MarketplaceAccount::REVOKED) {
+            $this->disconnect($account);
+        }
+        $name = $account->shop_name;
+        if (Order::query()->where('marketplace_account_id', $account->id)->exists()) {
+            $account->forceFill(['archived_at' => now(), 'sync_enabled' => false])->save();
+            $this->audit->record('marketplace.archived', $account, ['shop' => $name]);
+
+            return 'archived';
+        }
+        DB::transaction(function () use ($account, $name) {
+            $this->audit->record('marketplace.deleted', $account, ['shop' => $name]);
+            $account->delete();
+        });
+
+        return 'deleted';
     }
 
     /**

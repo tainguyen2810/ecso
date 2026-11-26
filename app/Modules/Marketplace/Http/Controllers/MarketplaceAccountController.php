@@ -72,7 +72,7 @@ class MarketplaceAccountController extends Controller
     {
         $this->authorize('viewAny', MarketplaceAccount::class);
 
-        $accounts = MarketplaceAccount::query()->with('warehouse')
+        $accounts = MarketplaceAccount::query()->with('warehouse')->whereNull('archived_at')
             ->withCount([
                 'listingVariants as listings_total',
                 'listingVariants as listings_mapped' => fn ($q) => $q->where('mapping_status', ListingVariant::MAPPED),
@@ -214,6 +214,14 @@ class MarketplaceAccountController extends Controller
         $this->authorize('connect', MarketplaceAccount::class);
 
         return new AccountResource($service->disconnect($account)->load('warehouse'));
+    }
+
+    /** "Xoá kênh": gone from the list; deleted outright when it has no orders, else hidden with its orders kept. */
+    public function destroy(MarketplaceAccount $account, AccountService $service): JsonResponse
+    {
+        $this->authorize('connect', MarketplaceAccount::class);
+
+        return response()->json(['data' => ['result' => $service->remove($account)]]);
     }
 
     public function syncProducts(MarketplaceAccount $account, ListingService $listings): JsonResponse

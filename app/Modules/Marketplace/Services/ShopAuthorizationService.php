@@ -99,6 +99,7 @@ class ShopAuthorizationService
                 'shop_name' => $auth->shopName,
                 'region' => $auth->region,
                 'status' => MarketplaceAccount::CONNECTED,
+                'archived_at' => null, // a channel removed earlier comes back
                 'last_error' => null,
                 'consecutive_failures' => 0,
                 'circuit_open_until' => null,

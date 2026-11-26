@@ -52,6 +52,7 @@ class TikiConnectService
                 'shop_name' => $name,
                 'region' => 'VN',
                 'status' => MarketplaceAccount::CONNECTED,
+                'archived_at' => null, // a channel removed earlier comes back
                 // Nothing to sync yet: orders and stock wait for verification on a real shop.
                 'sync_enabled' => false,
                 'warehouse_id' => $warehouse->id ?? $account->warehouse_id ?? Warehouse::query()->where('is_default', true)->value('id'),

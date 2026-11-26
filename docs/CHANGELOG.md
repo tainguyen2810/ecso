@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Kênh bán: menu "…" không bị che, thêm Xoá kênh (2026-11-26)
+- Menu "…" của từng gian hàng không còn bị khung gian hàng cắt mất.
+- "Xoá kênh" (trong menu "…" và cạnh "Kết nối lại" của kênh đã ngắt): ngắt kết nối rồi xoá kênh khỏi danh sách. Kênh chưa có đơn thì xoá hẳn cùng sản phẩm sàn và liên kết. Kênh đã có đơn thì chỉ ẩn khỏi danh sách (`marketplace_accounts.archived_at`, migration mới), đơn cũ giữ nguyên để báo cáo không đổi. Kết nối lại cùng shop thì kênh hiện lại. `DELETE /marketplace-accounts/{id}`, quyền `marketplace.connect`.
+
 ### Menu bên trái màu tối như Sapo, thu gọn được (2026-11-26)
 - Sidebar nền xanh đen (#182537), chữ sáng, mục đang mở nền xanh (#0088ff), tên nhóm in đậm có vạch ngăn.
 - Nút thu gọn cạnh tên doanh nghiệp (màn hình rộng): menu chỉ còn biểu tượng; rê chuột hoặc bấm vào mục có menu con thì menu con hiện bên cạnh. Trình duyệt nhớ trạng thái thu gọn.

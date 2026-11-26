@@ -47,6 +47,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::post('marketplace-accounts/{account}/new-products/skip', [MarketplaceAccountController::class, 'skipNewProducts']);
     Route::patch('marketplace-accounts/{account}', [MarketplaceAccountController::class, 'update']);
     Route::post('marketplace-accounts/{account}/disconnect', [MarketplaceAccountController::class, 'disconnect']);
+    Route::delete('marketplace-accounts/{account}', [MarketplaceAccountController::class, 'destroy']);
     Route::post('marketplace-accounts/{account}/sync-products', [MarketplaceAccountController::class, 'syncProducts'])->middleware('throttle:10,1,marketplace.marketplace-accounts.x.sync-products');
     Route::post('marketplace-accounts/{account}/push-stock', [MarketplaceAccountController::class, 'pushStock'])->middleware('throttle:10,1,marketplace.marketplace-accounts.x.push-stock');
     Route::get('marketplace-accounts/{account}/stock-check', [MarketplaceAccountController::class, 'stockCheck']);
