@@ -170,6 +170,15 @@ it('reconciles orders whose webhook was lost', function () {
     expect($order->status)->toBe('READY_TO_PACK')->and(balanceOf(defaultWarehouse($this->tenant), $this->shirt)->reserved)->toBe(2);
 });
 
+it('keeps reading orders when "Tự đẩy tồn lên sàn" is off: the switch only stops stock pushes', function () {
+    $this->shop->forceFill(['sync_enabled' => false])->save();
+    $remote = $this->fake->createOrder($this->shop->external_shop_id, [['sku_id' => fakeSkuOf($this->shop, $this->shirt), 'quantity' => 1]], notify: false);
+
+    $this->artisan('ecso:orders:reconcile')->assertSuccessful();
+
+    expect(Order::withoutGlobalScopes()->where('external_order_id', $remote['order_sn'])->exists())->toBeTrue();
+});
+
 it('enforces the shop limit of the plan', function () {
     // Free plan: 1 shop.
     actingInTenant($this->owner, $this->tenant)->postJson('/api/v1/marketplace-accounts/fake', ['shop_name' => 'Shop 3'])

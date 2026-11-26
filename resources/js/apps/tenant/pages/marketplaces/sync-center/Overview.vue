@@ -33,7 +33,9 @@ const tiles = computed(() => [
     { status: 'dead_letter', value: byStatus.value.dead_letter, tone: 'red', note: 'đã thử tối đa, cần xem lại' },
 ] as const);
 
-const canSyncNow = (s: SyncShopData) => s.status === 'connected' && s.sync_enabled;
+// Orders are read whatever the stock switch says; the stock check needs stock push on.
+const canSyncNow = (s: SyncShopData) => s.status === 'connected';
+const canCheckStock = (s: SyncShopData) => s.status === 'connected' && s.sync_enabled;
 
 /** Đợt 16 "Đối soát tồn với sàn": the latest check of a shop and the SKUs that differed. */
 const checkShop = ref<SyncShopData | null>(null);
@@ -145,7 +147,7 @@ async function syncNow(s: SyncShopData) {
                                     </span>
                                 </td>
                                 <td class="px-4 py-3">
-                                    <Badge v-if="!s.sync_enabled && s.status === 'connected'" tone="muted">Tắt đồng bộ</Badge>
+                                    <Badge v-if="!s.sync_enabled && s.status === 'connected'" tone="muted">Tắt đẩy tồn</Badge>
                                     <Badge v-else-if="s.circuit_open" tone="warning">Tạm ngừng đẩy</Badge>
                                     <Badge v-else-if="s.token_expires_at && s.status === 'connected'" tone="warning">Kết nối hết hạn {{ formatDate(s.token_expires_at) }}</Badge>
                                     <Badge v-else :tone="shopStatus[s.status]?.tone ?? 'muted'">{{ shopStatus[s.status]?.label ?? s.status }}</Badge>
@@ -213,7 +215,7 @@ async function syncNow(s: SyncShopData) {
         </div>
         <template #footer>
             <Button variant="outline" @click="checkOpen = false">Đóng</Button>
-            <Button v-if="data.permissions.operate && checkShop" :disabled="!canSyncNow(checkShop)" :loading="busy === `check-${checkShop.id}`" data-testid="stock-check-run" @click="runCheck(checkShop)"><RefreshCw /> Đối soát ngay</Button>
+            <Button v-if="data.permissions.operate && checkShop" :disabled="!canCheckStock(checkShop)" :loading="busy === `check-${checkShop.id}`" data-testid="stock-check-run" @click="runCheck(checkShop)"><RefreshCw /> Đối soát ngay</Button>
         </template>
     </Dialog>
 </template>
