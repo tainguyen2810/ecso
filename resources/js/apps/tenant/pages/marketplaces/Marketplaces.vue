@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { AlertTriangle, BadgePercent, ChevronDown, CircleCheck, FlaskConical, Link2, Link2Off, MoreHorizontal, PlugZap, Plus, RefreshCw, Send, Settings2, ShieldCheck, Unplug, Wrench, Zap, History } from 'lucide-vue-next';
+import { AlertTriangle, BadgePercent, ChevronDown, CircleCheck, FlaskConical, Link2, Link2Off, MoreHorizontal, PlugZap, Plus, RefreshCw, Send, Settings2, ShieldCheck, Trash2, Unplug, Wrench, Zap, History } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
@@ -164,6 +164,13 @@ const disconnect = (a: MarketplaceAccountData) => run(`disc-${a.id}`, async () =
     await load();
     return 'Đã ngắt kết nối. Dữ liệu đơn cũ được giữ nguyên.';
 });
+/** "Xoá kênh": gone from the list. A channel with orders keeps them (reports unchanged); one without is deleted outright. */
+const remove = (a: MarketplaceAccountData) => run(`remove-${a.id}`, async () => {
+    if (!window.confirm(`Xoá kênh "${a.shop_name}" khỏi danh sách?\n\nKênh sẽ được ngắt kết nối, sản phẩm sàn và liên kết sản phẩm của kênh bị xoá. Đơn hàng cũ của kênh vẫn được giữ để báo cáo không đổi. Kết nối lại sau vẫn được.`)) return;
+    const { data } = await api.delete(`/marketplace-accounts/${a.id}`);
+    await load();
+    return data.data.result === 'archived' ? `Đã xoá kênh ${a.shop_name}. Đơn hàng cũ của kênh vẫn được giữ.` : `Đã xoá kênh ${a.shop_name}.`;
+});
 
 async function openSimulator(a: MarketplaceAccountData) {
     const [state, orders] = await Promise.all([api.get(`/fake-marketplace/${a.id}`), api.get('/orders', { params: { account: a.id, per_page: 20 } })]);
@@ -243,7 +250,8 @@ function sinceLabel(a: MarketplaceAccountData) {
                 <EmptyState :icon="PlugZap" :title="sanName ? `Chưa kết nối ${sanName}` : 'Chưa kết nối gian hàng nào'" description="Kết nối gian hàng ở phần bên dưới để đơn, tồn kho và giá tự đồng bộ." />
             </div>
             <ul v-else class="space-y-3" data-testid="account-list">
-                <li v-for="a in shownAccounts" :key="a.id" class="overflow-hidden rounded-xl border bg-card shadow-xs">
+                <!-- No overflow-hidden: the "…" menu has to show past the card; the last strip keeps the rounded corners. -->
+                <li v-for="a in shownAccounts" :key="a.id" class="rounded-xl border bg-card shadow-xs [&>*:last-child]:rounded-b-xl">
                     <div class="flex flex-wrap items-center gap-x-6 gap-y-4 px-5 py-4">
                         <div class="flex min-w-60 flex-1 items-center gap-4">
                             <MarketplaceLogo :marketplace="a.marketplace" :name="a.marketplace_name" size="lg" class="size-11" />
@@ -296,6 +304,7 @@ function sinceLabel(a: MarketplaceAccountData) {
                                         <button type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-muted" :disabled="busy === `push-${a.id}`" @click="menuFor = null; pushStock(a)"><Send class="size-4 text-muted-foreground" /> Đẩy tồn kho ngay</button>
                                         <div class="my-1 border-t" />
                                         <button type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-rose-600 hover:bg-rose-50" @click="menuFor = null; disconnect(a)"><Unplug class="size-4" /> Ngắt kết nối</button>
+                                        <button type="button" role="menuitem" class="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-rose-600 hover:bg-rose-50" :data-testid="`account-remove-${a.id}`" @click="menuFor = null; remove(a)"><Trash2 class="size-4" /> Xoá kênh</button>
                                     </template>
                                 </div>
                             </template>
@@ -323,6 +332,7 @@ function sinceLabel(a: MarketplaceAccountData) {
                     <div v-else-if="a.status !== 'connected'" class="flex flex-wrap items-center gap-3 border-t bg-slate-50 px-5 py-3 text-sm text-muted-foreground">
                         <Unplug class="size-4 shrink-0" />
                         <span class="flex-1">Đã ngắt kết nối. Đơn cũ vẫn được giữ.</span>
+                        <Button v-if="tenant.can('marketplace.connect')" size="sm" variant="ghost" class="text-rose-600 hover:bg-rose-50 hover:text-rose-700" :data-testid="`account-remove-${a.id}`" @click="remove(a)"><Trash2 /> Xoá kênh</Button>
                         <Button v-if="tenant.can('marketplace.connect') && a.marketplace !== 'fake'" size="sm" variant="outline" @click="reconnect(a)">Kết nối lại</Button>
                     </div>
                 </li>

@@ -193,6 +193,7 @@ class WooCommerceConnectService
                 'region' => 'VN',
                 'base_url' => $url,
                 'status' => MarketplaceAccount::CONNECTED,
+                'archived_at' => null, // a channel removed earlier comes back
                 'sync_enabled' => true,
                 'warehouse_id' => $warehouse->id ?? $account->warehouse_id ?? Warehouse::query()->where('is_default', true)->value('id'),
                 // A5: a store connected for the first time goes through the setup steps before any stock is pushed.
