@@ -506,10 +506,21 @@ const channelPicked = (key: string) => (key === '' ? !filters.marketplace && !fi
 /** The next step of an order, done from its row (same rules as the bulk actions). */
 const nextAction: Record<string, string> = { PENDING_CONFIRMATION: 'confirm', READY_TO_PACK: 'pack', PACKED: 'handover' };
 const rowAction = (o: OrderSummary) => {
-    // Shopee / TikTok after "Chuẩn bị hàng": the carrier comes to the parcel, what is left here is its label.
-    if (o.marketplace_shipping && o.status === 'PACKED') return tenant.can('orders.print') ? 'label' : null;
+    // Shopee / TikTok after "Chuẩn bị hàng": the carrier comes to the parcel, what is left here is its label (once).
+    if (o.marketplace_shipping && o.status === 'PACKED') return tenant.can('orders.print') && !o.label_print_count ? 'label' : null;
     return tenant.can('orders.update') ? (nextAction[o.status] ?? null) : null;
 };
+/** No step left here: a muted, same-size placeholder that says where the order is (Mẫu A). */
+const doneLabels: Record<string, string> = {
+    UNPAID: 'Chờ thanh toán', HANDED_OVER: 'Đang giao', IN_TRANSIT: 'Đang giao', DELIVERED: 'Đã giao', COMPLETED: 'Xong',
+    CANCELLED: 'Đã hủy', FAILED_DELIVERY: 'Đang hoàn', RETURN_REQUESTED: 'Đang hoàn', RETURNED: 'Đã hoàn',
+};
+const rowDone = (o: OrderSummary) => {
+    if (o.marketplace_shipping && o.status === 'PACKED' && o.label_print_count) return 'Đã in phiếu';
+    return doneLabels[o.status] ?? null;
+};
+// A printed marketplace label can still be printed again from its placeholder.
+const canReprint = (o: OrderSummary) => !!(o.marketplace_shipping && o.status === 'PACKED' && o.label_print_count && tenant.can('orders.print'));
 async function runRow(o: OrderSummary, action: string) {
     if (action === 'pack' && o.marketplace_shipping) return openShip([o.id]);
     if (action === 'label') return openLabels([o.id]);
@@ -870,7 +881,18 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                                 <div v-if="!columns.payment && !compact" class="text-xs text-muted-foreground">{{ o.payment_status && o.status !== 'CANCELLED' ? paymentStatus[o.payment_status]?.label : o.is_cod ? 'COD' : o.source === 'manual' ? '' : 'Sàn thu' }}</div>
                             </td>
                             <td class="px-3 py-2 text-right" @click.stop>
-                                <Button v-if="rowAction(o)" size="sm" variant="outline" class="whitespace-nowrap" :loading="busy === `row-${o.id}`" :data-testid="`row-action-${rowAction(o)}`" @click="runRow(o, rowAction(o)!)">{{ actionLabel(rowAction(o)!, o) }}</Button>
+                                <Button v-if="rowAction(o)" size="sm" class="w-[120px] whitespace-nowrap" :loading="busy === `row-${o.id}`" :data-testid="`row-action-${rowAction(o)}`" @click="runRow(o, rowAction(o)!)">{{ actionLabel(rowAction(o)!, o) }}</Button>
+                                <button
+                                    v-else-if="rowDone(o)"
+                                    type="button"
+                                    :disabled="!canReprint(o)"
+                                    :title="canReprint(o) ? `Đã in ${o.label_print_count} lần, bấm để in lại` : undefined"
+                                    class="inline-flex h-8 w-[120px] items-center justify-center rounded-md border border-dashed border-slate-300 bg-white text-xs whitespace-nowrap text-muted-foreground enabled:hover:border-slate-400 enabled:hover:text-foreground disabled:cursor-default"
+                                    :data-testid="`row-done-${o.id}`"
+                                    @click="canReprint(o) && openLabels([o.id])"
+                                >
+                                    {{ rowDone(o) }}
+                                </button>
                             </td>
                         </tr>
                     </template>
