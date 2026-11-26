@@ -39,6 +39,9 @@ class TikTokConnector extends GatewayConnector
 
     private const V = '202309';
 
+    /** The pickup "slot" offered when TikTok has none to choose: shipped without one, TikTok books the time. */
+    public const ANY_SLOT = 'tiktok';
+
     public function marketplace(): string
     {
         return self::MARKETPLACE;
@@ -169,7 +172,21 @@ class TikTokConnector extends GatewayConnector
     public function shipOptions(MarketplaceAccount $account, string $externalOrderId): array
     {
         $package = $this->packageId($account, $externalOrderId);
-        $d = $this->gateway->call($account, 'GET', '/fulfillment/'.self::V.'/packages/'.rawurlencode($package).'/handover_time_slots');
+        try {
+            $d = $this->gateway->call($account, 'GET', '/fulfillment/'.self::V.'/packages/'.rawurlencode($package).'/handover_time_slots');
+        } catch (ConnectorException $e) {
+            if ($e->authExpired) {
+                throw $e;
+            }
+
+            // Some deliveries (Hoả tốc) have no slots to choose: TikTok answers "Request validation failed" and sends
+            // its carrier by itself, so the package is shipped as a pickup without a slot.
+            return [
+                'pickup' => ['available' => true, 'addresses' => [['id' => '', 'label' => 'Địa chỉ lấy hàng của shop trên TikTok', 'slots' => [['id' => self::ANY_SLOT, 'label' => 'TikTok tự hẹn giờ lấy hàng']]]]],
+                'dropoff' => ['available' => true],
+                'carrier' => null,
+            ];
+        }
         $slots = [];
         foreach ((array) ($d['pickup_slots'] ?? []) as $slot) {
             // TikTok spells it "avaliable" in this answer.
@@ -191,7 +208,7 @@ class TikTokConnector extends GatewayConnector
     {
         $package = $this->packageId($account, $externalOrderId);
         $body = ['handover_method' => $method === 'pickup' ? 'PICKUP' : 'DROP_OFF'];
-        if ($method === 'pickup') {
+        if ($method === 'pickup' && $slotId !== null && $slotId !== self::ANY_SLOT) {
             [$start, $end] = array_pad(explode('-', (string) $slotId, 2), 2, null);
             $body['pickup_slot'] = ['start_time' => (int) $start, 'end_time' => (int) ($end ?? $start)];
         }

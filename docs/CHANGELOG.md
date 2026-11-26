@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Chuẩn bị hàng sàn: đơn đã chuẩn bị trên sàn, TikTok Hoả tốc (2026-11-26)
+- Shopee báo "not eligible for rescheduling" khi đơn đã được chuẩn bị trong Kênh Người Bán mà ECSO chưa cập nhật. Giờ hộp Chuẩn bị hàng đọc lại đơn từ sàn: đơn đã chuẩn bị được để riêng ("đã được chuẩn bị trên sàn rồi") và chuyển trạng thái, đơn còn chờ thì hỏi sàn lại. Lỗi sàn không còn kèm đường dẫn API.
+- TikTok Shop: đơn Hoả tốc không có khung giờ lấy hàng (TikTok trả "Request validation failed"). Giờ hiện "Shipper đến lấy" với lựa chọn "TikTok tự hẹn giờ lấy hàng" và gửi lệnh giao không kèm khung giờ.
+
 ### Nhập khách hàng: file tới 200.000 dòng (2026-11-24)
 - Giới hạn nhập chạy ngầm nâng từ 30.000 lên 200.000 dòng (`ecso.customer_import.background_rows`, `CUSTOMER_IMPORT_BACKGROUND_ROWS`), đủ cho file khách hàng Sapo khoảng 40.000 dòng. Việc chạy ngầm nâng bộ nhớ lên 1 GB. Đo thử 45.000 dòng: kiểm tra 2 giây, nhập khoảng 3 phút, 185 MB.
 
