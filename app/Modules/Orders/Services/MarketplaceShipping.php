@@ -241,8 +241,16 @@ class MarketplaceShipping
         $failed = [];
         foreach ($orders as $order) {
             $connector = $this->connector($order);
+            if ($connector !== null && ! in_array($order->status, self::LABEL_FROM, true) && $order->ship_arrangement !== null) {
+                // Just prepared ("Chuẩn bị hàng" then straight to print): ECSO has not read the new status yet.
+                try {
+                    $order = $this->sync->syncOne($order->account, $order->external_order_id, 'user')['order'] ?? $order;
+                } catch (ConnectorException) {
+                }
+            }
             $message = match (true) {
                 $connector === null => 'Đơn này không có phiếu sàn.',
+                ! in_array($order->status, self::LABEL_FROM, true) && $order->ship_arrangement !== null => 'Sàn đang xử lý đơn vừa chuẩn bị hàng, chưa có phiếu. Thử in lại sau ít giây.',
                 ! in_array($order->status, self::LABEL_FROM, true) => 'Đơn chưa chuẩn bị hàng nên sàn chưa có phiếu.',
                 default => null,
             };
