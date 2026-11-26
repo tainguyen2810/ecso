@@ -75,6 +75,7 @@ use App\Modules\Purchasing\Models\SupplierReturn;
 use App\Modules\Purchasing\Policies\PurchasingPolicy;
 use App\Modules\Sales\Console\AutoGroupCustomersCommand;
 use App\Modules\Sales\Console\LoyaltyNightlyCommand;
+use App\Modules\Sales\Console\SubscriptionDailyCommand;
 use App\Modules\Sales\Console\VerifyOrderMoneyCommand;
 use App\Modules\Sales\Listeners\CreateDefaultSalesChannel;
 use App\Modules\Sales\Loyalty\LoyaltyService;
@@ -171,7 +172,7 @@ class ModuleServiceProvider extends ServiceProvider
         $this->configureAuthLinks();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([AutoGroupCustomersCommand::class, ZnsPaymentRemindersCommand::class, LoyaltyNightlyCommand::class, CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, VerifyOrderMoneyCommand::class, LowStockDigestCommand::class, LotExpiryCommand::class, PushDueInventoryCommand::class, RecoverSyncCommand::class, PruneSyncLogsCommand::class, CheckFeesCommand::class, StockCheckCommand::class, SyncSettlementsCommand::class, SyncReturnsCommand::class, CheckWebhooksCommand::class, ReconcileOrdersCommand::class, BackfillShipmentsCommand::class, TrackCarrierShipmentsCommand::class, BillingSweepCommand::class, LossAlertsCommand::class, MorningBriefCommand::class, MonitorCommand::class, BackupDatabaseCommand::class, PruneDemoStoresCommand::class, DemoTenantCommand::class]);
+            $this->commands([SubscriptionDailyCommand::class, AutoGroupCustomersCommand::class, ZnsPaymentRemindersCommand::class, LoyaltyNightlyCommand::class, CheckEnvCommand::class, InstallCommand::class, VerifyInventoryCommand::class, VerifyOrderMoneyCommand::class, LowStockDigestCommand::class, LotExpiryCommand::class, PushDueInventoryCommand::class, RecoverSyncCommand::class, PruneSyncLogsCommand::class, CheckFeesCommand::class, StockCheckCommand::class, SyncSettlementsCommand::class, SyncReturnsCommand::class, CheckWebhooksCommand::class, ReconcileOrdersCommand::class, BackfillShipmentsCommand::class, TrackCarrierShipmentsCommand::class, BillingSweepCommand::class, LossAlertsCommand::class, MorningBriefCommand::class, MonitorCommand::class, BackupDatabaseCommand::class, PruneDemoStoresCommand::class, DemoTenantCommand::class]);
         }
     }
 

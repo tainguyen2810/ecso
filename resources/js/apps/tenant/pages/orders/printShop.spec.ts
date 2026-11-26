@@ -14,6 +14,7 @@ const settings = {
     payments: { methods: { cash: true, bank_transfer: true, card: true, cod: true, ewallet: false }, default_pos: 'cash', default_online: 'bank_transfer', bank_accounts: [{ bank: 'MB', number: '0909123456', holder: 'ITSO', is_default: true }] },
     sales: { allow_change_sale_time: false, invoice_copies: 2, pos_require_cash: false, pos_auto_print: false, pos_require_shift: true },
     reasons: [],
+    subscriptions: { remind_days: [7, 1, 0], zalo: true, notify_staff: true },
     print: { defaults: { sale: 'a5', purchase: 'a4', receipt: 'a4', stocktake: 'a4', cash: 'a5' }, show_logo: true, show_qr: true, show_signatures: false, footer: 'Đổi trả 7 ngày', label_extras: { picklist: false, note: false, warehouse: false, notice: false, notice_text: null, notice_box: true, size: 'md', accounts: null } },
 } as TenantSettingsData;
 

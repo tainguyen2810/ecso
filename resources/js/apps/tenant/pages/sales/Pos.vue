@@ -540,7 +540,12 @@ async function onShiftChanged(s: CashShift) {
     }
 }
 
-const stockOf = (variantId: string) => results.value.find((v) => v.id === variantId)?.stock?.available;
+// Dịch vụ, thuê bao: sold without stock.
+const noStock = (v: { product?: { type?: string } | null } | undefined) => ['service', 'subscription'].includes(v?.product?.type ?? '');
+const stockOf = (variantId: string) => {
+    const v = results.value.find((r) => r.id === variantId);
+    return noStock(v) ? undefined : v?.stock?.available;
+};
 const quick = computed(() => quickCash(totals.value.total).slice(0, 4));
 
 /** Thoát: back to where the cashier came from, or the order list. */
@@ -692,7 +697,7 @@ const warehouseOptions = computed(() => warehouses.value.filter((w) => w.status 
                             v-for="v in results"
                             :key="v.id"
                             type="button"
-                            :disabled="(v.stock?.available ?? 0) <= 0"
+                            :disabled="!noStock(v) && (v.stock?.available ?? 0) <= 0"
                             class="flex min-w-0 items-center gap-2.5 rounded-xl border bg-white p-2 text-left transition hover:border-primary hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
                             :title="`${v.product?.name ?? ''}${v.name ? ' · ' + v.name : ''} · còn ${formatNumber(v.stock?.available ?? 0)}`"
                             @click="add(v)"
@@ -703,7 +708,8 @@ const warehouseOptions = computed(() => warehouses.value.filter((w) => w.status 
                                 <span class="block truncate text-sm font-medium">{{ v.product?.name }}<template v-if="v.name"> · {{ v.name }}</template></span>
                                 <span class="flex gap-1 whitespace-nowrap text-xs tabular-nums text-muted-foreground">
                                     {{ formatNumber(Number(v.ref_price)) }}
-                                    <span :class="(v.stock?.available ?? 0) <= 0 ? 'text-destructive' : ''">· còn {{ formatNumber(v.stock?.available ?? 0) }}</span>
+                                    <span v-if="noStock(v)">· {{ v.product?.type === 'subscription' ? 'thuê bao' : 'dịch vụ' }}</span>
+                                    <span v-else :class="(v.stock?.available ?? 0) <= 0 ? 'text-destructive' : ''">· còn {{ formatNumber(v.stock?.available ?? 0) }}</span>
                                 </span>
                             </span>
                         </button>

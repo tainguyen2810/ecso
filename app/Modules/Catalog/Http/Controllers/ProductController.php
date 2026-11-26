@@ -82,7 +82,7 @@ class ProductController extends Controller
             'category' => ['nullable', 'string'],
             'brand' => ['nullable', 'string'],
             'tag' => ['nullable', 'string', 'max:40'],
-            'type' => ['nullable', Rule::in([Product::TYPE_STANDARD, Product::TYPE_COMBO])],
+            'type' => ['nullable', Rule::in(Product::TYPES)],
             'created_from' => ['nullable', 'date'],
             'created_to' => ['nullable', 'date'],
             'sort' => ['nullable', Rule::in(['newest', 'oldest', 'name', 'available', '-available', 'price', '-price'])],
@@ -304,7 +304,7 @@ class ProductController extends Controller
         $exact = ! empty($data['ids']) || ! empty($data['products']);
 
         $query = ProductVariant::query()->with(['product.images', 'components.component'])
-            ->when($data['stocked'] ?? false, fn (Builder $q) => $q->whereDoesntHave('components')->whereHas('product', fn ($p) => $p->where('type', '!=', Product::TYPE_COMBO)))
+            ->when($data['stocked'] ?? false, fn (Builder $q) => $q->whereDoesntHave('components')->whereHas('product', fn ($p) => $p->whereNotIn('type', [Product::TYPE_COMBO, ...Product::NON_STOCK_TYPES])))
             ->when($data['ids'] ?? null, fn (Builder $q, array $ids) => $q->whereIn('product_variants.ulid', $ids))
             ->when($data['products'] ?? null, fn (Builder $q, array $ids) => $q->whereIn('product_id', Product::query()->whereIn('ulid', $ids)->select('id')))
             ->unless($exact, fn (Builder $q) => $q->whereHas('product', fn ($p) => $p->where('status', '!=', Product::STATUS_ARCHIVED)))

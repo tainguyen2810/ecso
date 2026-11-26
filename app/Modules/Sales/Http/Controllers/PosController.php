@@ -71,7 +71,7 @@ class PosController extends Controller
                 'name' => $v->name,
                 'ref_price' => $v->ref_price,
                 'wholesale_price' => $v->wholesale_price,
-                'product' => ['id' => $v->product->ulid, 'name' => $v->product->name, 'image' => $v->product->images->first()?->url()],
+                'product' => ['id' => $v->product->ulid, 'name' => $v->product->name, 'image' => $v->product->images->first()?->url(), 'type' => $v->product->type ?? 'standard'],
                 'stock' => ['available' => $available[(int) $v->id] ?? 0],
             ])->values(),
             'meta' => ['warehouse' => $data['warehouse'], 'at' => now()->toIso8601String(), 'truncated' => $truncated],

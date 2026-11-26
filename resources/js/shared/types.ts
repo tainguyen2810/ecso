@@ -100,7 +100,9 @@ export interface Variant {
     height_mm?: number | null;
     sellable?: boolean;
     status?: string;
-    product?: Ref & { image?: string | null; unit?: string | null; track_lots?: boolean; shelf_life_months?: number | null; require_mfg_date?: boolean; expiry_warn_days?: number | null };
+    product?: Ref & { image?: string | null; unit?: string | null; track_lots?: boolean; shelf_life_months?: number | null; require_mfg_date?: boolean; expiry_warn_days?: number | null; type?: ProductType };
+    /** Thuê bao: the months this SKU sells. */
+    period_months?: number | null;
     stock?: StockFigures;
 }
 
@@ -110,11 +112,40 @@ export interface StockFigures {
     available: number;
 }
 
+/** standard | combo hold stock; service (sold once) and subscription (sold per period) hold none. */
+export type ProductType = 'standard' | 'combo' | 'service' | 'subscription';
+
+/** A row of Thuê bao, gia hạn (GET /subscriptions). */
+export interface SubscriptionRow {
+    id: string;
+    code: string;
+    customer: { id: string; code: string; name: string; phone: string | null } | null;
+    product: { id: string; name: string } | null;
+    variant: { id: string; sku: string; name: string | null; period_months: number | null; ref_price: string | null } | null;
+    label: string | null;
+    status: 'active' | 'paused' | 'cancelled';
+    state: 'pending' | 'active' | 'expiring' | 'overdue' | 'expired' | 'paused' | 'cancelled';
+    starts_on: string | null;
+    ends_on: string | null;
+    days_left: number | null;
+    grace_days: number;
+    pending_order: { id: string; number: string } | null;
+    reminders: number;
+    assignee: { id: string; name: string } | null;
+}
+
+export interface SubscriptionRules {
+    grace_days: number;
+    auto_order_days: number | null;
+    remind: boolean;
+}
+
 export interface Product {
     id: string;
     name: string;
     description: string | null;
-    type?: 'standard' | 'combo';
+    type?: ProductType;
+    subscription?: SubscriptionRules | null;
     unit?: string | null;
     tags?: string[];
     vat_rate?: string | null;
@@ -323,6 +354,16 @@ export interface OrderItemDetail {
     is_gift?: boolean;
     listing_id: string | null;
     variant: { id: string; sku: string; name: string } | null;
+    /** Dịch vụ / thuê bao sold from a SKU of the catalog (no stock): the SKU is here, not in variant. */
+    service_variant?: { id: string; sku: string; name: string | null; period_months: number | null; type: ProductType } | null;
+    /** Thuê bao line: the cycle sold and the period it gave the subscription. */
+    subscription?: {
+        months?: number;
+        start?: string;
+        label?: string;
+        subscription_id?: string;
+        period?: { starts_on: string | null; ends_on: string | null; status: string; subscription: { id: string; code: string } | null } | null;
+    } | null;
     image?: string | null;
     reservation: { quantity: number; shortage: number; status: string } | null;
     /** Lot-tracked SKUs: the lots held for or shipped on the line. */

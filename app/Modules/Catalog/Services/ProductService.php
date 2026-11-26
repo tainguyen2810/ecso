@@ -18,7 +18,18 @@ use Illuminate\Validation\ValidationException;
 
 class ProductService
 {
-    public const VARIANT_FIELDS = ['sku', 'barcode', 'location', 'name', 'options', 'ref_price', 'price_source', 'wholesale_price', 'weight_gram', 'status', 'supplier_id', 'supplier_sku', 'length_mm', 'width_mm', 'height_mm'];
+    public const VARIANT_FIELDS = ['sku', 'barcode', 'location', 'name', 'options', 'ref_price', 'price_source', 'wholesale_price', 'weight_gram', 'status', 'supplier_id', 'supplier_sku', 'length_mm', 'width_mm', 'height_mm', 'period_months'];
+
+    /**
+     * @param  array<string, mixed>  $input
+     * @return array{grace_days: int, auto_order_days: int|null, remind: bool}
+     */
+    private function subscriptionRules(array $input): array
+    {
+        $rules = [...Product::SUBSCRIPTION_DEFAULTS, ...array_intersect_key($input, Product::SUBSCRIPTION_DEFAULTS)];
+
+        return ['grace_days' => (int) $rules['grace_days'], 'auto_order_days' => $rules['auto_order_days'] === null ? null : (int) $rules['auto_order_days'], 'remind' => (bool) $rules['remind']];
+    }
 
     public function __construct(private readonly AuditLogger $audit, private readonly InventoryDocumentService $documents, private readonly InventoryService $inventory) {}
 
@@ -33,6 +44,9 @@ class ProductService
         return DB::transaction(function () use ($data, $openingWarehouse) {
             $product = Product::create(collect($data)->only(Product::FIELDS)->all());
             $product->forceFill(['type' => $data['type'] ?? Product::TYPE_STANDARD])->save();
+            if ($product->isNonStock()) {
+                $product->forceFill(['track_lots' => false, 'subscription' => $product->isSubscription() ? $this->subscriptionRules($data['subscription'] ?? []) : null])->save();
+            }
             if ($product->isCombo() && $product->track_lots) {
                 // A combo has no stock of its own: lots are kept on its components.
                 $product->forceFill(['track_lots' => false])->save();
@@ -70,7 +84,11 @@ class ProductService
     public function update(Product $product, array $data): Product
     {
         return DB::transaction(function () use ($product, $data) {
-            $product->fill(collect($data)->only(Product::FIELDS)->all())->save();
+            $product->fill(collect($data)->only(Product::FIELDS)->all());
+            if ($product->isSubscription() && array_key_exists('subscription', $data)) {
+                $product->subscription = $this->subscriptionRules($data['subscription']);
+            }
+            $product->save();
             $statusChanged = $product->wasChanged('status') ? $product->variants()->pluck('id')->all() : [];
             $lotsStarted = $product->wasChanged('track_lots') && $product->track_lots;
             $lotRulesChanged = $product->wasChanged(['track_lots', 'expiry_block_days']);

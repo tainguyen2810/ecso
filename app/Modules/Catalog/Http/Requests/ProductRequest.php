@@ -65,7 +65,13 @@ class ProductRequest extends FormRequest
             'variants.*.conversion.base_sku' => ['required_with:variants.*.conversion', 'string', 'max:64'],
             'variants.*.conversion.quantity' => ['required_with:variants.*.conversion', 'integer', 'min:2', 'max:100000'],
             // Combos: the type is chosen when creating; a combo has one SKU and its components.
-            'type' => $creating ? ['sometimes', Rule::in([Product::TYPE_STANDARD, Product::TYPE_COMBO])] : ['prohibited'],
+            'type' => $creating ? ['sometimes', Rule::in(Product::TYPES)] : ['prohibited'],
+            // Thuê bao: the cycle of each SKU (months) and the renewal rules of the product.
+            'variants.*.period_months' => ['nullable', 'integer', 'min:1', 'max:120'],
+            'subscription' => ['sometimes', 'array'],
+            'subscription.grace_days' => ['sometimes', 'integer', 'min:0', 'max:90'],
+            'subscription.auto_order_days' => ['present_with:subscription', 'nullable', 'integer', 'min:1', 'max:60'],
+            'subscription.remind' => ['sometimes', 'boolean'],
             'components' => ['sometimes', 'array', 'max:30'],
             'components.*.variant_id' => ['required', 'string', 'distinct'],
             'components.*.quantity' => ['required', 'integer', 'min:1', 'max:10000'],
@@ -165,8 +171,54 @@ class ProductRequest extends FormRequest
             $this->checkUnique($validator, 'sku');
             $this->checkUnique($validator, 'barcode');
             $this->checkCombo($validator);
+            $this->checkNonStock($validator);
             $this->checkConversions($validator);
         }];
+    }
+
+    public function productType(): string
+    {
+        $product = $this->route('product');
+
+        return $product instanceof Product ? (string) $product->type : (string) $this->input('type', Product::TYPE_STANDARD);
+    }
+
+    /**
+     * Services and subscriptions hold no stock: no opening stock, pack sizes or lots. Each SKU of a subscription sells
+     * one cycle, so it needs its number of months, and two SKUs cannot sell the same cycle.
+     */
+    private function checkNonStock(Validator $validator): void
+    {
+        $type = $this->productType();
+        if (! in_array($type, Product::NON_STOCK_TYPES, true)) {
+            if ($this->has('subscription')) {
+                $validator->errors()->add('subscription', 'Chỉ sản phẩm thuê bao mới có cài đặt gia hạn.');
+            }
+
+            return;
+        }
+        if ($this->boolean('track_lots')) {
+            $validator->errors()->add('track_lots', 'Dịch vụ, thuê bao không theo dõi lô.');
+        }
+        $months = [];
+        foreach ($this->input('variants', []) as $i => $v) {
+            if (! empty($v['opening_qty'])) {
+                $validator->errors()->add("variants.{$i}.opening_qty", 'Dịch vụ, thuê bao không có tồn kho.');
+            }
+            if (! empty($v['conversion'])) {
+                $validator->errors()->add("variants.{$i}.conversion", 'Dịch vụ, thuê bao không có đơn vị quy đổi.');
+            }
+            if ($type !== Product::TYPE_SUBSCRIPTION) {
+                continue;
+            }
+            $m = (int) ($v['period_months'] ?? 0);
+            if ($m < 1) {
+                $validator->errors()->add("variants.{$i}.period_months", 'Chọn chu kỳ (số tháng) cho gói này.');
+            } elseif (isset($months[$m])) {
+                $validator->errors()->add("variants.{$i}.period_months", "Đã có gói {$m} tháng.");
+            }
+            $months[$m] = true;
+        }
     }
 
     /**

@@ -17,6 +17,7 @@ use App\Modules\Sales\Http\Controllers\PosController;
 use App\Modules\Sales\Http\Controllers\PromotionController;
 use App\Modules\Sales\Http\Controllers\SalesChannelController;
 use App\Modules\Sales\Http\Controllers\SalesOrderController;
+use App\Modules\Sales\Http\Controllers\SubscriptionController;
 use App\Modules\Sales\Services\ManualOrderService;
 use Illuminate\Support\Facades\Route;
 
@@ -39,6 +40,16 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::delete('ezchat-link', [EzChatLinkController::class, 'destroy']);
     Route::post('ezchat-link/grant', [EzChatLinkController::class, 'grant'])->middleware('throttle:20,1,sales.ezchat-link.grant');
     Route::apiResource('sales-channels', SalesChannelController::class)->except('show');
+
+    // Thuê bao, gia hạn.
+    Route::get('subscriptions', [SubscriptionController::class, 'index']);
+    Route::post('subscriptions/bulk', [SubscriptionController::class, 'bulk'])->middleware('throttle:30,1,sales.subscriptions.bulk');
+    Route::get('subscriptions/{subscription}', [SubscriptionController::class, 'show']);
+    Route::put('subscriptions/{subscription}', [SubscriptionController::class, 'update']);
+    Route::post('subscriptions/{subscription}/renew', [SubscriptionController::class, 'renew'])->middleware('throttle:60,1,sales.subscriptions.renew');
+    Route::post('subscriptions/{subscription}/pause', [SubscriptionController::class, 'pause']);
+    Route::post('subscriptions/{subscription}/resume', [SubscriptionController::class, 'resume']);
+    Route::post('subscriptions/{subscription}/cancel', [SubscriptionController::class, 'cancel']);
 
     Route::apiResource('customer-groups', CustomerGroupController::class)->except('show');
     Route::post('promotions/preview', [PromotionController::class, 'preview'])->middleware('throttle:240,1,sales.promotions.preview');

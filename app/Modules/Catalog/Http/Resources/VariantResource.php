@@ -21,6 +21,7 @@ class VariantResource extends JsonResource
             'location' => $this->location,
             'name' => $this->name,
             'options' => $this->options ?? (object) [],
+            'period_months' => $this->period_months,
             'ref_price' => $this->ref_price,
             'price_source' => $this->price_source ?? 'auto',
             'sourcing' => $this->sourcing ?? 'stock',
@@ -43,6 +44,8 @@ class VariantResource extends JsonResource
                 'id' => $this->product->ulid,
                 'name' => $this->product->name,
                 'unit' => $this->product->unit,
+                // service / subscription: no stock; a subscription line asks for its start date.
+                'type' => $this->product->type ?? 'standard',
                 // Lot-tracked: receipts ask for lot number + expiry date.
                 'track_lots' => (bool) $this->product->track_lots,
                 'shelf_life_months' => $this->product->shelf_life_months,

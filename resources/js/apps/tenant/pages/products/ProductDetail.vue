@@ -56,7 +56,7 @@ const toast = useToast();
 const tenant = useTenantStore();
 const canManage = computed(() => tenant.can('products.manage'));
 const canCost = computed(() => tenant.can('products.cost.view'));
-const canStock = computed(() => tenant.can('inventory.view'));
+const canStock = computed(() => tenant.can('inventory.view') && !['service', 'subscription'].includes(product.value?.type ?? ''));
 const canLocate = computed(() => tenant.can('inventory.adjust'));
 const canSetMax = computed(() => tenant.can('inventory.adjust.approve'));
 
@@ -262,6 +262,12 @@ const totals = computed(() => {
 });
 
 // Pack sizes repeat the base SKU's stock in another unit: leave them out of the totals.
+const TYPE_HINTS: Record<string, string> = {
+    combo: 'Combo: không có tồn riêng, số lượng bán được tính từ tồn các SKU thành phần.',
+    service: 'Dịch vụ: bán không cần tồn kho.',
+    subscription: 'Thuê bao: mỗi gói là một chu kỳ. Bán gói thì thuê bao của khách được cộng thêm chu kỳ đó.',
+};
+const typeHint = computed(() => TYPE_HINTS[product.value?.type ?? '']);
 const packIds = computed(() => new Set(product.value?.type === 'combo' ? [] : (product.value?.variants ?? []).filter((v) => v.components?.length).map((v) => v.id)));
 const stockTotals = computed(() =>
     visibleStock.value.filter((r) => !packIds.value.has(r.variant.id)).reduce(
@@ -287,7 +293,8 @@ async function remove() {
     <ErrorState v-if="loadError" :message="loadError" />
     <div v-else-if="!product" class="space-y-3"><Skeleton class="h-10 w-80" /><Skeleton class="h-72" /></div>
     <template v-else>
-        <PageHeader :title="product.name" :description="product.type === 'combo' ? 'Combo: không có tồn riêng, số lượng bán được tính từ tồn các SKU thành phần.' : undefined">
+        <PageHeader :title="product.name" :description="typeHint">
+            <RouterLink v-if="product.type === 'subscription'" :to="{ path: '/subscriptions', query: { product: product.id } }"><Button variant="outline" data-testid="product-subscriptions">Xem thuê bao</Button></RouterLink>
             <Button v-if="canManage" variant="ghost" class="text-destructive" @click="remove"><Trash2 /> Xóa</Button>
             <RouterLink :to="{ path: '/products/labels', query: { products: product.id } }"><Button variant="outline" data-testid="print-labels"><Tags /> In tem</Button></RouterLink>
             <RouterLink v-if="canManage" :to="{ path: '/products/new', query: { copy: product.id } }"><Button variant="outline" data-testid="copy-product"><Copy /> Sao chép</Button></RouterLink>
@@ -408,6 +415,7 @@ async function remove() {
                             </td>
                             <td class="px-4 py-2.5">
                                 {{ v.name ?? '—' }}
+                                <span v-if="v.period_months" class="block text-xs text-muted-foreground">Chu kỳ {{ v.period_months }} tháng</span>
                                 <span v-if="product.type !== 'combo' && v.components?.length === 1" class="block text-xs text-muted-foreground" data-testid="pack-conversion">
                                     = {{ v.components[0]!.quantity }} × {{ v.components[0]!.variant.sku }}
                                 </span>

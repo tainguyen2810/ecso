@@ -83,6 +83,7 @@ class ReorderSuggestions
             ->whereIn('product_variants.id', $candidates)
             ->whereNull('product_variants.deleted_at')
             ->where('products.status', '!=', 'archived')
+            ->whereNotIn('products.type', ['service', 'subscription'])
             ->when($onlyToOrder, fn ($q) => $q->where('product_variants.sourcing', 'order'))
             ->get(['product_variants.id', 'product_variants.ulid', 'product_variants.sku', 'product_variants.name as variant_name', 'products.name', 'product_variants.cost_price', 'product_variants.supplier_id', 'product_variants.sourcing']);
 

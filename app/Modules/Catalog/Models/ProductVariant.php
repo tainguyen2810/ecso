@@ -4,6 +4,7 @@ namespace App\Modules\Catalog\Models;
 
 use App\Modules\Tenancy\Concerns\BelongsToTenant;
 use App\Shared\Concerns\HasPublicUlid;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -33,7 +34,7 @@ class ProductVariant extends Model
 
     public const SOURCINGS = [self::SOURCING_STOCK, self::SOURCING_ORDER];
 
-    protected $fillable = ['sku', 'barcode', 'location', 'name', 'options', 'ref_price', 'price_source', 'wholesale_price', 'weight_gram', 'status', 'supplier_id', 'supplier_sku', 'length_mm', 'width_mm', 'height_mm'];
+    protected $fillable = ['sku', 'barcode', 'location', 'name', 'options', 'ref_price', 'price_source', 'wholesale_price', 'weight_gram', 'status', 'supplier_id', 'supplier_sku', 'length_mm', 'width_mm', 'height_mm', 'period_months'];
 
     protected function casts(): array
     {
@@ -45,6 +46,7 @@ class ProductVariant extends Model
             'wholesale_price' => 'decimal:2',
             'weight_gram' => 'integer',
             'virtual_stock' => 'integer',
+            'period_months' => 'integer',
         ];
     }
 
@@ -88,6 +90,16 @@ class ProductVariant extends Model
     }
 
     /** Sold in orders, POS and on the marketplaces: the variant and its product are both active. */
+    /**
+     * SKUs that hold stock: not those of a service or subscription product.
+     *
+     * @param  Builder<ProductVariant>  $query
+     */
+    public function scopeStocked(Builder $query): void
+    {
+        $query->whereNotIn('product_variants.product_id', Product::query()->withTrashed()->select('id')->whereIn('type', Product::NON_STOCK_TYPES));
+    }
+
     public function isSellable(): bool
     {
         /** @var Product|null $product a soft-deleted product loads as null */
