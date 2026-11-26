@@ -253,6 +253,18 @@ class MarketplaceShipping
                     continue;
                 } catch (ConnectorException $e) {
                     $message = preg_replace('#^/\S+: #', '', $e->getMessage());
+                    // Often the parcel left already (prepared in the seller centre, picked up): the marketplace stops
+                    // giving its label. The order is read again so its status says so.
+                    $before = $order->status;
+                    try {
+                        $order = $this->sync->syncOne($order->account, $order->external_order_id, 'user')['order'] ?? $order;
+                    } catch (ConnectorException) {
+                    }
+                    if ($order->status !== $before && in_array($order->status, OrderStatus::SHIPPED, true)) {
+                        $message = 'Đơn đã giao cho đơn vị vận chuyển, sàn không cho in phiếu nữa. Trạng thái đơn đã được cập nhật.';
+                    } elseif (str_contains($message, 'All failed')) {
+                        $message = 'Sàn từ chối in phiếu cho đơn này (thường do đơn đã giao cho đơn vị vận chuyển hoặc bị huỷ). Kiểm tra đơn trên Seller Center.';
+                    }
                 }
             }
             $failed[] = ['id' => $order->ulid, 'external_order_id' => $order->external_order_id, 'message' => $message];

@@ -425,6 +425,35 @@ it('packing a Shopee order asks how it goes, or uses the shop\'s last choice whe
         ->and($order->refresh()->ship_arrangement['method'])->toBe('dropoff');
 });
 
+it('reads a Shopee order again when its label is refused: handed to the carrier, the status catches up', function () {
+    $state = 'READY_TO_SHIP';
+    $detail = function () use (&$state) {
+        return Http::response(['data' => ['data' => ['response' => ['order_list' => [[
+            'order_sn' => '2611SHIP1', 'order_status' => $state, 'create_time' => 1763500000, 'update_time' => 1763500000 + ['READY_TO_SHIP' => 0, 'PROCESSED' => 60, 'SHIPPED' => 120][$state],
+            'ship_by_date' => 1763600000, 'currency' => 'VND', 'total_amount' => 120000, 'shipping_carrier' => 'SPX Express',
+            'recipient_address' => ['name' => 'L***n', 'full_address' => 'TP. HCM'],
+            'item_list' => [['item_id' => 11, 'item_name' => 'Áo thun', 'model_id' => 0, 'model_quantity_purchased' => 1, 'model_original_price' => 120000, 'model_discounted_price' => 120000]],
+        ]]]]]]);
+    };
+    shopeeShipFake([
+        'GET /api/v2/order/get_order_detail' => function () use (&$detail) {
+            return $detail();
+        },
+        'POST /api/v2/logistics/get_shipping_document_parameter' => fn () => Http::response(['error' => ['code' => 'MARKETPLACE_ERROR', 'message' => '/api/v2/logistics/get_shipping_document_parameter: All failed, please check result_list for detail', 'details' => ['auth' => false]]], 424),
+    ]);
+    $account = gatewayShop($this->tenant, 'shopee');
+    TenantContext::run($this->tenant, fn () => app(OrderSync::class)->syncOne($account, '2611SHIP1', 'webhook'));
+    $order = Order::withoutGlobalScopes()->where('external_order_id', '2611SHIP1')->sole();
+    $state = 'PROCESSED';
+    TenantContext::run($this->tenant, fn () => app(OrderSync::class)->syncOne($account, '2611SHIP1', 'webhook'));
+    expect($order->refresh()->status)->toBe(OrderStatus::PACKED);
+
+    $state = 'SHIPPED';
+    $failed = actingInTenant($this->owner, $this->tenant)->postJson('/api/v1/orders/shipping-labels', ['ids' => [$order->ulid]])->assertOk()->json('data.failed');
+    expect($failed[0]['message'])->toContain('đã giao cho đơn vị vận chuyển')
+        ->and($order->refresh()->status)->not->toBe(OrderStatus::PACKED);
+});
+
 it('offers Shopee pickup without a time when Shopee asks for none, and ships without pickup_time_id', function () {
     shopeeShipFake(['GET /api/v2/logistics/get_shipping_parameter' => ['data' => ['data' => ['response' => [
         'info_needed' => ['pickup' => ['address_id']],
