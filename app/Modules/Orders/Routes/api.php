@@ -20,6 +20,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::get('orders', [OrderController::class, 'index']);
     Route::get('orders/summary', [OrderController::class, 'summary']);
     Route::get('orders/pipeline', [OrderController::class, 'pipeline']);
+    Route::get('orders/to-arrange', [OrderController::class, 'toArrange']);
     Route::post('orders/import/sapo', [SapoOrderImportController::class, 'import'])->middleware('throttle:60,1,orders.orders.import-sapo');
     Route::get('orders/export', [OrderController::class, 'export'])->middleware('throttle:10,1,orders.orders.export');
     Route::get('orders/assignees', [OrderController::class, 'assignees']);

@@ -24,6 +24,8 @@ import { useTenantStore } from '@/shared/stores/tenant';
 import { actionLabel, actionLabels, deadlineLabel, marketplaceNames, orderFlags, orderStatus, orderTabs, paymentMethods, paymentStatus } from './labels';
 import PrintDialog from './PrintDialog.vue';
 import ShipDialog from './ShipDialog.vue';
+import ArrangeByProduct from './ArrangeByProduct.vue';
+import { bannerIds, urgencyLine, type ArrangeOrder, type ArrangeSummary } from './arrange';
 import LabelPrint from './LabelPrint.vue';
 import { downloadPackingSlips } from './packingSlip';
 import { downloadPickList } from './packing';
@@ -103,6 +105,17 @@ const skuLabel = ref(str('sku_label'));
 
 const selected = ref<Set<string>>(new Set());
 const allSelected = computed(() => orders.value.length > 0 && orders.value.every((o) => selected.value.has(o.id)));
+
+// Shopee / TikTok orders waiting for "Chuẩn bị hàng" over all pages: the banner, the quick filter's count, the
+// "Chọn theo sản phẩm" dialog, and ticking orders that are on other pages of the list.
+const arrange = ref<ArrangeSummary | null>(null);
+const arrangeById = computed(() => new Map((arrange.value?.orders ?? []).map((o) => [o.id, o])));
+const arrangeOpen = ref(false);
+const arrangeFlagOn = computed(() => filters.flags.includes('not_arranged'));
+/** Orders to tick once the list and the waiting orders are loaded ('all' = every waiting order). */
+let pendingArrangeSelect: 'all' | string[] | null = null;
+const arrangeReady = computed(() => (arrange.value ? bannerIds(arrange.value) : []));
+const arrangeReadyAll = computed(() => !!arrange.value && arrangeReady.value.length === arrange.value.orders.length);
 /** Order shown in the side panel (row click); the panel steps through the orders of this page. */
 const peek = ref<string | null>(null);
 const peekIndex = computed(() => orders.value.findIndex((o) => o.id === peek.value));
@@ -197,17 +210,33 @@ async function load() {
         },
     });
     try {
-        const { data } = await api.get('/orders', { params: query() });
+        const [{ data }] = await Promise.all([api.get('/orders', { params: query() }), loadArrange(seq)]);
         if (seq !== loadSeq) return;
         orders.value = data.data;
         meta.value = data.meta;
         counts.value = data.meta.counts ?? {};
         hasImported.value = !!data.meta.has_imported;
-        selected.value = new Set([...selected.value].filter((id) => orders.value.some((o) => o.id === id)));
+        selected.value = new Set([...selected.value].filter((id) => orders.value.some((o) => o.id === id) || arrangeById.value.has(id)));
+        if (pendingArrangeSelect && arrange.value) {
+            const pick = pendingArrangeSelect === 'all' ? arrange.value.orders.map((o) => o.id) : pendingArrangeSelect.filter((id) => arrangeById.value.has(id));
+            selected.value = new Set(pick);
+        }
+        pendingArrangeSelect = null;
     } catch (e) {
         if (seq === loadSeq) loadError.value = (e as ApiError).message;
     } finally {
         if (seq === loadSeq) loading.value = false;
+    }
+}
+
+/** Waiting orders under the same filters as the list (tab, quick filters and paging aside). Never blocks the list. */
+async function loadArrange(seq: number) {
+    const { tab: _t, flags: _f, page: _p, sort: _s, ...params } = query();
+    try {
+        const { data } = await api.get('/orders/to-arrange', { params });
+        if (seq === loadSeq) arrange.value = data.data;
+    } catch {
+        if (seq === loadSeq) arrange.value = null;
     }
 }
 
@@ -238,7 +267,21 @@ watch(
 );
 
 function toggleFlag(flag: string) {
-    filters.flags = filters.flags.includes(flag) ? filters.flags.filter((f) => f !== flag) : [...filters.flags, flag];
+    const on = !filters.flags.includes(flag);
+    filters.flags = on ? [...filters.flags, flag] : filters.flags.filter((f) => f !== flag);
+    // "Cần chuẩn bị hàng": every waiting order, soonest deadline first, ticked over all pages ready for the bar.
+    if (flag === 'not_arranged' && on) {
+        filters.tab = 'all';
+        filters.sort = 'ship_by';
+        pendingArrangeSelect = 'all';
+    }
+}
+
+/** "Chọn theo sản phẩm" → "Chỉ chọn N đơn này": the list shows the waiting orders with these ticked. */
+function selectArranged(ids: string[]) {
+    if (arrangeFlagOn.value) return void (selected.value = new Set(ids));
+    toggleFlag('not_arranged');
+    pendingArrangeSelect = ids;
 }
 
 function selectQueue(key: string) {
@@ -353,8 +396,12 @@ function toggle(id: string) {
     selected.value = next;
 }
 function toggleAll() {
-    selected.value = allSelected.value ? new Set() : new Set(orders.value.map((o) => o.id));
+    if (allSelected.value) return void (selected.value = new Set());
+    // Waiting orders: the box ticks those on the other pages too (up to what "Chuẩn bị hàng" takes at once).
+    const all = arrangeFlagOn.value && arrange.value && meta.value.total > orders.value.length ? arrange.value.orders.map((o) => o.id) : [];
+    selected.value = new Set([...orders.value.map((o) => o.id), ...all]);
 }
+const offPageSelected = computed(() => [...selected.value].filter((id) => !orders.value.some((o) => o.id === id)).length);
 
 async function bulk(action: string, extra: Record<string, unknown> = {}) {
     busy.value = action;
@@ -387,8 +434,11 @@ async function paySelected() {
     payOpen.value = false;
 }
 
-const selectedOrders = computed(() => orders.value.filter((o) => selected.value.has(o.id)));
-const selectedDue = computed(() => selectedOrders.value.filter((o) => o.source === 'manual' && Number(o.balance_due ?? 0) > 0));
+// Ticked orders of this page, and waiting orders ticked on other pages (enough of them for the bar's buttons).
+const selectedOrders = computed<(OrderSummary | ArrangeOrder)[]>(() =>
+    [...selected.value].map((id) => orders.value.find((o) => o.id === id) ?? arrangeById.value.get(id)).filter((o): o is OrderSummary | ArrangeOrder => !!o),
+);
+const selectedDue = computed(() => selectedOrders.value.filter((o): o is OrderSummary => o.source === 'manual' && Number((o as OrderSummary).balance_due ?? 0) > 0));
 // Shopee / TikTok: "Chuẩn bị hàng" (the marketplace books its carrier) and the marketplace's own label.
 const selectedToArrange = computed(() => selectedOrders.value.filter((o) => o.marketplace_shipping && o.status === 'READY_TO_PACK'));
 const selectedLabels = computed(() => selectedOrders.value.filter((o) => o.marketplace_shipping && ['PACKED', 'HANDED_OVER', 'IN_TRANSIT', 'FAILED_DELIVERY'].includes(o.status)));
@@ -611,6 +661,21 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
 
     <Card>
         <div class="border-b px-3"><Tabs v-model="filters.tab" :tabs="tabs" variant="underline" data-testid="order-tabs" /></div>
+        <div v-if="arrange?.count && tenant.can('orders.update')" class="mx-4 mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-card px-4 py-3 text-sm" data-testid="arrange-banner">
+            <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground"><PackageCheck class="size-5" /></span>
+            <div class="min-w-60 flex-1">
+                <div class="font-semibold">{{ formatNumber(arrange.count) }} đơn Shopee, TikTok đang chờ Chuẩn bị hàng</div>
+                <div class="text-muted-foreground">
+                    <template v-for="(part, i) in urgencyLine(arrange)" :key="part"><span :class="i === 0 && arrange.urgent ? 'text-rose-600' : ''">{{ part }}</span> · </template>
+                    <span v-if="arrange.ready" class="text-emerald-700">{{ arrange.ready }} đơn đủ hàng</span>
+                    <template v-if="arrange.orders.length - arrange.ready">{{ arrange.ready ? ', ' : '' }}<span class="text-rose-600">{{ arrange.orders.length - arrange.ready }} đơn thiếu hàng</span></template>
+                </div>
+            </div>
+            <Button variant="outline" class="bg-card" data-testid="arrange-by-product-open" @click="arrangeOpen = true"><Filter /> Chọn theo sản phẩm</Button>
+            <Button data-testid="arrange-banner-run" @click="openShip(arrangeReady)">
+                <PackageCheck /> {{ arrangeReadyAll ? `Chuẩn bị ${arrangeReady.length > 1 ? 'tất cả ' : ''}${arrangeReady.length} đơn` : `Chuẩn bị ${arrangeReady.length} đơn đủ hàng` }}
+            </Button>
+        </div>
         <div class="relative space-y-3 border-b p-4">
             <!-- Search and order source stay in sight; every other filter lives in "Bộ lọc khác" and shows as a chip. -->
             <div class="flex flex-wrap items-center gap-2">
@@ -740,7 +805,7 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                     :data-testid="`flag-${f.value}`"
                     @click="toggleFlag(f.value)"
                 >
-                    {{ f.label }}
+                    <PackageCheck v-if="f.value === 'not_arranged'" class="-mt-0.5 mr-0.5 inline size-3" />{{ f.label }}<template v-if="f.value === 'not_arranged' && arrange?.count"> · {{ arrange.count }}</template>
                 </button>
                 <template v-if="advancedCount">
                     <span class="mx-1 h-4 w-px bg-border" />
@@ -765,7 +830,7 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
 
         <!-- Floating bar at the bottom while orders are ticked, so the actions stay in reach while scrolling. -->
         <div v-if="selected.size" class="fixed inset-x-0 bottom-24 z-30 mx-auto flex w-fit max-w-[calc(100vw-2rem)] flex-wrap justify-center items-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm text-white shadow-2xl lg:bottom-6 lg:left-60 lg:max-w-[calc(100vw-19rem)] [&_button:not(.bulk-plain)]:border-white/15 [&_button:not(.bulk-plain)]:bg-white/10 [&_button:not(.bulk-plain)]:text-white [&_button:not(.bulk-plain):hover]:bg-white/20" data-testid="bulk-bar">
-            <span class="mr-2 font-semibold"><span class="tabular-nums">{{ selected.size }}</span> đơn đã chọn</span>
+            <span class="mr-2 font-semibold"><span class="tabular-nums">{{ selected.size }}</span> đơn đã chọn<span v-if="offPageSelected" class="font-normal text-slate-400" data-testid="bulk-offpage"> (gồm {{ offPageSelected }} đơn ở trang khác)</span></span>
             <template v-if="tenant.can('orders.update')">
                 <Button size="sm" variant="outline" :loading="busy === 'confirm'" @click="bulk('confirm')">{{ actionLabels.confirm }}</Button>
                 <Button size="sm" variant="outline" :loading="busy === 'pack'" data-testid="bulk-pack" @click="bulkPack">
@@ -908,6 +973,7 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
 
     <PrintDialog v-model:open="printOpen" :orders="printOrders" />
     <ShipDialog v-if="shipOpen" v-model:open="shipOpen" :ids="shipIds" @done="afterShip" />
+    <ArrangeByProduct v-if="arrangeOpen && arrange" v-model:open="arrangeOpen" :summary="arrange" :can-arrange="tenant.can('orders.update')" @select="selectArranged" @arrange="openShip" />
     <Dialog v-model:open="labelOpen" title="In phiếu sàn" size="lg">
         <LabelPrint v-if="labelOpen" :ids="labelIds" @printed="refresh" />
     </Dialog>

@@ -30,6 +30,8 @@ export const orderTabs: { value: string; label: string }[] = [
 ];
 
 export const orderFlags: { value: string; label: string }[] = [
+    // Shopee / TikTok orders where "Chuẩn bị hàng" is not done yet: first, it is the step that holds up printing.
+    { value: 'not_arranged', label: 'Cần chuẩn bị hàng' },
     { value: 'overdue', label: 'Quá hạn giao' },
     { value: 'due_soon', label: 'Sắp đến hạn' },
     { value: 'shortage', label: 'Thiếu hàng' },
@@ -37,7 +39,6 @@ export const orderFlags: { value: string; label: string }[] = [
     { value: 'unmapped', label: 'Chưa liên kết sản phẩm' },
     { value: 'warning', label: 'Cảnh báo đồng bộ' },
     { value: 'not_printed', label: 'Chưa in phiếu đóng gói' },
-    { value: 'not_arranged', label: 'Chưa chuẩn bị hàng (sàn)' },
     { value: 'label_unprinted', label: 'Chưa in phiếu sàn' },
 ];
 

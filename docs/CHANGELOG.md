@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Đơn hàng: chọn nhanh đơn cần Chuẩn bị hàng (2026-11-27)
+- Ô nhắc đầu danh sách khi có đơn Shopee, TikTok chờ Chuẩn bị hàng: số đơn, đơn còn dưới 3 giờ, đơn hạn hôm nay, đơn đủ và thiếu hàng. Nút "Chuẩn bị N đơn đủ hàng" (hoặc "Chuẩn bị tất cả N đơn" khi không đơn nào đủ hàng) mở thẳng hộp Chuẩn bị hàng, không cần tích tay.
+- Lọc nhanh "Cần chuẩn bị hàng" (tên cũ "Chưa chuẩn bị hàng (sàn)") lên đầu, kèm số đơn; bấm vào là xếp theo hạn giao gần nhất và tự chọn hết các đơn ở mọi trang. Ô tích đầu bảng khi đang lọc này cũng chọn cả các trang (tối đa 200 đơn).
+- "Chọn theo sản phẩm": gom các đơn đang chờ theo mặt hàng (số đơn, số cái cần lấy, tồn kho, thiếu hàng), tìm theo tên hoặc SKU, lọc đơn 1 loại / nhiều loại sản phẩm, bỏ qua đơn thiếu hàng; "Chỉ chọn N đơn này" hoặc "Chuẩn bị hàng N đơn". `GET /orders/to-arrange` (cùng bộ lọc với danh sách).
+
 ### Menu Vận chuyển như Sapo (2026-11-26)
 - Nhóm **Vận chuyển** mới trong menu trái: Tổng quan, Quản lý vận đơn (trang "Gửi đơn vị vận chuyển" cũ, chuyển từ Đơn hàng sang), Đối soát COD và phí (chuyển từ Thu chi, `/cash/cod` tự chuyển sang `/shipping/cod`), Kết nối đối tác, Cấu hình giao hàng.
 - Khoảng cách menu theo Sapo: dòng cao 48px cách nhau 4px, biểu tượng 24px, chữ 14px; menu con cao 40px, thẳng hàng chữ mục cha, bỏ vạch dọc. Áp dụng cho toàn bộ menu.
