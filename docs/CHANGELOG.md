@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### In phiếu sàn: một nút, không lấy lại phiếu đã có (2026-11-27)
+- Khi phiếu đã sẵn sàng, nút "In N phiếu" mở thẳng file đã có (không hỏi sàn lại); bỏ nút "Mở phiếu để in" trùng, "Tải PDF" thành link nhỏ.
+- Phiếu đã lấy được nhớ theo đơn: đổi khổ A6/A5/A4 hoặc cách sắp xếp chỉ làm lại file, không gọi sàn lại, và không tính thêm lần in.
+- Lúc đang lấy chỉ còn thanh tiến độ, nút in ẩn đi cho khỏi trùng.
+
 ### In phiếu sàn hàng loạt không còn treo; hộp Chuẩn bị hàng gọn hơn (2026-11-27)
 - In phiếu sàn nhiều đơn từng hỏi sàn cho cả lô trong một lần gọi (mỗi đơn Shopee 5–6 lượt), quá 60 giây máy chủ cắt nên quay rồi tắt. Giờ trình duyệt lấy từng phiếu, 4 đơn cùng lúc, có thanh tiến độ "Đang lấy 4/11"; đơn sàn chưa cấp mã vận đơn được đợi 4 giây rồi hỏi lại một lần; đơn lỗi vẫn in các đơn còn lại, có nút "In lại đơn lỗi". `POST /orders/shipping-labels/plan` trả thứ tự in (theo sản phẩm) không gọi sàn; giới hạn gọi phiếu nâng 30 → 200/phút.
 - Hộp in không hiện (Chrome không in từ khung 0×0): khung in có kích thước, và luôn có nút "Mở phiếu để in" và "Tải PDF".
