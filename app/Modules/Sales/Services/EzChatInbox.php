@@ -2,6 +2,7 @@
 
 namespace App\Modules\Sales\Services;
 
+use App\Http\Middleware\SecurityHeaders;
 use App\Modules\Assistant\Services\EzChatAi;
 use App\Modules\Identity\Models\User;
 use App\Modules\Marketplace\Connectors\EzChat\EzChatGateway;
@@ -38,6 +39,11 @@ class EzChatInbox
     {
         $data = $this->post('/api/banhang/gw/inbox/ticket', $this->who($tenant, $user) + ['origin' => $origin]);
         $base = rtrim((string) ($data['appUrl'] ?? config('marketplaces.ezchat.url')), '/');
+        // The page's CSP (SecurityHeaders) lets this address be framed; EzChat's app may live apart from its API.
+        $appOrigin = SecurityHeaders::origin($base);
+        if ($appOrigin !== null && Cache::get(SecurityHeaders::APP_ORIGIN_KEY) !== $appOrigin) {
+            Cache::forever(SecurityHeaders::APP_ORIGIN_KEY, $appOrigin);
+        }
         $fragment = ['ticket' => (string) ($data['ticket'] ?? ''), 'lang' => 'vi'];
         if ($conversation !== null && preg_match('/^[A-Za-z0-9_-]{1,64}$/', $conversation) === 1) {
             $fragment['to'] = '/inbox?c='.$conversation;
