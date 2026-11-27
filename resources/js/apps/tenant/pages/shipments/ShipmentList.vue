@@ -10,6 +10,7 @@ import ErrorState from '@/shared/ui/ErrorState.vue';
 import Input from '@/shared/ui/Input.vue';
 import KpiCard from '@/shared/ui/KpiCard.vue';
 import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
+import CarrierLogo from '@/shared/ui/CarrierLogo.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError, downloadFile } from '@/shared/lib/api';
@@ -25,12 +26,12 @@ import ShipmentDrawer from './ShipmentDrawer.vue';
 import ShipmentImportDialog from './ShipmentImportDialog.vue';
 import CarrierConnectDialog from './CarrierConnectDialog.vue';
 import PushQueue from './PushQueue.vue';
-import { carrierMarks, loadCarrierAccounts, openLabels, type CarrierAccountData } from './carriers';
+import { loadCarrierAccounts, openLabels, type CarrierAccountData } from './carriers';
 import { carrierKeys, carrierText, shipmentTabs, shipmentTone, statusText, type ShipmentData, type ShipmentSummary } from './shipments';
 import DateRangeInput from '@/shared/ui/DateRangeInput.vue';
 
 /**
- * "Gửi đơn vị vận chuyển": orders waiting for a carrier (compare prices, push in bulk), then every shipment, what needs
+ * "Quản lý vận đơn": orders waiting for a carrier (compare prices, push in bulk), then every shipment, what needs
  * the shop's attention, and the COD carriers hold.
  */
 const route = useRoute();
@@ -48,7 +49,7 @@ const q = ref('');
 const carrier = ref('');
 const channel = ref('');
 const warehouse = ref('');
-const cod = ref('');
+const cod = ref(typeof route.query.cod === 'string' ? route.query.cod : '');
 const from = ref('');
 const to = ref('');
 const late = ref(route.query.late === '1');
@@ -179,11 +180,11 @@ const isLate = (s: ShipmentData) => ['picked_up', 'in_transit', 'out_for_deliver
 </script>
 
 <template>
-    <PageHeader title="Gửi đơn vị vận chuyển" description="So sánh giá, đẩy đơn qua tài khoản hãng của shop, rồi theo dõi từng vận đơn và tiền COD hãng đang giữ.">
+    <PageHeader title="Quản lý vận đơn" description="Mọi vận đơn của đơn web, tại quầy, Facebook, Zalo và đơn Shopee, TikTok: so giá, đẩy đơn qua tài khoản hãng của shop, theo dõi từng vận đơn.">
         <template #default>
             <div class="flex flex-wrap items-center gap-2" data-testid="carrier-chips">
                 <button v-for="a in accounts" :key="a.id" class="inline-flex items-center gap-1.5 rounded-full border bg-card px-2.5 py-1 text-xs" :title="a.last_error ?? a.name" @click="connectOpen = true">
-                    <span :class="cn('rounded px-1 text-[9px] font-bold text-white', carrierMarks[a.carrier]?.bg ?? 'bg-slate-500')">{{ carrierMarks[a.carrier]?.short ?? a.carrier }}</span>
+                    <CarrierLogo :carrier="a.carrier" :name="a.carrier_label" :width="40" :height="16" />
                     {{ a.carrier_label }}<span :class="cn('size-2 rounded-full', a.status === 'connected' ? 'bg-emerald-500' : 'bg-red-500')" />
                 </button>
                 <Button size="sm" variant="outline" data-testid="open-carrier-connect" @click="connectOpen = true"><Plug /> Kết nối hãng</Button>
@@ -255,7 +256,12 @@ const isLate = (s: ShipmentData) => ['picked_up', 'in_transit', 'out_for_deliver
                             </RouterLink>
                             <div class="text-[11px] text-muted-foreground">{{ s.order?.channel ?? marketplaceNames[s.order?.marketplace ?? ''] }}</div>
                         </td>
-                        <td class="whitespace-nowrap px-3 py-3">{{ carrierText(s) }}<div v-if="s.warehouse" class="text-[11px] text-muted-foreground">{{ s.warehouse.name }}</div></td>
+                        <td class="whitespace-nowrap px-3 py-3">
+                            <div class="flex items-center gap-2.5">
+                                <CarrierLogo :carrier="s.carrier" :name="carrierText(s)" :width="72" :height="24" />
+                                <div>{{ carrierText(s) }}<div v-if="s.warehouse" class="text-[11px] text-muted-foreground">{{ s.warehouse.name }}</div></div>
+                            </div>
+                        </td>
                         <td class="max-w-52 px-3 py-3">
                             <div class="truncate">{{ s.order?.recipient ?? '—' }}</div>
                             <div class="truncate text-[11px] text-muted-foreground">{{ s.order?.area ?? '' }}</div>

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { ArrowRight, Banknote, FileUp, Landmark, Smartphone, Truck, Wallet } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
-import CashNav from './CashNav.vue';
 import CodImportDialog from './CodImportDialog.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
@@ -18,7 +18,7 @@ import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
 import { codStatuses, type CodReconciliation } from './cod';
 
-/** Đối soát COD: statements imported from carriers' files, each booking COD collections and the carrier's fees. */
+/** Vận chuyển › Đối soát COD và phí: statements imported from carriers' files, each booking COD collections and the carrier's fees. */
 const tenant = useTenantStore();
 const rows = ref<CodReconciliation[]>([]);
 const loading = ref(true);
@@ -42,6 +42,7 @@ onMounted(() => {
     load();
     loadHeld();
     loadFunds();
+    loadGap();
 });
 
 /** "Chờ hãng trả": delivered COD parcels whose money the carrier still holds (needs orders.view). */
@@ -55,7 +56,8 @@ interface HeldParcel {
     delivered_at: string | null;
     order?: { id: string; external_order_id: string; channel: string | null };
 }
-const tab = ref<'waiting' | 'sessions'>('waiting');
+const route = useRoute();
+const tab = ref<'waiting' | 'sessions' | 'fee'>(route.query.tab === 'fee' ? 'fee' : 'waiting');
 const held = ref<HeldParcel[]>([]);
 const heldTotal = ref(0);
 const heldByCarrier = ref<{ carrier: string; carrier_name: string; amount: string; count: number }[]>([]);
@@ -63,16 +65,33 @@ const carrier = ref('');
 const canSeeParcels = computed(() => tenant.can('orders.view'));
 async function loadHeld() {
     if (!canSeeParcels.value) return void (tab.value = 'sessions');
+    const keep = tab.value === 'fee';
     try {
         const [list, sum] = await Promise.all([api.get('/shipments', { params: { cod: 'collected', carrier: carrier.value || undefined } }), api.get('/shipments/summary')]);
         held.value = list.data.data;
         heldTotal.value = list.data.meta?.total ?? held.value.length;
         heldByCarrier.value = sum.data.data.cod_held ?? [];
-        if (!heldByCarrier.value.length && !carrier.value) tab.value = 'sessions';
+        if (!heldByCarrier.value.length && !carrier.value && !keep) tab.value = 'sessions';
     } catch {
-        tab.value = 'sessions';
+        if (!keep) tab.value = 'sessions';
     }
 }
+
+/** "Phí ship lệch": parcels the carrier charged more for than it quoted when the order was pushed. */
+const gap = ref<HeldParcel[]>([]);
+const gapTotal = ref(0);
+async function loadGap() {
+    if (!canSeeParcels.value) return;
+    try {
+        const { data } = await api.get('/shipments', { params: { fee: 'gap', per_page: 100 } });
+        gap.value = data.data;
+        gapTotal.value = data.meta?.total ?? gap.value.length;
+    } catch {
+        gap.value = [];
+    }
+}
+const gapOf = (p: HeldParcel) => Number(p.fee_actual ?? 0) - Number(p.fee_estimated ?? 0);
+const gapSum = computed(() => gap.value.reduce((s, p) => s + gapOf(p), 0));
 function pickCarrier(c: string) {
     carrier.value = carrier.value === c ? '' : c;
     loadHeld();
@@ -145,10 +164,9 @@ function saved(r: CodReconciliation) {
 </script>
 
 <template>
-    <PageHeader title="Đối soát COD" description="Tiền thu hộ hãng vận chuyển đang giữ, và tiền đã về tài khoản.">
+    <PageHeader title="Đối soát COD và phí" description="Tiền thu hộ hãng vận chuyển đang giữ, tiền đã về tài khoản và phí ship hãng tính lệch.">
         <Button v-if="tenant.can('finance.vouchers')" data-testid="cod-import" @click="importing = true"><FileUp /> Nhập file đối soát của hãng</Button>
     </PageHeader>
-    <CashNav />
 
     <div class="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" data-testid="cod-kpis">
         <div class="rounded-xl border bg-card p-4">
@@ -193,6 +211,15 @@ function saved(r: CodReconciliation) {
                 @click="tab = 'sessions'"
             >
                 Phiên đối soát ({{ formatNumber(rows.length) }})
+            </button>
+            <button
+                v-if="canSeeParcels"
+                type="button"
+                :class="cn('rounded-full px-3.5 py-1.5 text-sm font-medium', tab === 'fee' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')"
+                data-testid="cod-tab-fee"
+                @click="tab = 'fee'"
+            >
+                Phí ship lệch ({{ formatNumber(gapTotal) }})
             </button>
             <div v-if="tab === 'waiting' && heldByCarrier.length > 1" class="ml-auto flex flex-wrap gap-1.5">
                 <button
@@ -241,7 +268,42 @@ function saved(r: CodReconciliation) {
                         </tr>
                     </tbody>
                 </table>
-                <p v-if="heldTotal > held.length" class="border-t px-4 py-2.5 text-xs text-muted-foreground">Đang hiện {{ held.length }} trên {{ formatNumber(heldTotal) }} đơn. Xem đủ ở <RouterLink to="/shipments" class="text-primary hover:underline">Vận chuyển</RouterLink>.</p>
+                <p v-if="heldTotal > held.length" class="border-t px-4 py-2.5 text-xs text-muted-foreground">Đang hiện {{ held.length }} trên {{ formatNumber(heldTotal) }} đơn. Xem đủ ở <RouterLink to="/shipments?cod=collected" class="text-primary hover:underline">Quản lý vận đơn</RouterLink>.</p>
+            </div>
+        </template>
+
+        <template v-else-if="tab === 'fee'">
+            <div v-if="!gap.length" class="flex flex-col items-center gap-2 px-6 py-12 text-center text-sm text-muted-foreground">
+                <Truck class="size-8" />
+                <p>Không có đơn nào hãng tính phí cao hơn lúc báo giá.</p>
+                <p class="max-w-md text-xs">Phí thật của hãng lấy từ hành trình hoặc file đối soát. Đơn đẩy qua hãng mới có phí báo giá để so.</p>
+            </div>
+            <div v-else class="overflow-x-auto">
+                <table class="w-full text-sm" data-testid="cod-fee-gap">
+                    <thead class="border-b bg-slate-50 text-left text-xs text-muted-foreground">
+                        <tr>
+                            <th class="px-4 py-2.5 font-medium">Đơn · vận đơn</th>
+                            <th class="px-4 py-2.5 text-right font-medium">Phí lúc báo giá</th>
+                            <th class="px-4 py-2.5 text-right font-medium">Hãng tính</th>
+                            <th class="px-4 py-2.5 text-right font-medium">Lệch</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        <tr v-for="p in gap" :key="p.id" class="hover:bg-muted/30">
+                            <td class="px-4 py-3">
+                                <RouterLink v-if="p.order" :to="`/orders/${p.order.id}`" class="font-medium text-primary hover:underline">{{ p.order.external_order_id }}</RouterLink>
+                                <p class="text-xs text-muted-foreground">{{ p.carrier_name }}<template v-if="p.tracking_number"> · <span class="font-mono">{{ p.tracking_number }}</span></template></p>
+                            </td>
+                            <td class="whitespace-nowrap px-4 py-3 text-right tabular-nums text-muted-foreground">{{ formatMoney(p.fee_estimated) }}</td>
+                            <td class="whitespace-nowrap px-4 py-3 text-right tabular-nums">{{ formatMoney(p.fee_actual) }}</td>
+                            <td class="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums text-rose-600">+{{ formatMoney(gapOf(p)) }}</td>
+                        </tr>
+                    </tbody>
+                    <tfoot class="border-t bg-slate-50 font-semibold">
+                        <tr><td class="px-4 py-2.5" colspan="3">Tổng lệch<template v-if="gapTotal > gap.length"> ({{ gap.length }} trên {{ formatNumber(gapTotal) }} đơn)</template></td><td class="px-4 py-2.5 text-right tabular-nums text-rose-600">+{{ formatMoney(gapSum) }}</td></tr>
+                    </tfoot>
+                </table>
+                <p class="border-t px-4 py-2.5 text-xs text-muted-foreground">Gửi danh sách này cho hãng để khiếu nại nếu khối lượng hoặc kích thước hãng đo khác với gói hàng.</p>
             </div>
         </template>
 

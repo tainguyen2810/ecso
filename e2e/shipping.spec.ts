@@ -40,7 +40,7 @@ test('failed delivery: redeliver, correct the tracking number, then the COD stat
     const orderUrl = page.url();
 
     // The carrier's statement shows the COD collected: the order can be marked delivered while booking it.
-    await page.goto('/cash/cod');
+    await page.goto('/shipping/cod');
     await page.getByTestId('cod-import').click();
     await page.getByTestId('cod-carrier').selectOption('ghn');
     const csv = `Mã đơn GHN,Tiền thu hộ (COD),Tổng phí\nGHN${run}B,1.000,18.000\n`;

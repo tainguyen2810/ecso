@@ -27,7 +27,7 @@ import { CARRIERS, emptyAddress, type AddressParts } from '@/shared/lib/geo';
 import { channelTypes, paymentMethods } from './labels';
 import CarrierQuotePicker from '../shipments/CarrierQuotePicker.vue';
 import ParcelOptionsPanel from '../shipments/ParcelOptionsPanel.vue';
-import { choiceOf, loadCarrierAccounts, type CarrierAccountData, type CarrierChoice, type ParcelOptions, type QuoteResult } from '../shipments/carriers';
+import { choiceOf, defaultParcel, loadCarrierAccounts, type CarrierAccountData, type CarrierChoice, type ParcelOptions, type QuoteResult } from '../shipments/carriers';
 import type { Customer, CustomerSummary, OrderDetail, OrderReturnData, SalesChannel, SubscriptionRow, Variant, Warehouse } from '@/shared/types';
 import DateInput from '@/shared/ui/DateInput.vue';
 import { previewPromotions, type PromotionPreview } from '../promotions/promotions';
@@ -177,6 +177,7 @@ onMounted(async () => {
         const [c, w, s] = await Promise.all([api.get('/sales-channels'), api.get('/warehouses'), settings.load()]);
         if (!editId.value) {
             priceTier.value = s.pricing.sale_price;
+            parcel.value = { ...parcel.value, ...defaultParcel() };
             if (payOptions.value.some((o) => o.value === s.payments.default_online)) form.pay_method = s.payments.default_online;
         }
         channels.value = c.data.data;
@@ -694,7 +695,7 @@ async function pushNew(orderId: string) {
 
 async function submit() {
     if (!editId.value && delivery.value === 'api' && !carrierChoice.value) {
-        pushError.value = hasCarrierAccount.value ? 'Chọn hãng và dịch vụ trong bảng giá trước khi lưu.' : 'Chưa kết nối hãng vận chuyển nào. Chọn "Đẩy vận chuyển ngoài" hoặc kết nối hãng ở trang Gửi đơn vị vận chuyển.';
+        pushError.value = hasCarrierAccount.value ? 'Chọn hãng và dịch vụ trong bảng giá trước khi lưu.' : 'Chưa kết nối hãng vận chuyển nào. Chọn "Đẩy vận chuyển ngoài" hoặc kết nối hãng ở Vận chuyển › Kết nối đối tác.';
         return;
     }
     pushError.value = null;
@@ -756,7 +757,7 @@ const deliveries = [
     { value: 'api', label: 'Đẩy qua hãng vận chuyển', icon: Truck, hint: 'So sánh giá các hãng đã kết nối; lưu đơn là đẩy sang hãng, hãng cấp mã và đến lấy hàng.' },
     { value: 'ext', label: 'Đẩy vận chuyển ngoài', icon: Send, hint: 'Hãng chưa kết nối hoặc shipper riêng: chọn hãng, nhập mã vận đơn ở trang đơn sau.' },
     { value: 'completed', label: 'Khách nhận tại cửa hàng', icon: Store, hint: 'Khách lấy hàng ngay: trừ kho và hoàn tất đơn khi lưu.' },
-    { value: 'later', label: 'Giao hàng sau', icon: Clock, hint: 'Đơn giữ hàng trong kho, chọn cách giao sau (ở trang đơn hoặc "Gửi đơn vị vận chuyển").' },
+    { value: 'later', label: 'Giao hàng sau', icon: Clock, hint: 'Đơn giữ hàng trong kho, chọn cách giao sau (ở trang đơn hoặc Vận chuyển › Quản lý vận đơn).' },
 ] as const;
 type Delivery = (typeof deliveries)[number]['value'];
 const delivery = ref<Delivery>('later');
@@ -769,7 +770,7 @@ watch([delivery, confirmedNow], () => {
 
 // Đẩy qua hãng: the shop's connected accounts, the parcel and the prices for this order as it is being typed.
 const carrierAccounts = ref<CarrierAccountData[]>([]);
-const parcel = ref<ParcelOptions>({ required_note: 'view_no_try', payer: 'shop' });
+const parcel = ref<ParcelOptions>(defaultParcel());
 const quote = ref<QuoteResult | null>(null);
 const quoteLoading = ref(false);
 const quoteError = ref<string | null>(null);
@@ -800,7 +801,7 @@ async function loadQuote() {
         const res = data.data as QuoteResult;
         quote.value = res;
         const row = res.accounts.find((a) => a.account.id === carrierChoice.value?.account_id)?.services.find((x) => x.code === carrierChoice.value?.service);
-        carrierChoice.value = row ? { ...carrierChoice.value!, fee: row.fee } : res.cheapest ? choiceOf(res.cheapest) : null;
+        carrierChoice.value = row ? { ...carrierChoice.value!, fee: row.fee } : res.preferred ? choiceOf(res.preferred) : null;
     } catch (e) {
         if (mine === quoteSeq) quoteError.value = (e as ApiError).message;
     } finally {

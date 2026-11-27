@@ -14,6 +14,7 @@ import {
     Store,
     UsersRound,
     ShoppingCart,
+    Truck,
     Users,
     Wallet,
 } from 'lucide-vue-next';
@@ -64,16 +65,25 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
         items: [
             { name: 'dashboard', label: 'Tổng quan', path: '/', icon: LayoutDashboard, permission: 'dashboard.view', shortcut: 'd' },
             { name: 'orders', label: 'Đơn hàng', path: '/orders', icon: ShoppingCart, permission: 'orders.view', shortcut: 'o', description: 'Quản lý đơn tập trung từ mọi sàn: lọc, xử lý hàng loạt, in phiếu, theo dõi trạng thái.',
-                alsoActive: ['returns', 'pos', 'shipments'],
+                alsoActive: ['returns', 'pos'],
                 children: [
                     { label: 'Tạo đơn và giao hàng', path: '/orders/new', permission: 'orders.create' },
                     { label: 'Danh sách đơn hàng', path: '/orders' },
                     { label: 'Thuê bao, gia hạn', path: '/subscriptions' },
                     { label: 'Đóng gói', path: '/orders/pack', permission: 'orders.pack' },
-                    { label: 'Gửi đơn vị vận chuyển', path: '/shipments' },
                     { label: 'Bán tại quầy', path: '/pos', permission: 'orders.create' },
                     { label: 'Ca bán hàng', path: '/pos/shifts', permission: 'orders.create', advanced: true },
                     { label: 'Khách trả hàng', path: '/returns', permission: 'returns.view' },
+                ] },
+            // Like Sapo's "Vận chuyển": overview, every shipment, COD and fee checks, carrier connections, defaults.
+            { name: 'shipping', label: 'Vận chuyển', path: '/shipping', icon: Truck, permission: 'orders.view', anyPermission: ['finance.view'], shortcut: 'v', description: 'Vận đơn, đối soát COD và phí ship, kết nối hãng vận chuyển, cấu hình giao hàng.',
+                alsoActive: ['shipments'],
+                children: [
+                    { label: 'Tổng quan', path: '/shipping', permission: 'orders.view' },
+                    { label: 'Quản lý vận đơn', path: '/shipments', permission: 'orders.view' },
+                    { label: 'Đối soát COD và phí', path: '/shipping/cod', permission: 'finance.view' },
+                    { label: 'Kết nối đối tác', path: '/shipping/partners', permission: 'orders.view' },
+                    { label: 'Cấu hình giao hàng', path: '/shipping/settings', permission: 'settings.manage' },
                 ] },
             { name: 'customers', label: 'Khách hàng', path: '/customers', icon: UsersRound, permission: 'customers.view', shortcut: 'k', description: 'Danh bạ khách mua qua kênh riêng, lịch sử mua và công nợ.',
                 children: [{ label: 'Danh sách khách hàng', path: '/customers' }, { label: 'Nhóm khách hàng', path: '/customers/groups' }, { label: 'Khuyến mãi', path: '/promotions', permission: 'orders.create' }, { label: 'Tích điểm và hạng', path: '/customers/loyalty' }, { label: 'Khách trùng', path: '/customers/duplicates', permission: 'customers.merge', advanced: true }] },
@@ -105,8 +115,8 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
     {
         label: 'Phân tích',
         items: [
-            { name: 'cash', label: 'Thu chi', path: '/cash', icon: HandCoins, permission: 'finance.view', shortcut: 'q', description: 'Phiếu thu, phiếu chi, sổ quỹ, đối soát COD và loại phiếu.',
-                children: [{ label: 'Phiếu thu, phiếu chi', path: '/cash' }, { label: 'Sổ quỹ', path: '/reports/cashbook' }, { label: 'Quỹ', path: '/cash/accounts' }, { label: 'Đối soát COD', path: '/cash/cod' }, { label: 'Loại phiếu', path: '/cash/types', advanced: true }] },
+            { name: 'cash', label: 'Thu chi', path: '/cash', icon: HandCoins, permission: 'finance.view', shortcut: 'q', description: 'Phiếu thu, phiếu chi, sổ quỹ, quỹ và loại phiếu.',
+                children: [{ label: 'Phiếu thu, phiếu chi', path: '/cash' }, { label: 'Sổ quỹ', path: '/reports/cashbook' }, { label: 'Quỹ', path: '/cash/accounts' }, { label: 'Loại phiếu', path: '/cash/types', advanced: true }] },
             { name: 'accounting', label: 'Kế toán, thuế', path: '/accounting', icon: Landmark, permission: 'finance.view', description: 'Tổng quan thuế, sổ sách hộ kinh doanh, tờ khai thuế, hoá đơn mua vào.',
                 children: [
                     { label: 'Tổng quan thuế', path: '/accounting' },

@@ -25,6 +25,7 @@ class CarrierRegistry
      * @var array<string, array{label: string, note: string}>
      */
     public const UPCOMING = [
+        'ghtk' => ['label' => 'Giao Hàng Tiết Kiệm', 'note' => 'Chưa kết nối được. Đơn đi GHTK nhập mã vận đơn, trạng thái cập nhật bằng file.'],
         'spx' => ['label' => 'SPX Express', 'note' => 'SPX chưa mở API cho phần mềm ngoài. Đơn Shopee lấy vận đơn qua sàn; đơn tự bán nhập mã hoặc nhập file.'],
     ];
 

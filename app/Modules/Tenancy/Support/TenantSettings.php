@@ -64,6 +64,21 @@ class TenantSettings
         // staff get the list on their phones each morning.
         'subscriptions' => ['remind_days' => [7, 1, 0], 'zalo' => true, 'notify_staff' => true],
         'loyalty' => ['enabled' => false, 'earn_per' => 100000, 'point_value' => 1000, 'max_redeem_percent' => 50, 'expire_months' => 12, 'with_promotions' => true],
+        // Vận chuyển › Cấu hình giao hàng: the parcel filled in when a shipment is made (each one can still be changed),
+        // the carrier account picked first for each warehouse, and the automatic steps.
+        'shipping' => [
+            'weight_g' => 500,
+            'length_cm' => null,
+            'width_cm' => null,
+            'height_cm' => null,
+            'required_note' => 'view_no_try',
+            'payer' => 'shop',
+            'note' => null,
+            // [{warehouse_id: ulid, account_id: ulid}]; a warehouse with none takes the cheapest price.
+            'default_carriers' => [],
+            'notify_problems' => true,
+            'cancel_with_order' => false,
+        ],
         'print' => [
             'defaults' => ['sale' => 'a5', 'purchase' => 'a4', 'receipt' => 'a4', 'stocktake' => 'a4', 'cash' => 'a5'],
             'show_logo' => true,

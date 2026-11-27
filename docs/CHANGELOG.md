@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+### Menu Vận chuyển như Sapo (2026-11-26)
+- Nhóm **Vận chuyển** mới trong menu trái: Tổng quan, Quản lý vận đơn (trang "Gửi đơn vị vận chuyển" cũ, chuyển từ Đơn hàng sang), Đối soát COD và phí (chuyển từ Thu chi, `/cash/cod` tự chuyển sang `/shipping/cod`), Kết nối đối tác, Cấu hình giao hàng.
+- Khoảng cách menu theo Sapo: dòng cao 48px cách nhau 4px, biểu tượng 24px, chữ 14px; menu con cao 40px, thẳng hàng chữ mục cha, bỏ vạch dọc. Áp dụng cho toàn bộ menu.
+- Logo thật của hãng (`public/images/carriers/*.webp`, `CarrierLogo.vue`, cân theo diện tích để các hàng đều nhau) ở Quản lý vận đơn, Tổng quan, Kết nối đối tác.
+- **Tổng quan** (`GET /shipping/overview`, tối đa 92 ngày): đơn chờ đẩy, chờ lấy (quá hạn), đang giao (chậm), giao thất bại, đang hoàn, COD hãng giữ; biểu đồ đơn theo ngày; danh sách "Cần xử lý ngay"; bảng hiệu quả theo hãng (tỉ lệ giao, hoàn, số ngày giao, phí trung bình, COD đang giữ).
+- **Đối soát COD và phí**: thêm tab "Phí ship lệch" (đơn hãng tính phí cao hơn lúc báo giá, `GET /shipments?fee=gap`).
+- **Kết nối đối tác**: thẻ từng hãng (GHN, Viettel Post, J&T; GHTK, SPX "Sắp có"), vận chuyển của sàn theo từng gian hàng, dòng tự giao với "Nhập trạng thái từ file".
+- **Cấu hình giao hàng** (mục cấu hình `shipping`, không cần migration): khối lượng và kích thước mặc định, yêu cầu khi giao, người trả phí, ghi chú cho hãng, hãng mặc định theo kho (được chọn sẵn khi đẩy đơn, `preferred` trong báo giá), báo ngay khi đơn giao thất bại hoặc bị hoàn (thông báo đẩy), hủy đơn thì tự hủy vận đơn bên hãng (khi hãng chưa lấy hàng).
+
 ### Kênh bán: menu "…" không bị che, thêm Xoá kênh (2026-11-26)
 - Menu "…" của từng gian hàng không còn bị khung gian hàng cắt mất.
 - "Xoá kênh" (trong menu "…" và cạnh "Kết nối lại" của kênh đã ngắt): ngắt kết nối rồi xoá kênh khỏi danh sách. Kênh chưa có đơn thì xoá hẳn cùng sản phẩm sàn và liên kết. Kênh đã có đơn thì chỉ ẩn khỏi danh sách (`marketplace_accounts.archived_at`, migration mới), đơn cũ giữ nguyên để báo cáo không đổi. Kết nối lại cùng shop thì kênh hiện lại. `DELETE /marketplace-accounts/{id}`, quyền `marketplace.connect`.

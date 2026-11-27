@@ -39,6 +39,8 @@ class ShipmentQuery
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date'],
             'late' => ['nullable', 'boolean'],
+            // "Phí ship lệch": the carrier charged more than the price quoted when the parcel was made.
+            'fee' => ['nullable', Rule::in(['gap'])],
             'order_id' => ['nullable', 'string', 'max:26'],
             'q' => ['nullable', 'string', 'max:100'],
         ];
@@ -70,6 +72,7 @@ class ShipmentQuery
             ->when($filters['from'] ?? null, fn ($q, $d) => $q->where('picked_up_at', '>=', ReportRange::date($d)->startOfDay()->utc()))
             ->when($filters['to'] ?? null, fn ($q, $d) => $q->where('picked_up_at', '<=', ReportRange::date($d)->endOfDay()->utc()))
             ->when($filters['late'] ?? false, fn ($q) => self::late($q))
+            ->when(($filters['fee'] ?? null) === 'gap', fn ($q) => self::feeGap($q))
             ->when($filters['order_id'] ?? null, fn ($q, $id) => $q->whereHas('order', fn ($o) => $o->where('ulid', $id)))
             ->when($filters['q'] ?? null, fn ($q, $term) => $q->where(fn ($w) => $w->where('tracking_number', 'like', "%{$term}%")
                 ->orWhereHas('order', fn ($o) => $o->where('external_order_id', 'like', "%{$term}%"))));
@@ -82,5 +85,15 @@ class ShipmentQuery
     public static function late(Builder $query): Builder
     {
         return $query->whereIn('status', self::TABS['delivering'])->where('picked_up_at', '<', now()->subDays(self::LATE_DAYS));
+    }
+
+    /**
+     * @param  Builder<Shipment>  $query
+     * @return Builder<Shipment>
+     */
+    public static function feeGap(Builder $query): Builder
+    {
+        return $query->whereNotNull('fee_actual')->whereNotNull('fee_estimated')->whereColumn('fee_actual', '>', 'fee_estimated')
+            ->where('status', '!=', ShipmentStatus::CANCELLED);
     }
 }

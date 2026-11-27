@@ -1,5 +1,6 @@
 /** Carrier connections (kết nối hãng vận chuyển bằng tài khoản của shop): types and helpers. */
 import { api } from '@/shared/lib/api';
+import { useSettingsStore } from '@/shared/stores/settings';
 
 export interface CarrierCatalogItem {
     carrier: string;
@@ -50,6 +51,8 @@ export interface QuoteResult {
     accounts: { account: { id: string; carrier: string; carrier_label: string; name: string }; services: ServiceQuoteData[]; error: string | null }[];
     cheapest: QuoteOption | null;
     fastest: QuoteOption | null;
+    /** The warehouse's default carrier (Cấu hình giao hàng) at its cheapest service, else the cheapest overall. */
+    preferred: QuoteOption | null;
 }
 
 /** What the shop picked: one service of one connected account. */
@@ -89,6 +92,12 @@ export interface ParcelOptions {
     payer?: 'shop' | 'buyer';
     required_note?: 'view_no_try' | 'try' | 'no_view';
     note?: string | null;
+}
+
+/** Who pays and the delivery note start from Vận chuyển › Cấu hình giao hàng; weight and size are filled by the server. */
+export function defaultParcel(): ParcelOptions {
+    const s = useSettingsStore().data?.shipping;
+    return { required_note: s?.required_note ?? 'view_no_try', payer: s?.payer ?? 'shop' };
 }
 
 export const requiredNotes = [

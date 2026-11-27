@@ -67,7 +67,7 @@ async function quoteRow(id: string) {
         const { data } = await api.post('/shipping/quotes', { order_id: id });
         const res = data.data as QuoteResult;
         quotes.value[id] = res;
-        if (res.cheapest && !picks.value[id]) picks.value[id] = choiceOf(res.cheapest);
+        if (res.preferred && !picks.value[id]) picks.value[id] = choiceOf(res.preferred);
     } catch (e) {
         quotes.value[id] = (e as ApiError).message;
     }

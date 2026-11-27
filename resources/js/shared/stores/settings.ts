@@ -32,6 +32,7 @@ export interface TenantSettingsData {
     /** Thuê bao: the days before the end the customer is reminded (0 = the end day), by Zalo; the staff summary. */
     subscriptions: { remind_days: number[]; zalo: boolean; notify_staff: boolean };
     print: { defaults: Record<'sale' | 'purchase' | 'receipt' | 'stocktake' | 'cash', PrintSize>; show_logo: boolean; show_qr: boolean; show_signatures: boolean; footer: string | null; label_extras: LabelExtrasSettings };
+    shipping?: ShippingSettings;
 }
 
 /** Chữ in thêm lên phiếu sàn (Shopee, TikTok). accounts: null = every shop, else the chosen shops' ids. */
@@ -46,7 +47,22 @@ export interface LabelExtrasSettings {
     accounts: string[] | null;
 }
 
-export type SettingsSection = 'store' | 'tax' | 'pricing' | 'payments' | 'sales' | 'reasons' | 'print' | 'subscriptions';
+/** Vận chuyển › Cấu hình giao hàng. */
+export interface ShippingSettings {
+    weight_g: number;
+    length_cm: number | null;
+    width_cm: number | null;
+    height_cm: number | null;
+    required_note: 'view_no_try' | 'try' | 'no_view';
+    payer: 'shop' | 'buyer';
+    note: string | null;
+    /** Carrier account picked first for each warehouse (ulids). */
+    default_carriers: { warehouse_id: string; account_id: string }[];
+    notify_problems: boolean;
+    cancel_with_order: boolean;
+}
+
+export type SettingsSection = 'store' | 'tax' | 'pricing' | 'payments' | 'sales' | 'reasons' | 'print' | 'shipping' | 'subscriptions';
 
 /** Loaded once per business; screens read it to apply the configured defaults and rules. */
 export const useSettingsStore = defineStore('settings', () => {
