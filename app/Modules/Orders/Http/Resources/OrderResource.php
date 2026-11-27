@@ -33,6 +33,9 @@ class OrderResource extends JsonResource
             },
             'balance_due' => $this->isManual() && $this->imported_from === null && $this->status !== OrderStatus::CANCELLED ? $this->balanceDue() : null,
             'external_order_id' => $this->external_order_id,
+            // Mã đơn hàng (SON50892); null until the shop starts its numbering, screens then show external_order_id.
+            'code' => $this->code,
+            'reference' => $this->reference,
             'status' => $this->status,
             'imported_from' => $this->imported_from,
             'version' => (int) $this->version,

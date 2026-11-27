@@ -79,6 +79,16 @@ class TenantSettings
             'notify_problems' => true,
             'cancel_with_order' => false,
         ],
+        // Mã đơn hàng (Orders\Services\OrderCodes): off until the shop starts it; prefix + running number like Sapo.
+        // mode shared = one counter for every order, per_source = prefixes[manual|shopee|tiktok|woocommerce] each.
+        'order_codes' => [
+            'enabled' => false,
+            'mode' => 'shared',
+            'prefix' => 'SON',
+            'prefixes' => ['manual' => null, 'shopee' => null, 'tiktok' => null, 'woocommerce' => null],
+            'started_at' => null,
+            'started' => null,
+        ],
         'print' => [
             'defaults' => ['sale' => 'a5', 'purchase' => 'a4', 'receipt' => 'a4', 'stocktake' => 'a4', 'cash' => 'a5'],
             'show_logo' => true,

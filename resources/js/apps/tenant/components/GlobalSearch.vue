@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { orderCode } from '@/shared/orderCode';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Component } from 'vue';
 import { useRouter } from 'vue-router';
 import { ArrowRight, Download, FileText, Package, Plus, Search, ShoppingCart, Truck, UserRound, Wallet } from 'lucide-vue-next';
@@ -122,7 +123,7 @@ async function search(term: string) {
     const get = <T,>(perm: string, url: string, params: Record<string, unknown>) =>
         tenant.can(perm) ? api.get<Paged<T>>(url, { params: { q: term, ...params } }).then((r) => r.data).catch(() => ({ data: [] as T[], meta: { total: 0 } })) : Promise.resolve({ data: [] as T[], meta: { total: 0 } });
 
-    type O = { id: string; external_order_id: string; marketplace: string; status: string; total: string; placed_at: string | null; buyer_name: string | null; customer?: { name: string } | null; shop?: { name: string } | null; channel?: { name: string } | null };
+    type O = { id: string; external_order_id: string; code?: string | null; marketplace: string; status: string; total: string; placed_at: string | null; buyer_name: string | null; customer?: { name: string } | null; shop?: { name: string } | null; channel?: { name: string } | null };
     type C = { id: string; name: string; phone: string | null; code: string | null; debt?: string | null; orders_count?: number | null };
     type V = { id: string; sku: string; name: string | null; product?: { id: string; name: string } };
     type S = { id: string; name: string; code: string | null; phone: string | null; debt?: string | null };
@@ -139,7 +140,7 @@ async function search(term: string) {
             rows: o.data.map((x) => ({
                 key: `o:${x.id}`,
                 group: 'orders',
-                title: x.external_order_id,
+                title: orderCode(x),
                 detail: [x.shop?.name ?? x.channel?.name, x.customer?.name ?? x.buyer_name, formatDateTime(x.placed_at)].filter(Boolean).join(' · '),
                 right: formatMoney(x.total),
                 status: x.status,

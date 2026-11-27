@@ -16,6 +16,7 @@ use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Sales\Services\CustomerResolver;
 use App\Modules\Sales\Support\PhoneNumber;
+use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -197,6 +198,9 @@ class SapoOrderImporter
         $order->forceFill([
             'marketplace' => Order::SOURCE_MANUAL,
             'external_order_id' => $code,
+            // Sapo's number is the order's Mã đơn (SON50891), unless the shop's own numbering already gave it out.
+            'code' => strlen($code) <= 30 && OrderCodes::isFree((int) app(TenantContext::class)->id(), $code) ? $code : null,
+            'reference' => ($ref = trim((string) ($data['reference'] ?? ''))) !== '' ? mb_substr($ref, 0, 100) : null,
             'imported_from' => self::SOURCE,
             'historical' => true,
             'sales_channel_id' => $channel->id,

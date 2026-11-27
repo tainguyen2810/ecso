@@ -53,7 +53,7 @@ class CarrierShipmentController extends Controller
         $data = $request->validate(['q' => ['nullable', 'string', 'max:100'], 'page' => ['nullable', 'integer', 'min:1']]);
         $active = fn ($s) => $s->where('status', '!=', ShipmentStatus::CANCELLED);
         $page = CarrierShipmentService::queueQuery()
-            ->when(filled($data['q'] ?? null), fn ($q) => $q->where(fn ($w) => $w->where('external_order_id', 'like', '%'.$data['q'].'%')->orWhere('buyer_name', 'like', '%'.$data['q'].'%')->orWhere('buyer_phone', 'like', '%'.$data['q'].'%')))
+            ->when(filled($data['q'] ?? null), fn ($q) => $q->where(fn ($w) => $w->where('external_order_id', 'like', '%'.$data['q'].'%')->orWhere('code', 'like', '%'.$data['q'].'%')->orWhere('buyer_name', 'like', '%'.$data['q'].'%')->orWhere('buyer_phone', 'like', '%'.$data['q'].'%')))
             ->with(['warehouse:id,ulid,code,name', 'shipments' => $active])
             ->orderBy('id')
             ->paginate(20);
@@ -67,7 +67,7 @@ class CarrierShipmentController extends Controller
 
                 return [
                     'id' => $o->ulid,
-                    'external_order_id' => $o->external_order_id,
+                    'external_order_id' => $o->external_order_id, 'code' => $o->code,
                     'marketplace' => $o->marketplace,
                     'status' => $o->status,
                     'recipient' => $o->buyer_name,

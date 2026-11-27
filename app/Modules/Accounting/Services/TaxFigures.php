@@ -41,8 +41,8 @@ class TaxFigures
             ->leftJoin('products as p', 'p.id', '=', 'v.product_id')
             ->leftJoin('sales_channels as sc', 'sc.id', '=', 'o.sales_channel_id')
             ->leftJoin('marketplace_accounts as ma', 'ma.id', '=', 'o.marketplace_account_id')
-            ->groupBy('o.id', 'o.external_order_id', 'o.delivered_at', 'o.completed_at', 'o.marketplace', 'o.marketplace_account_id', 'o.sales_channel_id', 'p.category_id', 'ma.shop_name', 'sc.name')
-            ->selectRaw("o.id, o.external_order_id as number, {$day} as day, ({$market}) as is_market, CONCAT(o.marketplace, ':', COALESCE(o.marketplace_account_id, o.sales_channel_id, 0)) as channel, {$label} as label, p.category_id, "
+            ->groupBy('o.id', 'o.external_order_id', 'o.code', 'o.delivered_at', 'o.completed_at', 'o.marketplace', 'o.marketplace_account_id', 'o.sales_channel_id', 'p.category_id', 'ma.shop_name', 'sc.name')
+            ->selectRaw("o.id, COALESCE(o.code, o.external_order_id) as number, {$day} as day, ({$market}) as is_market, CONCAT(o.marketplace, ':', COALESCE(o.marketplace_account_id, o.sales_channel_id, 0)) as channel, {$label} as label, p.category_id, "
                 ."SUM((i.unit_price * i.quantity - i.discount) * ({$share})) as amount")
             ->get();
 
@@ -64,7 +64,7 @@ class TaxFigures
                 ->leftJoin('sales_channels as sc', 'sc.id', '=', 'o.sales_channel_id')
                 ->leftJoin('marketplace_accounts as ma', 'ma.id', '=', 'o.marketplace_account_id')
                 ->where('o.shipping_fee', '>', 0)
-                ->selectRaw("o.external_order_id as number, {$day} as day, ({$market}) as is_market, CONCAT(o.marketplace, ':', COALESCE(o.marketplace_account_id, o.sales_channel_id, 0)) as channel, {$label} as label, o.shipping_fee as amount")
+                ->selectRaw("COALESCE(o.code, o.external_order_id) as number, {$day} as day, ({$market}) as is_market, CONCAT(o.marketplace, ':', COALESCE(o.marketplace_account_id, o.sales_channel_id, 0)) as channel, {$label} as label, o.shipping_fee as amount")
                 ->get();
             foreach ($ship as $r) {
                 $add((string) $r->day, (bool) $r->is_market, (string) $r->channel, (string) $r->label, $tax->defaultGroup(), (float) $r->amount, (string) $r->number);
@@ -82,8 +82,8 @@ class TaxFigures
             ->leftJoin('sales_channels as sc', 'sc.id', '=', 'ro.sales_channel_id')
             ->leftJoin('marketplace_accounts as ma', 'ma.id', '=', 'ro.marketplace_account_id')
             ->where('r.tenant_id', $this->tenant())->whereIn('r.status', ReturnValues::COUNTED)->whereBetween('r.created_at', [$from, $to])
-            ->groupBy('r.id', 'r.created_at', 'ro.external_order_id', 'ro.marketplace', 'ro.marketplace_account_id', 'ro.sales_channel_id', 'p.category_id', 'ma.shop_name', 'sc.name')
-            ->selectRaw("ro.external_order_id as number, {$rday} as day, (".ProfitFigures::isMarketplaceSql('ro').") as is_market, CONCAT(ro.marketplace, ':', COALESCE(ro.marketplace_account_id, ro.sales_channel_id, 0)) as channel, "
+            ->groupBy('r.id', 'r.created_at', 'ro.external_order_id', 'ro.code', 'ro.marketplace', 'ro.marketplace_account_id', 'ro.sales_channel_id', 'p.category_id', 'ma.shop_name', 'sc.name')
+            ->selectRaw("COALESCE(ro.code, ro.external_order_id) as number, {$rday} as day, (".ProfitFigures::isMarketplaceSql('ro').") as is_market, CONCAT(ro.marketplace, ':', COALESCE(ro.marketplace_account_id, ro.sales_channel_id, 0)) as channel, "
                 .str_replace('o.marketplace', 'ro.marketplace', $label).' as label, p.category_id, '
                 ."SUM(CASE WHEN ri.quantity > 0 THEN rl.quantity * (ri.unit_price * ri.quantity - ri.discount) / ri.quantity * ({$rshare}) ELSE 0 END) as amount")
             ->get();

@@ -218,7 +218,7 @@ class EzChatStore
             throw ValidationException::withMessages(['code' => 'Thiếu mã đơn EzChat.']);
         }
         if ($done = EzChatLinkOrder::query()->where('code', $code)->with('order')->first()) {
-            return ['id' => (string) $done->order?->external_order_id];
+            return ['id' => (string) $done->order?->displayCode()];
         }
         $items = array_slice(array_values(array_filter((array) ($body['items'] ?? []), 'is_array')), 0, 100);
         if ($items === []) {
@@ -261,7 +261,7 @@ class EzChatStore
             EzChatLinkOrder::query()->create(['code' => $code, 'order_id' => $order->id]);
             $link->forceFill(['last_used_at' => now()])->save();
 
-            return ['id' => (string) $order->external_order_id];
+            return ['id' => $order->displayCode()];
         });
     }
 
@@ -289,7 +289,8 @@ class EzChatStore
             return null;
         }
 
-        return Order::query()->where('external_order_id', $number)->first()
+        return Order::query()->where('code', $number)->first()
+            ?? Order::query()->where('external_order_id', $number)->first()
             ?? EzChatLinkOrder::query()->where('code', $number)->first()?->order;
     }
 
@@ -308,7 +309,7 @@ class EzChatStore
         $order->loadMissing('items');
 
         return ['found' => true, 'order' => [
-            'number' => $order->external_order_id,
+            'number' => $order->displayCode(),
             'status' => $order->status,
             'statusName' => OrderExporter::STATUS[$order->status] ?? $order->status,
             'date' => $order->placed_at?->toIso8601String(),
@@ -336,7 +337,7 @@ class EzChatStore
         $orders = $hash ? Order::query()->where('buyer_phone_hash', $hash)->latest('placed_at')->limit(5)->get() : collect();
 
         return ['orders' => $orders->map(fn (Order $o) => [
-            'number' => (string) $o->external_order_id,
+            'number' => $o->displayCode(),
             'state' => (string) $o->status,
             'status' => OrderExporter::STATUS[$o->status] ?? (string) $o->status,
             'date' => $o->placed_at?->toIso8601String(),

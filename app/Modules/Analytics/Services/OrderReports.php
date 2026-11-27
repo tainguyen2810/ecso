@@ -42,7 +42,7 @@ class OrderReports
             .'COALESCE(SUM(it.cogs), 0) as cogs')->first();
         $rows = (clone $base)
             ->orderByDesc('o.placed_at')->limit(self::limit())
-            ->get(['o.ulid', 'o.external_order_id', 'o.placed_at', 'o.status', 'o.total', 'o.shipping_fee', 'o.discount', 'o.buyer_name', 'c.name as customer',
+            ->get(['o.ulid', 'o.external_order_id', 'o.code', 'o.placed_at', 'o.status', 'o.total', 'o.shipping_fee', 'o.discount', 'o.buyer_name', 'c.name as customer',
                 DB::raw("COALESCE(ma.shop_name, sc.name, 'Khác') as channel"), 'it.units', 'it.goods', 'it.line_discount', 'it.cogs'])
             ->map(function ($r) {
                 $revenue = (float) $r->total - (float) $r->shipping_fee;
@@ -50,7 +50,7 @@ class OrderReports
 
                 return [
                     'id' => $r->ulid,
-                    'number' => $r->external_order_id,
+                    'number' => $r->code ?? $r->external_order_id,
                     'placed_at' => CarbonImmutable::parse($r->placed_at)->toIso8601String(),
                     'status' => $r->status,
                     'customer' => $r->customer ?? $this->buyer($r->buyer_name),
@@ -93,20 +93,20 @@ class OrderReports
             ->join('order_items as i', 'i.order_id', '=', 'o.id')
             ->leftJoin('product_variants as v', 'v.id', '=', 'i.product_variant_id')
             ->leftJoin('products as p', 'p.id', '=', 'v.product_id')
-            ->when($like, fn (Builder $w) => $w->where(fn (Builder $s) => $s->where('o.external_order_id', 'like', $like)
+            ->when($like, fn (Builder $w) => $w->where(fn (Builder $s) => $s->where('o.external_order_id', 'like', $like)->orWhere('o.code', 'like', $like)
                 ->orWhere('v.sku', 'like', $like)->orWhere('i.name', 'like', $like)->orWhere('c.name', 'like', $like)));
         $all = (clone $base)->selectRaw('COUNT(*) as line_count, COUNT(DISTINCT o.id) as orders, COALESCE(SUM(i.quantity), 0) as quantity, COALESCE(SUM(i.discount), 0) as discount, '
             .'COALESCE(SUM(i.quantity * i.unit_price - i.discount), 0) as amount, COALESCE(SUM(COALESCE(i.cost_snapshot, 0) * i.quantity), 0) as cogs')->first();
         $rows = (clone $base)
             ->orderByDesc('o.placed_at')->orderBy('i.id')->limit(self::limit())
-            ->get(['o.ulid as order_id', 'o.external_order_id', 'o.placed_at', 'o.buyer_name', 'c.name as customer', DB::raw("COALESCE(ma.shop_name, sc.name, 'Khác') as channel"),
+            ->get(['o.ulid as order_id', 'o.external_order_id', 'o.code', 'o.placed_at', 'o.buyer_name', 'c.name as customer', DB::raw("COALESCE(ma.shop_name, sc.name, 'Khác') as channel"),
                 'i.name', 'i.quantity', 'i.unit_price', 'i.discount', 'i.cost_snapshot', 'i.mapping_status', 'v.ulid as variant_id', 'v.sku', 'p.name as product_name', 'v.name as variant_name'])
             ->map(function ($r) {
                 $amount = (float) $r->quantity * (float) $r->unit_price - (float) $r->discount;
                 $cogs = (float) ($r->cost_snapshot ?? 0) * (int) $r->quantity;
 
                 return [
-                    'order' => ['id' => $r->order_id, 'number' => $r->external_order_id],
+                    'order' => ['id' => $r->order_id, 'number' => $r->code ?? $r->external_order_id],
                     'placed_at' => CarbonImmutable::parse($r->placed_at)->toIso8601String(),
                     'customer' => $r->customer ?? $this->buyer($r->buyer_name),
                     'channel' => $r->channel,
@@ -245,7 +245,7 @@ class OrderReports
         return $query
             ->when($filters['channel'] ?? null, fn (Builder $w, int $id) => $w->where('o.sales_channel_id', $id))
             ->when($filters['warehouse'] ?? null, fn (Builder $w, int $id) => $w->where('o.warehouse_id', $id))
-            ->when($like, fn (Builder $w) => $w->where(fn (Builder $s) => $s->where('o.external_order_id', 'like', $like)->orWhere('c.name', 'like', $like)));
+            ->when($like, fn (Builder $w) => $w->where(fn (Builder $s) => $s->where('o.external_order_id', 'like', $like)->orWhere('o.code', 'like', $like)->orWhere('c.name', 'like', $like)));
     }
 
     /** The buyer name is encrypted at rest (personal data); shown only when there is no customer record. */

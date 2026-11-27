@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { orderCode } from '@/shared/orderCode';
 import { computed, onMounted, ref, watch } from 'vue';
 import { PackageCheck, Plug, Search, TriangleAlert } from 'lucide-vue-next';
 import Button from '@/shared/ui/Button.vue';
@@ -220,10 +221,10 @@ const canPush = computed(() => tenant.can('shipments.manage'));
                 </thead>
                 <tbody class="divide-y">
                     <tr v-for="r in rows" :key="r.id" :class="cn(selected.has(r.id) && 'bg-blue-50/40')" data-testid="queue-row">
-                        <td class="px-4 py-3"><input type="checkbox" :checked="selected.has(r.id)" :disabled="!picks[r.id]" class="accent-blue-600" :aria-label="`Chọn ${r.external_order_id}`" @change="toggle(r.id)" /></td>
+                        <td class="px-4 py-3"><input type="checkbox" :checked="selected.has(r.id)" :disabled="!picks[r.id]" class="accent-blue-600" :aria-label="`Chọn ${orderCode(r)}`" @change="toggle(r.id)" /></td>
                         <td class="whitespace-nowrap px-2 py-3">
                             <RouterLink :to="`/orders/${r.id}`" class="inline-flex items-center gap-1.5 font-medium hover:underline">
-                                <MarketplaceLogo :marketplace="r.marketplace" :name="marketplaceNames[r.marketplace]" size="sm" />{{ r.external_order_id }}
+                                <MarketplaceLogo :marketplace="r.marketplace" :name="marketplaceNames[r.marketplace]" size="sm" />{{ orderCode(r) }}
                             </RouterLink>
                             <div class="text-[11px] text-muted-foreground">{{ r.warehouse?.name ?? '' }}<template v-if="r.placed_at"> · {{ formatDateTime(r.placed_at) }}</template></div>
                         </td>
@@ -275,5 +276,5 @@ const canPush = computed(() => tenant.can('shipments.manage'));
             </span>
         </div>
     </div>
-    <CarrierPushDialog v-if="detail" v-model:open="detailOpen" :order-id="detail.id" :order-code="detail.external_order_id" @pushed="afterSingle" />
+    <CarrierPushDialog v-if="detail" v-model:open="detailOpen" :order-id="detail.id" :order-code="orderCode(detail)" @pushed="afterSingle" />
 </template>

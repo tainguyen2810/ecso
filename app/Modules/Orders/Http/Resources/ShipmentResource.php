@@ -69,6 +69,7 @@ class ShipmentResource extends JsonResource
             'order' => $this->whenLoaded('order', fn () => [
                 'id' => $this->order->ulid,
                 'external_order_id' => $this->order->external_order_id,
+                'code' => $this->order->code,
                 'marketplace' => $this->order->marketplace,
                 'channel' => $this->order->relationLoaded('channel') ? $this->order->channel?->name : null,
                 'status' => $this->order->status,

@@ -42,7 +42,7 @@ class LossReports
             ->leftJoinSub($costs, 'c', 'c.order_id', '=', 'o.id')
             ->leftJoin('marketplace_accounts as ma', 'ma.id', '=', 'o.marketplace_account_id')
             ->leftJoin('sales_channels as sc', 'sc.id', '=', 'o.sales_channel_id')
-            ->selectRaw('o.id, o.ulid, o.external_order_id, o.placed_at, o.marketplace, o.loss_alerted_at, '
+            ->selectRaw('o.id, o.ulid, o.external_order_id, o.code, o.placed_at, o.marketplace, o.loss_alerted_at, '
                 ."COALESCE(ma.shop_name, sc.name, 'Khác') as channel, "
                 .ProfitFigures::netGoodsSql().' as net, COALESCE(c.cogs, 0) as cogs, COALESCE(c.missing, 0) as missing, COALESCE(c.units, 0) as units, '
                 .'COALESCE('.ProfitFigures::confirmedFeeSql().', '.ProfitFigures::estimatedFeeSql().', 0) as fee, '
@@ -68,7 +68,7 @@ class LossReports
             'range' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
             'rows' => $rows->map(fn ($r) => [
                 'id' => $r->ulid,
-                'number' => $r->external_order_id,
+                'number' => $r->code ?? $r->external_order_id,
                 'placed_at' => CarbonImmutable::parse($r->placed_at)->toIso8601String(),
                 'channel' => $r->channel,
                 'net' => round((float) $r->net, 2),

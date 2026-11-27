@@ -41,6 +41,8 @@ class SalesOrderController extends Controller
             'payments.*.amount' => ['required', 'numeric', 'min:0', 'max:9999999999'],
             'payments.*.reference' => ['nullable', 'string', 'max:100'],
             'exchange_return_id' => ['nullable', 'string'],
+            // Mã đơn typed by hand (once numbering is on); empty = the next number.
+            'code' => ['nullable', 'string', 'max:30', 'regex:/^[A-Za-z0-9_.\-]+$/'],
             'placed_at' => ['nullable', 'date', 'before_or_equal:now'],
             'counter' => ['sometimes', 'boolean'], // sold at the till (POS screen): needs an open shift
             // Bán khi mất mạng: a sale the till kept while offline, sent once the connection is back.
@@ -221,6 +223,8 @@ class SalesOrderController extends Controller
             'tags' => ['nullable', 'array', 'max:'.OrderTags::MAX],
             'tags.*' => ['nullable', 'string', 'max:40'],
             'note' => ['nullable', 'string', 'max:500'],
+            // Mã tham chiếu: a code from elsewhere (Woo, another system), searchable in the order list.
+            'reference' => ['nullable', 'string', 'max:100'],
         ];
     }
 

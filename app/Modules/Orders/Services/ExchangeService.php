@@ -45,7 +45,7 @@ class ExchangeService
             if (bccomp($credit, '0', 2) > 0) {
                 $this->payments->record($original, [
                     'kind' => OrderPayment::REFUND, 'method' => OrderPayment::EXCHANGE, 'amount' => $credit,
-                    'reference' => $exchange->external_order_id, 'note' => "Bù trừ sang đơn đổi {$exchange->external_order_id}",
+                    'reference' => $exchange->external_order_id, 'note' => "Bù trừ sang đơn đổi {$exchange->displayCode()}",
                 ]);
                 $this->payments->record($exchange, [
                     'method' => OrderPayment::EXCHANGE, 'amount' => $credit,

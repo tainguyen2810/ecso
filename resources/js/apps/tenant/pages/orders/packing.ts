@@ -19,6 +19,7 @@ export interface PackLine {
 export interface PackOrder {
     id: string;
     external_order_id: string;
+    code?: string | null;
     marketplace: string;
     shop: string | null;
     buyer_name: string | null;

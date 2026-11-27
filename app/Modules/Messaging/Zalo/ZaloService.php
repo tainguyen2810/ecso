@@ -266,7 +266,7 @@ class ZaloService
 
         return match ($field) {
             'customer_name' => (string) ($order->buyer_name ?: ($order->customer_id ? Customer::query()->whereKey($order->customer_id)->value('name') : '') ?: 'Quý khách'),
-            'order_code' => (string) $order->external_order_id,
+            'order_code' => $order->displayCode(),
             'order_date' => ($order->placed_at ?? $order->created_at)?->timezone('Asia/Ho_Chi_Minh')->format('d/m/Y') ?? '',
             'total' => $money($order->total),
             'amount_due' => $money(max(0, (float) $order->total - (float) $order->paid_amount - (float) $order->refunded_amount)),
@@ -288,9 +288,9 @@ class ZaloService
             ] : null,
             'events' => self::EVENTS,
             'fields' => self::FIELDS,
-            'messages' => $account ? ZaloMessage::query()->with('order:id,ulid,external_order_id')->latest('id')->limit(30)->get()->map(fn (ZaloMessage $m) => [
+            'messages' => $account ? ZaloMessage::query()->with('order:id,ulid,external_order_id,code')->latest('id')->limit(30)->get()->map(fn (ZaloMessage $m) => [
                 'id' => $m->id, 'event' => $m->event, 'template_name' => $m->template_name, 'phone' => $m->phone_masked, 'buyer_name' => $m->buyer_name,
-                'status' => $m->status, 'error' => $m->error, 'order' => $m->order ? ['id' => $m->order->ulid, 'number' => $m->order->external_order_id] : null,
+                'status' => $m->status, 'error' => $m->error, 'order' => $m->order ? ['id' => $m->order->ulid, 'number' => $m->order->displayCode()] : null,
                 'created_at' => $m->created_at?->toIso8601String(),
             ])->all() : [],
         ];

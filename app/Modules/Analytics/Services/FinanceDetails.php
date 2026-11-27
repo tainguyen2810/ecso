@@ -80,7 +80,7 @@ class FinanceDetails
             ->leftJoinSub($cost, 'c', 'c.order_id', '=', 'o.id')
             ->leftJoin('marketplace_accounts as ma', 'ma.id', '=', 'o.marketplace_account_id')
             ->leftJoin('sales_channels as sc', 'sc.id', '=', 'o.sales_channel_id')
-            ->selectRaw("o.ulid as id, o.external_order_id as code, o.marketplace, o.status, COALESCE(ma.shop_name, sc.name, 'Khác') as shop, "
+            ->selectRaw("o.ulid as id, COALESCE(o.code, o.external_order_id) as code, o.marketplace, o.status, COALESCE(ma.shop_name, sc.name, 'Khác') as shop, "
                 .'o.placed_at, '.RevenuePolicy::dateSql('o').' as recognized_at, '.ProfitFigures::netGoodsSql().' as goods, o.discount, o.tax_amount as tax, o.shipping_fee as shipping, o.total, '
                 .'c.cogs, '.ProfitFigures::netGoodsSql().' - COALESCE(c.cogs, 0) as gross_profit, '
                 .'COALESCE('.ProfitFigures::confirmedFeeSql().', '.ProfitFigures::estimatedFeeSql().') as fee, '
@@ -95,7 +95,7 @@ class FinanceDetails
             ->where(fn ($q) => $q->whereBetween('r.created_at', [$from, $to])->orWhereBetween('r.inspected_at', [$from, $to]))
             ->leftJoin('marketplace_accounts as ma', 'ma.id', '=', 'ro.marketplace_account_id')
             ->leftJoin('sales_channels as sc', 'sc.id', '=', 'ro.sales_channel_id')
-            ->selectRaw("r.ulid as id, r.number as code, ro.external_order_id as order_code, ro.ulid as order_id, r.status, COALESCE(ma.shop_name, sc.name, 'Khác') as shop, r.created_at, r.inspected_at, "
+            ->selectRaw("r.ulid as id, r.number as code, COALESCE(ro.code, ro.external_order_id) as order_code, ro.ulid as order_id, r.status, COALESCE(ma.shop_name, sc.name, 'Khác') as shop, r.created_at, r.inspected_at, "
                 // A return counts in the period it was approved (value) and in the period its goods went back on the shelf (cost).
                 .'CASE WHEN r.created_at BETWEEN ? AND ? THEN '.ReturnValues::netValueSql().' ELSE 0 END as value, '
                 .'CASE WHEN r.inspected_at BETWEEN ? AND ? THEN COALESCE(rv.cost_back, 0) ELSE 0 END as cost_back', [$from, $to, $from, $to])

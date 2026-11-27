@@ -31,7 +31,7 @@ class OrderPromotions
         // Earlier gift lines go (with any stock they held); the ones still due are added again below.
         $old = $order->items()->whereNotNull('promotion_id')->pluck('id')->map(fn ($id) => (int) $id)->all();
         if ($old !== []) {
-            $this->ledger->releaseAll(Order::STOCK_REFERENCE, $old, "Tính lại khuyến mãi đơn {$order->external_order_id}");
+            $this->ledger->releaseAll(Order::STOCK_REFERENCE, $old, "Tính lại khuyến mãi đơn {$order->displayCode()}");
             $order->items()->whereKey($old)->delete();
         }
         $items = $order->items()->with('variant.product')->get();

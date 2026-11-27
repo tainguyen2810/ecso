@@ -67,10 +67,10 @@ class LoyaltyService
             $earned = (int) $rows->whereIn('kind', [LoyaltyEntry::EARN, LoyaltyEntry::RETURN])->sum('points');
             $spent = (int) $rows->whereIn('kind', [LoyaltyEntry::REDEEM, LoyaltyEntry::REDEEM_BACK])->sum('points');
             if ($earned !== 0) {
-                $this->post((int) $otherId, $order, LoyaltyEntry::RETURN, -$earned, "Đơn {$order->external_order_id} chuyển sang khách khác");
+                $this->post((int) $otherId, $order, LoyaltyEntry::RETURN, -$earned, "Đơn {$order->displayCode()} chuyển sang khách khác");
             }
             if ($spent !== 0) {
-                $this->post((int) $otherId, $order, LoyaltyEntry::REDEEM_BACK, -$spent, "Đơn {$order->external_order_id} chuyển sang khách khác");
+                $this->post((int) $otherId, $order, LoyaltyEntry::REDEEM_BACK, -$spent, "Đơn {$order->displayCode()} chuyển sang khách khác");
             }
         }
         if ($customerId === null) {
@@ -84,7 +84,7 @@ class LoyaltyService
         if ($spentTarget !== $spentNow) {
             $more = $spentTarget > $spentNow;
             $this->post($customerId, $order, $more ? LoyaltyEntry::REDEEM : LoyaltyEntry::REDEEM_BACK, $spentNow - $spentTarget,
-                $more ? "Dùng điểm cho đơn {$order->external_order_id}" : ($order->status === OrderStatus::CANCELLED ? "Hủy đơn {$order->external_order_id}: trả lại điểm đã dùng" : "Sửa đơn {$order->external_order_id}: trả lại điểm"));
+                $more ? "Dùng điểm cho đơn {$order->displayCode()}" : ($order->status === OrderStatus::CANCELLED ? "Hủy đơn {$order->displayCode()}: trả lại điểm đã dùng" : "Sửa đơn {$order->displayCode()}: trả lại điểm"));
         }
 
         // Earned: once the order is completed, on what the buyer paid for the goods, less what was refunded.
@@ -107,7 +107,7 @@ class LoyaltyService
             return;
         }
         $this->post($customerId, $order, $target > $earnedNow ? LoyaltyEntry::EARN : LoyaltyEntry::RETURN, $target - $earnedNow,
-            $order->status === OrderStatus::CANCELLED ? "Hủy đơn {$order->external_order_id}" : "Trả hàng đơn {$order->external_order_id}");
+            $order->status === OrderStatus::CANCELLED ? "Hủy đơn {$order->displayCode()}" : "Trả hàng đơn {$order->displayCode()}");
     }
 
     public function pointsFor(Order $order, string $multiplier, int $earnPer): int
@@ -261,7 +261,7 @@ class LoyaltyService
     {
         $paid = number_format((float) bcsub((string) $order->total, (string) $order->shipping_fee, 2), 0, ',', '.');
 
-        return "Đơn {$order->external_order_id} hoàn tất · {$paid} ₫".(bccomp($multiplier, '1', 2) !== 0 ? ' × '.rtrim(rtrim(number_format((float) $multiplier, 2, ',', ''), '0'), ',') : '');
+        return "Đơn {$order->displayCode()} hoàn tất · {$paid} ₫".(bccomp($multiplier, '1', 2) !== 0 ? ' × '.rtrim(rtrim(number_format((float) $multiplier, 2, ',', ''), '0'), ',') : '');
     }
 
     private function goods(Order $order): string

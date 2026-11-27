@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Orders\Http\Controllers\OrderCodeController;
 use App\Modules\Orders\Http\Controllers\OrderController;
 use App\Modules\Orders\Http\Controllers\PackingController;
 use App\Modules\Orders\Http\Controllers\ReturnController;
@@ -8,6 +9,10 @@ use App\Modules\Orders\Http\Controllers\ShipmentController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
+    // Cấu hình › Mã đơn hàng
+    Route::get('order-codes', [OrderCodeController::class, 'show']);
+    Route::put('order-codes', [OrderCodeController::class, 'update']);
+    Route::post('order-codes/start', [OrderCodeController::class, 'start'])->middleware('throttle:5,1,orders.codes.start');
     Route::get('shipments', [ShipmentController::class, 'index']);
     Route::get('shipments/summary', [ShipmentController::class, 'summary']);
     Route::get('shipments/export', [ShipmentController::class, 'export'])->middleware('throttle:10,1,orders.shipments.export');

@@ -117,6 +117,12 @@ class Order extends Model
         ];
     }
 
+    /** Mã đơn hàng shown to people: the shop's own number (SON50892), else the marketplace / old number. */
+    public function displayCode(): string
+    {
+        return (string) ($this->code ?? $this->external_order_id);
+    }
+
     /** @return BelongsTo<MarketplaceAccount, $this> */
     public function account(): BelongsTo
     {

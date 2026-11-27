@@ -57,7 +57,7 @@ class LossAlertsCommand extends Command
 
             return [
                 'title' => 'Đơn lỗ sau phí · '.$o->channel,
-                'body' => "{$o->external_order_id} lỗ ".$money((float) $o->profit).' (thu '.$money((float) $o->net - (float) $o->fee).', vốn '.$money((float) $o->cogs).')',
+                'body' => ($o->code ?? $o->external_order_id).' lỗ '.$money((float) $o->profit).' (thu '.$money((float) $o->net - (float) $o->fee).', vốn '.$money((float) $o->cogs).')',
                 'url' => '/orders/'.$o->ulid,
             ];
         }

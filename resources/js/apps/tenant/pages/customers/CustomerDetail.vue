@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { orderCode } from '@/shared/orderCode';
 import DateTimeInput from '@/shared/ui/DateTimeInput.vue';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -403,7 +404,7 @@ const thead = 'border-b bg-slate-50 text-left text-[11px] uppercase tracking-wid
             <div class="rounded-xl border bg-card p-4">
                 <p class="text-sm text-muted-foreground">Lần mua gần nhất</p>
                 <p class="mt-1 text-2xl font-semibold">{{ lastOrderLabel }}</p>
-                <p class="mt-0.5 truncate text-xs text-muted-foreground">{{ customer.last_order_at ? formatDate(customer.last_order_at) : 'Chưa có đơn' }}<template v-if="customer.orders[0]"> · {{ customer.orders[0].external_order_id }}</template></p>
+                <p class="mt-0.5 truncate text-xs text-muted-foreground">{{ customer.last_order_at ? formatDate(customer.last_order_at) : 'Chưa có đơn' }}<template v-if="customer.orders[0]"> · {{ orderCode(customer.orders[0]) }}</template></p>
             </div>
             <div :class="cn('rounded-xl border bg-card p-4', Number(customer.debt) > 0 && 'border-red-200')">
                 <p class="text-sm text-muted-foreground">Công nợ</p>
@@ -455,7 +456,7 @@ const thead = 'border-b bg-slate-50 text-left text-[11px] uppercase tracking-wid
                     <Card title="Đơn gần đây">
                         <ul v-if="customer.orders.length" class="divide-y text-sm">
                             <li v-for="o in customer.orders.slice(0, 5)" :key="o.id" class="flex cursor-pointer items-center gap-3 px-5 py-2.5 hover:bg-muted/30" @click="$router.push(`/orders/${o.id}`)">
-                                <span class="font-mono text-xs font-medium">{{ o.external_order_id }}</span>
+                                <span class="font-mono text-xs font-medium">{{ orderCode(o) }}</span>
                                 <span class="flex-1 text-muted-foreground">{{ formatDateTime(o.placed_at) }}</span>
                                 <Badge :tone="orderStatus[o.status]?.tone">{{ orderStatus[o.status]?.label }}</Badge>
                                 <span class="w-28 text-right tabular-nums">{{ formatMoney(o.total) }}</span>
@@ -473,7 +474,7 @@ const thead = 'border-b bg-slate-50 text-left text-[11px] uppercase tracking-wid
                             <thead :class="thead"><tr><th :class="th">Mã đơn</th><th :class="th">Ngày</th><th :class="th">Trạng thái</th><th :class="th">Thanh toán</th><th :class="[th, 'text-right']">Tổng</th></tr></thead>
                             <tbody class="divide-y">
                                 <tr v-for="o in ordersPage.rows.value" :key="o.id" class="cursor-pointer hover:bg-muted/30" @click="$router.push(`/orders/${o.id}`)">
-                                    <td class="px-4 py-2.5 font-mono text-xs font-medium">{{ o.external_order_id }}<div class="font-sans text-muted-foreground">{{ o.channel?.name }}</div></td>
+                                    <td class="px-4 py-2.5 font-mono text-xs font-medium">{{ orderCode(o) }}<div class="font-sans text-muted-foreground">{{ o.channel?.name }}</div></td>
                                     <td class="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{{ formatDateTime(o.placed_at) }}</td>
                                     <td class="px-4 py-2.5"><Badge :tone="orderStatus[o.status]?.tone">{{ orderStatus[o.status]?.label }}</Badge></td>
                                     <td class="px-4 py-2.5"><Badge v-if="o.payment_status" :tone="paymentStatus[o.payment_status]?.tone">{{ paymentStatus[o.payment_status]?.label }}</Badge></td>
@@ -540,7 +541,7 @@ const thead = 'border-b bg-slate-50 text-left text-[11px] uppercase tracking-wid
                             <tbody class="divide-y">
                                 <tr v-for="r in returnsPage.rows.value" :key="r.id" class="cursor-pointer hover:bg-muted/30" @click="$router.push(`/returns/${r.id}`)">
                                     <td class="px-4 py-2.5 font-mono text-xs font-medium">{{ r.number }}<div class="font-sans text-muted-foreground">{{ formatDateTime(r.created_at) }}</div></td>
-                                    <td class="px-4 py-2.5 font-mono text-xs">{{ r.order?.external_order_id }}</td>
+                                    <td class="px-4 py-2.5 font-mono text-xs">{{ orderCode(r.order) }}</td>
                                     <td class="px-4 py-2.5">{{ returnTypes[r.type] ?? r.type }}</td>
                                     <td class="px-4 py-2.5"><Badge :tone="returnStatus[r.status]?.tone">{{ returnStatus[r.status]?.label ?? r.status }}</Badge></td>
                                     <td class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{{ formatMoney(r.refund_amount ?? r.goods_value ?? 0) }}</td>

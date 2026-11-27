@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { orderCode } from '@/shared/orderCode';
 import { computed, ref, watch } from 'vue';
 import { CircleCheck, CircleX, Info, MapPin, PackageCheck, Store, Truck } from 'lucide-vue-next';
 import Button from '@/shared/ui/Button.vue';
@@ -27,18 +28,18 @@ interface Slot { id: string; label: string }
 interface Address { id: string; label: string; slots: Slot[] }
 interface Group {
     account: { id: string; name: string; marketplace: string };
-    orders: { id: string; external_order_id: string }[];
+    orders: { id: string; external_order_id: string; code?: string | null }[];
     options: { pickup: { available: boolean; addresses: Address[] }; dropoff: { available: boolean } } | null;
     error: string | null;
     last: { method: 'pickup' | 'dropoff'; address_id: string | null } | null;
 }
 interface Choice { method: 'pickup' | 'dropoff'; address_id: string | null; slot_id: string | null; slot_label: string | null; address_label: string | null }
-interface Result { id: string; ok: boolean; message: string | null; external_order_id?: string; tracking_number?: string | null }
+interface Result { id: string; ok: boolean; message: string | null; external_order_id?: string; code?: string | null; tracking_number?: string | null }
 
 const loading = ref(false);
 const loadError = ref<string | null>(null);
 const groups = ref<Group[]>([]);
-const skipped = ref<{ id: string; external_order_id: string; message: string }[]>([]);
+const skipped = ref<{ id: string; external_order_id: string; code?: string | null; message: string }[]>([]);
 const form = ref<Record<string, { method: 'pickup' | 'dropoff' | ''; address_id: string; slot_id: string }>>({});
 const printAfter = ref(true);
 const busy = ref(false);
@@ -113,8 +114,8 @@ async function submit() {
     try {
         const ids = ready.value.flatMap((g) => g.orders.map((o) => o.id));
         const { data } = await api.post('/orders/bulk', { ids, action: 'pack', shipping: choices() });
-        const names = Object.fromEntries(ready.value.flatMap((g) => g.orders.map((o) => [o.id, o.external_order_id])));
-        results.value = (data.data as Result[]).map((r) => ({ ...r, external_order_id: r.external_order_id ?? names[r.id] }));
+        const names = Object.fromEntries(ready.value.flatMap((g) => g.orders.map((o) => [o.id, orderCode(o)])));
+        results.value = (data.data as Result[]).map((r) => ({ ...r, code: r.code ?? (r.external_order_id ? null : names[r.id]), external_order_id: r.external_order_id ?? names[r.id] }));
         const ok = results.value.filter((r) => r.ok).length;
         if (ok) toast.success(`Đã chuẩn bị ${ok} đơn trên sàn.`);
         emit('done');
@@ -138,7 +139,7 @@ const title = computed(() => (results.value ? `Đã chuẩn bị ${okIds.value.l
             <ul class="max-h-52 divide-y overflow-y-auto rounded-xl border text-sm">
                 <li v-for="r in results" :key="r.id" :class="cn('flex items-start gap-2.5 px-3 py-2', !r.ok && 'bg-rose-50/60')">
                     <div class="min-w-0 flex-1">
-                        <span class="font-medium tabular-nums">{{ r.external_order_id }}</span>
+                        <span class="font-medium tabular-nums">{{ orderCode(r) }}</span>
                         <span v-if="r.ok && r.tracking_number" class="ml-2 text-xs text-muted-foreground tabular-nums">Mã vận đơn {{ r.tracking_number }}</span>
                         <span v-else-if="r.ok" class="ml-2 text-xs text-muted-foreground">Sàn đang cấp mã vận đơn</span>
                         <div v-if="!r.ok" class="text-xs text-rose-700">{{ r.message }}</div>
@@ -204,7 +205,7 @@ const title = computed(() => (results.value ? `Đã chuẩn bị ${okIds.value.l
             </section>
 
             <ul v-if="skipped.length" class="space-y-0.5 rounded-md bg-slate-50 p-2.5 text-xs text-muted-foreground" data-testid="ship-skipped">
-                <li v-for="s in skipped" :key="s.id"><b class="tabular-nums text-foreground">{{ s.external_order_id }}</b>: {{ s.message }}</li>
+                <li v-for="s in skipped" :key="s.id"><b class="tabular-nums text-foreground">{{ orderCode(s) }}</b>: {{ s.message }}</li>
             </ul>
             <p v-if="!groups.length && !loading" class="text-sm text-muted-foreground">Không có đơn Shopee hoặc TikTok Shop nào cần chuẩn bị hàng trong các đơn đã chọn.</p>
 

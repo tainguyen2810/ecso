@@ -45,7 +45,7 @@ class PackingService
     {
         $code = trim($code);
         $matches = OrderQuery::visible(Order::query())
-            ->where(fn ($q) => $q->where('external_order_id', $code)->orWhere('tracking_number', $code)->orWhere('ulid', $code))
+            ->where(fn ($q) => $q->where('code', $code)->orWhere('external_order_id', $code)->orWhere('tracking_number', $code)->orWhere('ulid', $code))
             ->orderByRaw('status = ? desc', [OrderStatus::READY_TO_PACK])
             ->latest('id')
             ->limit(5)
@@ -56,7 +56,7 @@ class PackingService
         }
         if ($order->status !== OrderStatus::READY_TO_PACK) {
             $label = self::STATUS_LABELS[$order->status] ?? $order->status;
-            throw ValidationException::withMessages(['code' => "Đơn {$order->external_order_id} đang ở trạng thái \"{$label}\", không phải chờ đóng gói."]);
+            throw ValidationException::withMessages(['code' => "Đơn {$order->displayCode()} đang ở trạng thái \"{$label}\", không phải chờ đóng gói."]);
         }
 
         return $order;
@@ -99,7 +99,7 @@ class PackingService
 
         return [
             'id' => $order->ulid,
-            'external_order_id' => $order->external_order_id,
+            'external_order_id' => $order->external_order_id, 'code' => $order->code,
             'marketplace' => $order->marketplace,
             'shop' => $order->account->shop_name ?? $order->channel?->name,
             'buyer_name' => $order->buyer_name,
@@ -163,7 +163,7 @@ class PackingService
     /**
      * Today's figures for the side panel, on the shop's clock.
      *
-     * @return array{packed_today: int, errors_today: int, remaining: int, recent: Collection<int, array{id: string, external_order_id: string, items: int, by: string|null, at: string}>}
+     * @return array{packed_today: int, errors_today: int, remaining: int, recent: Collection<int, array{id: string, external_order_id: string, code: string|null, items: int, by: string|null, at: string}>}
      */
     public function stats(): array
     {
@@ -180,7 +180,7 @@ class PackingService
             'remaining' => OrderQuery::visible(Order::query())->where('status', OrderStatus::READY_TO_PACK)->count(),
             'recent' => $recent->filter(fn (OrderStatusHistory $h) => $orders->has($h->order_id))->map(fn (OrderStatusHistory $h) => [
                 'id' => $orders[$h->order_id]->ulid,
-                'external_order_id' => $orders[$h->order_id]->external_order_id,
+                'external_order_id' => $orders[$h->order_id]->external_order_id, 'code' => $orders[$h->order_id]->code,
                 'items' => (int) $orders[$h->order_id]->items_count,
                 'by' => $h->actor?->name,
                 'at' => $h->created_at->toIso8601String(),

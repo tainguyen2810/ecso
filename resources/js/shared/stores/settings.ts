@@ -33,6 +33,17 @@ export interface TenantSettingsData {
     subscriptions: { remind_days: number[]; zalo: boolean; notify_staff: boolean };
     print: { defaults: Record<'sale' | 'purchase' | 'receipt' | 'stocktake' | 'cash', PrintSize>; show_logo: boolean; show_qr: boolean; show_signatures: boolean; footer: string | null; label_extras: LabelExtrasSettings };
     shipping?: ShippingSettings;
+    /** Mã đơn hàng (Cấu hình › Mã đơn hàng): off until the shop starts it. */
+    order_codes?: OrderCodeSettings;
+}
+
+export interface OrderCodeSettings {
+    enabled: boolean;
+    mode: 'shared' | 'per_source';
+    prefix: string;
+    prefixes: Record<'manual' | 'shopee' | 'tiktok' | 'woocommerce', string | null>;
+    started_at: string | null;
+    started: { count: number; first: string | null; last: string | null } | null;
 }
 
 /** Chữ in thêm lên phiếu sàn (Shopee, TikTok). accounts: null = every shop, else the chosen shops' ids. */

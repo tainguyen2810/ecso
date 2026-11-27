@@ -1,3 +1,4 @@
+import { orderCode } from '@/shared/orderCode';
 import { formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { paymentMethodNames } from './labels';
 import type { OrderDetail } from '@/shared/types';
@@ -61,7 +62,7 @@ function contactLine(shop: PrintShop): string {
 function qrBlock(order: OrderDetail, shop: PrintShop, width: string): string {
     const due = dueOf(order);
     if (!shop.bank || due <= 0) return '';
-    return `<div class="qr"><img src="${esc(vietQrUrl(shop.bank, due, order.external_order_id))}" alt="VietQR" style="width:${width}"><div>Quét mã để chuyển khoản ${formatMoney(due)}<br>${esc(shop.bank.bank)} · ${esc(shop.bank.number)} · ${esc(shop.bank.holder)}</div></div>`;
+    return `<div class="qr"><img src="${esc(vietQrUrl(shop.bank, due, orderCode(order)))}" alt="VietQR" style="width:${width}"><div>Quét mã để chuyển khoản ${formatMoney(due)}<br>${esc(shop.bank.bank)} · ${esc(shop.bank.number)} · ${esc(shop.bank.holder)}</div></div>`;
 }
 
 /** Thermal roll (K80 / K57): one column, each line then "qty × price … amount". */
@@ -76,7 +77,7 @@ function rollHtml(order: OrderDetail, shopArg: string | PrintShop, size: 'k80' |
         .join('');
     const k80 = size === 'k80';
 
-    return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${esc(order.external_order_id)}</title>
+    return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${esc(orderCode(order))}</title>
 <style>
 @page { size: ${k80 ? '80mm' : '57mm'} auto; margin: ${k80 ? '4mm' : '2mm'}; }
 * { box-sizing: border-box; }
@@ -95,7 +96,7 @@ hr { border: 0; border-top: 1px dashed #000; margin: 6px 0; }
 ${shop.logo ? `<img class="logo" src="${esc(shop.logo)}" alt="">` : ''}
 <h1>${esc(shopName)}</h1>
 ${contactLine(shop) ? `<p class="c muted">${contactLine(shop)}</p>` : `<p class="c muted">${esc(order.channel?.name ?? '')}</p>`}
-<p class="c"><b>HÓA ĐƠN BÁN HÀNG</b><br>${esc(order.external_order_id)} · ${formatDateTime(order.placed_at)}</p>
+<p class="c"><b>HÓA ĐƠN BÁN HÀNG</b><br>${esc(orderCode(order))} · ${formatDateTime(order.placed_at)}</p>
 ${order.buyer_name ? `<p>Khách: <b>${esc(order.buyer_name)}</b>${order.buyer_phone ? ` · ${esc(order.buyer_phone)}` : ''}${order.shipping_address ? `<br>${esc(order.shipping_address)}` : ''}</p>` : ''}
 <hr><table>${rows}</table>
 <table>${totalsRows(order)}</table>
@@ -116,7 +117,7 @@ function sheetHtml(order: OrderDetail, shopArg: string | PrintShop, size: 'a4' |
         )
         .join('');
 
-    return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${esc(order.external_order_id)}</title>
+    return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${esc(orderCode(order))}</title>
 <style>
 @page { size: ${a5 ? 'A5 landscape' : 'A4'}; margin: ${a5 ? '8mm 10mm' : '12mm'}; }
 * { box-sizing: border-box; }
@@ -138,7 +139,7 @@ table.sum { width: 45%; border-collapse: collapse; } table.sum td { padding: 2px
 .qr { display: flex; gap: 8px; align-items: center; margin-top: 6px; font-size: 10px; }
 .footer { text-align: center; margin-top: 6px; color: #444; }
 </style></head><body>
-<div class="head"><div class="brand">${shop.logo ? `<img src="${esc(shop.logo)}" alt="">` : ''}<div><h1>${esc(shopName)}</h1><div class="muted">${contactLine(shop) || esc(order.channel?.name ?? '')}</div></div></div><div class="r">Số: <b>${esc(order.external_order_id)}</b><br>${formatDateTime(order.placed_at)}</div></div>
+<div class="head"><div class="brand">${shop.logo ? `<img src="${esc(shop.logo)}" alt="">` : ''}<div><h1>${esc(shopName)}</h1><div class="muted">${contactLine(shop) || esc(order.channel?.name ?? '')}</div></div></div><div class="r">Số: <b>${esc(orderCode(order))}</b><br>${formatDateTime(order.placed_at)}</div></div>
 <div class="title">HÓA ĐƠN BÁN HÀNG</div>
 <div class="info">
 <div>Khách hàng: <b>${esc(order.buyer_name ?? order.customer?.name ?? 'Khách lẻ')}</b>${order.buyer_phone ? `<br>Điện thoại: ${esc(order.buyer_phone)}` : ''}</div>
@@ -166,7 +167,7 @@ export function deliverySlipHtml(order: OrderDetail, shopArg: string | PrintShop
         .map((i, n) => `<tr><td class="c">${n + 1}</td><td>${esc(i.name)}${i.variant_name ? `<br><small>${esc(i.variant_name)}</small>` : ''}</td><td class="c">${esc(i.variant?.sku ?? i.seller_sku ?? '')}</td><td class="r">${formatNumber(i.quantity)}</td></tr>`)
         .join('');
 
-    return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Giao ${esc(order.external_order_id)}</title>
+    return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Giao ${esc(orderCode(order))}</title>
 <style>
 @page { size: ${a5 ? 'A5 landscape' : 'A4'}; margin: ${a5 ? '8mm 10mm' : '12mm'}; }
 * { box-sizing: border-box; }
@@ -183,7 +184,7 @@ table.lines th { background: #eee; font-weight: bold; }
 .sign { display: flex; justify-content: space-around; margin-top: ${a5 ? '10px' : '24px'}; text-align: center; }
 .sign div { width: 40%; } .sign small { display: block; color: #444; margin-bottom: ${a5 ? '28px' : '48px'}; }
 </style></head><body>
-<div class="head"><div><h1>${esc(shop.name)}</h1><div class="muted">${contactLine(shop)}</div></div><div class="r">Đơn: <b>${esc(order.external_order_id)}</b><br>${formatDateTime(order.placed_at)}${order.tracking_number ? `<br>Mã vận đơn: <b>${esc(order.tracking_number)}</b>` : ''}</div></div>
+<div class="head"><div><h1>${esc(shop.name)}</h1><div class="muted">${contactLine(shop)}</div></div><div class="r">Đơn: <b>${esc(orderCode(order))}</b><br>${formatDateTime(order.placed_at)}${order.tracking_number ? `<br>Mã vận đơn: <b>${esc(order.tracking_number)}</b>` : ''}</div></div>
 <div class="title">PHIẾU GIAO HÀNG</div>
 <div class="info">
 <div><b>Người nhận</b><br>${esc(order.buyer_name ?? order.customer?.name ?? '')}${order.buyer_phone ? `<br>ĐT: <b>${esc(order.buyer_phone)}</b>` : ''}<br>${esc(order.shipping_address ?? '')}</div>

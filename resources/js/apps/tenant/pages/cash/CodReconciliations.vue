@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { orderCode } from '@/shared/orderCode';
 import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { ArrowRight, Banknote, FileUp, Landmark, Smartphone, Truck, Wallet } from 'lucide-vue-next';
@@ -54,7 +55,7 @@ interface HeldParcel {
     fee_actual: string | null;
     fee_estimated: string | null;
     delivered_at: string | null;
-    order?: { id: string; external_order_id: string; channel: string | null };
+    order?: { id: string; external_order_id: string; code?: string | null; channel: string | null };
 }
 const route = useRoute();
 const tab = ref<'waiting' | 'sessions' | 'fee'>(route.query.tab === 'fee' ? 'fee' : 'waiting');
@@ -254,7 +255,7 @@ function saved(r: CodReconciliation) {
                     <tbody class="divide-y">
                         <tr v-for="p in held" :key="p.id" class="hover:bg-muted/30">
                             <td class="px-4 py-3">
-                                <RouterLink v-if="p.order" :to="`/orders/${p.order.id}`" class="font-medium text-primary hover:underline">{{ p.order.external_order_id }}</RouterLink>
+                                <RouterLink v-if="p.order" :to="`/orders/${p.order.id}`" class="font-medium text-primary hover:underline">{{ orderCode(p.order) }}</RouterLink>
                                 <p class="text-xs text-muted-foreground">{{ p.carrier_name }}<template v-if="p.tracking_number"> · <span class="font-mono">{{ p.tracking_number }}</span></template></p>
                             </td>
                             <td class="whitespace-nowrap px-4 py-3 text-muted-foreground">{{ p.delivered_at ? formatDate(p.delivered_at) : '—' }}</td>
@@ -291,7 +292,7 @@ function saved(r: CodReconciliation) {
                     <tbody class="divide-y">
                         <tr v-for="p in gap" :key="p.id" class="hover:bg-muted/30">
                             <td class="px-4 py-3">
-                                <RouterLink v-if="p.order" :to="`/orders/${p.order.id}`" class="font-medium text-primary hover:underline">{{ p.order.external_order_id }}</RouterLink>
+                                <RouterLink v-if="p.order" :to="`/orders/${p.order.id}`" class="font-medium text-primary hover:underline">{{ orderCode(p.order) }}</RouterLink>
                                 <p class="text-xs text-muted-foreground">{{ p.carrier_name }}<template v-if="p.tracking_number"> · <span class="font-mono">{{ p.tracking_number }}</span></template></p>
                             </td>
                             <td class="whitespace-nowrap px-4 py-3 text-right tabular-nums text-muted-foreground">{{ formatMoney(p.fee_estimated) }}</td>

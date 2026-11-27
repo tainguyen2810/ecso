@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { orderCode } from '@/shared/orderCode';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { CircleCheck, Download, Printer, RotateCcw } from 'lucide-vue-next';
 import Button from '@/shared/ui/Button.vue';
@@ -37,7 +38,7 @@ const byProduct = ref(true);
 const withPickList = ref(false);
 const busy = ref(false);
 const progress = ref<{ done: number; total: number } | null>(null);
-type Failure = { id: string; external_order_id: string; message: string };
+type Failure = { id: string; external_order_id: string; code?: string | null; message: string };
 const failed = ref<Failure[]>([]);
 /** The merged PDF of the last run, for "Mở phiếu để in" and "Tải file PDF". */
 const ready = ref<{ url: string; count: number; key: string } | null>(null);
@@ -168,7 +169,7 @@ const fileName = computed(() => `phieu-san-${new Date().toISOString().slice(0, 1
                 <button type="button" class="ml-auto inline-flex items-center gap-1 font-medium text-rose-700 hover:underline" data-testid="label-retry" @click="print(failed.map((f) => f.id))"><RotateCcw class="size-3.5" /> In lại đơn lỗi</button>
             </div>
             <ul class="space-y-0.5">
-                <li v-for="f in failed" :key="f.id"><b v-if="f.external_order_id" class="tabular-nums">{{ f.external_order_id }}: </b>{{ f.message }}</li>
+                <li v-for="f in failed" :key="f.id"><b v-if="f.external_order_id" class="tabular-nums">{{ orderCode(f) }}: </b>{{ f.message }}</li>
             </ul>
         </div>
         <div class="mt-3 flex justify-end">

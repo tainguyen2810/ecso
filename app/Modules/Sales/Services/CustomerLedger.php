@@ -25,12 +25,12 @@ class CustomerLedger
     public function entries(Customer $customer): array
     {
         $orders = CustomerDebt::constrain(Order::query()->where('orders.customer_id', $customer->id))
-            ->get(['id', 'ulid', 'external_order_id', 'total', 'placed_at', 'created_at']);
+            ->get(['id', 'ulid', 'external_order_id', 'code', 'total', 'placed_at', 'created_at']);
         $byId = $orders->keyBy('id');
         $at = fn ($value) => $value ? Carbon::parse($value)->toIso8601String() : null;
 
         $lines = $orders->map(fn (Order $o) => [
-            'type' => 'order', 'ref' => $o->external_order_id, 'order_id' => $o->ulid,
+            'type' => 'order', 'ref' => $o->displayCode(), 'order_id' => $o->ulid,
             'at' => ($o->placed_at ?? $o->created_at)?->toIso8601String(), 'note' => 'Ghi nhận đơn hàng', 'change' => bcadd((string) $o->total, '0', 2),
         ])->all();
 
@@ -43,7 +43,7 @@ class CustomerLedger
             }
             $order = $byId[$r->order_id];
             $lines[] = [
-                'type' => 'return', 'ref' => $order->external_order_id, 'order_id' => $order->ulid,
+                'type' => 'return', 'ref' => $order->displayCode(), 'order_id' => $order->ulid,
                 'at' => $at($r->created_at), 'note' => 'Trả hàng', 'change' => bcsub('0', (string) $r->value, 2),
             ];
         }
@@ -54,7 +54,7 @@ class CustomerLedger
             $order = $byId[$p->order_id];
             $refund = $p->kind === OrderPayment::REFUND;
             $lines[] = [
-                'type' => $refund ? 'refund' : 'payment', 'ref' => $order->external_order_id, 'order_id' => $order->ulid,
+                'type' => $refund ? 'refund' : 'payment', 'ref' => $order->displayCode(), 'order_id' => $order->ulid,
                 'at' => $p->paid_at->toIso8601String(),
                 'note' => $p->method === OrderPayment::EXCHANGE ? ($refund ? 'Bù trừ đổi hàng (đơn gốc)' : 'Bù trừ đổi hàng (đơn mới)') : ($refund ? 'Hoàn tiền' : 'Thu tiền'),
                 'change' => $refund ? bcadd((string) $p->amount, '0', 2) : bcsub('0', (string) $p->amount, 2),

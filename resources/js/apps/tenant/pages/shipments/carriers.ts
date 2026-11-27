@@ -67,6 +67,7 @@ export interface CarrierChoice {
 export interface QueueRow {
     id: string;
     external_order_id: string;
+    code?: string | null;
     marketplace: string;
     status: string;
     recipient: string | null;

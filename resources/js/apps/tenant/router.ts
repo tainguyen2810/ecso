@@ -127,6 +127,7 @@ const routes: RouteRecordRaw[] = [
         { path: 'settings/data-migration', name: 'settings-data-migration', component: () => import('./pages/settings/DataMigration.vue'), meta: { anyPermission: ['products.manage', 'customers.import'], nav: 'settings' } },
             { path: 'settings/connections', name: 'settings-connections', component: () => import('./pages/connections/ServiceConnections.vue'), meta: { permission: 'settings.manage', nav: 'settings' } },
             { path: 'settings/connections/zalo', name: 'settings-zalo', component: () => import('./pages/connections/ZaloSettings.vue'), meta: { permission: 'settings.manage', nav: 'settings' } },
+            { path: 'settings/order-codes', name: 'settings-order-codes', component: () => import('./pages/settings/OrderCodeSettings.vue'), meta: { permission: 'settings.manage', nav: 'settings' } },
             { path: 'settings/print', name: 'settings-print', component: () => import('./pages/settings/PrintSettings.vue'), meta: { permission: 'settings.manage', nav: 'settings' } },
             { path: 'forbidden', name: 'forbidden', component: () => import('./pages/Forbidden.vue') },
         ],

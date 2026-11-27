@@ -21,6 +21,7 @@ import { useToast } from '@/shared/composables/useToast';
 import { useAuthStore } from '@/shared/stores/auth';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useSettingsStore } from '@/shared/stores/settings';
+import { orderCode } from '@/shared/orderCode';
 import { enabledMethods } from '@/shared/lib/paymentMethods';
 import { CARRIERS, emptyAddress, type AddressParts } from '@/shared/lib/geo';
 import { channelTypes, paymentMethods } from './labels';
@@ -103,6 +104,8 @@ const form = reactive({
     note: '',
     tags: [] as string[],
     deliver_on: '',
+    code: '',
+    reference: '',
     pay_method: 'cash',
     pay_amount: '' as number | string,
     placed_at: '',
@@ -110,6 +113,25 @@ const form = reactive({
 // Cấu hình: default price list and payment method, who may change prices, back-dating a sale.
 const settings = useSettingsStore();
 const canEditPrice = computed(() => (settings.data?.pricing.staff_edit_price ?? true) || tenant.can('orders.price'));
+// Mã đơn hàng: once the shop numbers its orders, the form shows the next number (or takes one typed by hand).
+const codesOn = computed(() => !!settings.data?.order_codes?.enabled);
+const nextCode = ref<string | null>(null);
+const editingCode = ref<string | null>(null);
+watch(
+    codesOn,
+    async (on) => {
+        if (!on || editId.value) return;
+        try {
+            const { data } = await api.get('/order-codes');
+            const c = data.data;
+            const prefix = (c.mode === 'per_source' && c.prefixes?.manual) || c.prefix;
+            nextCode.value = c.next?.[prefix] ? `${prefix}${c.next[prefix]}` : null;
+        } catch {
+            nextCode.value = null;
+        }
+    },
+    { immediate: true },
+);
 const canBackdate = computed(() => !editId.value && !!settings.data?.sales.allow_change_sale_time);
 const payOptions = computed(() => enabledMethods(Object.entries(paymentMethods).filter(([k]) => k !== 'cod').map(([value, label]) => ({ value, label })), settings.data));
 const saving = ref(false);
@@ -217,7 +239,7 @@ async function loadOrder(id: string, asCopy = false) {
     }
     if (!asCopy || o.channel) form.channel_id = o.channel?.id ?? '';
     if (!asCopy || o.warehouse) form.warehouse_id = o.warehouse?.id ?? form.warehouse_id;
-    copiedFrom.value = asCopy ? o.external_order_id : null;
+    copiedFrom.value = asCopy ? orderCode(o) : null;
     loadedVersion.value = asCopy ? null : (o.version ?? null);
     orderTax.value = asCopy || o.tax_rate === undefined ? null : { rate: Number(o.tax_rate) || 0, included: o.prices_include_tax ?? true };
     // A marketplace line without an internal SKU cannot be sold again from here.
@@ -238,6 +260,8 @@ async function loadOrder(id: string, asCopy = false) {
     form.note = o.buyer_note ?? '';
     form.tags = [...(o.tags ?? [])];
     form.deliver_on = asCopy ? '' : (o.deliver_on ?? '');
+    form.reference = asCopy ? '' : (o.reference ?? '');
+    editingCode.value = asCopy ? null : orderCode(o);
     customer.value = o.customer ? { ...o.customer, phone: null, address: null } : null;
     lines.value = o.items.map((i) => ({
         uid: nextUid++,
@@ -683,7 +707,7 @@ async function loadExchange(returnId: string) {
     const { data } = await api.get(`/returns/${returnId}`);
     exchange.value = data.data;
     if (exchange.value?.exchange_order) {
-        toast.error(`Phiếu ${exchange.value.number} đã đổi sang đơn ${exchange.value.exchange_order.external_order_id}.`);
+        toast.error(`Phiếu ${exchange.value.number} đã đổi sang đơn ${orderCode(exchange.value.exchange_order)}.`);
         exchange.value = null;
         return;
     }
@@ -745,6 +769,7 @@ async function submit() {
         note: form.note || null,
         tags: form.tags,
         deliver_on: form.deliver_on || null,
+        reference: form.reference.trim() || null,
         lines: lines.value.map((l) => ({
             ...(l.kind === 'service' ? { name: l.name.trim() } : { variant_id: l.variant_id }),
             ...(l.sub ? { start: l.sub.start || null, label: l.sub.label.trim() || null, subscription_id: l.sub.subscription_id || null } : {}),
@@ -761,8 +786,8 @@ async function submit() {
         } else {
             const payments = num(form.pay_amount) > 0 ? [{ method: form.pay_method, amount: num(form.pay_amount) }] : [];
             const placedAt = canBackdate.value && form.placed_at ? form.placed_at.replace('T', ' ') : null;
-            const { data } = await api.post('/sales-orders', { ...body, channel_id: form.channel_id, stage: form.stage, payments, exchange_return_id: exchange.value?.id ?? null, ...(placedAt ? { placed_at: placedAt } : {}) }, idempotent(createKey));
-            toast.success(`Đã tạo đơn ${data.data.external_order_id}`);
+            const { data } = await api.post('/sales-orders', { ...body, channel_id: form.channel_id, stage: form.stage, ...(codesOn.value && form.code.trim() ? { code: form.code.trim() } : {}), payments, exchange_return_id: exchange.value?.id ?? null, ...(placedAt ? { placed_at: placedAt } : {}) }, idempotent(createKey));
+            toast.success(`Đã tạo đơn ${orderCode(data.data)}`);
             if (draftId.value) await api.delete(`/order-drafts/${draftId.value}`).catch(() => {});
             if (delivery.value === 'api' && carrierChoice.value) await pushNew(data.data.id);
             await router.push(`/orders/${data.data.id}`);
@@ -936,7 +961,7 @@ async function saveDraft() {
     <div v-if="loading" class="space-y-6"><Skeleton class="h-40" /><Skeleton class="h-64" /></div>
     <Alert v-if="!loading && exchange" :icon="Repeat" tone="blue" class="mb-6" data-testid="exchange-banner">
         <span>
-            Đơn đổi hàng cho phiếu trả <b class="font-mono">{{ exchange.number }}</b> (đơn {{ exchange.order?.external_order_id }}). Hàng trả trị giá
+            Đơn đổi hàng cho phiếu trả <b class="font-mono">{{ exchange.number }}</b> (đơn {{ orderCode(exchange.order) }}). Hàng trả trị giá
             <b>{{ formatMoney(exchange.goods_value) }}</b> được trừ vào đơn này, tối đa bằng số khách đã trả ở đơn cũ. Chọn sản phẩm khách lấy đổi.
         </span>
     </Alert>
@@ -1080,6 +1105,25 @@ async function saveDraft() {
                             <DateInput weekday quick="future" id="o-deliver-on" v-model="form.deliver_on" data-testid="form-deliver-on" />
                         </div>
                     </template>
+                    <div v-if="editId && editingCode" class="grid grid-cols-[80px_1fr] items-center gap-2">
+                        <span>Mã đơn</span>
+                        <span class="flex h-9 items-center truncate rounded-md border border-input bg-muted/60 px-3 font-mono">{{ editingCode }}</span>
+                    </div>
+                    <div v-else-if="codesOn" class="grid grid-cols-[80px_1fr] items-start gap-2">
+                        <label for="o-code" class="pt-2">Mã đơn</label>
+                        <div>
+                            <Input id="o-code" v-model="form.code" :placeholder="nextCode ?? 'Tự cấp khi tạo đơn'" maxlength="30" class="font-mono" data-testid="form-code" />
+                            <p class="mt-1 text-xs text-muted-foreground">Để trống: tự cấp số tiếp theo</p>
+                        </div>
+                    </div>
+                    <p v-if="error?.field('code')" class="text-xs text-destructive">{{ error.field('code') }}</p>
+                    <div class="grid grid-cols-[80px_1fr] items-start gap-2">
+                        <label for="o-reference" class="pt-2 leading-tight">Mã tham chiếu</label>
+                        <div>
+                            <Input id="o-reference" v-model="form.reference" placeholder="VD: mã đơn Woo, mã sàn…" maxlength="100" data-testid="form-reference" />
+                            <p class="mt-1 text-xs text-muted-foreground">Không bắt buộc, tìm được trong danh sách đơn</p>
+                        </div>
+                    </div>
                     <div v-if="canBackdate" class="grid grid-cols-[80px_1fr] items-center gap-2">
                         <label for="o-placed-at">Ngày bán</label>
                         <DateTimeInput id="o-placed-at" v-model="form.placed_at" :max="new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)" data-testid="form-placed-at" />

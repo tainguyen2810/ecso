@@ -15,6 +15,7 @@ use App\Modules\Orders\Models\OrderItem;
 use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Orders\Models\OrderStatusHistory;
 use App\Modules\Orders\Services\ExchangeService;
+use App\Modules\Orders\Services\OrderCodes;
 use App\Modules\Orders\Services\OrderIngestor;
 use App\Modules\Orders\Services\OrderStockSync;
 use App\Modules\Orders\Support\OrderTags;
@@ -27,6 +28,7 @@ use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Sales\Promotions\OrderPromotions;
 use App\Modules\Sales\Subscriptions\SubscriptionService;
 use App\Modules\Sales\Support\PhoneNumber;
+use App\Modules\Tenancy\Support\TenantContext;
 use App\Modules\Tenancy\Support\TenantSettings;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -71,6 +73,7 @@ class ManualOrderService
         private readonly OrderPromotions $promotions,
         private readonly LoyaltyService $loyalty,
         private readonly SubscriptionService $subscriptions,
+        private readonly OrderCodes $codes,
     ) {}
 
     /**
@@ -93,10 +96,13 @@ class ManualOrderService
             };
 
             $order = new Order;
-            $number = DocumentNumber::next('SO');
+            $code = $this->orderCode($data);
+            // With Mã đơn hàng on, the shop's number is also the order's own id; before that, SO-000123 as always.
+            $number = $code ?? DocumentNumber::next('SO');
             $order->forceFill([
                 'marketplace' => Order::SOURCE_MANUAL,
                 'external_order_id' => $number,
+                'code' => $code,
                 'sales_channel_id' => $channel->id,
                 'warehouse_id' => $warehouse->id,
                 'cash_shift_id' => $shift?->id,
@@ -196,7 +202,7 @@ class ManualOrderService
 
             if (isset($data['warehouse_id']) || isset($data['lines'])) {
                 $ids = $order->items()->pluck('id')->map(fn ($id) => (int) $id)->all();
-                $this->ledger->releaseAll(Order::STOCK_REFERENCE, $ids, "Sửa đơn {$order->external_order_id}");
+                $this->ledger->releaseAll(Order::STOCK_REFERENCE, $ids, "Sửa đơn {$order->displayCode()}");
                 if (isset($data['warehouse_id'])) {
                     $order->warehouse_id = $this->warehouse($data['warehouse_id'], $order->channel)->id;
                 }
@@ -326,6 +332,31 @@ class ManualOrderService
     /**
      * @param  array<string, mixed>  $data
      */
+    /**
+     * Mã đơn of a new order: the code typed on the form (must be free) or the next number; null while the shop has
+     * not started its numbering (Cấu hình › Mã đơn hàng).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function orderCode(array $data): ?string
+    {
+        $tenant = app(TenantContext::class)->tenant();
+        if (! OrderCodes::enabled($tenant)) {
+            return null;
+        }
+        $typed = strtoupper(trim((string) ($data['code'] ?? '')));
+        if ($typed !== '') {
+            if (! OrderCodes::isFree($tenant->id, $typed)) {
+                throw ValidationException::withMessages(['code' => "Mã đơn {$typed} đã có, nhập mã khác hoặc để trống để tự cấp."]);
+            }
+
+            return $typed;
+        }
+
+        return $this->codes->forNewOrder($tenant, Order::SOURCE_MANUAL);
+    }
+
+    /** @param  array<string, mixed>  $data */
     private function fillDetails(Order $order, array $data, ?Customer $customer): void
     {
         $phone = array_key_exists('buyer_phone', $data) ? $data['buyer_phone'] : ($order->exists ? $order->buyer_phone : $customer?->phone);
@@ -349,6 +380,9 @@ class ManualOrderService
             if (array_key_exists($field, $data)) {
                 $order->forceFill([$field => bcadd((string) ($data[$field] ?? 0), '0', 2)]);
             }
+        }
+        if (array_key_exists('reference', $data)) {
+            $order->reference = ($ref = trim((string) $data['reference'])) !== '' ? $ref : null;
         }
         foreach (['note' => 'buyer_note', 'carrier' => 'shipping_carrier', 'tracking_number' => 'tracking_number', 'ship_by_at' => 'ship_by_at', 'deliver_on' => 'deliver_on'] as $input => $column) {
             if (array_key_exists($input, $data)) {

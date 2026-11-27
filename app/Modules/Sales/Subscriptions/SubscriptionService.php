@@ -98,11 +98,11 @@ class SubscriptionService
 
             $range = $start->format('d/m/Y').' – '.$end->format('d/m/Y');
             if ($status === CustomerSubscriptionPeriod::ACTIVE && $previous?->status !== CustomerSubscriptionPeriod::ACTIVE) {
-                $this->log($sub, 'renewed', "Thêm {$months} tháng ({$range}) · đơn {$order->external_order_id}");
+                $this->log($sub, 'renewed', "Thêm {$months} tháng ({$range}) · đơn {$order->displayCode()}");
             } elseif ($status === CustomerSubscriptionPeriod::VOID && $previous?->status !== CustomerSubscriptionPeriod::VOID) {
-                $this->log($sub, 'period_void', "Đơn {$order->external_order_id} đã huỷ: bỏ kỳ {$range}");
+                $this->log($sub, 'period_void', "Đơn {$order->displayCode()} đã huỷ: bỏ kỳ {$range}");
             } elseif ($status === CustomerSubscriptionPeriod::PENDING && $previous === null) {
-                $this->log($sub, 'renewal_order', "Đơn {$order->external_order_id} chờ xác nhận: {$months} tháng ({$range})");
+                $this->log($sub, 'renewal_order', "Đơn {$order->displayCode()} chờ xác nhận: {$months} tháng ({$range})");
             }
         }
     }
@@ -147,7 +147,7 @@ class SubscriptionService
             'assigned_to' => $order->assigned_to ?? Auth::id(),
             'remind' => $product->subscriptionRules()['remind'],
         ]);
-        $this->log($sub, 'created', "Bán từ đơn {$order->external_order_id}");
+        $this->log($sub, 'created', "Bán từ đơn {$order->displayCode()}");
 
         return $sub;
     }

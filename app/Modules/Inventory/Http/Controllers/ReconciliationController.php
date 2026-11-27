@@ -49,14 +49,14 @@ class ReconciliationController extends Controller
             ->where('r.status', StockReservation::CONSUMED)->where('r.shortage', '>', 0)
             ->where('r.consumed_at', '>=', now()->subDays(90))
             ->orderByDesc('r.consumed_at')->limit(200)
-            ->get(['r.warehouse_id', 'r.product_variant_id', 'r.quantity', 'r.shortage', 'r.consumed_at', 'o.ulid as order_id', 'o.external_order_id', 'o.marketplace']);
+            ->get(['r.warehouse_id', 'r.product_variant_id', 'r.quantity', 'r.shortage', 'r.consumed_at', 'o.ulid as order_id', 'o.external_order_id', 'o.code', 'o.marketplace']);
         $names = $this->names($tenant, $short->pluck('warehouse_id')->all(), $short->pluck('product_variant_id')->all());
 
         return response()->json(['data' => [
             'checked_at' => now()->toIso8601String(),
             'ledger' => $ledger,
             'shortages' => $short->map(fn ($r) => [
-                'order' => ['id' => $r->order_id, 'number' => $r->external_order_id, 'marketplace' => $r->marketplace],
+                'order' => ['id' => $r->order_id, 'number' => $r->code ?? $r->external_order_id, 'marketplace' => $r->marketplace],
                 'warehouse' => $names['warehouses'][$r->warehouse_id] ?? null,
                 'variant' => $names['variants'][$r->product_variant_id] ?? null,
                 'quantity' => (int) $r->quantity,

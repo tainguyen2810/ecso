@@ -304,7 +304,7 @@ class CodReconciliationService
             return $result;
         }
         /** @var Order|null $order */
-        $order = $candidates->first() ?? $own()->where('external_order_id', $tracking)->first();
+        $order = $candidates->first() ?? $own()->where(fn ($w) => $w->where('external_order_id', $tracking)->orWhere('code', $tracking))->first();
         if ($order && $lock) {
             /** @var Order|null $order */
             $order = Order::query()->whereKey($order->id)->lockForUpdate()->first();
@@ -317,7 +317,7 @@ class CodReconciliationService
         $key = (int) $order->id;
         $owed[$key] ??= (string) ($order->isManual() ? $order->balanceDue() : $this->payments->unconfirmed($order));
         $due = $owed[$key];
-        $result['order'] = ['id' => $order->ulid, 'number' => $order->external_order_id, 'total' => (string) $order->total, 'due' => $due, 'status' => $order->status];
+        $result['order'] = ['id' => $order->ulid, 'number' => $order->displayCode(), 'total' => (string) $order->total, 'due' => $due, 'status' => $order->status];
         $result['order_key'] = $order->id;
 
         if ($order->status === OrderStatus::CANCELLED) {
