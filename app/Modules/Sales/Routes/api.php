@@ -9,6 +9,7 @@ use App\Modules\Sales\Http\Controllers\CustomerMergeController;
 use App\Modules\Sales\Http\Controllers\CustomerProfileController;
 use App\Modules\Sales\Http\Controllers\CustomerTaskController;
 use App\Modules\Sales\Http\Controllers\CustomerTransferController;
+use App\Modules\Sales\Http\Controllers\EzChatInboxController;
 use App\Modules\Sales\Http\Controllers\EzChatLinkController;
 use App\Modules\Sales\Http\Controllers\EzChatStoreController;
 use App\Modules\Sales\Http\Controllers\LoyaltyController;
@@ -39,6 +40,10 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::put('ezchat-link', [EzChatLinkController::class, 'update']);
     Route::delete('ezchat-link', [EzChatLinkController::class, 'destroy']);
     Route::post('ezchat-link/grant', [EzChatLinkController::class, 'grant'])->middleware('throttle:20,1,sales.ezchat-link.grant');
+    // "Tin nhắn": the EzChat inbox inside this app.
+    Route::get('ezchat-inbox', [EzChatInboxController::class, 'show'])->middleware('throttle:120,1,sales.ezchat-inbox');
+    Route::post('ezchat-inbox/open', [EzChatInboxController::class, 'open'])->middleware('throttle:30,1,sales.ezchat-inbox.open');
+    Route::get('ezchat-inbox/customer', [EzChatInboxController::class, 'customer'])->middleware('throttle:240,1,sales.ezchat-inbox.customer');
     Route::apiResource('sales-channels', SalesChannelController::class)->except('show');
 
     // Thuê bao, gia hạn.

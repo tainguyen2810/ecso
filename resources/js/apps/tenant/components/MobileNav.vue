@@ -3,6 +3,7 @@ import PushToggle from './PushToggle.vue';
 import { computed, ref, watch, type Component } from 'vue';
 import { useRoute } from 'vue-router';
 import {
+    MessagesSquare,
     BarChart3,
     Boxes,
     Check,
@@ -32,6 +33,7 @@ import { useTenantStore } from '@/shared/stores/tenant';
 import { inboxItems, ordersWaiting } from './inbox';
 import { usePwaInstall } from '../pwa';
 import { hidesPos } from '../pages/setup/setup';
+import { inboxAvailable } from '../composables/ezchatInbox';
 
 /**
  * Phone menu (B6): a bar at the bottom with the four places a shop owner opens most and "Thêm" for the rest.
@@ -54,6 +56,7 @@ const groups = computed(() =>
         {
             label: 'Bán hàng',
             tiles: [
+                { label: 'Tin nhắn', to: '/messages', icon: MessagesSquare, can: inboxAvailable.value },
                 { label: 'Bán tại quầy', to: '/pos', icon: Store, can: any('orders.create') && !hidesPos(tenant.current?.channels) },
                 { label: 'Khách hàng', to: '/customers', icon: UsersRound, can: any('customers.view') },
                 { label: 'Đóng gói', to: '/orders/pack', icon: ScanBarcode, can: any('orders.pack') },
