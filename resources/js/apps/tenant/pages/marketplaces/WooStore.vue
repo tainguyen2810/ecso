@@ -62,7 +62,11 @@ async function load() {
         loading.value = false;
     }
 }
-onMounted(load);
+onMounted(async () => {
+    await load();
+    // "Ánh xạ trạng thái" link from an order: scroll to the card once it is on the page.
+    if (route.hash === '#status-map') setTimeout(() => document.getElementById('status-map')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+});
 
 async function run(key: string, fn: () => Promise<string | void>) {
     busy.value = key;
@@ -108,15 +112,18 @@ const topicLabels: Record<string, string> = {
 
 function setStatusMap(m: StatusMapData) {
     statusMap.value = m;
-    mapDraft.value = { ...m.custom };
+    // Statuses a plugin added come pre-filled with a guess from their name; nothing changes until "Lưu".
+    mapDraft.value = { ...(m.suggested ?? {}), ...m.custom };
 }
 /** Raw statuses to show: the ones orders came with, the store's own entries and the shared defaults. */
 const mapRows = computed(() => {
     const m = statusMap.value;
     if (!m) return [];
-    const raws = new Set([...m.seen.map((x) => x.raw_status), ...Object.keys(m.custom), ...Object.keys(m.defaults)]);
+    const raws = new Set([...m.seen.map((x) => x.raw_status), ...Object.keys(m.custom), ...Object.keys(m.defaults), ...Object.keys(m.labels ?? {})]);
     return [...raws].sort((a, b) => (m.seen.find((x) => x.raw_status === b)?.unknown ?? 0) - (m.seen.find((x) => x.raw_status === a)?.unknown ?? 0) || a.localeCompare(b)).map((raw) => ({
         raw,
+        label: m.labels?.[raw] ?? null,
+        suggested: !m.custom[raw] && m.suggested?.[raw] && mapDraft.value[raw] === m.suggested[raw] ? m.suggested[raw] : null,
         fallback: m.defaults[raw] ?? null,
         seen: m.seen.find((x) => x.raw_status === raw) ?? null,
     }));
@@ -312,7 +319,7 @@ const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].
                 </div>
             </Card>
 
-            <Card title="Ánh xạ trạng thái" description="Trạng thái đơn trên website (kể cả trạng thái do plugin thêm) tương ứng trạng thái nào trong EzChat Bán hàng." data-testid="woo-status-map">
+            <Card id="status-map" title="Ánh xạ trạng thái" description="Trạng thái đơn trên website (kể cả trạng thái do plugin thêm) tương ứng trạng thái nào trong EzChat Bán hàng. Dòng có chữ Gợi ý được chọn sẵn theo tên, bấm Lưu để áp dụng." data-testid="woo-status-map">
                 <template v-if="canEdit" #actions>
                     <Button size="sm" :loading="busy === 'status-map'" data-testid="woo-save-status-map" @click="saveMap"><ListChecks /> Lưu</Button>
                 </template>
@@ -324,7 +331,10 @@ const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].
                         </thead>
                         <tbody class="divide-y">
                             <tr v-for="r in mapRows" :key="r.raw" :data-testid="`status-row-${r.raw}`">
-                                <td class="px-5 py-2 font-mono text-xs">{{ r.raw }}</td>
+                                <td class="px-5 py-2">
+                                    <div v-if="r.label" class="font-medium">{{ r.label }}</div>
+                                    <div :class="r.label ? 'font-mono text-[11px] text-muted-foreground' : 'font-mono text-xs'">{{ r.raw }}</div>
+                                </td>
                                 <td class="px-4 py-1.5">
                                     <Select
                                         :model-value="mapDraft[r.raw] ?? ''"
@@ -332,6 +342,7 @@ const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].
                                         :options="[{ value: '', label: r.fallback ? `Mặc định: ${orderStatus[r.fallback]?.label ?? r.fallback}` : 'Chưa ánh xạ' }, ...statusMap.statuses.map((x) => ({ value: x, label: orderStatus[x]?.label ?? x }))]"
                                         @update:model-value="(v?: string) => (mapDraft[r.raw] = v ?? '')"
                                     />
+                                    <span v-if="r.suggested" class="mt-0.5 inline-block rounded-full bg-blue-50 px-1.5 text-[11px] text-blue-600" :data-testid="`status-suggested-${r.raw}`">Gợi ý theo tên, bấm Lưu để áp dụng</span>
                                 </td>
                                 <td class="px-5 py-2 text-right tabular-nums">
                                     {{ formatNumber(r.seen?.orders ?? 0) }}

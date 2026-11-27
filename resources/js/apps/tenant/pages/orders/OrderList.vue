@@ -22,7 +22,7 @@ import { api, ApiError, downloadFile } from '@/shared/lib/api';
 import { cn, formatDate, formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
-import { actionLabel, actionLabels, deadlineLabel, marketplaceNames, orderFlags, orderStatus, orderTabs, paymentMethods, paymentStatus } from './labels';
+import { actionLabel, actionLabels, deadlineLabel, marketplaceNames, orderFlags, orderStatus, orderStatusBadge, orderTabs, paymentMethods, paymentStatus } from './labels';
 import PrintDialog from './PrintDialog.vue';
 import ShipDialog from './ShipDialog.vue';
 import ArrangeByProduct from './ArrangeByProduct.vue';
@@ -929,7 +929,7 @@ const orderLabel = (id: string) => orderCode(orders.value.find((o) => o.id === i
                                 </div>
                                 <span v-else class="text-muted-foreground">—</span>
                             </td>
-                            <td v-if="columns.status" class="px-3 py-3"><Badge :tone="orderStatus[o.status]?.tone">{{ orderStatus[o.status]?.label ?? o.status }}</Badge></td>
+                            <td v-if="columns.status" class="px-3 py-3"><Badge :tone="orderStatusBadge(o).tone" :title="orderStatusBadge(o).hint" class="max-w-48 truncate">{{ orderStatusBadge(o).label }}</Badge></td>
                             <td v-if="columns.payment" class="whitespace-nowrap px-3 py-3 text-xs">
                                 <span v-if="o.payment_status && o.status !== 'CANCELLED'" class="inline-flex items-center gap-1.5" :title="paymentStatus[o.payment_status]?.label">
                                     <span :class="cn('size-2.5 rounded-full border-2', o.payment_status === 'paid' ? 'border-emerald-500 bg-emerald-500' : o.payment_status === 'partial' ? 'border-amber-500 bg-[linear-gradient(90deg,var(--color-amber-500)_50%,transparent_50%)]' : 'border-slate-400')" />

@@ -55,6 +55,33 @@ it('maps statuses a plugin added, per store, and moves the orders that were wait
     $this->api->putJson($url, ['map' => ['dang-giao' => null]])->assertOk()->assertJsonPath('data.custom', []);
 });
 
+it('shows the website name of a status it has not mapped, and suggests a mapping from it', function () {
+    $this->store->statusNames['dang-giao-hang'] = 'Đang giao hàng';
+    wooWebhook($this, 'order.created', $this->store->addOrder(960, 'dang-giao-hang', [[11, 1, 'G304-BK', 499000]]))->assertOk();
+    $order = Order::withoutGlobalScopes()->where('external_order_id', '960')->sole();
+    expect($order->status)->toBe('UNKNOWN_STATUS');
+
+    $this->api->getJson("/api/v1/orders/{$order->ulid}")->assertOk()->assertJsonPath('data.raw_status_label', 'Đang giao hàng');
+    $this->api->getJson("/api/v1/marketplace-accounts/{$this->account->ulid}/status-map")->assertOk()
+        ->assertJsonPath('data.labels.dang-giao-hang', 'Đang giao hàng')
+        ->assertJsonPath('data.suggested.dang-giao-hang', 'IN_TRANSIT')
+        ->assertJsonPath('data.custom', []);
+    // A suggestion is only a suggestion: the order waits until the seller saves the map.
+    expect(statusOf('960'))->toBe('UNKNOWN_STATUS');
+});
+
+it('suggests ECSO statuses from Vietnamese and English status names', function (string $raw, ?string $name, ?string $expected) {
+    expect(\App\Modules\Marketplace\Services\WooStatusLabels::suggest($raw, $name))->toBe($expected);
+})->with([
+    ['dang-giao-hang', 'Đang giao hàng', 'IN_TRANSIT'],
+    ['dang-giao-cu', 'Đang giao hàng (cũ)', 'IN_TRANSIT'],
+    ['shipped', null, 'IN_TRANSIT'],
+    ['da-giao', 'Đã giao hàng', 'DELIVERED'],
+    ['giao-that-bai', 'Giao thất bại', 'FAILED_DELIVERY'],
+    ['cho-lay-hang', 'Chờ lấy hàng', 'PACKED'],
+    ['xyz', 'Khác', null],
+]);
+
 it('keeps order actions in ECSO for a one-way store and does not fight the website status', function () {
     wooWebhook($this, 'order.created', $this->store->addOrder(952, 'processing', [[11, 2, 'G304-BK', 499000]]))->assertOk();
     $this->api->patchJson("/api/v1/marketplace-accounts/{$this->account->ulid}", ['settings' => ['push_status' => false]])->assertOk()

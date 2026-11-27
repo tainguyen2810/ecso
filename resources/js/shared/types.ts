@@ -294,6 +294,7 @@ export interface OrderSummary {
     prices_include_tax?: boolean;
     tax_amount?: string;
     raw_status: string;
+    raw_status_label?: string | null;
     payment_method: string | null;
     is_cod: boolean;
     subtotal: string;
@@ -757,6 +758,8 @@ export interface SyncOverviewData {
 }
 
 export interface StatusMapData {
+    labels: Record<string, string>;
+    suggested: Record<string, string>;
     defaults: Record<string, string>;
     custom: Record<string, string>;
     seen: { raw_status: string; orders: number; unknown: number }[];

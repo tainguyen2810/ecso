@@ -11,6 +11,7 @@ use App\Modules\Marketplace\Models\SyncError;
 use App\Modules\Marketplace\Models\SyncRun;
 use App\Modules\Marketplace\Services\SyncErrorLog;
 use App\Modules\Marketplace\Services\WooCommerceConnectService;
+use App\Modules\Marketplace\Services\WooStatusLabels;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Jobs\BackfillOrdersJob;
 use App\Modules\Orders\Models\Order;
@@ -164,9 +165,14 @@ class SyncLogController extends Controller
     }
 
     /** The store's status map: shared defaults, the store's own entries, and the raw statuses its orders came with. */
-    public function statusMap(MarketplaceAccount $account, StatusMapper $mapper): JsonResponse
+    public function statusMap(MarketplaceAccount $account, StatusMapper $mapper, WooStatusLabels $labels): JsonResponse
     {
         $this->authorize('viewAny', MarketplaceAccount::class);
+        // Names of statuses a plugin added; read again when an order came with a status that has no name yet.
+        $missing = Order::query()->where('marketplace_account_id', $account->id)->where('status', OrderStatus::UNKNOWN_STATUS)
+            ->whereNotNull('raw_status')->distinct()->pluck('raw_status')
+            ->first(fn ($raw) => WooStatusLabels::labelFor($account, (string) $raw) === null && ! str_contains((string) $raw, ':'));
+        $labels->ensure($account, $missing);
 
         return response()->json(['data' => $this->mapData($account, $mapper)]);
     }
@@ -207,7 +213,21 @@ class SyncLogController extends Controller
             ->selectRaw('raw_status, count(*) as orders, sum(status = ?) as unknown', [OrderStatus::UNKNOWN_STATUS])
             ->groupBy('raw_status')->get();
 
+        $names = $account->statusLabels();
+        $defaults = $mapper->defaults($account->marketplace);
+        $custom = $account->statusMap();
+        $suggested = [];
+        foreach ($seen->pluck('raw_status')->merge(array_keys($names)) as $raw) {
+            $raw = (string) $raw;
+            if (! isset($defaults[$raw]) && ! isset($custom[$raw]) && ! str_contains($raw, ':')
+                && ($guess = WooStatusLabels::suggest($raw, $names[$raw] ?? null)) !== null) {
+                $suggested[$raw] = $guess;
+            }
+        }
+
         return [
+            'labels' => (object) $names,
+            'suggested' => (object) $suggested,
             'defaults' => (object) $mapper->defaults($account->marketplace),
             'custom' => (object) $account->statusMap(),
             'seen' => $seen->map(fn (Order $r) => ['raw_status' => $r->raw_status, 'orders' => (int) $r->getAttribute('orders'), 'unknown' => (int) $r->getAttribute('unknown')])->values(),

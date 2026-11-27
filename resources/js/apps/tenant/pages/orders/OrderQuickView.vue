@@ -13,7 +13,7 @@ import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import PrintDialog from './PrintDialog.vue';
 import ShipDialog from './ShipDialog.vue';
-import { actionLabel, actionLabels, marketplaceNames, orderStatus, paymentStatus } from './labels';
+import { actionLabel, actionLabels, marketplaceNames, orderStatusBadge, paymentStatus } from './labels';
 import type { OrderDetail } from '@/shared/types';
 
 /**
@@ -141,7 +141,7 @@ const source = computed(() => (order.value ? (order.value.channel?.name ?? order
                         <div class="min-w-0 flex-1">
                             <p class="flex flex-wrap items-center gap-2">
                                 <span class="font-mono text-lg font-semibold">{{ orderCode(order) }}</span>
-                                <Badge :tone="orderStatus[order.status]?.tone">{{ orderStatus[order.status]?.label ?? order.status }}</Badge>
+                                <Badge :tone="orderStatusBadge(order).tone" :title="orderStatusBadge(order).hint">{{ orderStatusBadge(order).label }}</Badge>
                             </p>
                             <p v-if="secondaryCodes(order).length" class="flex flex-wrap gap-x-3 text-xs text-muted-foreground"><span v-for="c in secondaryCodes(order)" :key="c.kind">{{ c.kind === 'marketplace' ? `Mã đơn ${c.label === 'Sàn' ? 'sàn' : c.label}` : c.label }} <span class="font-mono text-foreground">{{ c.value }}</span></span></p>
                             <p class="text-sm text-muted-foreground">{{ marketplaceNames[order.marketplace] ?? order.marketplace }}<template v-if="source"> · {{ source }}</template> · đặt {{ formatDateTime(order.placed_at) }}</p>

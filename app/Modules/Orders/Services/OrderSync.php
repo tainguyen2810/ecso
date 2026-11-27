@@ -10,7 +10,9 @@ use App\Modules\Marketplace\Models\SyncCursor;
 use App\Modules\Marketplace\Models\SyncError;
 use App\Modules\Marketplace\Models\SyncRun;
 use App\Modules\Marketplace\Services\SyncErrorLog;
+use App\Modules\Marketplace\Services\WooStatusLabels;
 use App\Modules\Marketplace\Support\SyncCorrelation;
+use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use Carbon\CarbonImmutable;
 use Throwable;
@@ -27,6 +29,7 @@ class OrderSync
     public function __construct(
         private readonly ConnectorRegistry $connectors,
         private readonly OrderIngestor $ingestor,
+        private readonly WooStatusLabels $labels,
         private readonly SyncErrorLog $errors,
     ) {}
 
@@ -54,6 +57,10 @@ class OrderSync
         }
 
         $result = $this->ingestor->ingest($account, $data, $source, $webhookEventId, $actorId);
+        if ($result['order']?->status === OrderStatus::UNKNOWN_STATUS) {
+            // A status a plugin added: learn the website's name for it so screens show it instead of "Chưa rõ".
+            $this->labels->ensure($account, $data->rawStatus);
+        }
         if ($result['result'] === OrderIngestor::IGNORED_TRANSITION) {
             $this->errors->record($account, 'order', $externalOrderId, SyncError::CONFLICT, (string) $result['order']?->sync_warning);
         } else {
