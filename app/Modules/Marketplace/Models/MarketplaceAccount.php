@@ -71,6 +71,12 @@ class MarketplaceAccount extends Model
         return (array) ($this->settings['status_map'] ?? []);
     }
 
+    /** @return array<string, string> the website's own names of its order statuses (WooCommerce), slug => name */
+    public function statusLabels(): array
+    {
+        return (array) ($this->settings['status_labels'] ?? []);
+    }
+
     public function orderSyncInterval(): int
     {
         $minutes = (int) ($this->settings['order_sync_interval'] ?? 15);

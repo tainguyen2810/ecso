@@ -37,6 +37,10 @@ class FakeWooStore
 
     public bool $readOnly = false;
 
+    /** reports/orders/totals: every registered order status with its name (plugins add their own). */
+    public array $statusNames = ['pending' => 'Chờ thanh toán', 'processing' => 'Đang xử lý', 'on-hold' => 'Tạm giữ', 'completed' => 'Đã hoàn thành',
+        'cancelled' => 'Đã hủy', 'refunded' => 'Đã hoàn lại tiền', 'failed' => 'Thất bại'];
+
     public bool $stripAuthorization = false;
 
     private int $nextId = 900;
@@ -140,6 +144,7 @@ class FakeWooStore
         }
 
         return match (true) {
+            $path === 'reports/orders/totals' => Http::response(array_map(fn ($slug, $name) => ['slug' => $slug, 'name' => $name, 'total' => 0], array_keys($this->statusNames), $this->statusNames)),
             $path === 'system_status' => Http::response(['environment' => ['home_url' => $this->url, 'version' => '9.3.3'], 'settings' => ['store_name' => 'Cửa hàng Woo']]),
             $path === 'products' && $method === 'GET' => $this->page(array_values($this->products), $query),
             $path === 'products/batch' => $this->batch($this->products, $request->data()['update'] ?? []),

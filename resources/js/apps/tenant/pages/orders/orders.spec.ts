@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deadlineLabel, orderFlags, orderStatus, orderTabs } from './labels';
+import { deadlineLabel, orderFlags, orderStatus, orderStatusBadge, orderTabs } from './labels';
 import { packingSlipDocument, type PackingSlipData } from './packingSlip';
 
 const slip = (over: Partial<PackingSlipData> = {}): PackingSlipData => ({
@@ -40,6 +40,16 @@ describe('order labels', () => {
         expect(deadlineLabel('2026-10-31T09:30:00Z', now)).toBe('quá 30 phút');
         expect(deadlineLabel('2026-11-04T10:00:00Z', now)).toBe('còn 4 ngày');
         expect(deadlineLabel(null, now)).toBeNull();
+    });
+});
+
+describe('order status badge', () => {
+    it('shows the website name of an unmapped WooCommerce status instead of "Chưa rõ"', () => {
+        expect(orderStatusBadge({ status: 'UNKNOWN_STATUS', marketplace: 'woocommerce', raw_status: 'dang-giao-hang', raw_status_label: 'Đang giao hàng' }))
+            .toMatchObject({ label: 'Web: Đang giao hàng', tone: 'warning' });
+        expect(orderStatusBadge({ status: 'UNKNOWN_STATUS', marketplace: 'woocommerce', raw_status: 'dang-giao-hang' }).label).toBe('Web: dang-giao-hang');
+        expect(orderStatusBadge({ status: 'UNKNOWN_STATUS', marketplace: 'shopee', raw_status: 'NEW_ONE' }).label).toBe('Sàn: NEW_ONE');
+        expect(orderStatusBadge({ status: 'IN_TRANSIT', marketplace: 'woocommerce', raw_status: 'x' }).label).toBe('Đang giao');
     });
 });
 

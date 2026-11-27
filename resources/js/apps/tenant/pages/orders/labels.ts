@@ -16,6 +16,20 @@ export const orderStatus: Record<string, { label: string; tone: Tone }> = {
     UNKNOWN_STATUS: { label: 'Chưa rõ trạng thái', tone: 'danger' },
 };
 
+/**
+ * Status badge of an order. A status ECSO has not mapped yet (one a WooCommerce plugin added, or a new marketplace
+ * status) shows the channel's own name for it, e.g. "Web: Đang giao hàng", instead of a bare "Chưa rõ trạng thái".
+ */
+export function orderStatusBadge(o: { status: string; marketplace?: string | null; raw_status?: string | null; raw_status_label?: string | null }): { label: string; tone: Tone; hint?: string } {
+    if (o.status !== 'UNKNOWN_STATUS' || !(o.raw_status_label || o.raw_status)) return orderStatus[o.status] ?? { label: o.status, tone: 'muted' };
+    const web = o.marketplace === 'woocommerce';
+    return {
+        label: `${web ? 'Web' : 'Sàn'}: ${o.raw_status_label || o.raw_status}`,
+        tone: 'warning',
+        hint: web ? 'Trạng thái này do plugin trên website thêm vào, chưa ánh xạ. Vào Kênh bán › website › Ánh xạ trạng thái để chọn trạng thái tương ứng.' : 'Trạng thái sàn này chưa được ánh xạ.',
+    };
+}
+
 export const orderTabs: { value: string; label: string }[] = [
     { value: 'all', label: 'Tất cả' },
     { value: 'new', label: 'Chờ thanh toán' },

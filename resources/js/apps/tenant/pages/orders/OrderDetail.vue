@@ -22,7 +22,7 @@ import OrderPayoutCard from './OrderPayoutCard.vue';
 import OrderShipmentsCard from '../shipments/OrderShipmentsCard.vue';
 import OrderEInvoiceCard from './OrderEInvoiceCard.vue';
 import { useTenantStore } from '@/shared/stores/tenant';
-import { actionLabel, actionLabels, capabilityLabels, deadlineLabel, historySource, manualActionOrder, mappingStatus, marketplaceNames, orderStatus, paymentMethodNames, paymentMethods, paymentStatus, refundStatus, returnState, returnStatus, returnTypes } from './labels';
+import { actionLabel, actionLabels, capabilityLabels, deadlineLabel, historySource, manualActionOrder, mappingStatus, marketplaceNames, orderStatus, orderStatusBadge, paymentMethodNames, paymentMethods, paymentStatus, refundStatus, returnState, returnStatus, returnTypes } from './labels';
 import PrintDialog from './PrintDialog.vue';
 import ShipDialog from './ShipDialog.vue';
 import LabelPrint from './LabelPrint.vue';
@@ -370,7 +370,8 @@ const fmtDay = (d: string | null | undefined) => (d ? d.split('-').reverse().joi
                 <div class="min-w-0 flex-1">
                     <div class="flex flex-wrap items-center gap-2">
                         <h1 class="font-mono text-xl font-semibold tracking-tight" data-testid="order-code">Đơn {{ orderCode(order) }}</h1>
-                        <Badge :tone="orderStatus[order.status]?.tone" data-testid="order-status">{{ orderStatus[order.status]?.label ?? order.status }}</Badge>
+                        <Badge :tone="orderStatusBadge(order).tone" :title="orderStatusBadge(order).hint" data-testid="order-status">{{ orderStatusBadge(order).label }}</Badge>
+                        <RouterLink v-if="order.status === 'UNKNOWN_STATUS' && order.marketplace === 'woocommerce' && order.shop?.id" :to="`/marketplaces/${order.shop.id}/store#status-map`" class="text-xs text-primary hover:underline" data-testid="order-map-status">Ánh xạ trạng thái</RouterLink>
                         <Badge v-if="(isManual || isWebsite) && order.payment_status" :tone="paymentStatus[order.payment_status]?.tone" data-testid="payment-status">{{ paymentStatus[order.payment_status]?.label }}</Badge>
                         <Badge v-if="order.deleted_on_channel_at" tone="danger" data-testid="deleted-on-channel">Đã xóa trên website</Badge>
                         <Badge v-if="order.refund_status && refundStatus[order.refund_status]" :tone="refundStatus[order.refund_status]!.tone" data-testid="refund-status">{{ refundStatus[order.refund_status]!.label }}</Badge>

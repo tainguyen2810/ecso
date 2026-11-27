@@ -2,6 +2,7 @@
 
 namespace App\Modules\Orders\Http\Resources;
 
+use App\Modules\Marketplace\Services\WooStatusLabels;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\MarketplaceShipping;
@@ -40,6 +41,9 @@ class OrderResource extends JsonResource
             'imported_from' => $this->imported_from,
             'version' => (int) $this->version,
             'raw_status' => $this->raw_status,
+            // The website's own name of a status ECSO has not mapped yet (a WooCommerce plugin status), shown instead of "Chưa rõ".
+            'raw_status_label' => $this->status === OrderStatus::UNKNOWN_STATUS && $this->relationLoaded('account')
+                ? WooStatusLabels::labelFor($this->account, $this->raw_status) : null,
             'payment_method' => $this->payment_method,
             'is_cod' => $this->is_cod,
             'currency' => $this->currency,
