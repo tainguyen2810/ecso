@@ -77,6 +77,14 @@ class OrderController extends Controller
         return response()->json(['data' => $orders->pipeline()]);
     }
 
+    /** Shopee / TikTok orders waiting for "Chuẩn bị hàng" (all pages), with their products, for the list's one-tap prepare. */
+    public function toArrange(Request $request, OrderQuery $orders): JsonResponse
+    {
+        $this->authorize('viewAny', Order::class);
+
+        return response()->json(['data' => $orders->toArrange($this->filters($request), $request->user()->id)]);
+    }
+
     /** XLSX of the orders matching the list filters (all tabs and pages, up to OrderExporter::MAX_ROWS). */
     public function export(Request $request, OrderExporter $exporter): StreamedResponse
     {

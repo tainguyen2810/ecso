@@ -5,9 +5,12 @@ namespace App\Modules\Orders\Services;
 use App\Modules\Catalog\Models\ProductVariant;
 use App\Modules\Identity\Models\User;
 use App\Modules\Inventory\Models\Warehouse;
+use App\Modules\Inventory\Services\ReservationLedger;
+use App\Modules\Inventory\Services\StockReader;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Orders\Models\OrderItem;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Sales\Support\PhoneNumber;
@@ -153,6 +156,88 @@ class OrderQuery
         }
 
         return $counts;
+    }
+
+    /** Most orders "Chuẩn bị hàng" takes in one go (same cap as the bulk actions). */
+    public const ARRANGE_MAX = 200;
+
+    /**
+     * Shopee / TikTok orders waiting for "Chuẩn bị hàng" under the current filters (tab and quick filters aside):
+     * how urgent they are, which have the goods, and the same orders grouped by product so a whole product can be
+     * picked and prepared at once. Orders come soonest deadline first.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array<string, mixed>
+     */
+    public function toArrange(array $filters, ?int $userId): array
+    {
+        $query = $this->build([...$filters, 'flags' => ['not_arranged']], $userId, withTab: false);
+        $count = (clone $query)->count();
+        $orders = $query->with(['items.variant.product.images'])
+            ->orderByRaw('ship_by_at IS NULL')->orderBy('ship_by_at')->orderBy('id')
+            ->limit(self::ARRANGE_MAX)->get();
+
+        $items = $orders->flatMap(fn (Order $o) => $o->items)->filter(fn (OrderItem $i) => $i->mapping_status !== OrderItem::SERVICE);
+        $snapshot = app(ReservationLedger::class)->snapshot(Order::STOCK_REFERENCE, $items->pluck('id')->all());
+        $variantIds = $items->pluck('product_variant_id')->filter()->unique()->values()->all();
+        $onHand = $variantIds === [] ? [] : app(StockReader::class)->onHand(array_map('intval', $variantIds));
+
+        $products = [];
+        $rows = [];
+        foreach ($orders as $order) {
+            $keys = [];
+            foreach ($order->items as $item) {
+                if ($item->mapping_status === OrderItem::SERVICE) {
+                    continue;
+                }
+                $quantity = max(0, $item->quantity - (int) $item->refunded_quantity);
+                $variant = $item->variant;
+                $key = $variant ? 'v:'.$variant->ulid : 'n:'.mb_strtolower(trim((string) ($item->seller_sku ?: $item->name)));
+                $products[$key] ??= [
+                    'key' => $key,
+                    'name' => $variant?->product->name ?? $item->name,
+                    'variant_name' => $variant ? $variant->name : $item->variant_name,
+                    'sku' => $variant->sku ?? $item->seller_sku,
+                    'image' => $variant?->product->images->first()?->url(),
+                    'mapped' => $variant !== null,
+                    'on_hand' => $variant ? (int) ($onHand[$variant->id] ?? 0) : null,
+                    'quantity' => 0,
+                    'short' => false,
+                    'orders' => [],
+                ];
+                $products[$key]['quantity'] += $quantity;
+                $products[$key]['short'] = $products[$key]['short'] || (($snapshot[$item->id]['shortage'] ?? 0) > 0);
+                if (! in_array($order->ulid, $products[$key]['orders'], true)) {
+                    $products[$key]['orders'][] = $order->ulid;
+                }
+                $keys[$key] = ($keys[$key] ?? 0) + $quantity;
+            }
+            $rows[] = [
+                'id' => $order->ulid,
+                'external_order_id' => $order->external_order_id,
+                'status' => $order->status,
+                'source' => 'marketplace',
+                'marketplace_shipping' => true,
+                'ship_by_at' => $order->ship_by_at?->toIso8601String(),
+                'shortage' => (bool) $order->has_shortage || (bool) $order->awaiting_purchase,
+                // Units of each product in this order, by product key.
+                'products' => (object) $keys,
+            ];
+        }
+        usort($products, fn ($a, $b) => [count($b['orders']), $b['quantity'], $a['name']] <=> [count($a['orders']), $a['quantity'], $b['name']]);
+
+        $soon = now()->addHours(3);
+        $endOfDay = now(ReportRange::timezone())->endOfDay();
+        $due = fn ($limit) => $orders->filter(fn (Order $o) => $o->ship_by_at !== null && $o->ship_by_at->lte($limit))->count();
+
+        return [
+            'count' => $count,
+            'urgent' => $due($soon),
+            'today' => $due($endOfDay),
+            'ready' => collect($rows)->where('shortage', false)->count(),
+            'orders' => $rows,
+            'products' => $products,
+        ];
     }
 
     /**
