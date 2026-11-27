@@ -60,3 +60,15 @@ it('keeps to the list filters and to what the member may see', function () {
     $api->getJson('/api/v1/orders/to-arrange?q=KHONG-CO')->assertJsonPath('data.count', 0)->assertJsonPath('data.products', []);
     $api->getJson('/api/v1/orders/to-arrange?marketplace=tiktok')->assertJsonPath('data.count', 0);
 });
+
+it('plans the label print order by product without asking the marketplace', function () {
+    $card = shopeeOrder($this->shop, [[$this->card, 1]]);
+    $glue = shopeeOrder($this->shop, [[$this->glue, 1]]);
+    $antenna = shopeeOrder($this->shop, [[$this->antenna, 1]]);
+    $api = actingInTenant($this->owner, $this->tenant);
+    $ids = [$card->ulid, $glue->ulid, $antenna->ulid];
+
+    $api->postJson('/api/v1/orders/shipping-labels/plan', ['ids' => $ids])->assertOk()->assertJsonPath('data.ids', $ids);
+    $api->postJson('/api/v1/orders/shipping-labels/plan', ['ids' => $ids, 'sort' => 'product'])->assertOk()
+        ->assertJsonPath('data.ids', [$antenna->ulid, $card->ulid, $glue->ulid]);
+});

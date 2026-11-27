@@ -44,6 +44,7 @@ use App\Modules\Tenancy\Support\TenantContext;
 use App\Shared\Support\ReportRange;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -409,15 +410,40 @@ class OrderController extends Controller
         $this->authorize('print', Order::class);
         $data = $request->validate([
             'ids' => ['required', 'array', 'min:1', 'max:'.MarketplaceShipping::MAX_LABELS], 'ids.*' => ['string'],
-            // "product": orders of the same product next to each other, so the parcels are picked in one walk.
             'sort' => ['nullable', 'in:product'],
         ]);
-        $orders = Order::query()->with(['account', 'items'])->whereIn('ulid', $data['ids'])->get();
-        $orders = ($data['sort'] ?? null) === 'product'
-            ? $orders->sortBy(fn (Order $o) => [mb_strtolower((string) $o->items->sortBy('id')->first()?->name), $o->ship_by_at?->getTimestamp() ?? PHP_INT_MAX])->values()
-            : $orders->sortBy(fn (Order $o) => array_search($o->ulid, $data['ids'], true))->values();
+        $orders = $this->labelOrder(Order::query()->with(['account', 'items'])->whereIn('ulid', $data['ids'])->get(), $data['ids'], $data['sort'] ?? null);
 
         return response()->json(['data' => $shipping->labels($orders)]);
+    }
+
+    /**
+     * The order "In phiếu sàn" asks the labels in (same sorting as shippingLabels), without calling the marketplace,
+     * so the browser can fetch them a few at a time with a progress bar instead of one long request.
+     */
+    public function shippingLabelPlan(Request $request): JsonResponse
+    {
+        $this->authorize('print', Order::class);
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:'.MarketplaceShipping::MAX_LABELS], 'ids.*' => ['string'],
+            'sort' => ['nullable', 'in:product'],
+        ]);
+        $orders = Order::query()->with('items')->whereIn('ulid', $data['ids'])->get();
+
+        return response()->json(['data' => ['ids' => $this->labelOrder($orders, $data['ids'], $data['sort'] ?? null)->pluck('ulid')->values()]]);
+    }
+
+    /**
+     * @param  Collection<int, Order>  $orders
+     * @param  array<int, string>  $ids
+     * @return Collection<int, Order>
+     */
+    private function labelOrder($orders, array $ids, ?string $sort)
+    {
+        // "product": orders of the same product next to each other, so the parcels are picked in one walk.
+        return $sort === 'product'
+            ? $orders->sortBy(fn (Order $o) => [mb_strtolower((string) $o->items->sortBy('id')->first()?->name), $o->ship_by_at?->getTimestamp() ?? PHP_INT_MAX])->values()
+            : $orders->sortBy(fn (Order $o) => array_search($o->ulid, $ids, true))->values();
     }
 
     /** Data for packing slips (rendered to PDF in the browser) and marks the orders as printed. */

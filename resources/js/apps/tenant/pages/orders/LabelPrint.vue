@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { Printer } from 'lucide-vue-next';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { CircleCheck, Download, ExternalLink, Printer, RotateCcw } from 'lucide-vue-next';
 import Button from '@/shared/ui/Button.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { cn } from '@/shared/lib/utils';
@@ -8,13 +8,16 @@ import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useAuthStore } from '@/shared/stores/auth';
 import { downloadPickList } from './packing';
-import { labelPapers, mergeLabels, printPdf, type LabelFile, type LabelPaper } from './shippingLabels';
+import { labelPapers, mergeLabels, printPdf, runPool, type LabelFile, type LabelPaper } from './shippingLabels';
 
 /**
  * "In phiếu sàn": the shipping labels Shopee / TikTok issued for the orders, merged into one PDF on A6, A5 or A4.
+ * Each label is asked separately, a few at a time (one marketplace label takes several calls, a whole batch in one
+ * request ran past the server's time limit), with progress; what came is printed, what did not is listed with why.
  * The chosen paper is remembered in this browser.
  */
-const props = defineProps<{ ids: string[] }>();
+/** auto: start at once (right after "Chuẩn bị hàng" with "In phiếu sàn ngay khi xong" ticked). */
+const props = defineProps<{ ids: string[]; auto?: boolean }>();
 const emit = defineEmits<{ printed: [] }>();
 const toast = useToast();
 const tenant = useTenantStore();
@@ -33,28 +36,66 @@ const paper = ref<LabelPaper>(read());
 const byProduct = ref(true);
 const withPickList = ref(false);
 const busy = ref(false);
-const failed = ref<{ id: string; external_order_id: string; message: string }[]>([]);
+const progress = ref<{ done: number; total: number } | null>(null);
+type Failure = { id: string; external_order_id: string; message: string };
+const failed = ref<Failure[]>([]);
+/** The merged PDF of the last run, for "Mở phiếu để in" and "Tải file PDF". */
+const ready = ref<{ url: string; count: number } | null>(null);
+const CONCURRENCY = 4;
+type Answer = { id: string; file?: LabelFile & { id: string }; fail?: Failure };
+/** Failures that usually clear in seconds (tracking number or document not issued yet, slow answer). */
+const WAIT_AND_RETRY = /chưa cấp|chưa tạo xong|đang xử lý|chậm|Thử in lại/i;
+const waiting = ref(false);
 
-async function print() {
+function release() {
+    if (ready.value) URL.revokeObjectURL(ready.value.url);
+    ready.value = null;
+}
+onBeforeUnmount(release);
+onMounted(() => props.auto && print());
+
+const percent = computed(() => (progress.value ? Math.round((progress.value.done / Math.max(1, progress.value.total)) * 100) : 0));
+
+async function print(only?: string[]) {
     busy.value = true;
     failed.value = [];
+    release();
     try {
         localStorage.setItem(KEY, paper.value);
     } catch {
         /* private window: not remembered */
     }
+    const ids = only ?? props.ids;
     try {
-        // The server makes at most 50 labels a call.
-        const files: (LabelFile & { id: string })[] = [];
-        for (let i = 0; i < props.ids.length; i += 50) {
-            const { data } = await api.post('/orders/shipping-labels', { ids: props.ids.slice(i, i + 50), sort: byProduct.value ? 'product' : null });
-            files.push(...data.data.files);
-            failed.value.push(...data.data.failed);
+        const sort = byProduct.value ? 'product' : null;
+        const plan: string[] = (await api.post('/orders/shipping-labels/plan', { ids, sort })).data.data.ids;
+        progress.value = { done: 0, total: plan.length };
+        const fetchOne = async (id: string): Promise<Answer> => {
+            try {
+                const { data } = await api.post('/orders/shipping-labels', { ids: [id] });
+                return { id, file: data.data.files[0], fail: data.data.failed[0] };
+            } catch (e) {
+                return { id, fail: { id, external_order_id: '', message: e instanceof ApiError && e.status !== 504 && e.status !== 502 ? e.message : 'Sàn trả lời chậm, chưa lấy được phiếu. Bấm "In lại đơn lỗi" để thử lại.' } };
+            }
+        };
+        let answers = await runPool(plan, CONCURRENCY, fetchOne, (done) => (progress.value = { done, total: plan.length }));
+        // Right after "Chuẩn bị hàng" the marketplace takes a few seconds to issue tracking numbers: wait once, ask again.
+        const later = answers.filter((a) => a.fail && WAIT_AND_RETRY.test(a.fail.message)).map((a) => a.id);
+        if (later.length) {
+            waiting.value = true;
+            await new Promise((r) => setTimeout(r, 4000));
+            waiting.value = false;
+            const again = new Map((await runPool(later, CONCURRENCY, fetchOne)).map((a) => [a.id, a]));
+            answers = answers.map((a) => again.get(a.id) ?? a);
         }
+        const files = answers.flatMap((a) => (a.file ? [a.file] : []));
+        failed.value = answers.flatMap((a) => (a.fail ? [a.fail] : []));
         if (files.length) {
-            printPdf(await mergeLabels(files, paper.value));
-            toast.success(`Đã mở ${files.length} phiếu sàn để in.`);
+            const url = printPdf(await mergeLabels(files, paper.value));
+            ready.value = { url, count: files.length };
             emit('printed');
+        } else {
+            toast.error('Chưa lấy được phiếu nào từ sàn.');
         }
         if (withPickList.value && files.length) {
             const pick = await api.post('/orders/pick-list', { ids: files.map((f) => f.id) });
@@ -64,8 +105,15 @@ async function print() {
         toast.error(e instanceof ApiError ? e.message : 'Không tạo được file phiếu sàn.');
     } finally {
         busy.value = false;
+        progress.value = null;
     }
 }
+
+/** On the user's own click, so the browser never blocks the new tab. */
+function openReady() {
+    if (ready.value) window.open(ready.value.url, '_blank');
+}
+const fileName = computed(() => `phieu-san-${new Date().toISOString().slice(0, 10)}.pdf`);
 </script>
 
 <template>
@@ -92,11 +140,30 @@ async function print() {
             <label class="flex items-center gap-2"><input v-model="byProduct" type="checkbox" class="size-4" /> Sắp xếp theo sản phẩm (dễ nhặt hàng)</label>
             <label class="flex items-center gap-2"><input v-model="withPickList" type="checkbox" class="size-4" /> Tải kèm phiếu nhặt hàng</label>
         </div>
-        <ul v-if="failed.length" class="mt-3 space-y-1 rounded-md bg-rose-50 p-2.5 text-xs text-rose-700" data-testid="label-failed">
-            <li v-for="f in failed" :key="f.id"><b class="tabular-nums">{{ f.external_order_id }}</b>: {{ f.message }}</li>
-        </ul>
+        <div v-if="progress" class="mt-3 rounded-lg border bg-muted/30 p-3" data-testid="label-progress">
+            <div class="mb-1.5 flex items-center justify-between text-xs">
+                <span class="font-medium">{{ waiting ? 'Đợi sàn cấp mã vận đơn cho vài đơn…' : 'Đang lấy phiếu từ sàn' }}</span>
+                <span class="tabular-nums text-muted-foreground">{{ progress.done }}/{{ progress.total }}</span>
+            </div>
+            <div class="h-1.5 overflow-hidden rounded-full bg-muted"><div class="h-full rounded-full bg-primary transition-all" :style="{ width: `${percent}%` }" /></div>
+        </div>
+        <div v-if="ready && !busy" class="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm" data-testid="label-ready">
+            <CircleCheck class="size-4 shrink-0 text-emerald-600" />
+            <span class="min-w-40 flex-1"><b>{{ ready.count }} phiếu</b> đã sẵn sàng. Không thấy hộp in thì bấm "Mở phiếu để in".</span>
+            <Button size="sm" data-testid="label-open" @click="openReady"><ExternalLink /> Mở phiếu để in</Button>
+            <a :href="ready.url" :download="fileName"><Button size="sm" variant="outline"><Download /> Tải PDF</Button></a>
+        </div>
+        <div v-if="failed.length && !busy" class="mt-3 rounded-lg bg-rose-50 p-3 text-xs text-rose-700" data-testid="label-failed">
+            <div class="mb-1 flex items-center gap-2">
+                <b class="text-sm">{{ failed.length }} đơn chưa có phiếu</b>
+                <button type="button" class="ml-auto inline-flex items-center gap-1 font-medium text-rose-700 hover:underline" data-testid="label-retry" @click="print(failed.map((f) => f.id))"><RotateCcw class="size-3.5" /> In lại đơn lỗi</button>
+            </div>
+            <ul class="space-y-0.5">
+                <li v-for="f in failed" :key="f.id"><b v-if="f.external_order_id" class="tabular-nums">{{ f.external_order_id }}: </b>{{ f.message }}</li>
+            </ul>
+        </div>
         <div class="mt-3 flex justify-end">
-            <Button :loading="busy" data-testid="label-print-go" @click="print"><Printer /> In {{ ids.length }} phiếu</Button>
+            <Button :loading="busy" data-testid="label-print-go" @click="print()"><Printer /> {{ busy && progress ? `Đang lấy ${progress.done}/${progress.total}` : `In ${ids.length} phiếu` }}</Button>
         </div>
     </div>
 </template>

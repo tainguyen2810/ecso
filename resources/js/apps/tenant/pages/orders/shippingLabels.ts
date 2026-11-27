@@ -74,22 +74,45 @@ export async function mergeLabels(files: (string | LabelFile)[], paper: LabelPap
 }
 
 /** Opens the browser's print dialog on a PDF (hidden frame); falls back to a new tab when the frame cannot print. */
-export function printPdf(bytes: Uint8Array): void {
+/**
+ * Opens the print dialog on the merged PDF from a small iframe and returns the file's address, so the page can also
+ * offer "Mở phiếu để in" / "Tải file PDF": some browsers print nothing from an iframe (and block a new tab opened
+ * after a wait), the buttons always work because they run on the user's own click. The caller frees the address.
+ */
+export function printPdf(bytes: Uint8Array): string {
     const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' }));
     const frame = document.createElement('iframe');
-    frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+    // Not 0×0: Chrome does not load its PDF viewer in an empty frame, then print() silently does nothing.
+    frame.style.cssText = 'position:fixed;right:0;bottom:0;width:2px;height:2px;border:0;opacity:0;pointer-events:none';
     frame.src = url;
     frame.onload = () => {
-        try {
-            frame.contentWindow?.focus();
-            frame.contentWindow?.print();
-        } catch {
-            window.open(url, '_blank');
-        }
+        // The viewer needs a moment after load before it can print.
         setTimeout(() => {
-            frame.remove();
-            URL.revokeObjectURL(url);
-        }, 60_000);
+            try {
+                frame.contentWindow?.focus();
+                frame.contentWindow?.print();
+            } catch {
+                /* the "Mở phiếu để in" button is there */
+            }
+        }, 300);
+        setTimeout(() => frame.remove(), 120_000);
     };
     document.body.appendChild(frame);
+    return url;
+}
+
+/** Runs `work` on every item with at most `limit` at once; results keep the items' order. */
+export async function runPool<T, R>(items: T[], limit: number, work: (item: T, index: number) => Promise<R>, onDone?: (done: number) => void): Promise<R[]> {
+    const results = new Array<R>(items.length);
+    let next = 0;
+    let done = 0;
+    const worker = async () => {
+        while (next < items.length) {
+            const i = next++;
+            results[i] = await work(items[i]!, i);
+            onDone?.(++done);
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+    return results;
 }
