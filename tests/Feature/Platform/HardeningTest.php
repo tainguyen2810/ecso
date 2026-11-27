@@ -1,7 +1,9 @@
 <?php
 
+use App\Http\Middleware\SecurityHeaders;
 use App\Logging\RedactSecrets;
 use App\Modules\Identity\Models\User;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -64,4 +66,14 @@ it('shows super admins queue, failed job and scheduler health without tenant dat
     Log::spy();
     $this->artisan('ecso:monitor')->assertSuccessful();
     Log::shouldHaveReceived('critical')->withArgs(fn ($m) => str_contains($m, 'Scheduler'))->once();
+});
+
+it('lets Tin nhắn frame EzChat (and its microphone) on production, nothing else', function () {
+    config(['marketplaces.ezchat.url' => 'https://api.ezchat.test/']);
+    Cache::forever(SecurityHeaders::APP_ORIGIN_KEY, 'https://app.ezchat.test');
+    app()->detectEnvironment(fn () => 'production');
+
+    $response = $this->get('https://localhost/up');
+    expect($response->headers->get('Content-Security-Policy'))->toContain("frame-src 'self' https://api.ezchat.test https://app.ezchat.test")
+        ->and($response->headers->get('Permissions-Policy'))->toContain('microphone=("https://api.ezchat.test" "https://app.ezchat.test")');
 });
