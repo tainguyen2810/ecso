@@ -28,7 +28,9 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::post('orders/bulk', [OrderController::class, 'bulk'])->middleware('throttle:30,1,orders.orders.bulk');
     Route::post('orders/packing-slips', [OrderController::class, 'packingSlips']);
     Route::post('orders/ship-options', [OrderController::class, 'shipOptions'])->middleware('throttle:60,1,orders.orders.ship-options');
-    Route::post('orders/shipping-labels', [OrderController::class, 'shippingLabels'])->middleware('throttle:30,1,orders.orders.shipping-labels');
+    Route::post('orders/shipping-labels/plan', [OrderController::class, 'shippingLabelPlan']);
+    // The browser asks one order per call (a few at a time), so a batch of 50 labels is 50 calls.
+    Route::post('orders/shipping-labels', [OrderController::class, 'shippingLabels'])->middleware('throttle:200,1,orders.orders.shipping-labels');
     Route::post('orders/pick-list', [PackingController::class, 'pickList']);
     Route::get('orders/packing/lookup', [PackingController::class, 'lookup'])->middleware('throttle:240,1,orders.packing.lookup');
     Route::get('orders/packing/stats', [PackingController::class, 'stats']);

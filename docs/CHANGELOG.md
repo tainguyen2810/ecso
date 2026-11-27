@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### In phiếu sàn hàng loạt không còn treo; hộp Chuẩn bị hàng gọn hơn (2026-11-27)
+- In phiếu sàn nhiều đơn từng hỏi sàn cho cả lô trong một lần gọi (mỗi đơn Shopee 5–6 lượt), quá 60 giây máy chủ cắt nên quay rồi tắt. Giờ trình duyệt lấy từng phiếu, 4 đơn cùng lúc, có thanh tiến độ "Đang lấy 4/11"; đơn sàn chưa cấp mã vận đơn được đợi 4 giây rồi hỏi lại một lần; đơn lỗi vẫn in các đơn còn lại, có nút "In lại đơn lỗi". `POST /orders/shipping-labels/plan` trả thứ tự in (theo sản phẩm) không gọi sàn; giới hạn gọi phiếu nâng 30 → 200/phút.
+- Hộp in không hiện (Chrome không in từ khung 0×0): khung in có kích thước, và luôn có nút "Mở phiếu để in" và "Tải PDF".
+- Sau "Chuẩn bị hàng" có tích "In phiếu sàn ngay khi xong": tự lấy phiếu và mở hộp in, không cần bấm thêm.
+- Hộp Chuẩn bị hàng: hai lựa chọn Shipper đến lấy / Tự mang ra bưu cục cùng cỡ, có biểu tượng; Nơi lấy hàng và Ngày lấy hàng thành hai ô có nhãn bên dưới, không còn bị cắt chữ; bỏ khung lồng nhau.
+
 ### Đơn hàng: chọn nhanh đơn cần Chuẩn bị hàng (2026-11-27)
 - Ô nhắc đầu danh sách khi có đơn Shopee, TikTok chờ Chuẩn bị hàng: số đơn, đơn còn dưới 3 giờ, đơn hạn hôm nay, đơn đủ và thiếu hàng. Nút "Chuẩn bị N đơn đủ hàng" (hoặc "Chuẩn bị tất cả N đơn" khi không đơn nào đủ hàng) mở thẳng hộp Chuẩn bị hàng, không cần tích tay.
 - Lọc nhanh "Cần chuẩn bị hàng" (tên cũ "Chưa chuẩn bị hàng (sàn)") lên đầu, kèm số đơn; bấm vào là xếp theo hạn giao gần nhất và tự chọn hết các đơn ở mọi trang. Ô tích đầu bảng khi đang lọc này cũng chọn cả các trang (tối đa 200 đơn).

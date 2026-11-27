@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PDFDocument } from 'pdf-lib';
-import { fitInCell, mergeLabels } from './shippingLabels';
+import { fitInCell, mergeLabels, runPool } from './shippingLabels';
 
 /** A label as a marketplace sends it: one 100×150 mm page, base64. */
 async function label(): Promise<string> {
@@ -26,5 +26,23 @@ describe('marketplace labels', () => {
         expect(await pages('a4')).toBe(2);
         const a4 = (await PDFDocument.load(await mergeLabels(files, 'a4'))).getPage(0).getSize();
         expect(Math.round(a4.width)).toBe(595);
+    });
+});
+
+describe('runPool', () => {
+    it('keeps at most `limit` running, keeps order and reports progress', async () => {
+        let running = 0;
+        let peak = 0;
+        const seen: number[] = [];
+        const out = await runPool([30, 5, 20, 1, 10], 2, async (ms, i) => {
+            running++;
+            peak = Math.max(peak, running);
+            await new Promise((r) => setTimeout(r, ms));
+            running--;
+            return i * 10;
+        }, (done) => seen.push(done));
+        expect(out).toEqual([0, 10, 20, 30, 40]);
+        expect(peak).toBe(2);
+        expect(seen).toEqual([1, 2, 3, 4, 5]);
     });
 });
