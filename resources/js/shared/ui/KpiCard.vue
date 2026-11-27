@@ -15,7 +15,7 @@ const props = withDefaults(
 </script>
 
 <template>
-    <div :class="cn('flex items-center gap-3 rounded-lg border bg-card px-4 py-3.5 shadow-xs', active && 'border-primary/40 bg-blue-50/60 ring-1 ring-primary/30', props.class)">
+    <div :class="cn('flex items-center gap-3 rounded-lg bg-card px-4 py-3.5 shadow-card', active && 'border-primary/40 bg-blue-50/60 ring-1 ring-primary/30', props.class)">
         <IconBubble v-if="icon" :icon="icon" :tone="tone === 'slate' ? 'blue' : tone" />
         <div class="min-w-0 flex-1">
             <p class="flex items-center gap-1 text-xs text-muted-foreground"><slot name="label">{{ label }}</slot></p>

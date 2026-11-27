@@ -129,7 +129,7 @@ const duration = (ms: number | null) => (ms === null ? '—' : ms < 1000 ? `${ms
             v-for="(c, key) in categories"
             :key="key"
             type="button"
-            :class="['rounded-lg border bg-card px-4 py-3 text-left shadow-xs transition hover:border-primary/40', category === key && 'border-primary ring-2 ring-blue-100']"
+            :class="['rounded-lg bg-card px-4 py-3 text-left shadow-card transition hover:border-primary/40', category === key && 'border-primary ring-2 ring-blue-100']"
             :title="c.hint"
             @click="category = category === key ? '' : key"
         >

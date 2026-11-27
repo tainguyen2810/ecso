@@ -113,7 +113,7 @@ async function syncNow(s: SyncShopData) {
                 <span class="text-xs text-muted-foreground">Bấm vào ô để mở Hàng đợi đã lọc</span>
             </div>
             <div class="grid gap-3 sm:grid-cols-3 xl:grid-cols-5" data-testid="sync-center-task-tiles">
-                <RouterLink v-for="t in tiles" :key="t.status" :to="{ query: { tab: 'queue', status: t.status, since: '24h' } }" class="block rounded-lg border bg-card px-4 py-3.5 shadow-xs transition hover:border-primary/40">
+                <RouterLink v-for="t in tiles" :key="t.status" :to="{ query: { tab: 'queue', status: t.status, since: '24h' } }" class="block rounded-lg bg-card px-4 py-3.5 shadow-card transition hover:border-primary/40">
                     <Badge :tone="statusInfo[t.status].tone">{{ statusInfo[t.status].label }}</Badge>
                     <p :class="['mt-2 text-2xl font-bold tabular-nums', { slate: 'text-foreground', blue: 'text-blue-600', green: 'text-emerald-600', red: t.value ? 'text-rose-600' : 'text-slate-400' }[t.tone]]">{{ formatNumber(t.value) }}</p>
                     <p class="text-[11px] text-muted-foreground">{{ t.note }}</p>

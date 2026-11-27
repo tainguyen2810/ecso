@@ -450,7 +450,7 @@ async function removeImage(id: number) {
                         role="radio"
                         :aria-checked="productType === t.value"
                         :data-testid="`type-${t.value}`"
-                        :class="cn('rounded-lg border bg-card p-4 text-left text-sm shadow-xs transition-colors hover:border-primary/60', productType === t.value && 'border-primary ring-2 ring-primary/20')"
+                        :class="cn('rounded-lg bg-card p-4 text-left text-sm shadow-card transition-colors hover:border-primary/60', productType === t.value && 'border-primary ring-2 ring-primary/20')"
                         @click="setType(t.value)"
                     >
                         <p class="font-medium">{{ t.title }}</p>

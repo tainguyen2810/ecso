@@ -352,7 +352,7 @@ const fmtDay = (d: string | null | undefined) => (d ? d.split('-').reverse().joi
     <template v-else-if="order">
         <RouterLink to="/orders" class="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft class="size-4" /> Đơn hàng</RouterLink>
 
-        <section class="mb-5 rounded-lg border bg-card shadow-xs">
+        <section class="mb-5 rounded-lg bg-card shadow-card">
             <div class="flex flex-wrap items-start gap-4 px-5 py-4">
                 <MarketplaceLogo :marketplace="order.marketplace" :name="marketplaceNames[order.marketplace]" size="lg" class="size-11" />
                 <div class="min-w-0 flex-1">

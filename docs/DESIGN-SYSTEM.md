@@ -4,7 +4,7 @@ Chốt ngày 03/11/2026 cùng màn Tổng quan mới (tham khảo bố cục T�
 
 ## Nguyên tắc
 
-1. **Nền xám nhạt, thẻ trắng, sidebar trắng.** Trang `bg-background`, mỗi khối là `Card` trắng viền mảnh, bo `rounded-lg`.
+1. **Theo Sapo (đo trên trang Tạo đơn của Sapo, 27/11/2026).** Trang nền `#f0f1f1`, mỗi khối là `Card` trắng **không viền**, bóng mờ `shadow-card`, bo 3px (`rounded-lg` = 3px). Tiêu đề thẻ 15px chữ vừa, đệm 16px, các thẻ cách nhau 24px (`gap-6`). Nút và ô nhập cao 36px, bo 3px; nút chính xanh `#0088ff`, nút phụ (`outline`) viền xanh chữ xanh. Thẻ lựa chọn (cách giao hàng) và hộp thoại bo 8px (`rounded-xl`). Trang dạng form (Tạo đơn) đặt tiêu đề + nút lên thanh trên cùng (`meta.actionBar` + `<Teleport defer to="#page-actionbar">`) và lặp nút ở cuối trang.
 2. **Màu nhạt theo bảng Tailwind.** Nền tô màu dùng tông 50 (`bg-blue-50`), icon tông 500, con số tông 600. Không dùng màu đặc cho mảng lớn.
 3. **Màu phải có nghĩa.** Icon mặc định đơn sắc (nét lucide, `stroke-width` 1.75). Chỉ tô màu khi màu nói lên điều gì:
 

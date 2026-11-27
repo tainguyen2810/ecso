@@ -277,7 +277,7 @@ const orderLinks = computed(() => links.value.filter((l) => !['Thanh toán', 'Tr
     <template v-else>
         <p class="-mt-3 mb-4 text-sm text-muted-foreground">Danh sách {{ group.title.toLowerCase() }}</p>
         <div class="grid gap-4 md:grid-cols-2" :data-testid="`report-group-${key}`">
-            <div v-for="l in links" :key="l.title" class="flex gap-4 rounded-lg border bg-card p-5 shadow-xs">
+            <div v-for="l in links" :key="l.title" class="flex gap-4 rounded-lg bg-card p-5 shadow-card">
                 <span class="grid size-11 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-600"><component :is="l.icon" class="size-5" /></span>
                 <div class="min-w-0">
                     <RouterLink :to="target(l)" class="font-semibold text-primary hover:underline">{{ l.title }}</RouterLink>
