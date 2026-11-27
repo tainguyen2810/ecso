@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { CircleCheck, Download, ExternalLink, Printer, RotateCcw } from 'lucide-vue-next';
+import { CircleCheck, Download, Printer, RotateCcw } from 'lucide-vue-next';
 import Button from '@/shared/ui/Button.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { cn } from '@/shared/lib/utils';
@@ -40,9 +40,14 @@ const progress = ref<{ done: number; total: number } | null>(null);
 type Failure = { id: string; external_order_id: string; message: string };
 const failed = ref<Failure[]>([]);
 /** The merged PDF of the last run, for "Mở phiếu để in" and "Tải file PDF". */
-const ready = ref<{ url: string; count: number } | null>(null);
+const ready = ref<{ url: string; count: number; key: string } | null>(null);
+/** Labels already fetched, by order: changing the paper or the order only rebuilds the file, it never asks the marketplace again. */
+const cache = new Map<string, LabelFile & { id: string }>();
+const optionKey = computed(() => `${paper.value}|${byProduct.value}`);
+/** The file on screen still matches the options: the main button prints it as it is. */
+const current = computed(() => !!ready.value && ready.value.key === optionKey.value);
 const CONCURRENCY = 4;
-type Answer = { id: string; file?: LabelFile & { id: string }; fail?: Failure };
+type Answer = { id: string; file?: LabelFile & { id: string }; fail?: Failure; cached?: boolean };
 /** Failures that usually clear in seconds (tracking number or document not issued yet, slow answer). */
 const WAIT_AND_RETRY = /chưa cấp|chưa tạo xong|đang xử lý|chậm|Thử in lại/i;
 const waiting = ref(false);
@@ -71,9 +76,11 @@ async function print(only?: string[]) {
         const plan: string[] = (await api.post('/orders/shipping-labels/plan', { ids, sort })).data.data.ids;
         progress.value = { done: 0, total: plan.length };
         const fetchOne = async (id: string): Promise<Answer> => {
+            const hit = cache.get(id);
+            if (hit) return { id, file: hit, cached: true };
             try {
                 const { data } = await api.post('/orders/shipping-labels', { ids: [id] });
-                return { id, file: data.data.files[0], fail: data.data.failed[0] };
+                return { id, file: data.data.files[0], fail: data.data.failed[0], cached: false };
             } catch (e) {
                 return { id, fail: { id, external_order_id: '', message: e instanceof ApiError && e.status !== 504 && e.status !== 502 ? e.message : 'Sàn trả lời chậm, chưa lấy được phiếu. Bấm "In lại đơn lỗi" để thử lại.' } };
             }
@@ -89,11 +96,13 @@ async function print(only?: string[]) {
             answers = answers.map((a) => again.get(a.id) ?? a);
         }
         const files = answers.flatMap((a) => (a.file ? [a.file] : []));
+        files.forEach((f) => cache.set(f.id, f));
         failed.value = answers.flatMap((a) => (a.fail ? [a.fail] : []));
         if (files.length) {
             const url = printPdf(await mergeLabels(files, paper.value));
-            ready.value = { url, count: files.length };
-            emit('printed');
+            ready.value = { url, count: files.length, key: optionKey.value };
+            // Only labels newly taken from the marketplace count as a print.
+            if (answers.some((a) => a.file && !a.cached)) emit('printed');
         } else {
             toast.error('Chưa lấy được phiếu nào từ sàn.');
         }
@@ -109,9 +118,10 @@ async function print(only?: string[]) {
     }
 }
 
-/** On the user's own click, so the browser never blocks the new tab. */
-function openReady() {
-    if (ready.value) window.open(ready.value.url, '_blank');
+/** Main button: the file already made opens at once (on the user's click, so it is never blocked); otherwise make it. */
+function go() {
+    if (current.value && ready.value) return void window.open(ready.value.url, '_blank');
+    void print();
 }
 const fileName = computed(() => `phieu-san-${new Date().toISOString().slice(0, 10)}.pdf`);
 </script>
@@ -149,9 +159,8 @@ const fileName = computed(() => `phieu-san-${new Date().toISOString().slice(0, 1
         </div>
         <div v-if="ready && !busy" class="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm" data-testid="label-ready">
             <CircleCheck class="size-4 shrink-0 text-emerald-600" />
-            <span class="min-w-40 flex-1"><b>{{ ready.count }} phiếu</b> đã sẵn sàng. Không thấy hộp in thì bấm "Mở phiếu để in".</span>
-            <Button size="sm" data-testid="label-open" @click="openReady"><ExternalLink /> Mở phiếu để in</Button>
-            <a :href="ready.url" :download="fileName"><Button size="sm" variant="outline"><Download /> Tải PDF</Button></a>
+            <span class="min-w-40 flex-1"><b>{{ ready.count }} phiếu</b> đã sẵn sàng.<template v-if="current"> Không thấy hộp in thì bấm "In {{ ready.count }} phiếu" bên dưới.</template><template v-else> Bấm bên dưới để làm lại file theo lựa chọn mới.</template></span>
+            <a v-if="current" :href="ready.url" :download="fileName" class="inline-flex items-center gap-1 text-sm font-medium text-emerald-800 hover:underline"><Download class="size-4" /> Tải PDF</a>
         </div>
         <div v-if="failed.length && !busy" class="mt-3 rounded-lg bg-rose-50 p-3 text-xs text-rose-700" data-testid="label-failed">
             <div class="mb-1 flex items-center gap-2">
@@ -163,7 +172,8 @@ const fileName = computed(() => `phieu-san-${new Date().toISOString().slice(0, 1
             </ul>
         </div>
         <div class="mt-3 flex justify-end">
-            <Button :loading="busy" data-testid="label-print-go" @click="print()"><Printer /> {{ busy && progress ? `Đang lấy ${progress.done}/${progress.total}` : `In ${ids.length} phiếu` }}</Button>
+            <!-- While labels come in, the progress bar above is the only status: the button waits out of sight. -->
+            <Button v-if="!progress" :loading="busy" data-testid="label-print-go" @click="go"><Printer /> In {{ current && ready ? ready.count : ids.length }} phiếu</Button>
         </div>
     </div>
 </template>
