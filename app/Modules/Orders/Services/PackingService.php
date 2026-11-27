@@ -210,11 +210,13 @@ class PackingService
                     continue;
                 }
                 $variant = $item->variant;
-                $key = $variant ? 'v'.$variant->id : 's'.mb_strtolower(($item->seller_sku ?? '').'|'.$item->name.'|'.$item->variant_name);
+                // A shop variant without its own name (one SKU for the whole listing) keeps the marketplace variation ("128GB") apart.
+                $variation = $variant && ! filled($variant->name) && filled($item->variant_name) ? (string) $item->variant_name : null;
+                $key = $variant ? 'v'.$variant->id.($variation !== null ? '|'.mb_strtolower($variation) : '') : 's'.mb_strtolower(($item->seller_sku ?? '').'|'.$item->name.'|'.$item->variant_name);
                 $rows[$key] ??= [
                     'sku' => $variant->sku ?? $item->seller_sku,
                     'barcode' => $variant?->barcode,
-                    'name' => $variant ? $variant->displayName() : trim($item->name.($item->variant_name ? ' - '.$item->variant_name : '')),
+                    'name' => $variant ? $variant->displayName().($variation !== null ? ' - '.$variation : '') : trim($item->name.($item->variant_name ? ' - '.$item->variant_name : '')),
                     'location' => $variant?->location,
                     'quantity' => 0,
                     'orders' => [],

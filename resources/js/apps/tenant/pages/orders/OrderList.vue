@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import VariantTag from './VariantTag.vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Ban, Banknote, Bookmark, ClipboardList, FilePen, Package, PackageCheck, PackageX, Tag, ScanBarcode, Trash2, ChevronDown, ChevronsRight, Clock, Columns3, Download, Filter, History, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingBasket, ShoppingCart, UserPlus, X } from 'lucide-vue-next';
@@ -919,7 +920,8 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                                     <img v-if="o.items_preview[0].image" :src="o.items_preview[0].image" alt="" :class="cn('shrink-0 rounded-md border object-cover', compact ? 'size-7' : 'size-10')" loading="lazy" />
                                     <span v-else :class="cn('grid shrink-0 place-items-center rounded-md bg-slate-100 text-slate-400', compact ? 'size-7' : 'size-10')"><Package class="size-4" :stroke-width="1.75" /></span>
                                     <div class="min-w-0">
-                                        <div class="truncate">{{ o.items_preview[0].name }}<span v-if="o.items_preview[0].variant_name" class="text-muted-foreground"> · {{ o.items_preview[0].variant_name }}</span> <span class="text-muted-foreground tabular-nums">× {{ o.items_preview[0].quantity }}</span></div>
+                                        <div class="flex min-w-0 items-baseline gap-1"><span class="truncate">{{ o.items_preview[0].name }}</span> <span :class="cn('shrink-0 tabular-nums', o.items_preview[0].quantity > 1 ? 'font-semibold text-foreground' : 'text-muted-foreground')">× {{ o.items_preview[0].quantity }}</span></div>
+                                        <VariantTag :name="o.items_preview[0].variant_name" class="mt-0.5" />
                                         <div v-if="!compact && (o.items_count ?? 0) > 1" class="text-xs text-muted-foreground">+{{ (o.items_count ?? 0) - 1 }} sản phẩm khác</div>
                                     </div>
                                 </div>

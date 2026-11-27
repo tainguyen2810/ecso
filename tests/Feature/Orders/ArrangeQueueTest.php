@@ -2,6 +2,7 @@
 
 use App\Modules\Inventory\Services\StockVerifier;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Orders\Models\OrderItem;
 
 /** "Cần chuẩn bị hàng": Shopee / TikTok orders waiting for "Chuẩn bị hàng" over all pages, grouped by product. */
 beforeEach(function () {
@@ -71,4 +72,19 @@ it('plans the label print order by product without asking the marketplace', func
     $api->postJson('/api/v1/orders/shipping-labels/plan', ['ids' => $ids])->assertOk()->assertJsonPath('data.ids', $ids);
     $api->postJson('/api/v1/orders/shipping-labels/plan', ['ids' => $ids, 'sort' => 'product'])->assertOk()
         ->assertJsonPath('data.ids', [$antenna->ulid, $card->ulid, $glue->ulid]);
+});
+
+it('keeps marketplace variations of one unnamed shop SKU apart, in the queue and on the pick list', function () {
+    $a = shopeeOrder($this->shop, [[$this->glue, 1]]);
+    $b = shopeeOrder($this->shop, [[$this->glue, 2]]);
+    OrderItem::withoutGlobalScopes()->where('order_id', $a->id)->update(['variant_name' => '64GB']);
+    OrderItem::withoutGlobalScopes()->where('order_id', $b->id)->update(['variant_name' => '128GB']);
+    $api = actingInTenant($this->owner, $this->tenant);
+
+    $products = collect($api->getJson('/api/v1/orders/to-arrange')->json('data.products'))->keyBy('variant_name');
+    expect($products->keys()->sort()->values()->all())->toBe(['128GB', '64GB'])
+        ->and($products['128GB']['quantity'])->toBe(2);
+
+    $rows = collect($api->postJson('/api/v1/orders/pick-list', ['ids' => [$a->ulid, $b->ulid]])->assertOk()->json('data.rows'));
+    expect($rows->pluck('name')->sort()->values()->all())->toBe(['Keo tản nhiệt - 128GB', 'Keo tản nhiệt - 64GB']);
 });

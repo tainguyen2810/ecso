@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import VariantTag from './VariantTag.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { AlertTriangle, ArrowLeft, Ban, Banknote, Check, Clock, Copy, History, Link2, Mail, MapPin, MessageSquare, PackageCheck, Pencil, Printer, ReceiptText, RefreshCw, Repeat, Tag, Truck, Undo2, UserRound, Wallet, Warehouse, X } from 'lucide-vue-next';
@@ -450,7 +451,8 @@ const fmtDay = (d: string | null | undefined) => (d ? d.split('-').reverse().joi
                                 <tr v-for="i in order.items" :key="i.id" class="align-top">
                                     <td class="px-5 py-3">
                                         <div class="font-medium">{{ i.name }} <Badge v-if="i.is_gift" tone="success" data-testid="gift-line">Quà tặng</Badge></div>
-                                        <div class="text-xs text-muted-foreground">{{ i.variant_name }}<template v-if="!isManual"> · SKU sàn: {{ i.seller_sku ?? '—' }}</template><template v-else-if="Number(i.discount) > 0"> · giảm {{ formatMoney(i.discount) }}</template></div>
+                                        <VariantTag :name="i.variant_name" class="my-0.5" />
+                                        <div class="text-xs text-muted-foreground"><template v-if="!isManual">SKU sàn: {{ i.seller_sku ?? '—' }}</template><template v-else-if="Number(i.discount) > 0">Giảm {{ formatMoney(i.discount) }}</template></div>
                                         <div v-if="i.subscription?.period" class="mt-1 text-xs" data-testid="item-subscription">
                                             <RouterLink v-if="i.subscription.period.subscription" :to="`/subscriptions/${i.subscription.period.subscription.id}`" class="font-medium text-primary hover:underline">{{ i.subscription.period.subscription.code }}</RouterLink>
                                             <template v-if="i.subscription.label"> · {{ i.subscription.label }}</template>
