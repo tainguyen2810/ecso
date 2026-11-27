@@ -77,7 +77,8 @@ class OrderQuery
                 ->orWhere('reference', 'like', "%{$q}%")
                 ->orWhere('external_number', $q)
                 ->orWhere('external_number', ltrim($q, '#'))
-                ->orWhere('tracking_number', $q)
+                // Mã vận đơn: whole, or a part of at least 5 characters (the end read off a parcel).
+                ->orWhere('tracking_number', mb_strlen($q) >= 5 ? 'like' : '=', mb_strlen($q) >= 5 ? "%{$q}%" : $q)
                 ->orWhere('buyer_phone_hash', $phoneHash)
                 ->orWhereHas('customer', fn ($c) => $c->where('name', 'like', "%{$q}%")->orWhere('phone_hash', $phoneHash))
                 ->orWhereHas('items', fn ($i) => $i->where('seller_sku', $q)->orWhere('name', 'like', "%{$q}%")));

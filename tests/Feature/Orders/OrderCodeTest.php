@@ -67,6 +67,10 @@ it('keeps the old numbering until the shop starts, then numbers old orders by da
     $api->getJson('/api/v1/orders?q='.substr($later->external_order_id, 2, 6))->assertJsonPath('data.0.code', 'SON50895');
     $api->getJson('/api/v1/orders?q=SO-000001')->assertJsonCount(1, 'data')->assertJsonPath('data.0.code', 'SON50892');
     $api->getJson('/api/v1/orders?q=10391')->assertJsonCount(1, 'data')->assertJsonPath('data.0.code', 'SON50894');
+    // Mã vận đơn, whole or a part of it.
+    Order::withoutGlobalScopes()->whereKey($later->id)->update(['tracking_number' => 'SPXVN065512398']);
+    $api->getJson('/api/v1/orders?q=SPXVN065512398')->assertJsonCount(1, 'data')->assertJsonPath('data.0.code', 'SON50895');
+    $api->getJson('/api/v1/orders?q=5512398')->assertJsonCount(1, 'data')->assertJsonPath('data.0.code', 'SON50895');
 });
 
 it('sets the next number, never back to one already used, and supports a prefix per channel', function () {
