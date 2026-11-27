@@ -29,7 +29,7 @@ class CodReconciliationController extends Controller
     public function show(CodReconciliation $codReconciliation): JsonResponse
     {
         $this->authorize('view', CashVoucher::class);
-        $r = $codReconciliation->load(['account:id,ulid,name', 'creator:id,name', 'voider:id,name', 'feeVoucher:id,ulid,number', 'lines.order:id,ulid,external_order_id']);
+        $r = $codReconciliation->load(['account:id,ulid,name', 'creator:id,name', 'voider:id,name', 'feeVoucher:id,ulid,number', 'lines.order:id,ulid,external_order_id,code']);
 
         return response()->json(['data' => [
             ...$this->row($r),
@@ -41,7 +41,7 @@ class CodReconciliationController extends Controller
                 'status' => $l->status,
                 'booked' => (float) $l->booked,
                 'note' => $l->note,
-                'order' => $l->order ? ['id' => $l->order->ulid, 'number' => $l->order->external_order_id] : null,
+                'order' => $l->order ? ['id' => $l->order->ulid, 'number' => $l->order->displayCode()] : null,
             ])->values(),
         ]]);
     }

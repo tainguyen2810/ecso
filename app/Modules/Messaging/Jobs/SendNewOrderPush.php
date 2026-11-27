@@ -68,7 +68,7 @@ class SendNewOrderPush implements ShouldQueue
 
             return [
                 'title' => 'Đơn mới · '.$where($o),
-                'body' => trim($o->external_order_id.' · '.($o->buyer_name ? $o->buyer_name.' · ' : '').$money($o)),
+                'body' => trim($o->displayCode().' · '.($o->buyer_name ? $o->buyer_name.' · ' : '').$money($o)),
                 'url' => '/orders/'.$o->ulid,
             ];
         }
@@ -76,7 +76,7 @@ class SendNewOrderPush implements ShouldQueue
 
         return [
             'title' => count($orders).' đơn mới',
-            'body' => 'Tổng '.number_format($total, 0, ',', '.').'đ · mới nhất '.$orders[0]->external_order_id.' ('.$where($orders[0]).')',
+            'body' => 'Tổng '.number_format($total, 0, ',', '.').'đ · mới nhất '.$orders[0]->displayCode().' ('.$where($orders[0]).')',
             'url' => '/orders?tab=all',
         ];
     }

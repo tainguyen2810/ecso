@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { orderCode } from '@/shared/orderCode';
 import { onMounted, onUnmounted, ref } from 'vue';
 import { Pencil, Printer, RefreshCw, Trash2, Undo2, Wallet, X, XCircle } from 'lucide-vue-next';
 import Alert from '@/shared/ui/Alert.vue';
@@ -97,7 +98,7 @@ const dot = (status: string) => (['failed'].includes(status) ? 'bg-red-400 ring-
                             <p v-if="shipment.order" class="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
                                 Đơn
                                 <RouterLink :to="`/orders/${shipment.order.id}`" class="inline-flex items-center gap-1 text-primary hover:underline">
-                                    <MarketplaceLogo :marketplace="shipment.order.marketplace" :name="marketplaceNames[shipment.order.marketplace]" size="sm" />{{ shipment.order.external_order_id }}
+                                    <MarketplaceLogo :marketplace="shipment.order.marketplace" :name="marketplaceNames[shipment.order.marketplace]" size="sm" />{{ orderCode(shipment.order) }}
                                 </RouterLink>
                                 <span>· {{ shipment.order.channel ?? marketplaceNames[shipment.order.marketplace] }}</span>
                                 <span v-if="shipment.created_at">· tạo {{ formatDateTime(shipment.created_at) }}</span>

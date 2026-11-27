@@ -69,7 +69,7 @@ class SubscriptionController extends Controller
             ->orderBy('ends_on')->orderByDesc('id')
             ->paginate((int) ($filters['per_page'] ?? 50));
 
-        $pending = CustomerSubscriptionPeriod::query()->with('order:id,ulid,external_order_id')
+        $pending = CustomerSubscriptionPeriod::query()->with('order:id,ulid,external_order_id,code')
             ->whereIn('customer_subscription_id', $page->getCollection()->pluck('id'))->where('status', CustomerSubscriptionPeriod::PENDING)
             ->get()->keyBy('customer_subscription_id');
 
@@ -90,7 +90,7 @@ class SubscriptionController extends Controller
         $this->authorize('viewAny', Order::class);
         $today = SubscriptionService::today();
         $subscription->load(['customer', 'product' => fn ($q) => $q->withTrashed(), 'variant', 'assignee:id,ulid,name']);
-        $periods = CustomerSubscriptionPeriod::query()->with(['order:id,ulid,external_order_id,status,total,paid_amount,refunded_amount', 'variant'])
+        $periods = CustomerSubscriptionPeriod::query()->with(['order:id,ulid,external_order_id,code,status,total,paid_amount,refunded_amount', 'variant'])
             ->where('customer_subscription_id', $subscription->id)->orderByDesc('starts_on')->orderByDesc('id')->get();
         $pending = $periods->firstWhere('status', CustomerSubscriptionPeriod::PENDING);
 
@@ -110,7 +110,7 @@ class SubscriptionController extends Controller
                 'status' => $p->status,
                 'current' => $p->status === CustomerSubscriptionPeriod::ACTIVE && $p->starts_on->lessThanOrEqualTo($today) && $p->ends_on->greaterThanOrEqualTo($today),
                 'variant' => $p->variant ? ['id' => $p->variant->ulid, 'sku' => $p->variant->sku, 'name' => $p->variant->name] : null,
-                'order' => $p->order ? ['id' => $p->order->ulid, 'number' => $p->order->external_order_id, 'status' => $p->order->status, 'due' => number_format(max(0, (float) $p->order->total - (float) $p->order->paid_amount - (float) $p->order->refunded_amount), 2, '.', '')] : null,
+                'order' => $p->order ? ['id' => $p->order->ulid, 'number' => $p->order->displayCode(), 'status' => $p->order->status, 'due' => number_format(max(0, (float) $p->order->total - (float) $p->order->paid_amount - (float) $p->order->refunded_amount), 2, '.', '')] : null,
             ]),
             'events' => CustomerSubscriptionEvent::query()->with('user:id,name')->where('customer_subscription_id', $subscription->id)->latest('id')->limit(100)->get()
                 ->map(fn (CustomerSubscriptionEvent $e) => ['id' => $e->id, 'kind' => $e->kind, 'note' => $e->note, 'user' => $e->user?->name, 'at' => $e->created_at?->toIso8601String()]),
@@ -262,7 +262,7 @@ class SubscriptionController extends Controller
             'ends_on' => $s->ends_on?->toDateString(),
             'days_left' => $s->daysLeft($today),
             'grace_days' => $s->product->subscriptionRules()['grace_days'],
-            'pending_order' => $pending?->order ? ['id' => $pending->order->ulid, 'number' => $pending->order->external_order_id] : null,
+            'pending_order' => $pending?->order ? ['id' => $pending->order->ulid, 'number' => $pending->order->displayCode()] : null,
             'reminders' => count(array_filter($s->reminded ?? [], fn ($k) => $s->ends_on !== null && str_starts_with((string) $k, $s->ends_on->toDateString()))),
             'assignee' => $s->assignee ? ['id' => $s->assignee->ulid, 'name' => $s->assignee->name] : null,
         ];

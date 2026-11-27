@@ -17,6 +17,7 @@ use App\Modules\Orders\Models\OrderStatusHistory;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Services\CustomerResolver;
 use App\Modules\Sales\Support\PhoneNumber;
+use App\Modules\Tenancy\Models\Tenant;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -56,6 +57,7 @@ class OrderIngestor
         private readonly CustomerResolver $resolver,
         private readonly ReservationLedger $ledger,
         private readonly ReturnService $returns,
+        private readonly OrderCodes $codes,
     ) {}
 
     /**
@@ -118,6 +120,10 @@ class OrderIngestor
                 $order->forceFill(['cancelled_at' => null, 'cancel_reason' => null]);
             }
             $order->save();
+            // Mã đơn hàng: the shop's next number (also catches an order that arrived while numbering was starting).
+            if ($order->code === null && ($tenant = Tenant::query()->find($order->tenant_id))) {
+                $this->codes->assign($order, $tenant);
+            }
             $this->upsertItems($account, $order, $data->items, $data->refunds !== null, rebuild: $restoring
                 // Only the seller's own store edits orders; a snapshot without lines never empties an order.
                 || ($data->ownsCustomer && $data->items !== [] && $wasOpen && OrderStatus::policy($status) === OrderStatus::RESERVE
@@ -319,7 +325,7 @@ class OrderIngestor
             // what was held and take the lines again, so the stock held follows the new quantities. New item rows
             // get new reservation keys; the old reservations stay in the ledger as released.
             $ids = $order->items()->pluck('id')->map(fn ($id) => (int) $id)->all();
-            $this->ledger->releaseAll(Order::STOCK_REFERENCE, $ids, "Đơn {$order->external_order_id} đổi trên website");
+            $this->ledger->releaseAll(Order::STOCK_REFERENCE, $ids, "Đơn {$order->displayCode()} đổi trên website");
             $order->items()->delete();
         } elseif ($items !== [] && ! $order->wasRecentlyCreated && OrderStatus::isShipped($order->status) && $this->linesChanged($order, $items, false)) {
             $order->forceFill(['sync_warning' => 'Đơn đã sửa số lượng hoặc dòng hàng trên website sau khi ra khỏi kho; ECSO giữ số lượng đã xuất, cần kiểm tra.'])->save();

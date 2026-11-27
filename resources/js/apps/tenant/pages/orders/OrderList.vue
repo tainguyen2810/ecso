@@ -29,6 +29,7 @@ import ArrangeByProduct from './ArrangeByProduct.vue';
 import { bannerIds, urgencyLine, type ArrangeOrder, type ArrangeSummary } from './arrange';
 import LabelPrint from './LabelPrint.vue';
 import { downloadPackingSlips } from './packingSlip';
+import { orderCode, secondaryCodes } from '@/shared/orderCode';
 import { downloadPickList } from './packing';
 import { useAuthStore } from '@/shared/stores/auth';
 import OrderPipeline from './OrderPipeline.vue';
@@ -579,7 +580,7 @@ async function runRow(o: OrderSummary, action: string) {
     try {
         const { data } = await api.post('/orders/bulk', { ids: [o.id], action });
         const r = (data.data as { ok: boolean; message: string | null }[])[0];
-        if (r?.ok) toast.success(`${actionLabels[action]}: ${o.external_order_id}`);
+        if (r?.ok) toast.success(`${actionLabels[action]}: ${orderCode(o)}`);
         else toast.error(r?.message ?? 'Không xử lý được đơn này.');
         await refresh();
     } catch (e) {
@@ -618,7 +619,7 @@ async function loadAwaiting() {
 }
 onMounted(loadAwaiting);
 
-const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.external_order_id ?? id;
+const orderLabel = (id: string) => orderCode(orders.value.find((o) => o.id === id)) || id;
 </script>
 
 <template>
@@ -682,7 +683,7 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
             <div class="flex flex-wrap items-center gap-2">
                 <div class="relative min-w-60 flex-1">
                     <Search class="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                    <Input v-model="filters.q" class="pl-8" placeholder="Tìm theo mã đơn, mã vận đơn, SKU, tên sản phẩm, tên hoặc SĐT khách…" data-testid="order-search" />
+                    <Input v-model="filters.q" class="pl-8" placeholder="Tìm theo mã đơn, mã sàn/Woo, mã vận đơn, SKU, tên sản phẩm, tên hoặc SĐT khách…" data-testid="order-search" />
                 </div>
                 <Button variant="outline" :class="cn((moreFilters || advancedCount) && 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-50')" :aria-expanded="moreFilters" data-testid="more-filters" @click="moreFilters ? (moreFilters = false) : openFilters()">
                     <Filter /> Bộ lọc khác <span v-if="advancedCount" class="rounded-full bg-primary px-1.5 text-xs text-primary-foreground">{{ advancedCount }}</span>
@@ -882,14 +883,14 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                     <template v-for="o in orders" :key="o.id">
                         <tr :class="cn('cursor-pointer hover:bg-blue-50/40', selected.has(o.id) && 'bg-blue-50/70 hover:bg-blue-50/70', peek === o.id && 'bg-blue-50 hover:bg-blue-50')" @click="peek = o.id">
                             <td class="py-3 pl-3" @click.stop>
-                                <RouterLink :to="`/orders/${o.id}`" class="block rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground" :aria-label="`Mở trang đơn ${o.external_order_id}`" title="Mở trang đầy đủ"><ChevronsRight class="size-4" /></RouterLink>
+                                <RouterLink :to="`/orders/${o.id}`" class="block rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground" :aria-label="`Mở trang đơn ${orderCode(o)}`" title="Mở trang đầy đủ"><ChevronsRight class="size-4" /></RouterLink>
                             </td>
-                            <td class="py-3" @click.stop><input type="checkbox" :checked="selected.has(o.id)" :aria-label="`Chọn đơn ${o.external_order_id}`" @change="toggle(o.id)" /></td>
+                            <td class="py-3" @click.stop><input type="checkbox" :checked="selected.has(o.id)" :aria-label="`Chọn đơn ${orderCode(o)}`" @change="toggle(o.id)" /></td>
                             <td class="px-3 py-3">
                                 <div class="flex items-center gap-2">
                                     <MarketplaceLogo :marketplace="o.marketplace" :name="o.shop?.name ?? o.channel?.name ?? marketplaceNames[o.marketplace]" size="sm" />
-                                    <span class="font-medium text-primary">{{ o.external_order_id }}</span>
-                                    <span v-if="o.external_number && o.external_number !== o.external_order_id" class="font-mono text-xs text-muted-foreground">#{{ o.external_number }}</span>
+                                    <span class="font-medium text-primary" data-testid="order-code">{{ orderCode(o) }}</span>
+                                    <template v-if="compact"><span v-for="c in secondaryCodes(o)" :key="c.kind" class="whitespace-nowrap text-xs text-muted-foreground" :title="c.label">{{ c.label }} <span class="font-mono">{{ c.value }}</span></span></template>
                                     <span v-if="o.imported_from === 'sapo'" class="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 text-[11px] font-medium text-emerald-700" title="Đơn cũ lấy từ Sapo: chỉ để xem lịch sử, không trừ kho" data-testid="order-sapo-badge"><History class="size-3" /> Sapo</span>
                                     <template v-if="compact">
                                         <span v-if="o.flags.shortage" class="rounded-full bg-rose-50 px-1.5 text-[11px] text-rose-600">Thiếu hàng</span>
@@ -898,6 +899,7 @@ const orderLabel = (id: string) => orders.value.find((o) => o.id === id)?.extern
                                     </template>
                                 </div>
                                 <div v-if="!compact" class="mt-0.5 flex flex-wrap items-center gap-1 pl-7 text-[11px] text-muted-foreground">
+                                    <span v-for="c in secondaryCodes(o)" :key="c.kind" class="whitespace-nowrap" data-testid="order-secondary-code">{{ c.label }} <span class="font-mono text-foreground/70">{{ c.value }}</span> ·</span>
                                     <span v-if="!columns.date" class="tabular-nums">{{ formatDateTime(o.placed_at) }} ·</span>
                                     {{ o.shop?.name ?? o.channel?.name ?? marketplaceNames[o.marketplace] }}
                                     <span v-if="o.flags.shortage" class="rounded-full bg-rose-50 px-1.5 text-rose-600" title="Thiếu hàng">Thiếu hàng</span>

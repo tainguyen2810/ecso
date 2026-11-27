@@ -75,7 +75,7 @@ class ShipmentQuery
             ->when(($filters['fee'] ?? null) === 'gap', fn ($q) => self::feeGap($q))
             ->when($filters['order_id'] ?? null, fn ($q, $id) => $q->whereHas('order', fn ($o) => $o->where('ulid', $id)))
             ->when($filters['q'] ?? null, fn ($q, $term) => $q->where(fn ($w) => $w->where('tracking_number', 'like', "%{$term}%")
-                ->orWhereHas('order', fn ($o) => $o->where('external_order_id', 'like', "%{$term}%"))));
+                ->orWhereHas('order', fn ($o) => $o->where('external_order_id', 'like', "%{$term}%")->orWhere('code', 'like', "%{$term}%"))));
     }
 
     /**

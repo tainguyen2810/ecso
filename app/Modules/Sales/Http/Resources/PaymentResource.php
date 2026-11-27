@@ -22,7 +22,7 @@ class PaymentResource extends JsonResource
             'created_by' => $this->whenLoaded('creator', fn () => $this->creator?->name),
             'voided_at' => $this->voided_at?->toIso8601String(),
             'void_reason' => $this->void_reason,
-            'order' => $this->whenLoaded('order', fn () => ['id' => $this->order->ulid, 'number' => $this->order->external_order_id]),
+            'order' => $this->whenLoaded('order', fn () => ['id' => $this->order->ulid, 'number' => $this->order->displayCode()]),
         ];
     }
 }

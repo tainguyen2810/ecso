@@ -58,7 +58,7 @@ class PackingController extends Controller
         ]);
         $order = $packing->finish($order, $data['scanned'], $data['reason'] ?? null, $data['shipping'] ?? null);
 
-        return response()->json(['data' => ['id' => $order->ulid, 'external_order_id' => $order->external_order_id, 'status' => $order->status]]);
+        return response()->json(['data' => ['id' => $order->ulid, 'external_order_id' => $order->external_order_id, 'code' => $order->code, 'status' => $order->status]]);
     }
 
     public function pickList(Request $request, PackingService $packing): JsonResponse

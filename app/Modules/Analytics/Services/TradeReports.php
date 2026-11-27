@@ -141,7 +141,7 @@ class TradeReports
             ->leftJoin('customers as c', 'c.id', '=', 'o.customer_id');
         $all = (clone $returns)->selectRaw('COUNT(*) as n, COALESCE(SUM(q.quantity), 0) as quantity, COALESCE(SUM(r.refund_amount), 0) as refund_amount')->first();
         $rows = (clone $returns)->orderByDesc('r.created_at')->limit(self::limit())
-            ->get(['r.ulid', 'r.number', 'r.type', 'r.status', 'r.reason', 'r.refund_amount', 'r.created_at', 'o.ulid as order_id', 'o.external_order_id', 'o.buyer_name', 'c.name as customer', 'q.quantity'])
+            ->get(['r.ulid', 'r.number', 'r.type', 'r.status', 'r.reason', 'r.refund_amount', 'r.created_at', 'o.ulid as order_id', 'o.external_order_id', 'o.code', 'o.buyer_name', 'c.name as customer', 'q.quantity'])
             ->map(fn ($r) => [
                 'id' => $r->ulid,
                 'number' => $r->number,
@@ -149,7 +149,7 @@ class TradeReports
                 'status' => $r->status,
                 'reason' => $r->reason,
                 'created_at' => CarbonImmutable::parse($r->created_at)->toIso8601String(),
-                'order' => ['id' => $r->order_id, 'number' => $r->external_order_id],
+                'order' => ['id' => $r->order_id, 'number' => $r->code ?? $r->external_order_id],
                 'customer' => $r->customer ?? $r->buyer_name,
                 'quantity' => (int) $r->quantity,
                 'refund_amount' => round((float) $r->refund_amount, 2),

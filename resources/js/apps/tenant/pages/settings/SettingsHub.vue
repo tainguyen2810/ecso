@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, type Component } from 'vue';
-import { ArrowRightLeft, Boxes, Cable, CreditCard, HandCoins, MessageSquareWarning, Percent, Printer, Receipt, RefreshCw, ScrollText, Search, SlidersHorizontal, Sparkles, Store, Users, UsersRound, Wallet, Warehouse } from 'lucide-vue-next';
+import { ArrowRightLeft, Boxes, Hash, Cable, CreditCard, HandCoins, MessageSquareWarning, Percent, Printer, Receipt, RefreshCw, ScrollText, Search, SlidersHorizontal, Sparkles, Store, Users, UsersRound, Wallet, Warehouse } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Input from '@/shared/ui/Input.vue';
 import Switch from '@/shared/ui/Switch.vue';
@@ -36,6 +36,7 @@ const groups: { title: string; tiles: Tile[] }[] = [
     {
         title: 'Bán hàng',
         tiles: [
+            { to: '/settings/order-codes', icon: Hash, title: 'Mã đơn hàng', description: 'Kí hiệu và số chạy liên tục của mã đơn (VD: SON50892), cấp mã cho đơn đã có', permission: 'settings.manage' },
             { to: '/settings/sales', icon: SlidersHorizontal, title: 'Cấu hình bán hàng', description: 'Sửa thời gian bán, số liên in, bán tại quầy, lý do hủy và trả hàng', permission: 'settings.manage' },
             { to: '/sales-channels', icon: Store, title: 'Kênh bán riêng', description: 'Quầy, cửa hàng, Facebook, Zalo, website', permission: 'orders.view' },
             { to: '/settings/subscriptions', icon: RefreshCw, title: 'Thuê bao', description: 'Ngày nhắc khách gia hạn, gửi qua Zalo, báo nhân viên', permission: 'settings.manage' },

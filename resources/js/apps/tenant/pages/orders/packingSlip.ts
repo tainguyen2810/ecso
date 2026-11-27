@@ -1,9 +1,11 @@
+import { orderCode } from '@/shared/orderCode';
 import { formatDateTime, formatMoney } from '@/shared/lib/utils';
 import { marketplaceNames } from './labels';
 
 export interface PackingSlipData {
     id: string;
     external_order_id: string;
+    code?: string | null;
     shop: string | null;
     marketplace: string;
     placed_at: string | null;
@@ -35,7 +37,7 @@ export function packingSlipDocument(slips: PackingSlipData[]): Record<string, un
                 ],
                 ...(index > 0 ? { pageBreak: 'before' } : {}),
             },
-            { text: `Mã đơn: ${s.external_order_id}`, style: 'orderNo', margin: [0, 6, 0, 2] },
+            { text: `Mã đơn: ${orderCode(s)}`, style: 'orderNo', margin: [0, 6, 0, 2] },
             {
                 columns: [
                     { text: `Đặt lúc: ${formatDateTime(s.placed_at)}`, style: 'muted' },

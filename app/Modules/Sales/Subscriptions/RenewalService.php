@@ -61,7 +61,7 @@ class RenewalService
         DB::transaction(function () use ($sub, $order) {
             $fresh = CustomerSubscription::query()->lockForUpdate()->findOrFail($sub->id);
             $fresh->forceFill(['renewal_order_id' => $order->id])->save();
-            $this->subscriptions->log($fresh, 'auto_order', "Tự tạo đơn gia hạn {$order->external_order_id} (chờ xác nhận)");
+            $this->subscriptions->log($fresh, 'auto_order', "Tự tạo đơn gia hạn {$order->displayCode()} (chờ xác nhận)");
         });
 
         return $order;

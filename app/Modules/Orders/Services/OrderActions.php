@@ -147,7 +147,7 @@ class OrderActions
         foreach ($orders as $order) {
             try {
                 $done = $this->perform($order, $action, $params);
-                $results[] = ['id' => $order->ulid, 'ok' => true, 'message' => null, 'external_order_id' => $done->external_order_id, 'tracking_number' => $done->tracking_number];
+                $results[] = ['id' => $order->ulid, 'ok' => true, 'message' => null, 'external_order_id' => $done->external_order_id, 'code' => $done->code, 'tracking_number' => $done->tracking_number];
             } catch (ValidationException $e) {
                 $results[] = ['id' => $order->ulid, 'ok' => false, 'message' => collect($e->errors())->flatten()->first()];
             } catch (UnsupportedCapability $e) {

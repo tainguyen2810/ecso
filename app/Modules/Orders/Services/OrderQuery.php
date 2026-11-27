@@ -71,8 +71,12 @@ class OrderQuery
         }
         if ($q = trim((string) ($filters['q'] ?? ''))) {
             $phoneHash = PhoneNumber::hash(PhoneNumber::normalize($q)) ?? '-';
-            $query->where(fn (Builder $w) => $w->where('external_order_id', 'like', "%{$q}%")
+            // Mã đơn (SON50892), the marketplace / Woo number, a typed reference, the old SO-… number, the tracking code.
+            $query->where(fn (Builder $w) => $w->where('code', $q)->orWhere('code', 'like', "%{$q}%")
+                ->orWhere('external_order_id', 'like', "%{$q}%")
+                ->orWhere('reference', 'like', "%{$q}%")
                 ->orWhere('external_number', $q)
+                ->orWhere('external_number', ltrim($q, '#'))
                 ->orWhere('tracking_number', $q)
                 ->orWhere('buyer_phone_hash', $phoneHash)
                 ->orWhereHas('customer', fn ($c) => $c->where('name', 'like', "%{$q}%")->orWhere('phone_hash', $phoneHash))
@@ -216,7 +220,7 @@ class OrderQuery
             }
             $rows[] = [
                 'id' => $order->ulid,
-                'external_order_id' => $order->external_order_id,
+                'external_order_id' => $order->external_order_id, 'code' => $order->code,
                 'status' => $order->status,
                 'source' => 'marketplace',
                 'marketplace_shipping' => true,

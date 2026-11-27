@@ -93,7 +93,7 @@ class LabelExtras
     {
         $values = [
             'ten_khach' => trim((string) $order->buyer_name) ?: 'quý khách',
-            'ma_don' => (string) $order->external_order_id,
+            'ma_don' => $order->displayCode(),
             'tong_tien' => number_format((float) $order->total, 0, ',', '.').'đ',
             'ngay_dat' => $order->placed_at?->setTimezone(ReportRange::timezone())->format('d/m/Y') ?? '',
             'ten_shop' => (string) $order->account?->shop_name,

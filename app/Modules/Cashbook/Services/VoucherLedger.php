@@ -115,7 +115,7 @@ class VoucherLedger
             ->selectRaw("'order_payment' as source, op.ulid as id, NULL as number, CASE WHEN op.kind = 'refund' THEN 'payment' ELSE 'receipt' END as direction, "
                 ."NULL as type_id, CASE WHEN op.kind = 'refund' THEN 'Hoàn tiền khách' ELSE 'Thu tiền đơn hàng' END as type_name, 0 as counts_in_pnl, "
                 ."'customer' as party_kind, c.ulid as party_id, COALESCE(c.name, o.buyer_name, 'Khách lẻ') as party_name, op.method, op.amount, op.paid_at, "
-                ."'order' as document_kind, o.ulid as document_id, o.external_order_id as document_number, op.reference, op.note, u.name as created_by, "
+                ."'order' as document_kind, o.ulid as document_id, COALESCE(o.code, o.external_order_id) as document_number, op.reference, op.note, u.name as created_by, "
                 .'op.voided_at, op.void_reason, op.created_at, acc.id as account_key, acc.ulid as account_id, acc.name as account_name, NULL as counter_account_name, '
                 ."CASE WHEN op.voided_at IS NULL THEN 'completed' ELSE 'voided' END as status, 0 as imported");
 

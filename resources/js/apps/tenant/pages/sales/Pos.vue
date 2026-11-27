@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { orderCode } from '@/shared/orderCode';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { ArrowLeft, Banknote, Clock, CloudOff, CreditCard, History, Minus, NotebookPen, Plus, Printer, QrCode, RefreshCw, ScanBarcode, Store, Trash2, UserRound, Wallet, X } from 'lucide-vue-next';
 import { RouterLink, useRouter } from 'vue-router';
@@ -146,7 +147,7 @@ async function syncQueue() {
             try {
                 const { data } = await api.post('/sales-orders', sale.payload, idempotent(`${sale.key}-off`));
                 sale.status = 'sent';
-                sale.order_number = data.data.external_order_id;
+                sale.order_number = orderCode(data.data);
                 sale.error = null;
                 sent++;
             } catch (e) {
@@ -408,7 +409,7 @@ async function pay() {
             lines: cart.value.lines.map((l) => ({ variant_id: l.variant_id, quantity: l.quantity, unit_price: l.unit_price, discount: l.discount })),
             payments: split.value ? split.value.payments : collected > 0 ? [{ method: cart.value.method, amount: collected }] : [],
         }, idempotent(key));
-        toast.success(`Đã bán ${data.data.external_order_id}${change.value > 0 ? ` · trả lại khách ${formatMoney(change.value)}` : ''}`);
+        toast.success(`Đã bán ${orderCode(data.data)}${change.value > 0 ? ` · trả lại khách ${formatMoney(change.value)}` : ''}`);
         if (autoPrint.value) {
             const detail = await api.get(`/orders/${data.data.id}`);
             printInvoice(detail.data.data as OrderDetail, printShopFrom(settings.data, tenant.current?.name ?? ''), 'k80');

@@ -221,7 +221,7 @@ class OrderController extends Controller
             // This order was taken in exchange for returned goods.
             'exchanged_from' => OrderReturn::query()->with('order')->where('exchange_order_id', $order->id)->get()->map(fn (OrderReturn $r) => [
                 'id' => $r->ulid, 'number' => $r->number, 'credit' => $r->exchange_credit,
-                'order' => ['id' => $r->order->ulid, 'external_order_id' => $r->order->external_order_id],
+                'order' => ['id' => $r->order->ulid, 'external_order_id' => $r->order->external_order_id, 'code' => $r->order->code],
             ]),
             'actions' => $order->isManual()
                 ? collect(ManualOrderService::ACTIONS)->map(fn ($def) => ['allowed' => in_array($order->status, $def[0], true), 'capability' => Capability::SUPPORTED])
@@ -458,6 +458,7 @@ class OrderController extends Controller
         return response()->json(['data' => $orders->map(fn (Order $o) => [
             'id' => $o->ulid,
             'external_order_id' => $o->external_order_id,
+            'code' => $o->code,
             'shop' => $o->account->shop_name ?? $o->channel?->name,
             'marketplace' => $o->marketplace,
             'placed_at' => $o->placed_at?->toIso8601String(),

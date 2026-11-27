@@ -20,7 +20,7 @@ class OrderExporter
     public const HEADINGS = [
         'Mã đơn', 'Ngày đặt', 'Nguồn', 'Kênh / gian hàng', 'Khách hàng', 'Người nhận', 'Điện thoại', 'Địa chỉ giao',
         'Sản phẩm', 'Số lượng', 'Tiền hàng', 'Phí giao', 'Giảm giá', 'Tổng tiền', 'Đã thu', 'Thanh toán',
-        'Trạng thái', 'Đơn vị vận chuyển', 'Mã vận đơn', 'Người xử lý', 'Lý do hủy', 'Tags', 'Ngày hẹn giao',
+        'Trạng thái', 'Đơn vị vận chuyển', 'Mã vận đơn', 'Người xử lý', 'Lý do hủy', 'Tags', 'Ngày hẹn giao', 'Mã đơn sàn / tham chiếu',
     ];
 
     public const STATUS = [
@@ -70,7 +70,7 @@ class OrderExporter
                     }
                     /** @var Order $o */
                     $writer->addRow(SafeRow::fromValues([
-                        $o->external_order_id,
+                        $o->displayCode(),
                         $o->placed_at?->format('d/m/Y H:i') ?? '',
                         $o->isManual() ? 'Kênh riêng' : ucfirst($o->marketplace),
                         (string) ($o->account->shop_name ?? $o->channel?->name),
@@ -93,6 +93,8 @@ class OrderExporter
                         (string) $o->cancel_reason,
                         implode(', ', $o->tags ?? []),
                         $o->deliver_on?->format('d/m/Y') ?? '',
+                        // The marketplace / Woo / old number, or the code typed by hand.
+                        (string) ($o->code !== null && $o->code !== $o->external_order_id ? $o->external_order_id : ($o->reference ?? '')),
                     ]));
                 }
             });

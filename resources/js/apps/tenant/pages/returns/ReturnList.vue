@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { orderCode } from '@/shared/orderCode';
 import CameraScanButton from '../../components/CameraScanButton.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import { PackageOpen, Plus, RefreshCw, ScanLine, Search, Undo2 } from 'lucide-vue-next';
@@ -176,11 +177,11 @@ watch(pickOpen, (v) => v && loadPick());
                         </td>
                         <td class="px-3 py-3" @click.stop>
                             <RouterLink v-if="r.order" :to="`/orders/${r.order.id}`" class="inline-flex items-center gap-1.5 text-primary hover:underline">
-                                <MarketplaceLogo :marketplace="r.order.marketplace" :name="marketplaceNames[r.order.marketplace]" size="sm" />{{ r.order.external_order_id }}
+                                <MarketplaceLogo :marketplace="r.order.marketplace" :name="marketplaceNames[r.order.marketplace]" size="sm" />{{ orderCode(r.order) }}
                             </RouterLink>
                         </td>
                         <td class="px-3 py-3" @click.stop>
-                            <RouterLink v-if="r.exchange_order" :to="`/orders/${r.exchange_order.id}`" class="text-primary hover:underline">{{ r.exchange_order.external_order_id }}</RouterLink>
+                            <RouterLink v-if="r.exchange_order" :to="`/orders/${r.exchange_order.id}`" class="text-primary hover:underline">{{ orderCode(r.exchange_order) }}</RouterLink>
                             <span v-else class="text-muted-foreground">—</span>
                         </td>
                         <td class="max-w-48 truncate px-3 py-3">{{ r.order?.customer ?? 'Khách lẻ' }}</td>
@@ -216,7 +217,7 @@ watch(pickOpen, (v) => v && loadPick());
                 </thead>
                 <tbody class="divide-y">
                     <tr v-for="o in pickRows" :key="o.id" class="hover:bg-blue-50/40">
-                        <td class="px-3 py-2.5"><span class="inline-flex items-center gap-1.5"><MarketplaceLogo :marketplace="o.marketplace" :name="marketplaceNames[o.marketplace]" size="sm" />{{ o.external_order_id }}</span></td>
+                        <td class="px-3 py-2.5"><span class="inline-flex items-center gap-1.5"><MarketplaceLogo :marketplace="o.marketplace" :name="marketplaceNames[o.marketplace]" size="sm" />{{ orderCode(o) }}</span></td>
                         <td class="whitespace-nowrap px-3 py-2.5 tabular-nums">{{ formatDateTime(o.placed_at) }}</td>
                         <td class="px-3 py-2.5 text-muted-foreground">{{ o.assignee?.name ?? '—' }}</td>
                         <td class="max-w-48 truncate px-3 py-2.5">{{ o.customer?.name ?? o.buyer_name ?? 'Khách lẻ' }}</td>

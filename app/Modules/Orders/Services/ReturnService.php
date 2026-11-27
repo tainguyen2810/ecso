@@ -227,7 +227,7 @@ class ReturnService
                 if (bccomp($amount, '0', 2) <= 0) {
                     continue;
                 }
-                $this->refund($return, ['method' => $method, 'amount' => $amount, 'note' => "Hủy hóa đơn {$order->external_order_id}"]);
+                $this->refund($return, ['method' => $method, 'amount' => $amount, 'note' => "Hủy hóa đơn {$order->displayCode()}"]);
                 $left = bcsub($left, $amount, 2);
             }
             $this->move($return->refresh(), OrderReturn::CLOSED);
@@ -599,7 +599,7 @@ class ReturnService
         $open = [OrderReturn::REQUESTED, OrderReturn::APPROVED, OrderReturn::IN_TRANSIT, OrderReturn::RECEIVED];
         $return = OrderReturn::query()->whereIn('status', $open)->where('type', '!=', OrderReturn::TYPE_REFUND_ONLY)
             ->where(fn ($q) => $q->where('return_tracking_number', $code)
-                ->orWhereHas('order', fn ($o) => $o->where('tracking_number', $code)->orWhere('external_order_id', $code)))
+                ->orWhereHas('order', fn ($o) => $o->where('tracking_number', $code)->orWhere('code', $code)->orWhere('external_order_id', $code)))
             ->orderByRaw('CASE WHEN return_tracking_number = ? THEN 0 ELSE 1 END', [$code])->latest('id')->first();
         if ($return === null) {
             return null;

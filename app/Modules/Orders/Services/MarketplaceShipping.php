@@ -79,7 +79,7 @@ class MarketplaceShipping
                     default => null,
                 };
                 if ($reason !== null) {
-                    $skipped[] = ['id' => $order->ulid, 'external_order_id' => $order->external_order_id, 'message' => $reason];
+                    $skipped[] = ['id' => $order->ulid, 'external_order_id' => $order->external_order_id, 'code' => $order->code, 'message' => $reason];
                 }
             }
             $ready = $list->filter(fn (Order $o) => $connector !== null && $o->status === OrderStatus::READY_TO_PACK)->values();
@@ -95,7 +95,7 @@ class MarketplaceShipping
                 // read the orders again, set those aside, and ask again for the ones still waiting.
                 [$ready, $done] = $this->refresh($account, $ready);
                 foreach ($done as $order) {
-                    $skipped[] = ['id' => $order->ulid, 'external_order_id' => $order->external_order_id, 'message' => 'Đơn đã được chuẩn bị trên sàn rồi, trạng thái đã cập nhật.'];
+                    $skipped[] = ['id' => $order->ulid, 'external_order_id' => $order->external_order_id, 'code' => $order->code, 'message' => 'Đơn đã được chuẩn bị trên sàn rồi, trạng thái đã cập nhật.'];
                 }
                 if ($ready->isEmpty()) {
                     continue;
@@ -113,7 +113,7 @@ class MarketplaceShipping
             }
             $groups[] = [
                 'account' => ['id' => $account->ulid, 'name' => $account->shop_name, 'marketplace' => $account->marketplace],
-                'orders' => $ready->map(fn (Order $o) => ['id' => $o->ulid, 'external_order_id' => $o->external_order_id])->all(),
+                'orders' => $ready->map(fn (Order $o) => ['id' => $o->ulid, 'external_order_id' => $o->external_order_id, 'code' => $o->code])->all(),
                 'options' => $options,
                 'error' => $error,
                 'last' => $account->settings['ship_choice'] ?? null,
@@ -259,7 +259,7 @@ class MarketplaceShipping
             };
             if ($message === null) {
                 try {
-                    $files[] = ['id' => $order->ulid, 'external_order_id' => $order->external_order_id, 'pdf' => base64_encode($connector->shippingLabel($order->account, $order->external_order_id)), 'extras' => $this->extras->for($order, $extras)];
+                    $files[] = ['id' => $order->ulid, 'external_order_id' => $order->external_order_id, 'code' => $order->code, 'pdf' => base64_encode($connector->shippingLabel($order->account, $order->external_order_id)), 'extras' => $this->extras->for($order, $extras)];
 
                     continue;
                 } catch (ConnectorException $e) {
@@ -278,7 +278,7 @@ class MarketplaceShipping
                     }
                 }
             }
-            $failed[] = ['id' => $order->ulid, 'external_order_id' => $order->external_order_id, 'message' => $message];
+            $failed[] = ['id' => $order->ulid, 'external_order_id' => $order->external_order_id, 'code' => $order->code, 'message' => $message];
         }
         $printed = collect($files)->pluck('id');
         if ($printed->isNotEmpty()) {

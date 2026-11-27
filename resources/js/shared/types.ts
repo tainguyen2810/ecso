@@ -282,6 +282,10 @@ export interface OrderSummary {
     refund_status?: 'none' | 'partial' | 'full';
     balance_due?: string | null;
     external_order_id: string;
+    /** Mã đơn hàng (SON50892); null until the shop starts its numbering (Cấu hình › Mã đơn hàng). See orderCode(). */
+    code?: string | null;
+    /** Mã tham chiếu typed by hand (a Woo order, another system). */
+    reference?: string | null;
     /** Taken from the previous software (Cấu hình › Chuyển dữ liệu), e.g. 'sapo': history only, never moves stock. */
     imported_from?: string | null;
     status: string;
@@ -396,7 +400,7 @@ export interface OrderDetail extends OrderSummary {
     unconfirmed_amount?: string | null;
     created_by: string | null;
     payout?: OrderPayout;
-    exchanged_from?: { id: string; number: string; credit: string; order: { id: string; external_order_id: string } }[];
+    exchanged_from?: { id: string; number: string; credit: string; order: { id: string; external_order_id: string; code?: string | null } }[];
     customer_stats: { orders_count: number; total_spent: string; debt: string; returns_count: number; failed_deliveries: number } | null;
     refunds?: OrderRefundData[];
 }
@@ -594,7 +598,7 @@ export interface OrderReturnData {
     reason: string | null;
     refund_amount: string | null;
     exchange_credit?: string;
-    exchange_order?: { id: string; external_order_id: string; total: string } | null;
+    exchange_order?: { id: string; external_order_id: string; code?: string | null; total: string } | null;
     goods_value?: string;
     /** Refunds booked from this return, and what may still be refunded. */
     refunded?: string;
@@ -608,7 +612,7 @@ export interface OrderReturnData {
     return_tracking_number?: string | null;
     respond_by?: string | null;
     images?: string[];
-    order?: { id: string; external_order_id: string; status: string; marketplace: string; customer?: string | null };
+    order?: { id: string; external_order_id: string; code?: string | null; status: string; marketplace: string; customer?: string | null };
     warehouse?: { id: string; code: string; name: string } | null;
     damaged_warehouse?: { id: string; code: string; name: string } | null;
     lines?: OrderReturnLineData[];
@@ -1132,6 +1136,7 @@ export interface ShipmentData {
     order?: {
         id: string;
         external_order_id: string;
+        code?: string | null;
         marketplace: string;
         channel: string | null;
         status: string;

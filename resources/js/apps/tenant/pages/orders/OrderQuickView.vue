@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { orderCode, secondaryCodes } from '@/shared/orderCode';
 import VariantTag from './VariantTag.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { AlarmClock, Check, ChevronDown, ChevronUp, CircleCheck, ExternalLink, MapPin, Package, Pencil, ReceiptText, StickyNote, Truck, Warehouse, X } from 'lucide-vue-next';
@@ -103,7 +104,7 @@ async function run() {
     try {
         const { data } = await api.post('/orders/bulk', { ids: [order.value.id], action: action.value });
         const r = (data.data as { ok: boolean; message: string | null }[])[0];
-        if (r?.ok) toast.success(`${actionLabels[action.value]}: ${order.value.external_order_id}`);
+        if (r?.ok) toast.success(`${actionLabels[action.value]}: ${orderCode(order.value)}`);
         else toast.error(r?.message ?? 'Không xử lý được đơn này.');
         await load();
         emit('changed');
@@ -139,9 +140,10 @@ const source = computed(() => (order.value ? (order.value.channel?.name ?? order
                         <MarketplaceLogo :marketplace="order.marketplace" :name="marketplaceNames[order.marketplace]" size="lg" />
                         <div class="min-w-0 flex-1">
                             <p class="flex flex-wrap items-center gap-2">
-                                <span class="font-mono text-lg font-semibold">{{ order.external_order_id }}</span>
+                                <span class="font-mono text-lg font-semibold">{{ orderCode(order) }}</span>
                                 <Badge :tone="orderStatus[order.status]?.tone">{{ orderStatus[order.status]?.label ?? order.status }}</Badge>
                             </p>
+                            <p v-if="secondaryCodes(order).length" class="flex flex-wrap gap-x-3 text-xs text-muted-foreground"><span v-for="c in secondaryCodes(order)" :key="c.kind">{{ c.kind === 'marketplace' ? `Mã đơn ${c.label === 'Sàn' ? 'sàn' : c.label}` : c.label }} <span class="font-mono text-foreground">{{ c.value }}</span></span></p>
                             <p class="text-sm text-muted-foreground">{{ marketplaceNames[order.marketplace] ?? order.marketplace }}<template v-if="source"> · {{ source }}</template> · đặt {{ formatDateTime(order.placed_at) }}</p>
                             <p v-if="due" :class="['mt-1 inline-flex items-center gap-1 text-sm font-medium', due.late ? 'text-rose-600' : 'text-amber-600']"><AlarmClock class="size-4" /> {{ due.text }}</p>
                         </div>

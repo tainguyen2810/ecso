@@ -3,6 +3,7 @@
 export interface ArrangeOrder {
     id: string;
     external_order_id: string;
+    code?: string | null;
     status: string;
     source: 'marketplace';
     marketplace_shipping: true;

@@ -101,7 +101,7 @@ class OrderStockSync
      */
     private function consume(Order $order, array $ids): void
     {
-        $shipped = $this->ledger->consumeAll(Order::STOCK_REFERENCE, $ids, "Đơn {$order->external_order_id}");
+        $shipped = $this->ledger->consumeAll(Order::STOCK_REFERENCE, $ids, "Đơn {$order->displayCode()}");
 
         foreach ($shipped as $itemId => $line) {
             if ($line['unit_cost'] !== null) {
@@ -128,7 +128,7 @@ class OrderStockSync
             $this->returns->openAutomatic($order, OrderReturn::TYPE_CANCEL_AFTER_SHIP, 'cancel-after-ship', 'Đơn bị hủy sau khi đã bàn giao vận chuyển');
         }
 
-        $this->ledger->releaseAll(Order::STOCK_REFERENCE, $ids, "Hủy đơn {$order->external_order_id}");
+        $this->ledger->releaseAll(Order::STOCK_REFERENCE, $ids, "Hủy đơn {$order->displayCode()}");
     }
 
     private function warehouse(Order $order): ?Warehouse

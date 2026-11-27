@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { orderCode } from '@/shared/orderCode';
 import { computed, onMounted, ref, watch } from 'vue';
 import {
     AlarmClock,
@@ -369,7 +370,7 @@ const showStart = computed(() => !sellerPath.value && !startHidden.value && !pro
                             <MarketplaceLogo :marketplace="o.marketplace" :name="marketplaceNames[o.marketplace]" />
                             <div class="min-w-0">
                                 <p class="truncate font-medium">{{ o.buyer_name || 'Khách lẻ' }}</p>
-                                <p class="truncate text-xs text-muted-foreground"><span class="font-mono">{{ o.external_order_id }}</span> · {{ ago(o.placed_at) }}</p>
+                                <p class="truncate text-xs text-muted-foreground"><span class="font-mono">{{ orderCode(o) }}</span> · {{ ago(o.placed_at) }}</p>
                             </div>
                             <div class="hidden min-w-0 md:block">
                                 <p class="truncate">{{ itemsLine(o) || '—' }}</p>

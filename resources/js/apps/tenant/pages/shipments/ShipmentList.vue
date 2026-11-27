@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { orderCode } from '@/shared/orderCode';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { AlarmClock, CircleAlert, Clock, Download, FileUp, PackageCheck, Plug, Printer, Search, Truck, Undo2, Wallet } from 'lucide-vue-next';
@@ -252,7 +253,7 @@ const isLate = (s: ShipmentData) => ['picked_up', 'in_transit', 'out_for_deliver
                         </td>
                         <td class="whitespace-nowrap px-3 py-3" @click.stop>
                             <RouterLink v-if="s.order" :to="`/orders/${s.order.id}`" class="inline-flex items-center gap-1.5 hover:underline">
-                                <MarketplaceLogo :marketplace="s.order.marketplace" :name="marketplaceNames[s.order.marketplace]" size="sm" />{{ s.order.external_order_id }}
+                                <MarketplaceLogo :marketplace="s.order.marketplace" :name="marketplaceNames[s.order.marketplace]" size="sm" />{{ orderCode(s.order) }}
                             </RouterLink>
                             <div class="text-[11px] text-muted-foreground">{{ s.order?.channel ?? marketplaceNames[s.order?.marketplace ?? ''] }}</div>
                         </td>

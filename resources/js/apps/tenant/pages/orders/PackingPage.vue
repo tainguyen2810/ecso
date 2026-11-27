@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { orderCode } from '@/shared/orderCode';
 import VariantTag from './VariantTag.vue';
 import CameraScanButton from "../../components/CameraScanButton.vue";
 import {
@@ -62,6 +63,7 @@ interface Stats {
     recent: {
         id: string;
         external_order_id: string;
+        code?: string | null;
         items: number;
         by: string | null;
         at: string;
@@ -99,7 +101,7 @@ const placeholder = computed(() =>
         ? "Quét hoặc gõ mã đơn, mã vận đơn…"
         : progress.value.complete
           ? "Đủ hàng: bấm Enter để hoàn tất"
-          : `Quét sản phẩm tiếp theo của đơn ${order.value.external_order_id}…`,
+          : `Quét sản phẩm tiếp theo của đơn ${orderCode(order.value)}…`,
 );
 
 function focus() {
@@ -143,7 +145,7 @@ const itemsLine = (o: OrderSummary) => {
 };
 async function pick(o: OrderSummary) {
     if (order.value) return say("info", "Đang đóng đơn khác: hoàn tất hoặc bỏ đơn đó trước.");
-    code.value = o.external_order_id;
+    code.value = orderCode(o);
     await submit();
 }
 const settingsOpen = ref(false);
@@ -158,7 +160,7 @@ function open(o: PackOrder) {
     counts.value = {};
     history.value = [];
     lastLine.value = null;
-    say("ok", `Đã mở đơn ${o.external_order_id}: quét từng sản phẩm.`);
+    say("ok", `Đã mở đơn ${orderCode(o)}: quét từng sản phẩm.`);
 }
 
 function drop() {
@@ -248,7 +250,7 @@ async function submit() {
     }
     say(
         "error",
-        `Sai hàng: mã ${c} không có trong đơn ${order.value.external_order_id}. Không tính.`,
+        `Sai hàng: mã ${c} không có trong đơn ${orderCode(order.value)}. Không tính.`,
     );
     logError(c, "wrong");
 }
@@ -286,9 +288,9 @@ async function finish(reason: string | null, shipping: Record<string, unknown> |
             shipping,
         });
         shortOpen.value = false;
-        toast.success(`Đã đóng gói đơn ${o.external_order_id}.`);
+        toast.success(`Đã đóng gói đơn ${orderCode(o)}.`);
         drop();
-        say("info", `Xong đơn ${o.external_order_id}. Quét đơn tiếp theo.`);
+        say("info", `Xong đơn ${orderCode(o)}. Quét đơn tiếp theo.`);
         if (settings.autoPrint && tenant.can("orders.print")) {
             try {
                 const { data } = await api.post("/orders/packing-slips", {
@@ -495,7 +497,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
                         :to="`/orders/${order.id}`"
                         class="text-lg font-bold text-primary hover:underline"
                         data-testid="pack-order"
-                        >{{ order.external_order_id }}</RouterLink
+                        >{{ orderCode(order) }}</RouterLink
                     >
                     <Badge tone="warning">Chờ đóng gói</Badge>
                     <span class="text-sm text-muted-foreground">
@@ -665,7 +667,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
                         <button type="button" :class="cn('flex w-full items-center gap-3 px-5 py-2.5 text-left hover:bg-muted/40', order?.id === o.id && 'bg-blue-50')" @mousedown.prevent @click="pick(o)">
                             <MarketplaceLogo :marketplace="o.marketplace" size="sm" />
                             <span class="min-w-0 flex-1">
-                                <span class="block truncate font-mono text-sm font-medium">{{ o.external_order_id }}</span>
+                                <span class="block truncate font-mono text-sm font-medium">{{ orderCode(o) }}</span>
                                 <span class="block truncate text-xs text-muted-foreground">{{ itemsLine(o) }}</span>
                             </span>
                             <span :class="cn('shrink-0 text-xs font-medium', dueLabel(o).tone)">{{ dueLabel(o).text }}</span>
@@ -677,7 +679,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
                 <p v-if="!stats?.recent.length" class="px-5 py-4 text-sm text-muted-foreground">Chưa có đơn nào hôm nay.</p>
                 <RouterLink v-for="r in stats?.recent ?? []" :key="r.id + r.at" :to="`/orders/${r.id}`" class="flex items-center gap-2 border-t px-5 py-2.5 text-sm first:border-t-0 hover:bg-muted/40">
                     <CircleCheck class="size-4 shrink-0 text-emerald-500" />
-                    <span class="flex-1 truncate font-mono font-medium">{{ r.external_order_id }}</span>
+                    <span class="flex-1 truncate font-mono font-medium">{{ orderCode(r) }}</span>
                     <span class="text-xs text-muted-foreground">{{ r.items }} SP · {{ time(r.at) }}</span>
                 </RouterLink>
             </Card>
@@ -722,7 +724,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
         title="Chuyển sang đơn khác?"
         :description="
             switchTo && order
-                ? `Bạn vừa quét mã đơn ${switchTo.external_order_id}. Đơn ${order.external_order_id} đang gói dở (${progress.done}/${progress.total}) sẽ bị bỏ, chưa đóng gói.`
+                ? `Bạn vừa quét mã đơn ${orderCode(switchTo)}. Đơn ${orderCode(order)} đang gói dở (${progress.done}/${progress.total}) sẽ bị bỏ, chưa đóng gói.`
                 : ''
         "
         @update:open="(v) => !v && ((switchTo = null), focus())"
@@ -732,7 +734,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
                 >Gói tiếp đơn này</Button
             >
             <Button data-testid="pack-switch" @click="confirmSwitch"
-                >Chuyển sang {{ switchTo?.external_order_id }}</Button
+                >Chuyển sang {{ orderCode(switchTo) }}</Button
             >
         </template>
     </Dialog>

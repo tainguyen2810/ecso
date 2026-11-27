@@ -31,6 +31,7 @@ import { lotLabel } from '../inventory/lots';
 import { displayDate } from '@/shared/lib/dates';
 import { downloadPackingSlips } from './packingSlip';
 import { orderWorkflow } from './workflow';
+import { orderCode, secondaryCodes } from '@/shared/orderCode';
 import { useSettingsStore } from '@/shared/stores/settings';
 import type { OrderDetail, Ref } from '@/shared/types';
 import type { Fund } from '../cash/voucher';
@@ -41,6 +42,16 @@ const tenant = useTenantStore();
 const toast = useToast();
 
 const order = ref<OrderDetail | null>(null);
+/** Mã đơn sàn / Woo / mã cũ / mã tham chiếu, under the main code. */
+const secondary = computed(() => (order.value ? secondaryCodes(order.value) : []));
+async function copyText(text: string) {
+    try {
+        await navigator.clipboard.writeText(text);
+        toast.success(`Đã sao chép ${text}`);
+    } catch {
+        /* clipboard unavailable (http): the code stays readable */
+    }
+}
 // "Đổi lô" on an order line.
 const lotItem = ref<{ id: number; title: string } | null>(null);
 const canPack = computed(() => tenant.can('orders.pack') || tenant.can('orders.update'));
@@ -358,9 +369,8 @@ const fmtDay = (d: string | null | undefined) => (d ? d.split('-').reverse().joi
                 <MarketplaceLogo :marketplace="order.marketplace" :name="marketplaceNames[order.marketplace]" size="lg" class="size-11" />
                 <div class="min-w-0 flex-1">
                     <div class="flex flex-wrap items-center gap-2">
-                        <h1 class="font-mono text-xl font-semibold tracking-tight">Đơn {{ order.external_order_id }}</h1>
+                        <h1 class="font-mono text-xl font-semibold tracking-tight" data-testid="order-code">Đơn {{ orderCode(order) }}</h1>
                         <Badge :tone="orderStatus[order.status]?.tone" data-testid="order-status">{{ orderStatus[order.status]?.label ?? order.status }}</Badge>
-                        <span v-if="order.external_number && order.external_number !== order.external_order_id" class="font-mono text-sm text-muted-foreground" data-testid="external-number">#{{ order.external_number }}</span>
                         <Badge v-if="(isManual || isWebsite) && order.payment_status" :tone="paymentStatus[order.payment_status]?.tone" data-testid="payment-status">{{ paymentStatus[order.payment_status]?.label }}</Badge>
                         <Badge v-if="order.deleted_on_channel_at" tone="danger" data-testid="deleted-on-channel">Đã xóa trên website</Badge>
                         <Badge v-if="order.refund_status && refundStatus[order.refund_status]" :tone="refundStatus[order.refund_status]!.tone" data-testid="refund-status">{{ refundStatus[order.refund_status]!.label }}</Badge>
@@ -371,6 +381,14 @@ const fmtDay = (d: string | null | undefined) => (d ? d.split('-').reverse().joi
                         <template v-if="isManual">{{ order.channel?.name ?? 'Kênh riêng' }} · tạo lúc {{ formatDateTime(order.placed_at) }}<template v-if="order.created_by"> bởi {{ order.created_by }}</template></template>
                         <template v-else>{{ marketplaceNames[order.marketplace] ?? order.marketplace }} · {{ order.shop?.name ?? '' }} · đặt lúc {{ formatDateTime(order.placed_at) }}</template>
                     </p>
+                    <div v-if="secondary.length || order.tracking_number" class="mt-2 flex flex-wrap gap-2" data-testid="secondary-codes">
+                        <button v-for="c in secondary" :key="c.kind" type="button" class="inline-flex items-center gap-1.5 rounded border bg-card px-2 py-0.5 text-xs hover:bg-muted" :title="`Sao chép ${c.value}`" :data-testid="c.kind === 'woo' ? 'external-number' : `code-${c.kind}`" @click="copyText(c.value)">
+                            <span class="text-muted-foreground">{{ c.kind === 'marketplace' ? `Mã đơn ${c.label === 'Sàn' ? 'sàn' : c.label}` : c.label }}</span><span class="font-mono">{{ c.value }}</span><Copy class="size-3 text-muted-foreground" />
+                        </button>
+                        <button v-if="order.tracking_number" type="button" class="inline-flex items-center gap-1.5 rounded border bg-card px-2 py-0.5 text-xs hover:bg-muted" :title="`Sao chép ${order.tracking_number}`" @click="copyText(order.tracking_number)">
+                            <span class="text-muted-foreground">Mã vận đơn</span><span class="font-mono">{{ order.tracking_number }}</span><Copy class="size-3 text-muted-foreground" />
+                        </button>
+                    </div>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                     <Button v-if="!isManual" variant="outline" size="sm" :loading="busy === 'sync'" @click="sync"><RefreshCw /> Đồng bộ từ sàn</Button>
@@ -417,7 +435,7 @@ const fmtDay = (d: string | null | undefined) => (d ? d.split('-').reverse().joi
                 <Button data-testid="next-step-ship" @click="shipOpen = true"><PackageCheck /> Chuẩn bị hàng</Button>
             </div>
             <Alert v-for="x in order.exchanged_from ?? []" :key="x.id" :icon="Repeat" tone="blue" data-testid="exchanged-from">
-                Đơn đổi hàng từ phiếu trả <RouterLink :to="`/returns/${x.id}`" class="font-mono font-medium hover:underline">{{ x.number }}</RouterLink> của đơn <RouterLink :to="`/orders/${x.order.id}`" class="font-mono font-medium hover:underline">{{ x.order.external_order_id }}</RouterLink><template v-if="Number(x.credit) > 0">: hàng trả được trừ {{ formatMoney(x.credit) }} vào đơn này</template>.
+                Đơn đổi hàng từ phiếu trả <RouterLink :to="`/returns/${x.id}`" class="font-mono font-medium hover:underline">{{ x.number }}</RouterLink> của đơn <RouterLink :to="`/orders/${x.order.id}`" class="font-mono font-medium hover:underline">{{ orderCode(x.order) }}</RouterLink><template v-if="Number(x.credit) > 0">: hàng trả được trừ {{ formatMoney(x.credit) }} vào đơn này</template>.
             </Alert>
             <Alert v-if="imported" :icon="History" tone="green" data-testid="imported-order">
                 Đơn cũ lấy từ Sapo: chỉ để xem lịch sử và tính vào báo cáo. Đơn này không trừ kho, không sửa, không thu tiền ở đây. Khoản khách còn nợ đã chuyển sang thành nợ đầu kỳ của khách.
@@ -528,7 +546,7 @@ const fmtDay = (d: string | null | undefined) => (d ? d.split('-').reverse().joi
                     <OrderPayoutCard v-if="!isManual && order.payout && order.status !== 'CANCELLED'" :order-id="order.id" :payout="order.payout" :marketplace-name="marketplaceNames[order.marketplace] ?? order.marketplace" />
                 </Card>
 
-                <OrderShipmentsCard v-if="!imported" :order-id="order.id" :order-code="order.external_order_id" :shipments="order.shipments ?? []" :ships-itself="shipsItself" :order-status="order.status" @changed="load" />
+                <OrderShipmentsCard v-if="!imported" :order-id="order.id" :order-code="orderCode(order)" :shipments="order.shipments ?? []" :ships-itself="shipsItself" :order-status="order.status" @changed="load" />
 
                 <Card caps title="Lịch sử trạng thái">
                     <ol class="relative px-5 py-4 text-sm before:absolute before:bottom-6 before:left-[23px] before:top-6 before:border-l before:border-dashed before:border-blue-200" data-testid="order-history">
@@ -756,7 +774,7 @@ const fmtDay = (d: string | null | undefined) => (d ? d.split('-').reverse().joi
                                 <Badge :tone="returnStatus[r.status]?.tone">{{ returnStatus[r.status]?.label }}</Badge>
                             </div>
                             <div v-if="r.exchange_order" class="mt-1 text-xs">
-                                Đổi sang <RouterLink :to="`/orders/${r.exchange_order.id}`" class="font-mono text-primary hover:underline">{{ r.exchange_order.external_order_id }}</RouterLink>
+                                Đổi sang <RouterLink :to="`/orders/${r.exchange_order.id}`" class="font-mono text-primary hover:underline">{{ orderCode(r.exchange_order) }}</RouterLink>
                                 <span v-if="Number(r.exchange_credit) > 0" class="text-muted-foreground"> · bù trừ {{ formatMoney(r.exchange_credit) }}</span>
                             </div>
                             <RouterLink

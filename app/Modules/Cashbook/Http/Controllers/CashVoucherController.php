@@ -125,7 +125,7 @@ class CashVoucherController extends Controller
             'other' => max(0, (float) $debt->entriesBalance($customer)),
             'orders' => $orders->map(fn (Order $o) => [
                 'id' => $o->ulid,
-                'number' => $o->external_order_id,
+                'number' => $o->displayCode(),
                 'placed_at' => $o->placed_at?->toIso8601String(),
                 'due' => (float) CashVoucherService::due($o),
             ])->values(),

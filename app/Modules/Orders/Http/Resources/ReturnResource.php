@@ -20,7 +20,7 @@ class ReturnResource extends JsonResource
             'reason' => $this->reason,
             'refund_amount' => $this->refund_amount,
             'exchange_credit' => $this->exchange_credit,
-            'exchange_order' => $this->whenLoaded('exchangeOrder', fn () => $this->exchangeOrder ? ['id' => $this->exchangeOrder->ulid, 'external_order_id' => $this->exchangeOrder->external_order_id, 'total' => $this->exchangeOrder->total] : null),
+            'exchange_order' => $this->whenLoaded('exchangeOrder', fn () => $this->exchangeOrder ? ['id' => $this->exchangeOrder->ulid, 'external_order_id' => $this->exchangeOrder->external_order_id, 'code' => $this->exchangeOrder->code, 'total' => $this->exchangeOrder->total] : null),
             'note' => $this->note,
             // Đợt 6: a request read from the marketplace.
             'external_return_id' => $this->external_return_id,
@@ -33,6 +33,7 @@ class ReturnResource extends JsonResource
             'order' => $this->whenLoaded('order', fn () => [
                 'id' => $this->order->ulid,
                 'external_order_id' => $this->order->external_order_id,
+                'code' => $this->order->code,
                 'status' => $this->order->status,
                 'marketplace' => $this->order->marketplace,
                 // Buyer shown in the returns list: the customer record, else the name on the order.

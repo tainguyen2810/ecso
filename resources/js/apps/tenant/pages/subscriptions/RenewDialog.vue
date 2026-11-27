@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { orderCode } from '@/shared/orderCode';
 import { computed, ref, watch } from 'vue';
 import { ArrowRight, CalendarCheck } from 'lucide-vue-next';
 import Alert from '@/shared/ui/Alert.vue';
@@ -76,7 +77,7 @@ async function submit() {
             unit_price: Number(price.value) !== Math.round(Number(plan.value.ref_price ?? 0)) ? Number(price.value) || 0 : null,
             payments: method.value !== 'debt' && amount > 0 ? [{ method: method.value, amount }] : [],
         });
-        toast.success(`Đã gia hạn ${sub.value.code} đến ${day(to.value)} (đơn ${data.data.external_order_id})`);
+        toast.success(`Đã gia hạn ${sub.value.code} đến ${day(to.value)} (đơn ${orderCode(data.data)})`);
         open.value = false;
         emit('done', data.data.id);
     } catch (e) {

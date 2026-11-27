@@ -41,7 +41,7 @@ class CashFlows
             ->where('op.method', '!=', OrderPayment::EXCHANGE) // exchange set-offs move no money
             ->when($method, fn ($q) => $q->where('op.method', $method))
             ->selectRaw("op.cash_account_id as account_id, op.paid_at, op.kind as type, NULL as label, op.method, CASE WHEN op.kind = 'refund' THEN -op.amount ELSE op.amount END as amount, "
-                ."o.external_order_id as document, o.ulid as document_id, 'order' as document_kind, COALESCE(c.name, o.buyer_name, 'Khách lẻ') as party, op.reference, u.name as created_by");
+                ."COALESCE(o.code, o.external_order_id) as document, o.ulid as document_id, 'order' as document_kind, COALESCE(c.name, o.buyer_name, 'Khách lẻ') as party, op.reference, u.name as created_by");
         $scoped($customer, 'op.cash_account_id');
 
         $supplier = DB::table('supplier_payments as sp')

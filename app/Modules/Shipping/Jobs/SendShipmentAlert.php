@@ -45,7 +45,7 @@ class SendShipmentAlert implements ShouldQueue
         $reason = $shipment->failure_reason ? ' · '.$shipment->failure_reason : '';
 
         return [
-            $what.' · '.$order->external_order_id,
+            $what.' · '.$order->displayCode(),
             trim($carrier.($shipment->tracking_number ? ' '.$shipment->tracking_number : '').($order->buyer_name ? ' · '.$order->buyer_name : '').$reason),
             '/shipments?shipment='.$shipment->ulid,
         ];
