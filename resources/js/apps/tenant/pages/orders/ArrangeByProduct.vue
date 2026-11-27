@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import VariantTag from './VariantTag.vue';
 import { computed, ref } from 'vue';
 import { ListChecks, Package, PackageCheck, Search } from 'lucide-vue-next';
 import Button from '@/shared/ui/Button.vue';
@@ -91,7 +92,8 @@ function done(event: 'select' | 'arrange') {
                     <img v-if="p.image" :src="p.image" alt="" class="size-9 shrink-0 rounded-md border object-cover" />
                     <span v-else class="grid size-9 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground"><Package class="size-4" /></span>
                     <span class="min-w-0 flex-1">
-                        <span class="block truncate font-medium">{{ p.name }}<span v-if="p.variant_name" class="font-normal text-muted-foreground"> · {{ p.variant_name }}</span></span>
+                        <span class="block truncate font-medium" :title="p.name">{{ p.name }}</span>
+                        <VariantTag :name="p.variant_name" class="my-0.5" />
                         <span class="block truncate text-xs text-muted-foreground">{{ p.sku ?? 'Chưa có SKU' }}<template v-if="!p.mapped"> · chưa liên kết sản phẩm</template></span>
                     </span>
                     <span class="w-16 text-right tabular-nums"><b>{{ p.orders.length }}</b> <span class="text-muted-foreground">đơn</span></span>

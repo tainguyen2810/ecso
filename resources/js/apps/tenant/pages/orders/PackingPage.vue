@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import VariantTag from './VariantTag.vue';
 import CameraScanButton from "../../components/CameraScanButton.vue";
 import {
     computed,
@@ -136,7 +137,8 @@ function dueLabel(o: OrderSummary): { text: string; tone: string } {
 const itemsLine = (o: OrderSummary) => {
     const p = o.items_preview ?? [];
     if (!p.length) return "";
-    const first = `${p[0]!.name} × ${p[0]!.quantity}`;
+    // Variation first ("[128GB] USB …"): a long name is cut at the end, the variation must stay readable.
+    const first = `${p[0]!.variant_name ? `[${p[0]!.variant_name}] ` : ""}${p[0]!.name} × ${p[0]!.quantity}`;
     return p.length > 1 ? `${first} +${p.length - 1}` : first;
 };
 async function pick(o: OrderSummary) {
@@ -548,12 +550,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
                         class="size-11 shrink-0 rounded-lg border bg-slate-50"
                     />
                     <span class="min-w-0 flex-1">
-                        <span class="block truncate font-medium"
-                            >{{ l.name
-                            }}<template v-if="l.variant_name">
-                                · {{ l.variant_name }}</template
-                            ></span
-                        >
+                        <span class="block truncate font-medium">{{ l.name }}</span>
+                        <VariantTag :name="l.variant_name" class="my-0.5" />
                         <span
                             class="block truncate font-mono text-xs text-muted-foreground"
                             >{{

@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Phân loại sản phẩm hiện rõ trong đơn (2026-11-27)
+- Phân loại của sàn ("128GB", "Đen / M") hiện thành nhãn riêng "Phân loại: …" dưới tên sản phẩm ở danh sách đơn, xem nhanh, chi tiết đơn, trang Đóng gói và hộp Chọn theo sản phẩm. Trước đây phân loại nối sau tên dài nên bị cắt mất. Dòng tóm tắt sản phẩm (Đóng gói, Tổng quan) đưa phân loại lên trước: "[128GB] USB …". Số lượng lớn hơn 1 in đậm.
+- SKU nội bộ không có tên phân loại (một SKU cho cả sản phẩm sàn) mà đơn có phân loại khác nhau: phiếu nhặt hàng, chữ in thêm trên phiếu sàn và Chọn theo sản phẩm tách riêng từng phân loại thay vì gộp chung.
+
 ### In phiếu sàn: một nút, không lấy lại phiếu đã có (2026-11-27)
 - Khi phiếu đã sẵn sàng, nút "In N phiếu" mở thẳng file đã có (không hỏi sàn lại); bỏ nút "Mở phiếu để in" trùng, "Tải PDF" thành link nhỏ.
 - Phiếu đã lấy được nhớ theo đơn: đổi khổ A6/A5/A4 hoặc cách sắp xếp chỉ làm lại file, không gọi sàn lại, và không tính thêm lần in.

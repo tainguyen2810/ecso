@@ -193,7 +193,7 @@ function ago(iso: string | null): string {
     const d = new Date(iso);
     return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
-const itemsLine = (o: OrderSummary) => (o.items_preview ?? []).map((i) => i.name).join(' · ');
+const itemsLine = (o: OrderSummary) => (o.items_preview ?? []).map((i) => (i.variant_name ? `[${i.variant_name}] ${i.name}` : i.name)).join(' · ');
 const itemsQty = (o: OrderSummary) => (o.items_preview ?? []).reduce((s, i) => s + i.quantity, 0);
 
 // "Bắt đầu": setup steps, ticked from what the shop already has. Hidden per browser with "Ẩn".

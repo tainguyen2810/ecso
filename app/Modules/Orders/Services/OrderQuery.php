@@ -192,11 +192,13 @@ class OrderQuery
                 }
                 $quantity = max(0, $item->quantity - (int) $item->refunded_quantity);
                 $variant = $item->variant;
-                $key = $variant ? 'v:'.$variant->ulid : 'n:'.mb_strtolower(trim((string) ($item->seller_sku ?: $item->name)));
+                $variation = $variant && ! filled($variant->name) && filled($item->variant_name) ? (string) $item->variant_name : null;
+                $key = $variant ? 'v:'.$variant->ulid.($variation !== null ? '|'.mb_strtolower($variation) : '') : 'n:'.mb_strtolower(trim((string) ($item->seller_sku ?: $item->name.'|'.$item->variant_name)));
                 $products[$key] ??= [
                     'key' => $key,
                     'name' => $variant?->product->name ?? $item->name,
-                    'variant_name' => $variant ? $variant->name : $item->variant_name,
+                    // The shop's own variant name, else the marketplace's variation ("128GB") so the right item is picked.
+                    'variant_name' => ($variant ? $variant->name : null) ?: $item->variant_name,
                     'sku' => $variant->sku ?? $item->seller_sku,
                     'image' => $variant?->product->images->first()?->url(),
                     'mapped' => $variant !== null,

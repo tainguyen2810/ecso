@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import VariantTag from './VariantTag.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { AlarmClock, Check, ChevronDown, ChevronUp, CircleCheck, ExternalLink, MapPin, Package, Pencil, ReceiptText, StickyNote, Truck, Warehouse, X } from 'lucide-vue-next';
 import Badge from '@/shared/ui/Badge.vue';
@@ -167,7 +168,8 @@ const source = computed(() => (order.value ? (order.value.channel?.name ?? order
                             <img v-if="i.image" :src="i.image" alt="" class="size-12 shrink-0 rounded-lg border object-cover" />
                             <span v-else class="grid size-12 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-400"><Package class="size-5" /></span>
                             <div class="min-w-0 flex-1">
-                                <p class="truncate text-sm font-medium">{{ i.name }}<span v-if="i.variant_name" class="font-normal text-muted-foreground"> · {{ i.variant_name }}</span></p>
+                                <p class="truncate text-sm font-medium" :title="i.name">{{ i.name }}</p>
+                                <VariantTag :name="i.variant_name" class="my-0.5" />
                                 <p class="text-xs text-muted-foreground">
                                     <span class="font-mono">{{ i.variant?.sku ?? i.seller_sku ?? '—' }}</span>
                                     <template v-if="i.reservation"> · <span :class="i.reservation.shortage ? 'text-rose-600' : 'text-emerald-600'">{{ i.reservation.shortage ? `Thiếu ${i.reservation.shortage}` : `Giữ ${i.reservation.quantity}` }}</span></template>
