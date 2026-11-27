@@ -417,7 +417,7 @@ const thead = 'border-b bg-slate-50 text-left text-[11px] uppercase tracking-wid
 
         <div class="grid gap-4 lg:grid-cols-3">
             <div class="min-w-0 space-y-4 lg:col-span-2">
-                <div class="rounded-lg border bg-card px-3 shadow-xs"><Tabs v-model="tab" :tabs="tabs" variant="underline" data-testid="customer-tabs" /></div>
+                <div class="rounded-lg bg-card px-3 shadow-card"><Tabs v-model="tab" :tabs="tabs" variant="underline" data-testid="customer-tabs" /></div>
 
                 <template v-if="tab === 'overview'">
                     <div class="grid gap-4 md:grid-cols-2">

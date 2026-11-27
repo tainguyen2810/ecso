@@ -6,7 +6,7 @@ import { requiredNotes, sizePresets, type ParcelOptions } from './carriers';
 
 /** The parcel the carrier will carry (khung nét đứt bên trái): weight, size, COD, delivery requirement, who pays, note. */
 const opts = defineModel<ParcelOptions>({ required: true });
-defineProps<{ codHint?: string; weightHint?: number | null; hideCod?: boolean }>();
+defineProps<{ codHint?: string; weightHint?: number | null; hideCod?: boolean; bare?: boolean }>();
 
 const num = (v: string | number | null | undefined) => (v === '' || v === null || v === undefined ? null : Number(v));
 function setSize(l: number, w: number, h: number) {
@@ -16,7 +16,7 @@ const isSize = (l: number, w: number, h: number) => opts.value.length_cm === l &
 </script>
 
 <template>
-    <div class="space-y-3 rounded-lg border border-dashed border-slate-300 p-3 text-sm" data-testid="parcel-options">
+    <div :class="cn('space-y-3 text-sm', !bare && 'rounded-lg border border-dashed border-slate-300 p-3')" data-testid="parcel-options">
         <div class="grid grid-cols-2 gap-3">
             <label class="space-y-1">
                 <span class="text-xs text-muted-foreground">Khối lượng (g)</span>

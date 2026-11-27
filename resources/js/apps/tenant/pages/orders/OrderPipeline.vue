@@ -52,7 +52,7 @@ function toggle() {
 </script>
 
 <template>
-    <section class="mb-5 rounded-lg border bg-card shadow-xs" data-testid="order-pipeline">
+    <section class="mb-5 rounded-lg bg-card shadow-card" data-testid="order-pipeline">
         <div class="flex items-center justify-between px-4 pt-3" :class="hidden && 'pb-3'">
             <h2 class="text-[13px] font-bold uppercase tracking-wide">Đơn hàng cần xử lý</h2>
             <button type="button" class="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline" @click="toggle">

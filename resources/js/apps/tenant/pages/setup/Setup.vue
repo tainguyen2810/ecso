@@ -137,7 +137,7 @@ const steps = ['Thông tin cửa hàng', 'Bạn bán ở đâu', 'Bắt đầu']
                 </li>
             </ol>
 
-            <div class="rounded-xl border bg-card shadow-sm">
+            <div class="rounded-lg bg-card shadow-card">
                 <!-- 1. Store -->
                 <template v-if="step === 0">
                     <div class="px-5 pt-5 sm:px-7">

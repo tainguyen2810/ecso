@@ -246,12 +246,12 @@ function sinceLabel(a: MarketplaceAccountData) {
     <ErrorState v-else-if="loadError" :message="loadError" @retry="load" />
     <div v-else class="space-y-8">
         <section>
-            <div v-if="!shownAccounts.length" class="rounded-xl border bg-card shadow-xs">
+            <div v-if="!shownAccounts.length" class="rounded-lg bg-card shadow-card">
                 <EmptyState :icon="PlugZap" :title="sanName ? `Chưa kết nối ${sanName}` : 'Chưa kết nối gian hàng nào'" description="Kết nối gian hàng ở phần bên dưới để đơn, tồn kho và giá tự đồng bộ." />
             </div>
             <ul v-else class="space-y-3" data-testid="account-list">
                 <!-- No overflow-hidden: the "…" menu has to show past the card; the last strip keeps the rounded corners. -->
-                <li v-for="a in shownAccounts" :key="a.id" class="rounded-xl border bg-card shadow-xs [&>*:last-child]:rounded-b-xl">
+                <li v-for="a in shownAccounts" :key="a.id" class="rounded-lg bg-card shadow-card [&>*:last-child]:rounded-b-xl">
                     <div class="flex flex-wrap items-center gap-x-6 gap-y-4 px-5 py-4">
                         <div class="flex min-w-60 flex-1 items-center gap-4">
                             <MarketplaceLogo :marketplace="a.marketplace" :name="a.marketplace_name" size="lg" class="size-11" />
@@ -404,7 +404,7 @@ function sinceLabel(a: MarketplaceAccountData) {
             </div>
         </Card>
 
-        <details class="group rounded-xl border bg-card shadow-xs" data-testid="tech-details">
+        <details class="group rounded-lg bg-card shadow-card" data-testid="tech-details">
             <summary class="flex cursor-pointer list-none items-center gap-2 px-5 py-3.5 text-sm font-medium text-muted-foreground hover:text-foreground">
                 <Wrench class="size-4" /> Thông tin kỹ thuật (tin báo từ sàn, khả năng từng sàn)
                 <ChevronDown class="ml-auto size-4 transition group-open:rotate-180" />

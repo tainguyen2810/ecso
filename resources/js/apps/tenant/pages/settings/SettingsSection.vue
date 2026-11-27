@@ -9,6 +9,6 @@ defineProps<{ title: string; description?: string }>();
             <h2 class="font-semibold">{{ title }}</h2>
             <p v-if="description" class="mt-1 text-sm text-muted-foreground">{{ description }}</p>
         </div>
-        <div class="rounded-lg border bg-card p-5 shadow-xs"><slot /></div>
+        <div class="rounded-lg bg-card p-5 shadow-card"><slot /></div>
     </section>
 </template>

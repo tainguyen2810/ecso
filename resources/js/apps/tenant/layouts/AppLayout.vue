@@ -352,8 +352,11 @@ useGoShortcuts(
             <header class="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur lg:px-8">
                 <!-- Phones use the bottom menu (MobileNav); the sidebar is for wide screens. -->
                 <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-xs font-semibold text-white lg:hidden">{{ initials(tenant.current?.name ?? '?') }}</span>
-                <span class="min-w-0 flex-1 truncate font-semibold sm:hidden">{{ tenant.current?.name }}</span>
+                <span v-if="!route.meta.actionBar" class="min-w-0 flex-1 truncate font-semibold sm:hidden">{{ tenant.current?.name }}</span>
+                <!-- Form pages like Tạo đơn (Sapo): their title and buttons take the place of the search box. -->
+                <div v-if="route.meta.actionBar" id="page-actionbar" class="flex min-w-0 flex-1 items-center" />
                 <button
+                    v-else
                     type="button"
                     class="hidden h-9 w-full max-w-md items-center gap-2 rounded-lg border bg-slate-50 px-3 text-sm text-muted-foreground hover:bg-slate-100 sm:flex"
                     data-testid="open-search"
@@ -363,7 +366,7 @@ useGoShortcuts(
                     <span class="flex-1 truncate text-left">Tìm đơn, khách, sản phẩm, vận đơn…</span>
                     <kbd class="rounded border border-b-2 bg-card px-1.5 text-[11px]">Ctrl K</kbd>
                 </button>
-                <div class="ml-auto flex items-center gap-1">
+                <div v-if="!route.meta.actionBar" class="ml-auto flex items-center gap-1">
                     <RouterLink v-if="tenant.can('orders.pack')" to="/orders/pack" class="mr-1 hidden h-9 items-center gap-2 rounded-lg border bg-card px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 sm:flex" data-testid="topbar-scan">
                         <ScanBarcode class="size-4" :stroke-width="1.75" /> Quét đóng gói
                     </RouterLink>

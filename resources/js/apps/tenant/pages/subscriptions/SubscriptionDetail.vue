@@ -123,18 +123,18 @@ const periodStatus: Record<string, { label: string; tone: 'success' | 'info' | '
         <div class="grid items-start gap-5 lg:grid-cols-3">
             <div class="space-y-5 lg:col-span-2">
                 <div class="grid gap-3 sm:grid-cols-3" data-testid="subscription-stats">
-                    <div class="rounded-lg border bg-card p-4 shadow-xs">
+                    <div class="rounded-lg bg-card p-4 shadow-card">
                         <p class="text-xs text-muted-foreground">Hết hạn</p>
                         <p class="text-lg font-bold tabular-nums">{{ day(sub.ends_on) }}</p>
                         <p :class="cn('text-xs font-medium', leftTone)">{{ sub.status === 'active' ? leftText(sub.days_left) : stateLabels[sub.state].label }}</p>
                         <div v-if="progress !== null" class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-primary" :style="{ width: `${progress}%` }" /></div>
                     </div>
-                    <div class="rounded-lg border bg-card p-4 shadow-xs">
+                    <div class="rounded-lg bg-card p-4 shadow-card">
                         <p class="text-xs text-muted-foreground">Đang dùng gói</p>
                         <p class="text-lg font-bold">{{ sub.variant?.name ?? (sub.variant?.period_months ? `${sub.variant.period_months} tháng` : '—') }}</p>
                         <p class="text-xs text-muted-foreground">Giá gia hạn {{ sub.variant?.ref_price ? formatMoney(sub.variant.ref_price) : '—' }}</p>
                     </div>
-                    <div class="rounded-lg border bg-card p-4 shadow-xs">
+                    <div class="rounded-lg bg-card p-4 shadow-card">
                         <p class="text-xs text-muted-foreground">Đã thu từ thuê bao</p>
                         <p class="text-lg font-bold tabular-nums text-blue-600">{{ formatMoney(sub.paid_total) }}</p>
                         <p class="text-xs text-muted-foreground">Dùng từ {{ day(sub.customer_since) }}</p>

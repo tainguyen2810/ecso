@@ -248,7 +248,7 @@ const showStart = computed(() => !sellerPath.value && !startHidden.value && !pro
         <template #description>
             {{ todayLabel }}<template v-if="orders"> · Hôm nay có <b class="text-foreground">{{ formatNumber(orders.to_process) }} đơn</b> cần xử lý</template>
         </template>
-        <div class="inline-flex rounded-lg border bg-card p-0.5 shadow-xs" role="group" aria-label="Khoảng thời gian" data-testid="dashboard-range">
+        <div class="inline-flex rounded-lg bg-card p-0.5 shadow-card" role="group" aria-label="Khoảng thời gian" data-testid="dashboard-range">
             <button v-for="d in [7, 30]" :key="d" type="button" :class="['h-7 rounded-md px-3 text-xs font-medium', days === d ? 'bg-slate-900 text-white' : 'text-muted-foreground hover:text-foreground']" @click="days = d">{{ d }} ngày</button>
         </div>
     </PageHeader>
@@ -310,7 +310,7 @@ const showStart = computed(() => !sellerPath.value && !startHidden.value && !pro
                 v-for="t in todo"
                 :key="t.key"
                 :to="t.to"
-                :class="['group flex items-center gap-3 rounded-xl border bg-card px-4 py-3.5 shadow-xs transition hover:border-primary/40 hover:shadow-sm', !t.count && 'opacity-60']"
+                :class="['group flex items-center gap-3 rounded-lg bg-card px-4 py-3.5 shadow-card transition hover:border-primary/40 hover:shadow-sm', !t.count && 'opacity-60']"
             >
                 <IconBubble :icon="t.icon" :tone="t.count ? t.tone : 'slate'" size="lg" />
                 <div class="min-w-0 flex-1">

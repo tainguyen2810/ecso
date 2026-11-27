@@ -49,7 +49,7 @@ const roleNames: Record<string, string> = {
                 <button
                     v-for="t in tenant.tenants"
                     :key="t.id"
-                    class="flex w-full items-center gap-3 rounded-lg border bg-card p-3 text-left shadow-xs transition hover:border-primary/40 hover:shadow-sm"
+                    class="flex w-full items-center gap-3 rounded-lg bg-card p-3 text-left shadow-card transition hover:border-primary/40 hover:shadow-sm"
                     @click="open(t.id)"
                 >
                     <span class="flex size-10 items-center justify-center rounded-md bg-primary/10 text-sm font-semibold text-primary">{{ initials(t.name) }}</span>
