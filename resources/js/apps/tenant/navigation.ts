@@ -6,6 +6,7 @@ import {
     Landmark,
     LayoutDashboard,
     LayoutGrid,
+    MessagesSquare,
     RefreshCw,
     Package,
     ReceiptText,
@@ -75,6 +76,8 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
                     { label: 'Ca bán hàng', path: '/pos/shifts', permission: 'orders.create', advanced: true },
                     { label: 'Khách trả hàng', path: '/returns', permission: 'returns.view' },
                 ] },
+            // EzChat inbox (Zalo, Messenger, website chat…) inside this app; only shown once EzChat is joined (see AppLayout).
+            { name: 'messages', label: 'Tin nhắn', path: '/messages', icon: MessagesSquare, permission: 'dashboard.view', description: 'Chat đa kênh từ EzChat (Zalo, Messenger, website…) ngay trong phần mềm, kèm khách và đơn của người đang chat.' },
             // Like Sapo's "Vận chuyển": overview, every shipment, COD and fee checks, carrier connections, defaults.
             { name: 'shipping', label: 'Vận chuyển', path: '/shipping', icon: Truck, permission: 'orders.view', anyPermission: ['finance.view'], shortcut: 'v', description: 'Vận đơn, đối soát COD và phí ship, kết nối hãng vận chuyển, cấu hình giao hàng.',
                 alsoActive: ['shipments'],
@@ -104,7 +107,9 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
         ],
     },
     {
-        // Each marketplace has its own line (Tai: do not group the marketplaces into one item).
+        // Each marketplace has its own line (Tai: do not group the marketplaces into one item). The heading itself opens
+        // "Tất cả kênh" and carries "Kết nối thêm kênh" and "Trung tâm đồng bộ" as small buttons (mẫu A, 27/11); those
+        // two lines only show on the folded menu.
         label: 'Kênh bán',
         items: [
             { name: 'marketplaces', label: 'Tất cả kênh', path: '/marketplaces', icon: LayoutGrid, permission: 'marketplace.view', description: 'Kết nối Shopee, TikTok Shop, Lazada, Tiki và website bằng API chính thức.' },

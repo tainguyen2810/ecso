@@ -49,6 +49,8 @@ const routes: RouteRecordRaw[] = [
                 { path: `inventory/${kind}/new`, name: `inventory-${kind}-new`, component: () => import('./pages/inventory/DocumentForm.vue'), meta: { permission: documentKinds[kind].permission, nav: 'inventory', kind, section: `inventory-${kind}` } },
                 { path: `inventory/${kind}/:id`, name: `inventory-${kind}-show`, component: () => import('./pages/inventory/DocumentDetail.vue'), meta: { permission: 'inventory.view', nav: 'inventory', kind, section: `inventory-${kind}` } },
             ]),
+            // Tin nhắn: the EzChat inbox inside this app, full bleed under the top bar.
+            { path: 'messages', name: 'messages', component: () => import('./pages/messages/Messages.vue'), meta: { permission: 'dashboard.view', nav: 'messages', flush: true } },
             { path: 'orders', name: 'orders', component: () => import('./pages/orders/OrderList.vue'), meta: { permission: 'orders.view', nav: 'orders' } },
             { path: 'orders/pack', name: 'order-pack', component: () => import('./pages/orders/PackingPage.vue'), meta: { permission: 'orders.pack', nav: 'orders' } },
             { path: 'orders/new', name: 'order-new', component: () => import('./pages/orders/OrderForm.vue'), meta: { permission: 'orders.create', nav: 'orders', actionBar: true } },

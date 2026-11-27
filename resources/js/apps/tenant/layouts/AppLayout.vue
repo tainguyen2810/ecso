@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Check, ChevronDown, ChevronRight, ChevronsUpDown, LogOut, PanelLeftClose, PanelLeftOpen, Plus, ScanBarcode, Search } from 'lucide-vue-next';
+import { Check, ChevronDown, ChevronRight, ChevronsUpDown, LogOut, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, ScanBarcode, Search } from 'lucide-vue-next';
 import { useAuthStore } from '@/shared/stores/auth';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useGoShortcuts } from '@/shared/composables/useShortcuts';
@@ -18,6 +18,7 @@ import MobileNav from '../components/MobileNav.vue';
 import InstallBanner from '../components/InstallBanner.vue';
 import DemoBanner from '../components/DemoBanner.vue';
 import { hidesPos } from '../pages/setup/setup';
+import { inboxAvailable, inboxUnread, unreadLabel, watchInbox } from '../composables/ezchatInbox';
 
 const auth = useAuthStore();
 const tenant = useTenantStore();
@@ -72,7 +73,8 @@ const visibleGroups = computed(() =>
         .map((g) => ({
             ...g,
             items: g.items
-                .filter((i) => !i.hidden && canSee(i))
+                // "Tin nhắn" only once EzChat is joined and this person can open its inbox.
+                .filter((i) => !i.hidden && canSee(i) && (i.name !== 'messages' || inboxAvailable.value))
                 .map((i) => {
                     // A2: the POS pages leave the menu when the shop said it does not sell in a store.
                     const children = i.children?.filter((c) => (!c.permission || tenant.can(c.permission)) && !(c.path.startsWith('/pos') && hidesPos(tenant.current?.channels)) && (!c.advanced || tenant.current?.advanced_menu !== false || activeChild.value === c.path));
@@ -96,38 +98,50 @@ const isActive = (item: NavItem) => {
 /** Connected shops per marketplace, shown beside each marketplace line. */
 const shopCounts = ref<Record<string, number>>({});
 const countsLoaded = ref(false);
+/** A connected shop whose sync is failing: the dot on the "Trung tâm đồng bộ" button turns orange. */
+const syncTrouble = ref(false);
 async function loadShopCounts() {
     shopCounts.value = {};
     countsLoaded.value = false;
+    syncTrouble.value = false;
     if (!tenant.can('marketplace.view')) return;
     try {
         const { data } = await api.get('/marketplace-accounts');
         const counts: Record<string, number> = {};
-        for (const a of data.data as { marketplace: string; status: string }[]) if (a.status === 'connected') counts[a.marketplace] = (counts[a.marketplace] ?? 0) + 1;
+        const accounts = data.data as { marketplace: string; status: string; circuit_open?: boolean; last_error?: string | null }[];
+        for (const a of accounts) if (a.status === 'connected') counts[a.marketplace] = (counts[a.marketplace] ?? 0) + 1;
         shopCounts.value = counts;
+        syncTrouble.value = accounts.some((a) => a.status === 'connected' && (a.circuit_open || !!a.last_error));
         countsLoaded.value = true;
     } catch {
         // The menu still works without the counts.
     }
 }
 watch(() => tenant.current?.id, loadShopCounts, { immediate: true });
+watch(() => tenant.current?.id, (id) => watchInbox(id), { immediate: true });
 const shopCountLabel = (key: string) => {
     const n = shopCounts.value[key] ?? 0;
     return n ? `${n} ${key === 'woocommerce' ? 'web' : 'shop'}` : 'Chưa kết nối';
 };
 const hasChannel = computed(() => Object.values(shopCounts.value).some((n) => n > 0));
 /**
- * Kênh bán lists only the marketplaces that have a shop (each on its own line, Tai's rule); the others sit behind
- * one "Kết nối thêm kênh" line that opens a dialog. A shop with no channel yet sees only that line.
+ * Kênh bán lists only the marketplaces that have a shop (each on its own line, Tai's rule). Open menu (mẫu A): the
+ * heading opens "Tất cả kênh" and carries + (Kết nối thêm kênh) and the sync button. Folded menu: those three stay
+ * lines with icons. A shop with no channel yet sees only the "Kết nối kênh bán đầu tiên" line.
  */
 function channelLine(i: NavItem): NavItem[] {
     if (i.marketplace) return countsLoaded.value && (shopCounts.value[i.marketplace] || isActive(i)) ? [i] : [];
+    if (!collapsed.value && hasChannel.value && (i.name === 'marketplaces' || i.name === 'marketplace-sync')) return [];
     if (i.name === 'marketplaces' && countsLoaded.value && !hasChannel.value && !isActive(i)) return [];
     if (i.name !== 'marketplace-sync') return [i];
     const add = tenant.can('marketplace.connect') && countsLoaded.value ? [{ name: 'connect-channel', label: '', path: '', icon: Plus } as unknown as NavItem] : [];
     return [...add, ...(countsLoaded.value && !hasChannel.value && !isActive(i) ? [] : [i])];
 }
 const connectOpen = ref(false);
+/** Kênh bán heading (open menu, mẫu A): a link to "Tất cả kênh" and the two small buttons beside it. */
+const channelsHeading = computed(() => !collapsed.value && hasChannel.value);
+const canSeeChannels = computed(() => tenant.can('marketplace.view'));
+const allChannelsActive = computed(() => route.meta.nav === 'marketplaces' && !route.query.san && route.name !== 'marketplace-sync');
 const open = ref<Set<string>>(new Set());
 watch(
     () => route.meta.nav,
@@ -243,7 +257,43 @@ useGoShortcuts(
 
             <nav :class="cn('sidebar-scroll flex-1 overflow-y-auto px-1 py-2', collapsed && 'lg:px-1')" @scroll="flyout = null">
                 <div v-for="(group, i) in visibleGroups" :key="group.label" :class="i > 0 && 'mt-1 border-t border-white/10'">
-                    <p v-if="i > 0" :class="cn('flex h-12 items-center px-3.5 text-[13px] font-semibold uppercase tracking-wide text-slate-100', collapsed && 'lg:hidden')">{{ group.label }}</p>
+                    <!-- Kênh bán (mẫu A): the heading opens "Tất cả kênh"; + and the sync button sit beside it. -->
+                    <div v-if="group.label === 'Kênh bán' && channelsHeading" class="flex h-11 items-center gap-1 pl-3.5 pr-2" data-testid="channels-heading">
+                        <RouterLink
+                            v-if="canSeeChannels"
+                            to="/marketplaces"
+                            :class="cn('-ml-1.5 flex-1 truncate rounded px-1.5 py-1 text-[13px] font-semibold uppercase tracking-wide hover:bg-white/5', allChannelsActive ? 'text-[#4db1ff]' : 'text-slate-100')"
+                            title="Tất cả kênh"
+                            aria-label="Tất cả kênh"
+                            data-testid="nav-all-channels"
+                            @click="mobileOpen = false"
+                        >{{ group.label }}</RouterLink>
+                        <span v-else class="flex-1 text-[13px] font-semibold uppercase tracking-wide text-slate-100">{{ group.label }}</span>
+                        <button
+                            v-if="tenant.can('marketplace.connect')"
+                            type="button"
+                            class="grid size-7 place-items-center rounded-md bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white"
+                            title="Kết nối thêm kênh"
+                            aria-label="Kết nối thêm kênh"
+                            data-testid="nav-connect-channel"
+                            @click="connectOpen = true; mobileOpen = false"
+                        >
+                            <Plus class="size-4" />
+                        </button>
+                        <RouterLink
+                            v-if="tenant.can('sync.view')"
+                            to="/marketplaces/sync"
+                            :class="cn('relative grid size-7 place-items-center rounded-md hover:bg-white/10 hover:text-white', route.name === 'marketplace-sync' ? 'bg-[#0088ff] text-white' : 'bg-white/5 text-slate-300')"
+                            :title="syncTrouble ? 'Trung tâm đồng bộ · có shop đang lỗi' : 'Trung tâm đồng bộ'"
+                            aria-label="Trung tâm đồng bộ"
+                            data-testid="nav-sync"
+                            @click="mobileOpen = false"
+                        >
+                            <RefreshCw class="size-4" />
+                            <span :class="cn('absolute right-1 top-1 size-[7px] rounded-full ring-[1.5px] ring-[#182537]', syncTrouble ? 'bg-amber-400' : 'bg-emerald-400')" />
+                        </RouterLink>
+                    </div>
+                    <p v-else-if="i > 0" :class="cn('flex h-12 items-center px-3.5 text-[13px] font-semibold uppercase tracking-wide text-slate-100', collapsed && 'lg:hidden')">{{ group.label }}</p>
                     <div v-for="item in group.items" :key="item.name">
                         <button
                             v-if="item.name === 'connect-channel'"
@@ -260,7 +310,8 @@ useGoShortcuts(
                             v-else
                             :class="
                                 cn(
-                                    'group my-1 flex items-center rounded text-sm text-slate-200 hover:bg-white/5 hover:text-white',
+                                    'group relative flex items-center rounded text-sm text-slate-200 hover:bg-white/5 hover:text-white',
+                                    item.marketplace && !collapsed ? 'my-0.5' : 'my-1',
                                     isActive(item) && (item.children?.length && !collapsed ? 'text-white' : 'bg-[#0088ff] text-white hover:bg-[#0088ff]'),
                                 )
                             "
@@ -285,7 +336,7 @@ useGoShortcuts(
                             <RouterLink
                                 v-else
                                 :to="item.path"
-                                :class="cn('flex h-12 min-w-0 flex-1 items-center gap-2.5 pl-2.5 pr-3', collapsed && 'lg:justify-center lg:px-0')"
+                                :class="cn('flex min-w-0 flex-1 items-center gap-2.5 pl-2.5 pr-3', item.marketplace && !collapsed ? 'h-9' : 'h-12', collapsed && 'lg:justify-center lg:px-0')"
                                 :title="collapsed ? item.label : undefined"
                                 :data-testid="item.marketplace ? `nav-${item.marketplace}` : undefined"
                                 @click="mobileOpen = false"
@@ -293,7 +344,17 @@ useGoShortcuts(
                                 <MarketplaceLogo v-if="item.marketplace" :marketplace="item.marketplace" :name="item.label" size="sm" :class="cn('size-6', !shopCounts[item.marketplace] && 'opacity-40')" />
                                 <component :is="item.icon" v-else :class="cn('size-6 shrink-0', isActive(item) ? 'text-white' : 'text-slate-300 group-hover:text-white')" :stroke-width="1.5" />
                                 <span :class="cn('flex-1 truncate', item.marketplace && !shopCounts[item.marketplace] && !isActive(item) && 'text-slate-500', collapsed && 'lg:hidden')">{{ item.label }}</span>
-                                <span v-if="item.marketplace" :class="cn('shrink-0 text-[11px] font-normal', isActive(item) ? 'text-white/80' : 'text-slate-500', collapsed && 'lg:hidden')">{{ shopCountLabel(item.marketplace) }}</span>
+                                <span
+                                    v-if="item.marketplace && shopCounts[item.marketplace]"
+                                    :class="cn('grid h-[18px] min-w-5 shrink-0 place-items-center rounded-full px-1.5 text-[11px] font-normal', isActive(item) ? 'bg-white/25 text-white' : 'bg-white/10 text-slate-300', collapsed && 'lg:hidden')"
+                                    :title="shopCountLabel(item.marketplace)"
+                                >{{ shopCounts[item.marketplace] }}</span>
+                                <span v-else-if="item.marketplace" :class="cn('shrink-0 text-[11px] font-normal', isActive(item) ? 'text-white/80' : 'text-slate-500', collapsed && 'lg:hidden')">{{ shopCountLabel(item.marketplace) }}</span>
+                                <span
+                                    v-if="item.name === 'messages' && unreadLabel(inboxUnread)"
+                                    :class="cn('grid h-5 min-w-[22px] shrink-0 place-items-center rounded-full bg-rose-500 px-1.5 text-[11px] font-bold text-white', collapsed && 'lg:absolute lg:right-2 lg:top-1 lg:h-4 lg:min-w-4 lg:px-1 lg:text-[10px]')"
+                                    data-testid="messages-unread"
+                                >{{ unreadLabel(inboxUnread) }}</span>
                                 <Badge v-if="item.phase" tone="muted" :class="cn('px-1.5 text-[10px]', collapsed && 'lg:hidden')">{{ item.phase > 8 ? "Sau MVP" : "P" + item.phase }}</Badge>
                             </RouterLink>
                         </div>
@@ -379,7 +440,8 @@ useGoShortcuts(
             <DemoBanner />
             <GlobalSearch v-model:open="searchOpen" />
             <ConnectChannelDialog v-model:open="connectOpen" :counts="shopCounts" @connected="loadShopCounts" />
-            <main :class="'mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 pb-28 sm:px-6 lg:px-8 lg:pb-6'">
+            <!-- Full-bleed pages (Tin nhắn): no padding, the page fills the space under the top bar. -->
+            <main :class="route.meta.flush ? 'flex min-h-0 w-full flex-1 flex-col pb-16 lg:pb-0' : 'mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 pb-28 sm:px-6 lg:px-8 lg:pb-6'">
                 <RouterView :key="tenant.current?.id" />
             </main>
             <MobileNav @switch-tenant="switchTenant" @logout="logout" />

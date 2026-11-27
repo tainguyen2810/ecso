@@ -212,9 +212,20 @@ onMounted(async () => {
             const first = channels.value.find((ch) => ch.is_active);
             form.channel_id = first?.id ?? '';
             form.warehouse_id = first?.warehouse?.id ?? warehouses.value.find((x) => x.is_default && x.status === 'active')?.id ?? warehouses.value[0]?.id ?? '';
+            // "Tạo đơn từ chat này" (Tin nhắn): the chat's channel, and its customer or their name and phone.
+            if (typeof route.query.channel === 'string' && channels.value.some((ch) => ch.id === route.query.channel && ch.is_active)) {
+                form.channel_id = route.query.channel;
+                form.warehouse_id = channels.value.find((ch) => ch.id === route.query.channel)?.warehouse?.id ?? form.warehouse_id;
+            }
             if (route.query.customer) {
                 const { data } = await api.get(`/customers/${route.query.customer}`);
                 chooseCustomer(data.data);
+            } else if (typeof route.query.new_name === 'string' || typeof route.query.new_phone === 'string') {
+                newCustomer.enabled = true;
+                newCustomer.name = String(route.query.new_name ?? '').slice(0, 150);
+                newCustomer.phone = String(route.query.new_phone ?? '').slice(0, 20);
+                form.buyer_name = newCustomer.name;
+                form.buyer_phone = newCustomer.phone;
             }
             if (copyId.value) await loadOrder(copyId.value, true);
             if (draftId.value) await loadDraft(draftId.value);
