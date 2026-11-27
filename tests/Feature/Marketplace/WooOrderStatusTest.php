@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Marketplace\Models\SyncError;
+use App\Modules\Marketplace\Services\WooStatusLabels;
 use App\Modules\Orders\Models\Order;
 use Illuminate\Support\Facades\Artisan;
 use Tests\Support\FakeWooStore;
@@ -71,7 +72,7 @@ it('shows the website name of a status it has not mapped, and suggests a mapping
 });
 
 it('suggests ECSO statuses from Vietnamese and English status names', function (string $raw, ?string $name, ?string $expected) {
-    expect(\App\Modules\Marketplace\Services\WooStatusLabels::suggest($raw, $name))->toBe($expected);
+    expect(WooStatusLabels::suggest($raw, $name))->toBe($expected);
 })->with([
     ['dang-giao-hang', 'Đang giao hàng', 'IN_TRANSIT'],
     ['dang-giao-cu', 'Đang giao hàng (cũ)', 'IN_TRANSIT'],
