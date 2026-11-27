@@ -56,6 +56,8 @@ Schedule::command('ecso:orders:loss-alerts')->everyFifteenMinutes()->withoutOver
 Schedule::command('ecso:marketplace:stock-check')->dailyAt('02:15')->timezone('Asia/Ho_Chi_Minh')->withoutOverlapping(60)->onOneServer();
 
 // Đợt 15: morning summary on the phones that asked for it.
+// Thuê bao: đơn gia hạn tự tạo, nhắc khách và nhân viên lúc 8 giờ sáng giờ Việt Nam.
+Schedule::command('ecso:subscriptions:daily')->dailyAt('08:00')->timezone('Asia/Ho_Chi_Minh')->withoutOverlapping(60)->onOneServer();
 Schedule::command('ecso:morning-brief')->dailyAt('08:00')->timezone('Asia/Ho_Chi_Minh')->withoutOverlapping(60)->onOneServer();
 
 Schedule::command('ecso:marketplace:check-fees')->dailyAt('06:00')->withoutOverlapping(120)->onOneServer();

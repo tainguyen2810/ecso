@@ -63,6 +63,11 @@ class SettingsController extends Controller
 
         $settings = $tenant->settings ?? [];
         // Lists are saved whole; other sections keep the keys that were not sent.
+        if ($section === 'subscriptions' && isset($data['remind_days'])) {
+            $days = array_map('intval', $data['remind_days']);
+            rsort($days);
+            $data['remind_days'] = array_values(array_unique($days));
+        }
         $settings[$section] = in_array($section, ['reasons'], true)
             ? array_values($data['reasons'])
             : TenantSettings::merge(TenantSettings::merge(TenantSettings::DEFAULTS[$section], $settings[$section] ?? []), $data);
@@ -162,6 +167,12 @@ class SettingsController extends Controller
 
         return [
             'interface' => ['advanced_menu' => ['present', 'nullable', 'boolean']],
+            'subscriptions' => [
+                'remind_days' => ['sometimes', 'array', 'max:6'],
+                'remind_days.*' => ['integer', 'min:0', 'max:60', 'distinct'],
+                'zalo' => ['sometimes', 'boolean'],
+                'notify_staff' => ['sometimes', 'boolean'],
+            ],
             'store' => [
                 'name' => ['sometimes', 'string', 'min:2', 'max:120'],
                 'timezone' => ['sometimes', 'string', Rule::in(timezone_identifiers_list())],

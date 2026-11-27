@@ -123,7 +123,13 @@ class OrderController extends Controller
     {
         $this->authorize('view', $order);
         $returnable = $returnService->returnableQuantities($order);
-        $order->load(['account', 'channel', 'customer', 'creator', 'warehouse', 'assignee', 'items.variant.product.images', 'items.listingVariant', 'payments.creator']);
+        $order->load(['account', 'channel', 'customer', 'creator', 'warehouse', 'assignee', 'items.variant.product.images', 'items.serviceVariant.product.images', 'items.listingVariant', 'payments.creator']);
+        // Thuê bao lines: the period each one sold (dates, subscription).
+        $periods = DB::table('customer_subscription_periods')->join('customer_subscriptions', 'customer_subscriptions.id', '=', 'customer_subscription_periods.customer_subscription_id')
+            ->where('customer_subscription_periods.order_id', $order->id)
+            ->get(['customer_subscription_periods.line_no', 'customer_subscription_periods.starts_on', 'customer_subscription_periods.ends_on', 'customer_subscription_periods.status', 'customer_subscriptions.ulid', 'customer_subscriptions.code'])
+            ->keyBy('line_no');
+        $subLine = 0;
         $reservations = $ledger->snapshot(Order::STOCK_REFERENCE, $order->items->pluck('id')->all());
         $lots = $ledger->lotsFor(Order::STOCK_REFERENCE, $order->items->pluck('id')->map(fn ($id) => (int) $id)->all());
         $capabilities = $connectors->has($order->marketplace) ? $connectors->for($order->marketplace)->capabilities() : Capability::allUnknown();
@@ -146,7 +152,14 @@ class OrderController extends Controller
                 'mapping_status' => $i->mapping_status,
                 'listing_id' => $i->listingVariant?->ulid,
                 'variant' => $i->variant ? ['id' => $i->variant->ulid, 'sku' => $i->variant->sku, 'name' => $i->variant->displayName()] : null,
-                'image' => $i->variant?->product?->images->first()?->url(),
+                // Dịch vụ / thuê bao: the SKU sold without stock; the order form edits the line as that SKU again.
+                'service_variant' => $i->serviceVariant ? ['id' => $i->serviceVariant->ulid, 'sku' => $i->serviceVariant->sku, 'name' => $i->serviceVariant->displayName(), 'period_months' => $i->serviceVariant->period_months, 'type' => $i->serviceVariant->product?->type] : null,
+                'subscription' => $i->subscription !== null && $i->service_variant_id !== null ? (function () use ($i, $periods, &$subLine) {
+                    $p = $periods->get(++$subLine);
+
+                    return [...(array) $i->subscription, 'period' => $p ? ['starts_on' => $p->starts_on, 'ends_on' => $p->ends_on, 'status' => $p->status, 'subscription' => ['id' => $p->ulid, 'code' => $p->code]] : null];
+                })() : null,
+                'image' => ($i->variant ?? $i->serviceVariant)?->product?->images->first()?->url(),
                 'reservation' => isset($reservations[$i->id]) ? [
                     'quantity' => $reservations[$i->id]['quantity'],
                     'shortage' => $reservations[$i->id]['shortage'],

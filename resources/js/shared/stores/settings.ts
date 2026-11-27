@@ -29,6 +29,8 @@ export interface TenantSettingsData {
     payments: { methods: Record<PaymentMethodKey, boolean>; default_pos: PaymentMethodKey; default_online: PaymentMethodKey; bank_accounts: BankAccount[]; approval_threshold?: number };
     sales: { allow_change_sale_time: boolean; invoice_copies: number; pos_require_cash: boolean; pos_auto_print: boolean; pos_require_shift: boolean; marketplace_auto_arrange?: boolean };
     reasons: CancelReason[];
+    /** Thuê bao: the days before the end the customer is reminded (0 = the end day), by Zalo; the staff summary. */
+    subscriptions: { remind_days: number[]; zalo: boolean; notify_staff: boolean };
     print: { defaults: Record<'sale' | 'purchase' | 'receipt' | 'stocktake' | 'cash', PrintSize>; show_logo: boolean; show_qr: boolean; show_signatures: boolean; footer: string | null; label_extras: LabelExtrasSettings };
     shipping?: ShippingSettings;
 }
@@ -60,7 +62,7 @@ export interface ShippingSettings {
     cancel_with_order: boolean;
 }
 
-export type SettingsSection = 'store' | 'tax' | 'pricing' | 'payments' | 'sales' | 'reasons' | 'print' | 'shipping';
+export type SettingsSection = 'store' | 'tax' | 'pricing' | 'payments' | 'sales' | 'reasons' | 'print' | 'shipping' | 'subscriptions';
 
 /** Loaded once per business; screens read it to apply the configured defaults and rules. */
 export const useSettingsStore = defineStore('settings', () => {

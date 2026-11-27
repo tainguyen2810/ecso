@@ -56,7 +56,7 @@ class StockController extends Controller
 
         $rows = ProductVariant::query()
             ->with(['product:id,ulid,name', 'product.images'])
-            ->whereHas('product', fn ($q) => $q->where('status', '!=', Product::STATUS_ARCHIVED)->where('type', '!=', Product::TYPE_COMBO))
+            ->whereHas('product', fn ($q) => $q->where('status', '!=', Product::STATUS_ARCHIVED)->whereNotIn('type', [Product::TYPE_COMBO, ...Product::NON_STOCK_TYPES]))
             ->whereDoesntHave('components') // pack sizes have no stock of their own
             ->leftJoinSub($balances, 's', 's.product_variant_id', '=', 'product_variants.id')
             ->select('product_variants.*',
@@ -125,7 +125,7 @@ class StockController extends Controller
             ->selectRaw('SUM(CASE WHEN available > 0 THEN 1 ELSE 0 END) as in_stock, SUM(CASE WHEN available > 0 AND available <= safety THEN 1 ELSE 0 END) as low_stock')
             ->first();
 
-        $skus = ProductVariant::query()->whereHas('product', fn ($q) => $q->where('type', '!=', Product::TYPE_COMBO))->whereDoesntHave('components')->count();
+        $skus = ProductVariant::query()->whereHas('product', fn ($q) => $q->whereNotIn('type', [Product::TYPE_COMBO, ...Product::NON_STOCK_TYPES]))->whereDoesntHave('components')->count();
 
         return response()->json(['data' => [
             'skus' => $skus,

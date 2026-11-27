@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Bookmark, Boxes, ChevronDown, ChevronRight, Columns3, Download, FileSpreadsheet, ImageIcon, ImageOff, Images, Package, Plus, Printer, RotateCcw, Search, SlidersHorizontal, Sparkles, Tags, Upload, X } from 'lucide-vue-next';
+import { Bookmark, Boxes, ChevronDown, ChevronRight, Columns3, Download, FileSpreadsheet, ImageIcon, ImageOff, Images, Package, Plus, Printer, RefreshCw, RotateCcw, Search, SlidersHorizontal, Sparkles, Tags, Upload, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import StockOverview from '../../components/StockOverview.vue';
@@ -284,6 +284,7 @@ function toggleAll() {
             <HeaderLink v-if="canManage" :icon="Upload" data-testid="import-button" @click="importOpen = true">Nhập file</HeaderLink>
             <HeaderLink :icon="Tags" to="/products/taxonomy">Danh mục và thương hiệu</HeaderLink>
             <HeaderLink v-if="canManage" :icon="Boxes" :to="{ path: '/products/new', query: { type: 'combo' } }" data-testid="new-combo">Thêm combo</HeaderLink>
+            <HeaderLink v-if="canManage" :icon="RefreshCw" :to="{ path: '/products/new', query: { type: 'subscription' } }" data-testid="new-subscription">Thêm thuê bao</HeaderLink>
             <HeaderLink :icon="Printer" to="/products/labels">In tem mã vạch</HeaderLink>
         </template>
         <RouterLink v-if="canManage" to="/products/scan"><Button variant="outline" data-testid="product-from-photos"><Sparkles /> Tạo từ ảnh</Button></RouterLink>
@@ -360,7 +361,7 @@ function toggleAll() {
         <div v-if="moreFilters" class="flex flex-wrap items-end gap-3 border-b bg-muted/30 px-4 py-3 text-sm" data-testid="extra-filters">
             <label class="grid gap-1">
                 <span class="text-xs text-muted-foreground">Loại</span>
-                <Select v-model="filters.type" class="w-40" aria-label="Loại sản phẩm" :options="[{ value: '', label: 'Mọi loại' }, { value: 'standard', label: 'Sản phẩm thường' }, { value: 'combo', label: 'Combo' }]" />
+                <Select v-model="filters.type" class="w-40" aria-label="Loại sản phẩm" :options="[{ value: '', label: 'Mọi loại' }, { value: 'standard', label: 'Sản phẩm thường' }, { value: 'combo', label: 'Combo' }, { value: 'service', label: 'Dịch vụ' }, { value: 'subscription', label: 'Thuê bao' }]" />
             </label>
             <label class="grid gap-1">
                 <span class="text-xs text-muted-foreground">Tag</span>
@@ -451,6 +452,8 @@ function toggleAll() {
                                         <span v-if="trashed" class="font-medium">{{ p.name }}</span>
                                         <RouterLink v-else :to="`/products/${p.id}`" class="font-medium text-primary hover:underline">{{ p.name }}</RouterLink>
                                         <Badge v-if="p.type === 'combo'" class="ml-1.5">Combo</Badge>
+                                        <Badge v-else-if="p.type === 'service'" class="ml-1.5">Dịch vụ</Badge>
+                                        <Badge v-else-if="p.type === 'subscription'" tone="info" class="ml-1.5">Thuê bao</Badge>
                                         <p class="truncate text-xs text-muted-foreground">
                                             {{ p.variants_count }} biến thể ·
                                             <span class="font-mono">{{ p.variants?.slice(0, 2).map((v) => v.sku).join(', ') }}{{ (p.variants?.length ?? 0) > 2 ? '…' : '' }}</span>

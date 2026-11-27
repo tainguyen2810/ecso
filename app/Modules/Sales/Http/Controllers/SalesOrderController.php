@@ -234,6 +234,11 @@ class SalesOrderController extends Controller
             'lines.*.quantity' => ['required', 'integer', 'min:1', 'max:100000'],
             'lines.*.unit_price' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             'lines.*.discount' => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
+            // Thuê bao: the first day of the period (empty = continue the customer's current one), what it is for
+            // (a domain, an office…) and the subscription it renews.
+            'lines.*.start' => ['nullable', 'date_format:Y-m-d'],
+            'lines.*.label' => ['nullable', 'string', 'max:150'],
+            'lines.*.subscription_id' => ['nullable', 'string', 'max:40'],
         ];
     }
 

@@ -20,7 +20,7 @@ import { useToast } from '@/shared/composables/useToast';
 import { useIdempotencyKey } from '@/shared/composables/useIdempotencyKey';
 import SkuPicker from '../../components/SkuPicker.vue';
 import { useSettingsStore } from '@/shared/stores/settings';
-import type { Product, Ref, Variant, Warehouse } from '@/shared/types';
+import type { Product, ProductType, Ref, Variant, Warehouse } from '@/shared/types';
 
 interface VariantRow {
     id?: string;
@@ -43,6 +43,8 @@ interface VariantRow {
     cost_price?: string;
     opening_qty: string;
     opening_cost: string;
+    /** Thuê bao: the cycle this plan sells, in months. */
+    period_months: string;
     /** Pack size (đơn vị quy đổi): this SKU = quantity × base SKU. */
     conversion?: { base_sku: string; quantity: number } | null;
     skuTaken?: string | null;
@@ -88,8 +90,21 @@ const variants = ref<VariantRow[]>([]);
 const saving = ref(false);
 const error = ref<ApiError | null>(null);
 // Combo: one SKU, no stock of its own; components are other SKUs with a quantity per combo.
-const productType = ref<'standard' | 'combo'>(route.query.type === 'combo' ? 'combo' : 'standard');
+const TYPES: ProductType[] = ['standard', 'combo', 'service', 'subscription'];
+const productType = ref<ProductType>(TYPES.includes(route.query.type as ProductType) ? (route.query.type as ProductType) : 'standard');
 const isCombo = computed(() => productType.value === 'combo');
+// Dịch vụ and Thuê bao: sold without stock (no lots, pack sizes, opening stock or shelf). Thuê bao plans have a cycle.
+const isNonStock = computed(() => productType.value === 'service' || productType.value === 'subscription');
+const isSub = computed(() => productType.value === 'subscription');
+const noOwnStock = computed(() => isCombo.value || isNonStock.value);
+const TYPE_CARDS = [
+    { value: 'standard', title: 'Sản phẩm thường', text: 'Có tồn kho riêng, một hoặc nhiều biến thể.' },
+    { value: 'combo', title: 'Combo', text: 'Gồm nhiều SKU khác. Bán combo thì trừ tồn các SKU thành phần.' },
+    { value: 'service', title: 'Dịch vụ', text: 'Không có tồn kho: lắp đặt, sửa chữa, công thiết kế…' },
+    { value: 'subscription', title: 'Thuê bao', text: 'Bán theo chu kỳ (tháng, năm), có ngày hết hạn và nhắc gia hạn.' },
+] as const;
+// Gia hạn: renew from the old end date within the grace days, an order made ahead, reminders to the customer.
+const subRules = reactive({ grace_days: '3', auto_order: true, auto_order_days: '7', remind: true });
 const components = ref<{ variant: { id: string; sku: string; name: string; cost_price?: string; ref_price?: string | number | null }; quantity: number }[]>([]);
 const componentCost = computed(() => components.value.reduce((s, c) => s + Number(c.variant.cost_price ?? 0) * c.quantity, 0));
 const componentPrice = computed(() => components.value.reduce((s, c) => s + Number(c.variant.ref_price ?? 0) * c.quantity, 0));
@@ -98,9 +113,36 @@ function addComponent(v: Variant) {
     if (existing) existing.quantity++;
     else components.value.push({ variant: { id: v.id!, sku: v.sku, name: [v.product?.name, v.name].filter(Boolean).join(' - '), cost_price: v.cost_price, ref_price: v.ref_price }, quantity: 1 });
 }
-function setType(type: 'standard' | 'combo') {
+function setType(type: ProductType) {
     productType.value = type;
     if (type === 'combo') variants.value = [variants.value[0] ?? emptyRow()];
+    if (type === 'subscription') {
+        variants.value = variants.value.filter((v) => !v.conversion);
+        // Two usual plans to start from: 1 month and 12 months.
+        if (variants.value.length <= 1 && !variants.value[0]?.sku) {
+            variants.value = [
+                { ...emptyRow(), name: '1 tháng', period_months: '1' },
+                { ...emptyRow(), name: '12 tháng', period_months: '12' },
+            ];
+            planSkus();
+        }
+    }
+}
+/** Thuê bao: SKUs follow the name and the cycle (HOSTING-1T, HOSTING-12T) until staff type their own. */
+function planSkus() {
+    if (!isSub.value) return;
+    const prefix = slug(form.name).slice(0, 20);
+    if (!prefix) return;
+    for (const v of variants.value) {
+        if (v.id || !v.period_months) continue;
+        if (!v.sku || /-\d+T$/.test(v.sku)) v.sku = `${prefix}-${v.period_months}T`;
+    }
+}
+function addPlan() {
+    const used = new Set(variants.value.map((v) => Number(v.period_months)));
+    const months = [1, 3, 6, 12, 24, 36].find((m) => !used.has(m)) ?? '';
+    variants.value.push({ ...emptyRow(), name: months ? `${months} tháng` : '', period_months: String(months) });
+    planSkus();
 }
 
 // Pack sizes are variants with a conversion, shown in their own card (indexes kept for server error keys).
@@ -110,11 +152,11 @@ function addPack() {
     variants.value.push({ ...emptyRow(), conversion: { base_sku: baseOptions.value[0] ?? '', quantity: 2 } });
 }
 
-const showOpening = computed(() => isNew.value && canReceive.value && !isCombo.value);
-const hasOpening = computed(() => !isCombo.value && variants.value.some((v) => Number(v.opening_qty) > 0));
+const showOpening = computed(() => isNew.value && canReceive.value && !noOwnStock.value);
+const hasOpening = computed(() => !noOwnStock.value && variants.value.some((v) => Number(v.opening_qty) > 0));
 // Opening stock without a cost starts the average cost at 0 ₫: gross profit would look higher than it is.
 const noCost = (v: { opening_qty: string; opening_cost: string; conversion?: unknown }) => !v.conversion && Number(v.opening_qty) > 0 && !(Number(v.opening_cost) > 0);
-const zeroCostOpening = computed(() => (isCombo.value ? [] : variants.value.filter(noCost)));
+const zeroCostOpening = computed(() => (noOwnStock.value ? [] : variants.value.filter(noCost)));
 
 function addTag(raw = tagInput.value) {
     for (const t of raw.split(',').map((s) => s.trim()).filter(Boolean)) {
@@ -141,19 +183,22 @@ async function suggestBarcode(row: VariantRow) {
 }
 
 function emptyRow(): VariantRow {
-    return { sku: '', name: '', barcode: '', location: '', options: {}, ref_price: '', wholesale_price: '', weight_gram: '', supplier_id: '', supplier_sku: '', length_mm: '', width_mm: '', height_mm: '', opening_qty: '', opening_cost: '' };
+    return { sku: '', name: '', barcode: '', location: '', options: {}, ref_price: '', wholesale_price: '', weight_gram: '', supplier_id: '', supplier_sku: '', length_mm: '', width_mm: '', height_mm: '', opening_qty: '', opening_cost: '', period_months: '' };
 }
 
 const money = (value: string | number | null | undefined) => (Number(value) ? String(Math.round(Number(value))) : '');
 
 /** Unsaved changes: what the form holds now against what was loaded, shown in the save bar at the bottom. */
-const snapshot = () => JSON.stringify([form, lots, tags.value, variants.value, components.value, productType.value]);
+const snapshot = () => JSON.stringify([form, lots, tags.value, variants.value, components.value, productType.value, subRules]);
 const baseline = ref<string | null>(null);
 const dirty = computed(() => baseline.value !== null && snapshot() !== baseline.value);
 
 onMounted(async () => {
     // Set the first row before awaiting: rows generated while the lookups load must not be overwritten.
-    if (isNew.value && !copyFrom.value) variants.value = [emptyRow()];
+    if (isNew.value && !copyFrom.value) {
+        variants.value = [emptyRow()];
+        if (isSub.value) setType('subscription');
+    }
     const [c, b, t] = await Promise.all([api.get('/categories'), api.get('/brands'), api.get('/products/tags')]);
     categories.value = c.data.data;
     brands.value = b.data.data;
@@ -195,6 +240,14 @@ onMounted(async () => {
             api.get(`/products/${p.id}/listings`).then((r) => (linkedShops.value = r.data.data.length)).catch(() => undefined);
         }
         productType.value = p.type ?? 'standard';
+        if (p.subscription) {
+            Object.assign(subRules, {
+                grace_days: String(p.subscription.grace_days ?? 3),
+                auto_order: p.subscription.auto_order_days !== null,
+                auto_order_days: String(p.subscription.auto_order_days ?? 7),
+                remind: p.subscription.remind !== false,
+            });
+        }
         components.value = (p.variants?.[0]?.components ?? []).map((c) => ({ variant: { ...c.variant }, quantity: c.quantity }));
         // A copy keeps names, options and prices; SKU and barcode must be new (unique per business).
         variants.value = (p.variants ?? []).map((v) => ({
@@ -214,6 +267,7 @@ onMounted(async () => {
             height_mm: v.height_mm ? String(v.height_mm) : '',
             opening_qty: '',
             opening_cost: '',
+            period_months: v.period_months ? String(v.period_months) : '',
             conversion:
                 p.type !== 'combo' && v.components?.length === 1
                     ? { base_sku: copying ? '' : v.components[0]!.variant.sku, quantity: v.components[0]!.quantity }
@@ -289,7 +343,7 @@ async function save(then: 'detail' | 'labels' = 'detail') {
             unit: form.unit.trim() || null,
             tags: tags.value,
             vat_rate: form.vat_rate === '' ? null : Number(form.vat_rate),
-            ...(isCombo.value
+            ...(noOwnStock.value
                 ? {}
                 : {
                       track_lots: lots.track_lots,
@@ -300,6 +354,7 @@ async function save(then: 'detail' | 'labels' = 'detail') {
                   }),
             ...(isNew.value && hasOpening.value ? { opening_warehouse_id: form.opening_warehouse_id || null } : {}),
             ...(isNew.value ? { type: productType.value } : {}),
+            ...(isSub.value ? { subscription: { grace_days: Number(subRules.grace_days) || 0, auto_order_days: subRules.auto_order ? Number(subRules.auto_order_days) || 0 : null, remind: subRules.remind } } : {}),
             ...(isCombo.value ? { components: components.value.map((c) => ({ variant_id: c.variant.id, quantity: c.quantity })) } : {}),
             variants: variants.value.map((v) => ({
                 ...(v.id ? { id: v.id } : {}),
@@ -316,8 +371,9 @@ async function save(then: 'detail' | 'labels' = 'detail') {
                 length_mm: num(v.length_mm),
                 width_mm: num(v.width_mm),
                 height_mm: num(v.height_mm),
+                ...(isSub.value ? { period_months: num(v.period_months) } : {}),
                 ...(isNew.value && !v.conversion && Number(v.opening_qty) > 0 ? { opening_qty: Number(v.opening_qty), opening_cost: num(v.opening_cost) ?? 0 } : {}),
-                ...(!isCombo.value && v.conversion ? { conversion: { base_sku: v.conversion.base_sku, quantity: Number(v.conversion.quantity) } } : {}),
+                ...(!noOwnStock.value && v.conversion ? { conversion: { base_sku: v.conversion.base_sku, quantity: Number(v.conversion.quantity) } } : {}),
             })),
         };
         const { data } = isNew.value ? await api.post('/products', payload, idempotency.config()) : await api.put(`/products/${productId.value}`, payload);
@@ -377,7 +433,7 @@ async function removeImage(id: number) {
     <form v-else @submit.prevent="save()">
         <PageHeader
             :title="isNew ? (copyFrom ? 'Sao chép sản phẩm' : 'Thêm sản phẩm') : form.name || 'Sản phẩm'"
-            :description="copyFrom ? 'Đã chép thông tin, biến thể và giá. Nhập SKU mới cho từng biến thể.' : isNew ? 'Mỗi biến thể là một SKU bán được, có tồn kho riêng.' : undefined"
+            :description="copyFrom ? 'Đã chép thông tin, biến thể và giá. Nhập SKU mới cho từng biến thể.' : isNew ? (isSub ? 'Dịch vụ bán theo kỳ: mỗi gói là một SKU có chu kỳ riêng, không có tồn kho.' : isNonStock ? 'Dịch vụ không có tồn kho, bán như sản phẩm thường.' : 'Mỗi biến thể là một SKU bán được, có tồn kho riêng.') : undefined"
         >
             <Button v-if="!isNew && canManage" variant="ghost" class="text-destructive" @click="remove"><Trash2 /> Xóa</Button>
             <Button v-if="canManage" variant="outline" :disabled="saving" data-testid="save-and-print" @click="save('labels')"><Tags /> Lưu và in tem</Button>
@@ -386,12 +442,9 @@ async function removeImage(id: number) {
 
         <div class="grid gap-5 lg:grid-cols-3">
             <div class="space-y-5 lg:col-span-2">
-                <div v-if="isNew && !copyFrom" class="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Loại sản phẩm">
+                <div v-if="isNew && !copyFrom" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" role="radiogroup" aria-label="Loại sản phẩm">
                     <button
-                        v-for="t in [
-                            { value: 'standard', title: 'Sản phẩm thường', text: 'Có tồn kho riêng, một hoặc nhiều biến thể.' },
-                            { value: 'combo', title: 'Combo', text: 'Gồm nhiều SKU khác. Bán combo thì trừ tồn các SKU thành phần.' },
-                        ] as const"
+                        v-for="t in TYPE_CARDS"
                         :key="t.value"
                         type="button"
                         role="radio"
@@ -408,7 +461,7 @@ async function removeImage(id: number) {
                 <Card title="Thông tin chung">
                     <div class="grid gap-4 p-5 sm:grid-cols-2">
                         <FormField label="Tên sản phẩm" for="p-name" :error="error?.field('name')" class="sm:col-span-2">
-                            <Input id="p-name" v-model="form.name" required maxlength="255" placeholder="Ví dụ: Áo thun cotton cổ tròn" data-testid="product-name" />
+                            <Input id="p-name" v-model="form.name" required maxlength="255" :placeholder="isSub ? 'Ví dụ: Hosting doanh nghiệp 10GB' : isNonStock ? 'Ví dụ: Lắp đặt camera tại nhà' : 'Ví dụ: Áo thun cotton cổ tròn'" data-testid="product-name" @blur="planSkus()" />
                         </FormField>
                         <FormField label="Danh mục" for="p-cat">
                             <Select id="p-cat" v-model="form.category_id" :options="[{ value: '', label: '— Không chọn —' }, ...categories.map((c) => ({ value: c.id, label: c.name }))]" />
@@ -490,12 +543,16 @@ async function removeImage(id: number) {
                     </table>
                 </Card>
 
-                <Card :title="isCombo ? 'SKU và giá combo' : 'Biến thể và SKU'" description="SKU duy nhất trong doanh nghiệp (không phân biệt hoa thường). Giá vốn tự tính từ phiếu nhập.">
+                <Card
+                    :title="isCombo ? 'SKU và giá combo' : isSub ? 'Gói và chu kỳ' : isNonStock ? 'Gói dịch vụ và SKU' : 'Biến thể và SKU'"
+                    :description="isSub ? 'Mỗi gói là một chu kỳ (số tháng) với giá riêng. Bán gói nào thì thuê bao được cộng thêm đúng chu kỳ đó.' : 'SKU duy nhất trong doanh nghiệp (không phân biệt hoa thường). Giá vốn tự tính từ phiếu nhập.'"
+                >
                     <template v-if="canManage && !isCombo" #actions>
-                        <Button variant="outline" size="sm" @click="variants.push(emptyRow())"><Plus /> Thêm dòng</Button>
+                        <Button v-if="isSub" variant="outline" size="sm" data-testid="add-plan" @click="addPlan"><Plus /> Thêm gói</Button>
+                        <Button v-else variant="outline" size="sm" @click="variants.push(emptyRow())"><Plus /> Thêm dòng</Button>
                     </template>
 
-                    <details v-if="canManage && !isCombo" class="border-b bg-muted/30 px-5 py-3 text-sm" :open="isNew">
+                    <details v-if="canManage && !isCombo && !isNonStock" class="border-b bg-muted/30 px-5 py-3 text-sm" :open="isNew">
                         <summary class="cursor-pointer font-medium"><Sparkles class="mr-1 inline size-4 text-primary" /> Tạo nhanh biến thể theo thuộc tính</summary>
                         <div class="mt-3 grid gap-3 sm:grid-cols-[8rem_1fr]">
                             <template v-for="(g, i) in groups" :key="i">
@@ -516,14 +573,16 @@ async function removeImage(id: number) {
                             <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                                 <tr>
                                     <th class="px-3 py-2 font-medium">SKU *</th>
-                                    <th class="px-3 py-2 font-medium">Tên biến thể</th>
-                                    <th class="px-3 py-2 font-medium">Mã vạch</th>
-                                    <th class="px-3 py-2 font-medium" title="Vị trí trên kệ, in ở phiếu nhặt hàng">Vị trí kệ</th>
-                                    <th class="px-3 py-2 text-right font-medium">Giá bán lẻ</th>
-                                    <th class="px-3 py-2 text-right font-medium">Giá bán buôn</th>
-                                    <th class="px-3 py-2 text-right font-medium">KL (g)</th>
-                                    <th class="px-3 py-2 font-medium" title="Dài × Rộng × Cao, tính bằng mm">Kích thước (mm)</th>
-                                    <th v-if="canSuppliers" class="px-3 py-2 font-medium">NCC / Mã NCC</th>
+                                    <th class="px-3 py-2 font-medium">{{ isSub ? 'Tên gói' : 'Tên biến thể' }}</th>
+                                    <th v-if="isSub" class="px-3 py-2 font-medium">Chu kỳ (tháng) *</th>
+                                    <th v-if="!isNonStock" class="px-3 py-2 font-medium">Mã vạch</th>
+                                    <th v-if="!isNonStock" class="px-3 py-2 font-medium" title="Vị trí trên kệ, in ở phiếu nhặt hàng">Vị trí kệ</th>
+                                    <th class="px-3 py-2 text-right font-medium">{{ isSub ? 'Giá gói' : 'Giá bán lẻ' }}</th>
+                                    <th class="px-3 py-2 text-right font-medium">{{ isSub ? 'Giá đại lý' : 'Giá bán buôn' }}</th>
+                                    <th v-if="isSub" class="px-3 py-2 text-right font-medium">Quy ra / tháng</th>
+                                    <th v-if="!isNonStock" class="px-3 py-2 text-right font-medium">KL (g)</th>
+                                    <th v-if="!isNonStock" class="px-3 py-2 font-medium" title="Dài × Rộng × Cao, tính bằng mm">Kích thước (mm)</th>
+                                    <th v-if="canSuppliers && !isNonStock" class="px-3 py-2 font-medium">NCC / Mã NCC</th>
                                     <th v-if="!isNew && canCost" class="px-4 py-2 text-right font-medium">Giá vốn</th>
                                     <th class="px-2 py-2" />
                                 </tr>
@@ -543,26 +602,42 @@ async function removeImage(id: number) {
                                         <p v-if="fieldError(i, 'sku') || v.skuTaken" class="mt-1 max-w-36 text-xs text-destructive">{{ fieldError(i, 'sku') ?? v.skuTaken }}</p>
                                         <p v-else-if="duplicateSkus.has(v.sku.trim().toLowerCase())" class="mt-1 text-xs text-destructive">Trùng SKU</p>
                                     </td>
-                                    <td class="px-3 py-2"><input v-model="v.name" :disabled="!canManage" class="h-8 w-32 rounded-md border border-input bg-card px-2" /></td>
-                                    <td class="px-3 py-2">
+                                    <td class="px-3 py-2"><input v-model="v.name" :disabled="!canManage" :placeholder="isSub ? '12 tháng' : ''" class="h-8 w-32 rounded-md border border-input bg-card px-2" /></td>
+                                    <td v-if="isSub" class="px-3 py-2">
+                                        <input
+                                            v-model="v.period_months"
+                                            type="number"
+                                            min="1"
+                                            max="120"
+                                            required
+                                            :disabled="!canManage"
+                                            aria-label="Chu kỳ (tháng)"
+                                            :data-testid="`period-${i}`"
+                                            :class="cn('h-8 w-20 rounded-md border border-input bg-card px-2 text-right tabular-nums', fieldError(i, 'period_months') && 'border-destructive')"
+                                            @change="planSkus()"
+                                        />
+                                        <p v-if="fieldError(i, 'period_months')" class="mt-1 max-w-36 text-xs text-destructive">{{ fieldError(i, 'period_months') }}</p>
+                                    </td>
+                                    <td v-if="!isNonStock" class="px-3 py-2">
                                         <div class="flex items-center gap-1">
                                             <input v-model="v.barcode" :disabled="!canManage" maxlength="64" :data-testid="`barcode-${i}`" :class="cn('h-8 w-32 rounded-md border border-input bg-card px-2 font-mono text-xs', fieldError(i, 'barcode') && 'border-destructive')" />
                                             <Button v-if="canManage && !v.barcode" variant="ghost" size="icon" class="size-8" title="Tạo mã vạch EAN-13 nội bộ" :data-testid="`barcode-gen-${i}`" @click="suggestBarcode(v)"><ScanBarcode class="text-muted-foreground" /></Button>
                                         </div>
                                         <p v-if="fieldError(i, 'barcode')" class="mt-1 max-w-36 text-xs text-destructive">{{ fieldError(i, 'barcode') }}</p>
                                     </td>
-                                    <td class="px-3 py-2"><input v-model="v.location" maxlength="50" :disabled="!canManage" placeholder="VD: A1-02" aria-label="Vị trí kệ" :data-testid="`location-${i}`" class="h-8 w-20 rounded-md border border-input bg-card px-2 font-mono text-xs" /></td>
+                                    <td v-if="!isNonStock" class="px-3 py-2"><input v-model="v.location" maxlength="50" :disabled="!canManage" placeholder="VD: A1-02" aria-label="Vị trí kệ" :data-testid="`location-${i}`" class="h-8 w-20 rounded-md border border-input bg-card px-2 font-mono text-xs" /></td>
                                     <td class="px-3 py-2 text-right"><input v-model="v.ref_price" type="number" min="0" :disabled="!canManage" aria-label="Giá bán lẻ" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
                                     <td class="px-3 py-2 text-right"><input v-model="v.wholesale_price" type="number" min="0" :disabled="!canManage" aria-label="Giá bán buôn" :data-testid="`wholesale-${i}`" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
-                                    <td class="px-3 py-2 text-right"><input v-model="v.weight_gram" type="number" min="0" :disabled="!canManage" class="h-8 w-16 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
-                                    <td class="px-3 py-2">
+                                    <td v-if="isSub" class="px-3 py-2 text-right text-xs tabular-nums text-muted-foreground" :data-testid="`per-month-${i}`">{{ Number(v.ref_price) > 0 && Number(v.period_months) > 0 ? formatMoney(Math.round(Number(v.ref_price) / Number(v.period_months))) : '—' }}</td>
+                                    <td v-if="!isNonStock" class="px-3 py-2 text-right"><input v-model="v.weight_gram" type="number" min="0" :disabled="!canManage" class="h-8 w-16 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
+                                    <td v-if="!isNonStock" class="px-3 py-2">
                                         <div class="flex items-center gap-0.5 text-xs text-muted-foreground" :data-testid="`size-${i}`">
                                             <input v-model="v.length_mm" type="number" min="0" :disabled="!canManage" aria-label="Dài (mm)" placeholder="D" class="h-8 w-14 rounded-md border border-input bg-card px-1.5 text-right tabular-nums" />×
                                             <input v-model="v.width_mm" type="number" min="0" :disabled="!canManage" aria-label="Rộng (mm)" placeholder="R" class="h-8 w-14 rounded-md border border-input bg-card px-1.5 text-right tabular-nums" />×
                                             <input v-model="v.height_mm" type="number" min="0" :disabled="!canManage" aria-label="Cao (mm)" placeholder="C" class="h-8 w-14 rounded-md border border-input bg-card px-1.5 text-right tabular-nums" />
                                         </div>
                                     </td>
-                                    <td v-if="canSuppliers" class="px-3 py-2">
+                                    <td v-if="canSuppliers && !isNonStock" class="px-3 py-2">
                                         <select v-model="v.supplier_id" :disabled="!canManage" aria-label="Nhà cung cấp" :data-testid="`supplier-${i}`" class="h-8 w-36 rounded-md border border-input bg-card px-1 text-xs">
                                             <option value="">— Chưa chọn —</option>
                                             <option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.name }}</option>
@@ -582,7 +657,22 @@ async function removeImage(id: number) {
                     </div>
                 </Card>
 
-                <Card v-if="!isCombo" title="Đơn vị quy đổi" description="Bán theo thùng, hộp, lốc… Tồn vẫn tính theo đơn vị gốc: bán 1 thùng 24 chai sẽ trừ 24 chai." data-testid="pack-sizes">
+                <Card v-if="isSub" title="Gia hạn" description="Áp dụng cho mọi thuê bao của dịch vụ này. Ngày nhắc khách đặt ở Cấu hình › Thuê bao." data-testid="renewal-rules">
+                    <div class="grid gap-4 p-5 sm:grid-cols-2">
+                        <FormField label="Gia hạn trễ vẫn nối tiếp trong (ngày)" for="p-grace" :error="error?.field('subscription.grace_days')" hint="Khách gia hạn trễ trong số ngày này thì kỳ mới vẫn tính từ ngày hết hạn cũ. Trễ hơn thì tính từ ngày gia hạn.">
+                            <Input id="p-grace" v-model="subRules.grace_days" type="number" min="0" max="60" :disabled="!canManage" data-testid="grace-days" />
+                        </FormField>
+                        <div class="space-y-2">
+                            <Switch v-model="subRules.auto_order" :disabled="!canManage" label="Tự tạo đơn gia hạn" hint="Đơn chờ xác nhận, theo gói khách đang dùng. Khách chuyển khoản thì xác nhận đơn là xong. Hết ngày ân hạn mà khách không gia hạn thì đơn tự huỷ." data-testid="auto-order" />
+                            <FormField v-if="subRules.auto_order" label="Tạo đơn trước ngày hết hạn (ngày)" for="p-auto" :error="error?.field('subscription.auto_order_days')">
+                                <Input id="p-auto" v-model="subRules.auto_order_days" type="number" min="0" max="60" :disabled="!canManage" class="w-28" data-testid="auto-order-days" />
+                            </FormField>
+                        </div>
+                        <Switch v-model="subRules.remind" :disabled="!canManage" label="Nhắc khách gia hạn" hint="Gửi Zalo cho khách vào các ngày đặt ở Cấu hình › Thuê bao." class="sm:col-span-2" data-testid="remind" />
+                    </div>
+                </Card>
+
+                <Card v-if="!noOwnStock" title="Đơn vị quy đổi" description="Bán theo thùng, hộp, lốc… Tồn vẫn tính theo đơn vị gốc: bán 1 thùng 24 chai sẽ trừ 24 chai." data-testid="pack-sizes">
                     <template v-if="canManage" #actions>
                         <Button variant="outline" size="sm" data-testid="add-pack" :disabled="!baseOptions.length" @click="addPack"><Plus /> Thêm đơn vị quy đổi</Button>
                     </template>
@@ -629,7 +719,7 @@ async function removeImage(id: number) {
                     </div>
                 </Card>
 
-                <Card v-if="!isCombo" title="Lô và hạn sử dụng" data-testid="lot-settings">
+                <Card v-if="!noOwnStock" title="Lô và hạn sử dụng" data-testid="lot-settings">
                     <div class="p-5">
                         <Switch
                             v-model="lots.track_lots"
