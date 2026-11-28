@@ -1,16 +1,13 @@
 <script setup lang="ts">
-import { CheckCircle2, Info, XCircle } from "lucide-vue-next";
-import { useToast } from "@/shared/composables/useToast";
+import { CheckCircle2, Info, XCircle } from 'lucide-vue-next';
+import { useToast } from '@/shared/composables/useToast';
 
 const { toasts, dismiss } = useToast();
 const icons = { success: CheckCircle2, error: XCircle, info: Info };
 </script>
 
 <template>
-    <div
-        class="pointer-events-none fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] right-4 z-[60] flex w-80 max-w-[calc(100vw-2rem)] lg:bottom-4 flex-col gap-2"
-        aria-live="polite"
-    >
+    <div class="pointer-events-none fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] right-4 z-[60] flex w-80 max-w-[calc(100vw-2rem)] lg:bottom-4 flex-col gap-2" aria-live="polite">
         <div
             v-for="t in toasts"
             :key="t.id"
@@ -21,11 +18,7 @@ const icons = { success: CheckCircle2, error: XCircle, info: Info };
             <component
                 :is="icons[t.type]"
                 class="mt-0.5 size-4 shrink-0"
-                :class="{
-                    'text-success': t.type === 'success',
-                    'text-destructive': t.type === 'error',
-                    'text-primary': t.type === 'info',
-                }"
+                :class="{ 'text-success': t.type === 'success', 'text-destructive': t.type === 'error', 'text-primary': t.type === 'info' }"
             />
             <span>{{ t.message }}</span>
         </div>
