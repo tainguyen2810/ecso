@@ -1149,6 +1149,8 @@ export interface ShipmentData {
     returned_at: string | null;
     cancelled_at: string | null;
     last_event_at: string | null;
+    /** Newest step of the journey (in the list). */
+    last_event?: { status_label: string; description: string | null; occurred_at: string } | null;
     created_at: string | null;
     order?: {
         id: string;
@@ -1172,7 +1174,8 @@ export interface ShipmentSummary {
     tabs: Record<string, number>;
     late: number;
     late_days: number;
-    cod_held: { carrier: string | null; carrier_name: string | null; amount: string; count: number }[];
+    cod_held: { carrier: string | null; carrier_name: string | null; amount: string; count: number; slow_amount: string; slow_count: number }[];
+    slow_days: number;
 }
 
 /** The four numbers on top of Liên kết sản phẩm. */
