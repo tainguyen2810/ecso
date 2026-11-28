@@ -22,7 +22,7 @@ const tabs: { page: Page; route: string; label: string; icon: typeof Wallet }[] 
     <div class="mb-5">
         <p class="text-[14px] text-slate-500">Chấm công, lương / {{ tabs.find((t) => t.page === page)?.label }}</p>
         <div class="mt-1 flex flex-wrap items-end justify-between gap-4">
-            <div class="min-w-0">
+            <div class="min-w-0 flex-[1_1_20rem]">
                 <h1 class="text-[26px] font-bold leading-tight tracking-tight text-slate-900 sm:text-[30px]" data-testid="staff-title">{{ title }}</h1>
                 <p class="mt-1 text-[15px] text-slate-500">{{ description }}</p>
             </div>

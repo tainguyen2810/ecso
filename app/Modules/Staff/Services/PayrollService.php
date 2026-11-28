@@ -10,6 +10,7 @@ use App\Modules\Cashbook\Services\CashVoucherService;
 use App\Modules\Staff\Models\PayrollRun;
 use App\Modules\Staff\Support\PayrollRules;
 use App\Modules\Tenancy\Support\TenantContext;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -77,7 +78,7 @@ class PayrollService
             ->get(['u.name', 'u.ulid', 'cv.paid_at', 'cv.method', 'cv.amount'])
             ->map(fn ($r) => [
                 'name' => (string) $r->name, 'member' => (string) $r->ulid, 'method' => $r->method, 'amount' => (float) $r->amount,
-                'paid_at' => $r->paid_at ? \Carbon\CarbonImmutable::parse($r->paid_at, 'UTC')->toIso8601String() : null,
+                'paid_at' => $r->paid_at ? CarbonImmutable::parse($r->paid_at, 'UTC')->toIso8601String() : null,
             ])->all();
     }
 

@@ -184,3 +184,13 @@ export function attendanceSummary(m: AttendanceMonth) {
         unpaid: cells.filter((c) => c.status === 'off').length,
     };
 }
+
+const AVATAR_TONES = ['bg-blue-50 text-blue-600', 'bg-emerald-50 text-emerald-600', 'bg-violet-50 text-violet-600', 'bg-amber-50 text-amber-600', 'bg-pink-50 text-pink-600', 'bg-slate-100 text-slate-600'];
+
+/** Round avatar of a member: first and last initials ("Đỗ Ngọc Mai" → "ĐM") on a colour fixed by the name. */
+export function avatar(name: string): { text: string; tone: string } {
+    const words = name.trim().split(/\s+/).filter(Boolean);
+    const text = (words.length > 1 ? `${words[0]![0]}${words[words.length - 1]![0]}` : (words[0] ?? '?').slice(0, 2)).toUpperCase();
+    const hash = [...name].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+    return { text, tone: AVATAR_TONES[hash % AVATAR_TONES.length]! };
+}

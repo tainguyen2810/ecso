@@ -15,6 +15,7 @@ import ReportChip from '../reports/ReportChip.vue';
 import ReportKpi from '../reports/ReportKpi.vue';
 import { downloadCsv, toCsv } from '../reports/range';
 import FrameButton from './FrameButton.vue';
+import MemberAvatar from './MemberAvatar.vue';
 import StaffFrame from './StaffFrame.vue';
 import { attendanceSummary, cellClass, cellText, monthLabel, thisMonth, WEEKDAYS, type AttendanceMonth, type AttendanceRow, type DayCell } from './staff';
 
@@ -74,7 +75,6 @@ async function check(action: 'in' | 'out') {
 }
 
 const dayNumbers = computed(() => Array.from({ length: data.value?.days ?? 0 }, (_, i) => i + 1));
-const initials = (name: string) => name.trim().split(/\s+/).slice(-2).map((w) => w[0]).join('').toUpperCase();
 const fmtHours = (h: number) => String(Math.round(h * 10) / 10).replace('.', ',');
 
 // A day set by hand.
@@ -247,7 +247,7 @@ function exportCsv() {
                         <tr v-for="r in rows" :key="r.id" class="border-b border-slate-100 last:border-0">
                             <td class="sticky left-0 z-10 bg-white py-2 pl-5 pr-3 sm:pl-6">
                                 <div class="flex items-center gap-3">
-                                    <span class="grid size-9 shrink-0 place-items-center rounded-full bg-blue-50 text-[12px] font-semibold text-blue-600">{{ initials(r.name) }}</span>
+                                    <MemberAvatar :name="r.name" />
                                     <div class="min-w-0">
                                         <p class="truncate text-[14px] font-medium text-slate-900">{{ r.name }}</p>
                                         <p class="truncate text-[12px] text-slate-500">{{ r.title }} · {{ r.shift }}</p>

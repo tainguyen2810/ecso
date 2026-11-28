@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { attendanceSummary, cellClass, cellText, monthLabel, ruleValue, shiftMonth, thisMonth, type AttendanceRow, type DayCell } from './staff';
+import { attendanceSummary, avatar, cellClass, cellText, monthLabel, ruleValue, shiftMonth, thisMonth, type AttendanceRow, type DayCell } from './staff';
 
 const cell = (over: Partial<DayCell>): DayCell => ({ status: 'work', hours: 8, late: 0, in: '08:00', out: '17:00', source: 'shift', shifts: [], note: null, located: false, ...over });
 const money = (n: number) => `${n.toLocaleString('vi-VN')} đ`;
@@ -38,5 +38,11 @@ describe('staff helpers', () => {
             ],
         });
         expect(s).toMatchObject({ members: 3, workingToday: 1, onShift: 1, awayToday: ['Bình'], workDays: 5, late: 1, lateMembers: 1, noOut: 1 });
+    });
+
+    it('writes first and last initials for an avatar', () => {
+        expect(avatar('Đỗ Ngọc Mai').text).toBe('ĐM');
+        expect(avatar('An').text).toBe('AN');
+        expect(avatar('Đỗ Ngọc Mai').tone).toBe(avatar('Đỗ Ngọc Mai').tone);
     });
 });

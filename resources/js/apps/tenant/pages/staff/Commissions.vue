@@ -15,6 +15,7 @@ import ReportChip from '../reports/ReportChip.vue';
 import ReportKpi from '../reports/ReportKpi.vue';
 import SideCard from '../reports/SideCard.vue';
 import FrameButton from './FrameButton.vue';
+import MemberAvatar from './MemberAvatar.vue';
 import StaffFrame from './StaffFrame.vue';
 import { monthLabel, RULE_KINDS, ruleValue, thisMonth, type CommissionMonth, type CommissionRule, type RuleKind } from './staff';
 
@@ -119,7 +120,6 @@ const share = (part: number) => (data.value?.store_revenue ? Math.round((part / 
 const weekMax = computed(() => Math.max(1, ...(data.value?.weeks ?? []).map((w) => w.amount)));
 const short = (n: number) => (Math.abs(n) >= 1e6 ? `${String(Math.round(n / 1e5) / 10).replace('.', ',')} tr` : formatNumber(n));
 const first = (name: string) => name.trim().split(/\s+/).pop() ?? name;
-const initials = (name: string) => name.trim().split(/\s+/).slice(-2).map((w) => w[0]).join('').toUpperCase();
 const medal = ['bg-amber-100 text-amber-700', 'bg-slate-200 text-slate-600', 'bg-orange-100 text-orange-700'];
 </script>
 
@@ -180,7 +180,7 @@ const medal = ['bg-amber-100 text-amber-700', 'bg-slate-200 text-slate-600', 'bg
                                 <td class="py-4 pl-5 pr-2 sm:pl-6"><span :class="cn('grid size-7 place-items-center rounded-full text-[12px] font-bold', i < 3 && m[sortBy] > 0 ? medal[i] : 'text-slate-400')">{{ i + 1 }}</span></td>
                                 <td class="py-4 pr-4">
                                     <div class="flex items-center gap-3">
-                                        <span class="grid size-9 shrink-0 place-items-center rounded-full bg-blue-50 text-[12px] font-semibold text-blue-600">{{ initials(m.name) }}</span>
+                                        <MemberAvatar :name="m.name" />
                                         <div class="min-w-0"><p class="truncate text-[14px] font-medium text-slate-900">{{ m.name }}</p><p class="truncate text-[12px] text-slate-500">{{ m.title }}</p></div>
                                     </div>
                                 </td>

@@ -16,6 +16,7 @@ import ReportChip from '../reports/ReportChip.vue';
 import ReportKpi from '../reports/ReportKpi.vue';
 import SideCard from '../reports/SideCard.vue';
 import FrameButton from './FrameButton.vue';
+import MemberAvatar from './MemberAvatar.vue';
 import StaffFrame from './StaffFrame.vue';
 import { monthLabel, thisMonth, type PayLine, type Payroll, type StaffProfile } from './staff';
 
@@ -168,8 +169,9 @@ async function saveProfile() {
 
 // Headline figures, the three steps and the totals row.
 const sum = (k: keyof PayLine) => (data.value?.lines ?? []).reduce((s, l) => s + Number(l[k] ?? 0), 0);
+/** Work days of the members paid by the month (hourly members count in hours). */
+const monthDays = computed(() => (data.value?.lines ?? []).filter((l) => l.pay_type === 'month').reduce((s, l) => s + l.days, 0));
 const short = (n: number) => (Math.abs(n) >= 1e6 ? `${String(Math.round(n / 1e4) / 100).replace('.', ',')} tr` : formatNumber(n));
-const initials = (name: string) => name.trim().split(/\s+/).slice(-2).map((w) => w[0]).join('').toUpperCase();
 const steps = computed(() => {
     const at = { draft: 0, approved: 1, paid: 2 }[data.value?.status ?? 'draft'];
     return [
@@ -183,7 +185,7 @@ const dayText = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(
 </script>
 
 <template>
-    <StaffFrame v-model:month="month" page="payroll" title="Bảng lương" description="Lương theo công + hoa hồng + phụ cấp, trừ tạm ứng, bảo hiểm và thuế TNCN. Số liệu lấy từ Chấm công và Hoa hồng.">
+    <StaffFrame v-model:month="month" page="payroll" title="Bảng lương" description="Lương theo công + hoa hồng + phụ cấp, trừ tạm ứng, bảo hiểm và thuế TNCN.">
         <template v-if="data?.manage" #actions>
             <FrameButton data-testid="advance-open" @click="openAdvance()"><HandCoins class="text-slate-500" /> Tạm ứng</FrameButton>
             <FrameButton v-if="draft" primary :loading="busy" :disabled="!data.lines.length" data-testid="payroll-approve" @click="run('approve')"><CheckCircle2 /> Duyệt bảng lương</FrameButton>
@@ -221,7 +223,7 @@ const dayText = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(
                     Sau tạm ứng, bảo hiểm, thuế TNCN
                 </ReportKpi>
                 <ReportKpi label="Lương theo công" :icon="CalendarCheck" tone="green" :value="sum('base_pay')" tip="Lương tháng = lương cơ bản × số công / số công chuẩn. Lương giờ = số giờ × lương mỗi giờ.">
-                    <template #chips><ReportChip>{{ formatNumber(sum('days')) }} công</ReportChip><ReportChip v-if="sum('hours')">{{ formatNumber(Math.round(sum('hours') * 10) / 10) }} giờ</ReportChip></template>
+                    <template #chips><ReportChip>{{ formatNumber(monthDays) }} công</ReportChip><ReportChip v-if="data.lines.some((l) => l.pay_type === 'hour')">{{ formatNumber(data.lines.filter((l) => l.pay_type === 'hour').reduce((s, l) => s + l.hours, 0)) }} giờ theo giờ</ReportChip></template>
                     Lương cơ bản × công / công chuẩn
                 </ReportKpi>
                 <ReportKpi label="Hoa hồng, phụ cấp" :icon="HandCoins" tone="violet" plain :value="data.totals.commission + sum('allowance') + sum('bonus')" tip="Hoa hồng lấy từ trang Hoa hồng; phụ cấp từ Hồ sơ lương; thưởng nhập ở nút bút chì từng dòng.">
@@ -280,14 +282,14 @@ const dayText = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(
                                     <td class="relative !pl-5 !text-left sm:!pl-6">
                                         <span v-if="selected?.id === l.id" class="absolute inset-y-2 left-0 w-[3px] rounded-r-full bg-blue-600" />
                                         <div class="flex items-center gap-3">
-                                            <span class="grid size-9 shrink-0 place-items-center rounded-full bg-blue-50 text-[12px] font-semibold text-blue-600">{{ initials(l.name) }}</span>
+                                            <MemberAvatar :name="l.name" />
                                             <div class="min-w-0"><p class="font-medium text-slate-900">{{ l.name }}</p><p class="text-[12px] text-slate-500">{{ l.title }}</p></div>
                                         </div>
                                     </td>
                                     <td class="text-slate-600">{{ workText(l) }}</td>
                                     <td>{{ formatNumber(l.base_pay) }}</td>
                                     <td class="text-emerald-600">{{ l.commission ? formatNumber(l.commission) : '—' }}</td>
-                                    <td>{{ l.allowance + l.bonus ? formatNumber(l.allowance + l.bonus) : '—' }}</td>
+                                    <td :class="!(l.allowance + l.bonus) && 'text-slate-300'">{{ l.allowance + l.bonus ? formatNumber(l.allowance + l.bonus) : '—' }}</td>
                                     <td :class="l.advance ? 'text-rose-600' : 'text-slate-300'">{{ l.advance ? `−${formatNumber(l.advance)}` : '—' }}</td>
                                     <td :class="l.insurance ? 'text-rose-600' : 'text-slate-300'">{{ l.insurance ? `−${formatNumber(l.insurance)}` : '—' }}</td>
                                     <td :class="l.pit ? 'text-rose-600' : 'text-slate-300'">{{ l.pit ? `−${formatNumber(l.pit)}` : '—' }}</td>
@@ -302,13 +304,13 @@ const dayText = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(
                             <tfoot v-if="data.lines.length > 1" class="border-t border-slate-200 bg-slate-50/60 text-[14px] font-semibold tabular-nums">
                                 <tr class="[&>td]:whitespace-nowrap [&>td]:px-3 [&>td]:py-3.5 [&>td]:text-right">
                                     <td class="!pl-5 !text-left sm:!pl-6">Tổng {{ data.lines.length }} nhân viên</td>
-                                    <td class="text-slate-600">{{ sum('days') ? `${formatNumber(sum('days'))} công` : '' }}</td>
+                                    <td class="text-slate-600">{{ monthDays ? `${formatNumber(monthDays)} công` : '' }}</td>
                                     <td>{{ formatNumber(sum('base_pay')) }}</td>
                                     <td class="text-emerald-600">{{ formatNumber(data.totals.commission) }}</td>
                                     <td>{{ formatNumber(sum('allowance') + sum('bonus')) }}</td>
-                                    <td class="text-rose-600">{{ sum('advance') ? `−${formatNumber(sum('advance'))}` : '—' }}</td>
-                                    <td class="text-rose-600">{{ data.totals.insurance ? `−${formatNumber(data.totals.insurance)}` : '—' }}</td>
-                                    <td class="text-rose-600">{{ data.totals.pit ? `−${formatNumber(data.totals.pit)}` : '—' }}</td>
+                                    <td :class="sum('advance') ? 'text-rose-600' : 'text-slate-300'">{{ sum('advance') ? `−${formatNumber(sum('advance'))}` : '—' }}</td>
+                                    <td :class="data.totals.insurance ? 'text-rose-600' : 'text-slate-300'">{{ data.totals.insurance ? `−${formatNumber(data.totals.insurance)}` : '—' }}</td>
+                                    <td :class="data.totals.pit ? 'text-rose-600' : 'text-slate-300'">{{ data.totals.pit ? `−${formatNumber(data.totals.pit)}` : '—' }}</td>
                                     <td class="text-[16px] font-bold text-blue-700">{{ formatNumber(data.totals.net) }}</td>
                                     <td />
                                 </tr>
@@ -323,7 +325,7 @@ const dayText = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(
                 <div class="space-y-5">
                     <section v-if="selected" class="overflow-hidden rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]" data-testid="pay-detail">
                         <header class="flex items-center gap-3 border-b border-slate-100 px-5 py-4">
-                            <span class="grid size-9 shrink-0 place-items-center rounded-full bg-blue-50 text-[12px] font-semibold text-blue-600">{{ initials(selected.name) }}</span>
+                            <MemberAvatar :name="selected.name" />
                             <div class="min-w-0 flex-1">
                                 <h3 class="truncate text-[16px] font-semibold text-slate-900">{{ selected.name }}</h3>
                                 <p class="truncate text-[13px] text-slate-500">{{ selected.title }} · {{ selected.pay_type === 'hour' ? 'lương giờ' : 'lương tháng' }}<template v-if="selected.profile?.dependents"> · {{ selected.profile.dependents }} người phụ thuộc</template></p>
@@ -343,7 +345,7 @@ const dayText = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(
                     <SideCard title="Tạm ứng trong tháng" description="Đã ghi phiếu chi trong Sổ quỹ, tự trừ vào lương" :badge="data.advances.length ? short(data.advances.reduce((s, a) => s + a.amount, 0)) : null">
                         <ul class="px-5" data-testid="payroll-advances">
                             <li v-for="(a, i) in data.advances" :key="i" class="flex items-center gap-3 border-b border-slate-100 py-3 last:border-0">
-                                <span class="grid size-9 shrink-0 place-items-center rounded-full bg-slate-100 text-[12px] font-semibold text-slate-600">{{ initials(a.name) }}</span>
+                                <MemberAvatar :name="a.name" />
                                 <div class="min-w-0 flex-1"><p class="truncate text-[14px] font-medium text-slate-900">{{ a.name }}</p><p class="text-[12px] text-slate-500">{{ dayText(a.paid_at) }} · {{ methodText(a.method) }}</p></div>
                                 <span class="text-[14px] font-semibold tabular-nums text-rose-600">−{{ formatNumber(a.amount) }}</span>
                             </li>
