@@ -233,7 +233,7 @@ class ReportsController extends Controller
     /** @return array{q: string|null, channel: int|null, warehouse: int|null, basis: string} */
     private function orderFilters(Request $request): array
     {
-        $data = $request->validate(['q' => ['nullable', 'string', 'max:100'], 'channel' => ['nullable', 'string'], 'warehouse' => ['nullable', 'string'], 'basis' => ['nullable', Rule::in(['placed', 'completed'])]]);
+        $data = $request->validate(['q' => ['nullable', 'string', 'max:100'], 'channel' => ['nullable', 'string'], 'warehouse' => ['nullable', 'string'], 'basis' => ['nullable', Rule::in(['placed', 'completed', 'awaiting'])]]);
 
         return [
             // placed: orders placed in the period (default); completed: orders whose revenue is recognised in it, as
