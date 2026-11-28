@@ -115,6 +115,12 @@ class Customer extends Model
         return $this->belongsTo(CustomerGroup::class, 'customer_group_id');
     }
 
+    /** @return BelongsTo<LoyaltyTier, $this> */
+    public function loyaltyTier(): BelongsTo
+    {
+        return $this->belongsTo(LoyaltyTier::class, 'loyalty_tier_id');
+    }
+
     /** @return BelongsTo<User, $this> */
     public function assignee(): BelongsTo
     {

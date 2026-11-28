@@ -96,6 +96,9 @@ onMounted(async () => {
             });
             variants.value = p.variants ?? [];
             gift.value = p.gift;
+        } else if (promotionKinds.some((k) => k.key === route.query.kind)) {
+            // "Tạo nhanh" on the list opens the form on the kind that was picked.
+            pickKind(route.query.kind as Kind);
         }
     } finally {
         loading.value = false;

@@ -42,3 +42,18 @@ export const segments: { value: string; label: string; hint: string }[] = [
     { value: 'high_value', label: 'Giá trị cao', hint: '10% khách chi tiêu nhiều nhất.' },
     { value: 'new', label: 'Khách mới', hint: 'Thêm trong 30 ngày qua.' },
 ];
+
+/** Channels a customer bought through, for the list's "Mọi kênh" filter (marketplaces, then own channel types). */
+export const channelKinds: Record<string, string> = {
+    shopee: 'Shopee',
+    tiktok: 'TikTok Shop',
+    lazada: 'Lazada',
+    tiki: 'Tiki',
+    pos: 'Bán tại quầy',
+    store: 'Cửa hàng',
+    website: 'Website',
+    facebook: 'Facebook',
+    zalo: 'Zalo',
+    phone: 'Điện thoại',
+    other: 'Khác',
+};

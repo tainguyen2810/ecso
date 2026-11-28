@@ -468,6 +468,8 @@ export interface CustomerGroup {
     auto_min_spent?: string | null;
     auto_min_orders?: number | null;
     customers_count: number | null;
+    /** Spending of the group's customers over the last 12 months (only with ?stats=1). */
+    revenue_12m?: string;
     created_at: string | null;
 }
 
@@ -529,6 +531,10 @@ export interface Customer {
         credit_limit?: string | null;
     } | null;
     assignee: { id: string; name: string } | null;
+    /** Tích điểm: the customer's tier (list and card). */
+    tier?: { id: string; name: string; color: string | null } | null;
+    /** Where the customer has bought (list only): marketplace shops and own channels, most used first. */
+    channels?: { kind: string; name: string }[];
     birthday: string | null;
     gender: 'male' | 'female' | 'other' | null;
     tax_code: string | null;

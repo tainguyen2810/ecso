@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
-import { Hand, Pencil, Plus, Sparkles, Trash2, Users, UsersRound, UserX } from 'lucide-vue-next';
-import SettingsShell from '../settings/SettingsShell.vue';
+import { Hand, Pencil, Plus, Sparkles, Trash2, TrendingUp, Users, UsersRound } from 'lucide-vue-next';
+import CustomersFrame from './CustomersFrame.vue';
+import ReportChip from '../reports/ReportChip.vue';
+import { btnPrimary } from './frame';
 import ReportKpi from '../reports/ReportKpi.vue';
 import { priceTierLabels } from './labels';
 import { paymentMethods } from '../orders/labels';
@@ -30,11 +32,25 @@ const tones = ['bg-slate-100 text-slate-600', 'bg-blue-50 text-blue-600', 'bg-am
 const isAuto = (g: CustomerGroup) => g.auto_min_spent != null || g.auto_min_orders != null;
 const autoText = (g: CustomerGroup) =>
     [g.auto_min_spent != null ? `tổng chi tiêu từ ${formatMoney(g.auto_min_spent)}` : '', g.auto_min_orders != null ? `từ ${g.auto_min_orders} đơn` : ''].filter(Boolean).join(' và ');
-const stats = computed(() => ({
-    customers: rows.value.reduce((a, g) => a + (g.customers_count ?? 0), 0),
-    auto: rows.value.filter(isAuto).length,
-    inactive: rows.value.filter((g) => g.is_active === false).length,
-}));
+const meta = ref<{ customers: number; revenue_12m: string } | null>(null);
+const stats = computed(() => {
+    const customers = rows.value.reduce((a, g) => a + (g.customers_count ?? 0), 0);
+    const revenue = rows.value.reduce((a, g) => a + Number(g.revenue_12m ?? 0), 0);
+    const total = meta.value?.customers ?? 0;
+    return {
+        customers,
+        auto: rows.value.filter(isAuto).length,
+        inactive: rows.value.filter((g) => g.is_active === false).length,
+        total,
+        share: total ? (customers * 100) / total : null,
+        revenue,
+        // The biggest-spending group, for the fourth card.
+        top: [...rows.value].sort((a, b) => Number(b.revenue_12m ?? 0) - Number(a.revenue_12m ?? 0))[0] ?? null,
+        allRevenue: Number(meta.value?.revenue_12m ?? 0),
+    };
+});
+const pct = (n: number) => `${(Math.round(n * 10) / 10).toString().replace('.', ',')}%`;
+const bars = ['bg-slate-400', 'bg-blue-600', 'bg-amber-500', 'bg-emerald-500', 'bg-violet-500', 'bg-pink-400'];
 
 const dialog = ref(false);
 const editing = ref<CustomerGroup | null>(null);
@@ -46,7 +62,9 @@ async function load() {
     loading.value = true;
     loadError.value = null;
     try {
-        rows.value = (await api.get('/customer-groups')).data.data;
+        const { data } = await api.get('/customer-groups', { params: { stats: 1 } });
+        rows.value = data.data;
+        meta.value = data.meta ?? null;
     } catch (e) {
         loadError.value = (e as ApiError).message;
     } finally {
@@ -96,86 +114,98 @@ async function remove(g: CustomerGroup) {
 </script>
 
 <template>
-    <SettingsShell wide title="Nhóm khách hàng" description="Nhóm khách và điều khoản mua hàng của từng nhóm: giá áp dụng, chiết khấu, thanh toán, công nợ.">
-        <template #actions>
-            <button
-                v-if="canManage"
-                type="button"
-                class="inline-flex h-11 items-center gap-2 rounded-[12px] bg-blue-600 px-5 text-[15px] font-medium text-white shadow-sm hover:bg-blue-700"
-                data-testid="add-group"
-                @click="edit(null)"
-            >
-                <Plus class="size-4" /> Thêm nhóm
-            </button>
-        </template>
+    <CustomersFrame page="Nhóm khách hàng" description="Điều khoản mua hàng của từng nhóm: giá áp dụng, chiết khấu, thanh toán, công nợ. Nhóm có thể tự xếp khách theo ngưỡng.">
+        <button v-if="canManage" type="button" :class="btnPrimary" data-testid="add-group" @click="edit(null)"><Plus class="size-4" /> Thêm nhóm</button>
+    </CustomersFrame>
 
-        <div v-if="loading && !rows.length" class="grid gap-4 md:grid-cols-2 2xl:grid-cols-4"><Skeleton v-for="i in 4" :key="i" class="h-60 rounded-[14px]" /></div>
-        <ErrorState v-else-if="loadError" :message="loadError" @retry="load" />
-        <div v-else-if="!rows.length" class="rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-            <EmptyState :icon="UsersRound" title="Chưa có nhóm khách hàng" description="Tạo nhóm như Khách lẻ, Khách sỉ, VIP để lọc khách, giao việc và ghi điều khoản mua hàng cho từng nhóm.">
-                <Button v-if="canManage" @click="edit(null)"><Plus /> Thêm nhóm</Button>
-            </EmptyState>
+    <div v-if="loading && !rows.length" class="grid gap-4 md:grid-cols-2 2xl:grid-cols-3"><Skeleton v-for="i in 3" :key="i" class="h-72 rounded-[14px]" /></div>
+    <ErrorState v-else-if="loadError" :message="loadError" @retry="load" />
+    <div v-else-if="!rows.length" class="rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+        <EmptyState :icon="UsersRound" title="Chưa có nhóm khách hàng" description="Tạo nhóm như Khách lẻ, Khách sỉ, VIP để lọc khách, giao việc và ghi điều khoản mua hàng cho từng nhóm.">
+            <Button v-if="canManage" @click="edit(null)"><Plus /> Thêm nhóm</Button>
+        </EmptyState>
+    </div>
+    <template v-else>
+        <div class="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <ReportKpi label="Số nhóm" :icon="UsersRound" tone="blue" plain :value="rows.length" unit="nhóm">
+                <template #chips><ReportChip tone="blue">{{ rows.length - stats.inactive }} đang dùng</ReportChip></template>
+                Bấm số khách trên nhóm để xem danh sách
+            </ReportKpi>
+            <ReportKpi label="Khách đã có nhóm" :icon="Users" tone="violet" plain :value="stats.customers" unit="khách">
+                <template v-if="stats.share !== null" #chips><ReportChip tone="plain">{{ pct(stats.share) }} tổng khách</ReportChip></template>
+                {{ stats.total > stats.customers ? `${formatNumber(stats.total - stats.customers)} khách chưa xếp nhóm` : 'Mọi khách đều đã có nhóm' }}
+            </ReportKpi>
+            <ReportKpi label="Nhóm tự xếp khách" :icon="Sparkles" tone="green" plain :value="stats.auto" unit="nhóm">
+                <template #chips><ReportChip tone="up">Chạy mỗi đêm</ReportChip></template>
+                Xếp khách chưa có nhóm đạt ngưỡng vào nhóm
+            </ReportKpi>
+            <ReportKpi label="Doanh thu 12 tháng theo nhóm" tip="Tổng tiền các đơn 12 tháng qua của khách đang thuộc một nhóm. Không tính đơn hủy, đơn hoàn." :icon="TrendingUp" tone="amber" :value="Math.round(stats.revenue)">
+                <template v-if="stats.allRevenue" #chips><ReportChip tone="amber">{{ pct((stats.revenue * 100) / stats.allRevenue) }} doanh thu khách</ReportChip></template>
+                <template v-if="stats.top && Number(stats.top.revenue_12m)">Nhiều nhất: {{ stats.top.name }} {{ formatNumber(Math.round(Number(stats.top.revenue_12m))) }}</template>
+                <template v-else>Chưa có đơn của khách trong nhóm</template>
+            </ReportKpi>
         </div>
-        <template v-else>
-            <div class="mb-5 grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
-                <ReportKpi label="Số nhóm" :icon="UsersRound" tone="blue" plain :value="rows.length" unit="">{{ rows.length - stats.inactive }} nhóm đang dùng</ReportKpi>
-                <ReportKpi label="Khách đã có nhóm" :icon="Users" tone="violet" plain :value="stats.customers" unit="">Bấm số khách trên nhóm để xem danh sách</ReportKpi>
-                <ReportKpi label="Nhóm tự xếp khách" :icon="Sparkles" tone="green" plain :value="stats.auto" unit="">Mỗi đêm xếp khách đạt ngưỡng vào nhóm</ReportKpi>
-                <ReportKpi label="Ngừng sử dụng" :icon="UserX" tone="amber" plain :value="stats.inactive" unit="">Không xếp thêm khách mới</ReportKpi>
-            </div>
-            <div class="grid gap-4 md:grid-cols-2 2xl:grid-cols-4" data-testid="group-table">
-                <div
-                    v-for="(g, i) in rows"
-                    :key="g.id"
-                    :class="cn('flex flex-col rounded-[14px] border border-slate-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]', g.is_active === false && 'opacity-70')"
-                >
-                    <div class="flex items-start gap-3.5">
-                        <span :class="cn('grid size-11 shrink-0 place-items-center rounded-[12px]', tones[i % tones.length])"><UsersRound class="size-5" /></span>
-                        <div class="min-w-0 flex-1">
-                            <p class="truncate text-[16px] font-semibold text-slate-900">{{ g.name }}</p>
-                            <p class="text-[13px] text-slate-500">
-                                <span class="font-mono">{{ g.code }}</span> ·
-                                <RouterLink :to="{ path: '/customers', query: { group: g.id } }" class="text-blue-700 hover:underline">{{ formatNumber(g.customers_count) }} khách</RouterLink>
-                            </p>
-                        </div>
-                        <span v-if="g.is_active === false" class="rounded-md bg-slate-100 px-2 py-0.5 text-[12px] font-medium text-slate-500">Ngừng sử dụng</span>
-                    </div>
-                    <p v-if="g.description" class="mt-2 line-clamp-2 text-[13px] text-slate-500">{{ g.description }}</p>
-                    <dl class="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 rounded-[12px] bg-slate-50 p-4 text-[13px]">
-                        <div><dt class="text-slate-500">Giá áp dụng</dt><dd class="font-semibold text-slate-900">{{ priceTierLabels[g.price_tier] }}</dd></div>
-                        <div><dt class="text-slate-500">Chiết khấu</dt><dd class="font-semibold text-slate-900">{{ Number(g.discount_percent) ? `${Number(g.discount_percent)}%` : '—' }}</dd></div>
-                        <div><dt class="text-slate-500">Thanh toán quen dùng</dt><dd class="font-semibold text-slate-900">{{ g.payment_method ? paymentMethods[g.payment_method] : '—' }}</dd></div>
-                        <div>
-                            <dt class="text-slate-500">Hạn mức nợ</dt>
-                            <dd class="font-semibold text-slate-900">{{ g.credit_limit != null ? formatMoney(g.credit_limit) : '—' }}<template v-if="g.payment_terms_days != null"> · {{ g.payment_terms_days }} ngày</template></dd>
-                        </div>
-                    </dl>
-                    <div class="mt-auto flex items-center gap-2 pt-3.5 text-[13px]">
-                        <p :class="cn('flex min-w-0 flex-1 items-center gap-1.5', isAuto(g) ? 'text-blue-700' : 'text-slate-400')">
-                            <Sparkles v-if="isAuto(g)" class="size-4 shrink-0" />
-                            <Hand v-else class="size-4 shrink-0" />
-                            <span class="truncate" :title="isAuto(g) ? `Tự xếp khi ${autoText(g)}` : undefined">{{ isAuto(g) ? `Tự xếp: ${autoText(g)}` : 'Xếp khách bằng tay' }}</span>
+        <div class="grid gap-4 md:grid-cols-2 2xl:grid-cols-3" data-testid="group-table">
+            <div
+                v-for="(g, i) in rows"
+                :key="g.id"
+                :class="cn('flex flex-col rounded-[14px] border border-slate-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]', g.is_active === false && 'opacity-70')"
+            >
+                <div class="flex items-start gap-3.5">
+                    <span :class="cn('grid size-11 shrink-0 place-items-center rounded-[12px]', tones[i % tones.length])"><UsersRound class="size-5" /></span>
+                    <div class="min-w-0 flex-1">
+                        <p class="truncate text-[16px] font-semibold text-slate-900">{{ g.name }}</p>
+                        <p class="text-[13px] text-slate-500">
+                            <span class="font-mono">{{ g.code }}</span> ·
+                            <RouterLink :to="{ path: '/customers', query: { group: g.id } }" class="text-blue-700 hover:underline">{{ formatNumber(g.customers_count) }} khách</RouterLink>
                         </p>
-                        <template v-if="canManage">
-                            <button
-                                type="button"
-                                class="grid size-8 place-items-center rounded-[8px] text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40 disabled:hover:bg-transparent"
-                                :aria-label="`Xóa ${g.name}`"
-                                :disabled="!!g.customers_count"
-                                :title="g.customers_count ? 'Nhóm còn khách' : 'Xóa'"
-                                @click="remove(g)"
-                            >
-                                <Trash2 class="size-4" />
-                            </button>
-                            <button type="button" class="inline-flex items-center gap-1.5 rounded-[9px] border border-slate-200 px-3 py-1.5 text-slate-600 hover:border-blue-300 hover:text-blue-700" :aria-label="`Sửa ${g.name}`" @click="edit(g)">
-                                <Pencil class="size-3.5" /> Sửa
-                            </button>
-                        </template>
+                    </div>
+                    <span v-if="g.is_active === false" class="rounded-md bg-slate-100 px-2 py-0.5 text-[12px] font-medium text-slate-500">Ngừng sử dụng</span>
+                </div>
+                <p v-if="g.description" class="mt-2 line-clamp-1 text-[13px] text-slate-500">{{ g.description }}</p>
+                <div v-if="stats.total" class="mt-3">
+                    <div class="flex flex-wrap justify-between gap-x-3 text-[12px] text-slate-500">
+                        <span>{{ pct(((g.customers_count ?? 0) * 100) / stats.total) }} số khách</span>
+                        <span>Doanh thu 12 tháng <b class="font-semibold text-slate-800">{{ formatNumber(Math.round(Number(g.revenue_12m ?? 0))) }}</b></span>
+                    </div>
+                    <div class="mt-1.5 h-1.5 rounded-full bg-slate-100">
+                        <div :class="cn('h-1.5 rounded-full', bars[i % bars.length])" :style="{ width: `${Math.max(1, ((g.customers_count ?? 0) * 100) / stats.total)}%` }" />
                     </div>
                 </div>
+                <dl class="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 rounded-[12px] bg-slate-50 p-4 text-[13px]">
+                    <div><dt class="text-slate-500">Giá áp dụng</dt><dd class="font-semibold text-slate-900">{{ priceTierLabels[g.price_tier] }}</dd></div>
+                    <div><dt class="text-slate-500">Chiết khấu</dt><dd class="font-semibold text-slate-900">{{ Number(g.discount_percent) ? `${Number(g.discount_percent)}%` : '—' }}</dd></div>
+                    <div><dt class="text-slate-500">Thanh toán quen dùng</dt><dd class="font-semibold text-slate-900">{{ g.payment_method ? paymentMethods[g.payment_method] : '—' }}</dd></div>
+                    <div>
+                        <dt class="text-slate-500">Hạn mức nợ</dt>
+                        <dd class="font-semibold text-slate-900">{{ g.credit_limit != null ? formatMoney(g.credit_limit) : '—' }}<template v-if="g.payment_terms_days != null"> · {{ g.payment_terms_days }} ngày</template></dd>
+                    </div>
+                </dl>
+                <div class="mt-auto flex items-center gap-2 pt-3.5 text-[13px]">
+                    <p :class="cn('flex min-w-0 flex-1 items-center gap-1.5', isAuto(g) ? 'text-blue-700' : 'text-slate-400')">
+                        <Sparkles v-if="isAuto(g)" class="size-4 shrink-0" />
+                        <Hand v-else class="size-4 shrink-0" />
+                        <span class="truncate" :title="isAuto(g) ? `Tự xếp khi ${autoText(g)}` : undefined">{{ isAuto(g) ? `Tự xếp: ${autoText(g)}` : 'Xếp khách bằng tay' }}</span>
+                    </p>
+                    <template v-if="canManage">
+                        <button
+                            type="button"
+                            class="grid size-8 place-items-center rounded-[8px] text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40 disabled:hover:bg-transparent"
+                            :aria-label="`Xóa ${g.name}`"
+                            :disabled="!!g.customers_count"
+                            :title="g.customers_count ? 'Nhóm còn khách' : 'Xóa'"
+                            @click="remove(g)"
+                        >
+                            <Trash2 class="size-4" />
+                        </button>
+                        <button type="button" class="inline-flex items-center gap-1.5 rounded-[9px] border border-slate-200 px-3 py-1.5 text-slate-600 hover:border-blue-300 hover:text-blue-700" :aria-label="`Sửa ${g.name}`" @click="edit(g)">
+                            <Pencil class="size-3.5" /> Sửa
+                        </button>
+                    </template>
+                </div>
             </div>
-        </template>
-    </SettingsShell>
+        </div>
+    </template>
 
     <Dialog v-model:open="dialog" :title="editing ? 'Sửa nhóm khách hàng' : 'Thêm nhóm khách hàng'">
         <form id="group-form" class="grid gap-3 sm:grid-cols-2" @submit.prevent="save">
