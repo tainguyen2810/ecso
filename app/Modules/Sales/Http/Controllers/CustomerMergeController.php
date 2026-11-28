@@ -10,6 +10,7 @@ use App\Modules\Sales\Services\CustomerMerger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Duplicate cards and their merge. Merging needs customers.merge; the cards are always of the current business.
@@ -21,6 +22,18 @@ class CustomerMergeController extends Controller
         $this->authorize('merge', Customer::class);
 
         return response()->json(['data' => $duplicates->groups()]);
+    }
+
+    /** "Không phải trùng": hides a group of cards from the list until its cards change. */
+    public function dismiss(Request $request, CustomerDuplicates $duplicates): JsonResponse
+    {
+        $this->authorize('merge', Customer::class);
+        $key = $request->validate(['key' => ['required', 'string', 'size:40']])['key'];
+        if (! $duplicates->dismiss($key, $request->user()?->id)) {
+            throw ValidationException::withMessages(['key' => 'Nhóm này không còn trong danh sách khách trùng. Tải lại trang.']);
+        }
+
+        return response()->json(null, 204);
     }
 
     public function preview(Request $request, Customer $customer, CustomerMerger $merger): JsonResponse

@@ -34,10 +34,81 @@ class CustomerController extends Controller
         $this->authorize('viewAny', Customer::class);
         $filters = $request->validate(self::filterRules());
 
-        $query = self::filtered(Customer::query()->withStats()->with(['customerGroup', 'assignee']), $filters);
+        $query = self::filtered(Customer::query()->withStats()->with(['customerGroup', 'assignee', 'loyaltyTier']), $filters);
         self::sorted($query, $filters);
+        $page = $query->paginate((int) ($filters['per_page'] ?? 30));
+        $channels = self::channelsOf($page->getCollection()->pluck('id')->all());
+        $page->getCollection()->each(fn (Customer $c) => $c->setAttribute('channels', $channels[$c->id] ?? []));
 
-        return CustomerResource::collection($query->paginate((int) ($filters['per_page'] ?? 30)));
+        return CustomerResource::collection($page);
+    }
+
+    /**
+     * Where each of these customers has bought: the marketplace shop or own channel of their orders, most used first.
+     *
+     * @param  list<int>  $ids
+     * @return array<int, list<array{kind: string, name: string}>>
+     */
+    public static function channelsOf(array $ids): array
+    {
+        if (! $ids) {
+            return [];
+        }
+
+        return DB::table('orders as o')
+            ->leftJoin('marketplace_accounts as ma', 'ma.id', '=', 'o.marketplace_account_id')
+            ->leftJoin('sales_channels as sc', 'sc.id', '=', 'o.sales_channel_id')
+            ->whereIn('o.customer_id', $ids)->whereNotIn('o.status', [OrderStatus::CANCELLED, OrderStatus::RETURNED])
+            ->groupBy('o.customer_id', 'ma.marketplace', 'sc.type', 'ma.shop_name', 'sc.name')
+            ->selectRaw("o.customer_id, COALESCE(ma.marketplace, sc.type, 'other') as kind, COALESCE(ma.shop_name, sc.name, 'Khác') as name, COUNT(*) as n")
+            ->orderByDesc('n')->get()
+            ->groupBy('customer_id')
+            ->map(fn ($rows) => $rows->unique('kind')->take(4)->map(fn ($r) => ['kind' => (string) $r->kind, 'name' => (string) $r->name])->values()->all())
+            ->all();
+    }
+
+    /**
+     * Headline figures of the customer list (mẫu 28/11): how many, how many came back, debt, and the size of each
+     * quick group. Same rules as the list's filters, so a figure and the list it opens agree.
+     */
+    public function overview(): JsonResponse
+    {
+        $this->authorize('viewAny', Customer::class);
+        $counted = [OrderStatus::CANCELLED, OrderStatus::RETURNED];
+        $monthStart = ReportRange::now()->startOfMonth()->utc();
+        $byStatus = Customer::query()->toBase()->groupBy('status')->selectRaw('status, COUNT(*) as n')->pluck('n', 'status');
+        $buyers = fn ($since, $until = null) => Order::query()->whereNotNull('customer_id')->whereNotIn('status', $counted)
+            ->where('placed_at', '>=', $since)->when($until, fn ($q) => $q->where('placed_at', '<', $until))
+            ->groupBy('customer_id')->selectRaw('customer_id, COUNT(*) as n');
+        // Returning = bought twice or more in the last 12 months, among those who bought at all.
+        $returning = function ($end) use ($buyers) {
+            $rows = DB::query()->fromSub($buyers($end->copy()->subYear(), $end->isToday() ? null : $end), 'b')->selectRaw('COUNT(*) as buyers, SUM(CASE WHEN n >= 2 THEN 1 ELSE 0 END) as back')->first();
+            $all = (int) ($rows->buyers ?? 0);
+
+            return ['count' => (int) ($rows->back ?? 0), 'percent' => $all ? round((int) $rows->back * 100 / $all, 1) : null];
+        };
+        $debts = DB::query()->fromSub(Customer::query()->withStats()->toBase(), 'c')
+            ->selectRaw('SUM(CASE WHEN debt > 0 THEN debt ELSE 0 END) as debt, SUM(CASE WHEN debt > 0 THEN 1 ELSE 0 END) as debtors, SUM(CASE WHEN overdue > 0 THEN overdue ELSE 0 END) as overdue, SUM(CASE WHEN overdue > 0 THEN 1 ELSE 0 END) as late')
+            ->first();
+        $segment = fn (string $s) => DB::query()->fromSub(self::segment(Customer::query()->withStats(), $s)->toBase(), 's')->count();
+
+        return response()->json(['data' => [
+            'total' => (int) $byStatus->sum(),
+            'active' => (int) ($byStatus['active'] ?? 0),
+            'inactive' => (int) ($byStatus['inactive'] ?? 0),
+            'new_this_month' => Customer::query()->where('created_at', '>=', $monthStart)->count(),
+            'returning' => $returning(now()),
+            'returning_before' => $returning(now()->subMonth()),
+            'debt' => ['amount' => bcadd((string) ($debts->debt ?? 0), '0', 2), 'count' => (int) ($debts->debtors ?? 0)],
+            'overdue' => ['amount' => bcadd((string) ($debts->overdue ?? 0), '0', 2), 'count' => (int) ($debts->late ?? 0)],
+            'segments' => [
+                'follow_up' => $segment('follow_up'),
+                'birthday' => Customer::query()->whereMonth('birthday', ReportRange::now()->month)->count(),
+                'lapsed' => $segment('lapsed'),
+                'frequent' => $segment('frequent'),
+                'high_value' => $segment('high_value'),
+            ],
+        ]]);
     }
 
     /**
@@ -67,6 +138,8 @@ class CustomerController extends Controller
             'source' => ['nullable', Rule::in(Customer::SOURCES)],
             'segment' => ['nullable', Rule::in(array_keys(Customer::SEGMENTS))],
             'type' => ['nullable', Rule::in(Customer::TYPES)],
+            'tier' => ['nullable', 'string', 'max:40'],
+            'channel' => ['nullable', 'string', 'max:20'],
             'sort' => ['nullable', Rule::in(['newest', 'name', 'spent', 'debt', 'recent', 'orders', 'overdue'])],
             'dir' => ['nullable', Rule::in(['asc', 'desc'])],
             'per_page' => ['nullable', 'integer', 'min:5', 'max:100'],
@@ -266,6 +339,19 @@ class CustomerController extends Controller
             $assigned === 'none'
                 ? $query->whereNull('customers.assigned_user_id')
                 : $query->whereHas('assignee', fn ($u) => $u->where('ulid', $assigned));
+        }
+
+        if ($tier = $filters['tier'] ?? null) {
+            $tier === 'none'
+                ? $query->whereNull('customers.loyalty_tier_id')
+                : $query->whereHas('loyaltyTier', fn ($t) => $t->where('ulid', $tier));
+        }
+        // Bought at least once through this kind of channel (a marketplace, or an own channel type).
+        if ($channel = $filters['channel'] ?? null) {
+            $query->whereExists(fn ($o) => $o->from('orders as co')->whereColumn('co.customer_id', 'customers.id')
+                ->leftJoin('marketplace_accounts as cma', 'cma.id', '=', 'co.marketplace_account_id')
+                ->leftJoin('sales_channels as csc', 'csc.id', '=', 'co.sales_channel_id')
+                ->whereRaw('COALESCE(cma.marketplace, csc.type) = ?', [$channel]));
         }
 
         return $query

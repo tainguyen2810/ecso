@@ -30,6 +30,9 @@ class CustomerResource extends JsonResource
                 'price_tier' => $this->customerGroup->price_tier, 'discount_percent' => (string) $this->customerGroup->discount_percent, 'payment_method' => $this->customerGroup->payment_method, 'is_active' => (bool) $this->customerGroup->is_active,
                 'payment_terms_days' => $this->customerGroup->payment_terms_days, 'credit_limit' => $this->customerGroup->credit_limit !== null ? (string) $this->customerGroup->credit_limit : null,
             ] : null),
+            'tier' => $this->whenLoaded('loyaltyTier', fn () => $this->loyaltyTier ? ['id' => $this->loyaltyTier->ulid, 'name' => $this->loyaltyTier->name, 'color' => $this->loyaltyTier->color] : null),
+            // Where this customer has bought (set by the list): one entry per channel or marketplace shop.
+            'channels' => $this->when(array_key_exists('channels', $this->resource->getAttributes()), fn () => $this->resource->getAttributes()['channels']),
             'assignee' => $this->whenLoaded('assignee', fn () => $this->assignee ? ['id' => $this->assignee->ulid, 'name' => $this->assignee->name] : null),
             'birthday' => $this->birthday?->toDateString(),
             'gender' => $this->gender,

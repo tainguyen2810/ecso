@@ -57,4 +57,10 @@ class LoyaltyEntry extends Model
     {
         return $this->belongsTo(Order::class);
     }
+
+    /** @return BelongsTo<Customer, $this> */
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class);
+    }
 }

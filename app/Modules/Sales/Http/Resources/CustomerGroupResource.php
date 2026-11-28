@@ -24,6 +24,7 @@ class CustomerGroupResource extends JsonResource
             'auto_min_orders' => $this->auto_min_orders,
             'payment_terms_days' => $this->payment_terms_days,
             'credit_limit' => $this->credit_limit !== null ? (string) $this->credit_limit : null,
+            'revenue_12m' => $this->when(array_key_exists('revenue_12m', $this->resource->getAttributes()), fn () => $this->resource->getAttributes()['revenue_12m']),
             'customers_count' => $this->customers_count !== null ? (int) $this->customers_count : null,
             'created_at' => $this->created_at?->toIso8601String(),
         ];

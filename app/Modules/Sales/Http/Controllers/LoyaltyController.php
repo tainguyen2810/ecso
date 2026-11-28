@@ -4,6 +4,8 @@ namespace App\Modules\Sales\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Orders\Domain\OrderStatus;
+use App\Modules\Orders\Models\Order;
 use App\Modules\Sales\Loyalty\LoyaltyService;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\CustomerGroup;
@@ -11,6 +13,7 @@ use App\Modules\Sales\Models\LoyaltyEntry;
 use App\Modules\Sales\Models\LoyaltyTier;
 use App\Modules\Tenancy\Support\TenantContext;
 use App\Modules\Tenancy\Support\TenantSettings;
+use App\Shared\Support\ReportRange;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -29,7 +32,67 @@ class LoyaltyController extends Controller
     {
         $this->can('customers.view', 'promotions.manage');
 
-        return response()->json(['data' => $this->program()]);
+        return response()->json(['data' => $this->program(), 'meta' => ['stats' => $this->stats(), 'moves' => $this->moves()]]);
+    }
+
+    /**
+     * Points in the hands of customers, earned and spent this month (vs last month), and points about to expire in
+     * the next 30 days (by the same rule as the nightly expiry: oldest earned first, less what was spent).
+     *
+     * @return array<string, mixed>
+     */
+    private function stats(): array
+    {
+        $start = ReportRange::now()->startOfMonth();
+        $sum = fn (array $kinds, $from, $to) => (int) LoyaltyEntry::query()->whereIn('kind', $kinds)
+            ->where('created_at', '>=', $from->utc())->where('created_at', '<', $to->utc())->sum('points');
+        $earnKinds = [LoyaltyEntry::EARN];
+        $spendKinds = [LoyaltyEntry::REDEEM, LoyaltyEntry::REDEEM_BACK];
+        $soon = now()->addDays(30);
+        $rows = LoyaltyEntry::query()->toBase()->groupBy('customer_id')->selectRaw(
+            'customer_id, SUM(CASE WHEN points > 0 AND expires_at IS NOT NULL AND expires_at <= ? AND kind IN (?, ?) THEN points ELSE 0 END) as due, '
+            .'SUM(CASE WHEN points < 0 THEN -points ELSE 0 END) - SUM(CASE WHEN kind = ? THEN points ELSE 0 END) as used',
+            [$soon, LoyaltyEntry::EARN, LoyaltyEntry::ADJUST, LoyaltyEntry::REDEEM_BACK],
+        )->havingRaw('due > 0')->get();
+        $balances = Customer::query()->whereIn('id', $rows->pluck('customer_id'))->pluck('loyalty_points', 'id');
+        $expiring = 0;
+        $expiringCustomers = 0;
+        foreach ($rows as $r) {
+            $points = min(max(0, (int) $r->due - (int) $r->used), max(0, (int) ($balances[$r->customer_id] ?? 0)));
+            $expiring += $points;
+            $expiringCustomers += $points > 0 ? 1 : 0;
+        }
+        $held = Customer::query()->where('loyalty_points', '>', 0)->toBase()->selectRaw('COALESCE(SUM(loyalty_points), 0) as p, COUNT(*) as n')->first();
+        $end = $start->addMonth();
+
+        return [
+            'held' => (int) $held->p,
+            'holders' => (int) $held->n,
+            'earned' => $sum($earnKinds, $start, $end),
+            'earned_before' => $sum($earnKinds, $start->subMonth(), $start),
+            'earn_orders' => LoyaltyEntry::query()->where('kind', LoyaltyEntry::EARN)->where('created_at', '>=', $start->utc())->distinct()->count('order_id'),
+            'spent' => -$sum($spendKinds, $start, $end),
+            'spend_orders' => Order::query()->where('points_used', '>', 0)->where('status', '!=', OrderStatus::CANCELLED)->where('placed_at', '>=', $start->utc())->count(),
+            'expiring' => $expiring,
+            'expiring_customers' => $expiringCustomers,
+        ];
+    }
+
+    /**
+     * The latest tier changes (the "tier" rows of the points history), newest first.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function moves(): array
+    {
+        return LoyaltyEntry::query()->where('kind', LoyaltyEntry::TIER)->latest('id')->limit(6)->get(['customer_id', 'note', 'created_at'])
+            ->load('customer:id,ulid,name')
+            ->map(fn (LoyaltyEntry $e) => [
+                'customer' => $e->customer ? ['id' => $e->customer->ulid, 'name' => $e->customer->name] : null,
+                'up' => str_starts_with((string) $e->note, 'Lên'),
+                'note' => $e->note,
+                'at' => $e->created_at?->toIso8601String(),
+            ])->all();
     }
 
     public function update(Request $request, TenantContext $context): JsonResponse
