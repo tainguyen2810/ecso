@@ -9,6 +9,7 @@ use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Orders\Support\DeliveryType;
 use App\Modules\Tenancy\Support\TenantSettings;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -68,7 +69,11 @@ class MarketplaceShipping
     {
         $groups = [];
         $skipped = [];
-        foreach ($orders->groupBy(fn (Order $o) => $o->marketplace_account_id ?? 'own') as $list) {
+        // One group per shop and kiểu giao: Shopee offers other ways to hand over for Hỏa tốc (Pickup only) than for
+        // Nhanh (Drop off or Pickup). Hỏa tốc first, it has the shortest deadline.
+        $byGroup = $orders->sortBy(fn (Order $o) => $o->delivery_type === DeliveryType::EXPRESS ? 0 : 1)
+            ->groupBy(fn (Order $o) => ($o->marketplace_account_id ?? 'own').'|'.($o->delivery_type ?? ''));
+        foreach ($byGroup as $list) {
             /** @var Order $first */
             $first = $list->first();
             $connector = $this->connector($first);
@@ -111,7 +116,13 @@ class MarketplaceShipping
                     }
                 }
             }
+            if ($options !== null) {
+                $this->rememberMethods($ready->first(), $options);
+            }
             $groups[] = [
+                // What params.shipping is keyed by (choiceFor): the shop, plus the kiểu giao when the order has one.
+                'key' => self::groupKey($first),
+                'delivery' => $first->delivery_type === null ? null : ['type' => $first->delivery_type, 'option' => $first->delivery_option],
                 'account' => ['id' => $account->ulid, 'name' => $account->shop_name, 'marketplace' => $account->marketplace],
                 'orders' => $ready->map(fn (Order $o) => ['id' => $o->ulid, 'external_order_id' => $o->external_order_id, 'code' => $o->code])->all(),
                 'options' => $options,
@@ -155,14 +166,15 @@ class MarketplaceShipping
     }
 
     /**
-     * The choice sent with a "pack" action for this order's shop: params.shipping is keyed by shop id.
+     * The choice sent with a "pack" action for this order: params.shipping is keyed by shop id and kiểu giao
+     * (groupKey), or by shop id alone (packing screen, automatic choice).
      *
      * @param  array<string, mixed>  $params
      * @return array{method: string, address_id: string|null, slot_id: string|null, slot_label: string|null, address_label: string|null}|null
      */
     public static function choiceFor(Order $order, array $params): ?array
     {
-        $choice = $params['shipping'][$order->account->ulid ?? ''] ?? null;
+        $choice = $params['shipping'][self::groupKey($order)] ?? $params['shipping'][$order->account->ulid ?? ''] ?? null;
         if (! is_array($choice) || ! in_array($choice['method'] ?? null, ['pickup', 'dropoff'], true)) {
             return null;
         }
@@ -174,6 +186,54 @@ class MarketplaceShipping
             'slot_label' => filled($choice['slot_label'] ?? null) ? mb_substr((string) $choice['slot_label'], 0, 100) : null,
             'address_label' => filled($choice['address_label'] ?? null) ? mb_substr((string) $choice['address_label'], 0, 255) : null,
         ];
+    }
+
+    public static function groupKey(Order $order): string
+    {
+        $shop = $order->account->ulid ?? '';
+
+        return $order->delivery_type === null ? $shop : $shop.'|'.$order->delivery_type;
+    }
+
+    /** How long a learnt "Pickup / Drop off" answer is trusted before it is asked again. */
+    public const METHODS_DAYS = 3;
+
+    /**
+     * Keeps on the shop which ways the marketplace offers for this order's kiểu giao (from shipOptions).
+     *
+     * @param  array<string, mixed>  $options
+     */
+    public function rememberMethods(Order $order, array $options): void
+    {
+        $account = $order->account;
+        if ($account === null) {
+            return;
+        }
+        $methods = array_values(array_filter([
+            ($options['pickup']['available'] ?? false) ? 'pickup' : null,
+            ($options['dropoff']['available'] ?? false) ? 'dropoff' : null,
+        ]));
+        $all = (array) ($account->settings['ship_methods'] ?? []);
+        $key = $order->delivery_type ?? '_';
+        if (($all[$key]['methods'] ?? null) === $methods && now()->subDay()->lt((string) ($all[$key]['at'] ?? '2000-01-01'))) {
+            return;
+        }
+        $all[$key] = ['methods' => $methods, 'at' => now()->toIso8601String()];
+        $account->forceFill(['settings' => [...($account->settings ?? []), 'ship_methods' => $all]])->save();
+    }
+
+    /**
+     * Pickup / Drop off the marketplace offers for this order's kiểu giao, as learnt for its shop; null when not known
+     * yet or too old ($stale tells the caller to ask again).
+     *
+     * @return list<string>|null
+     */
+    public static function methodsFor(Order $order, ?bool &$stale = null): ?array
+    {
+        $known = $order->account?->settings['ship_methods'][$order->delivery_type ?? '_'] ?? null;
+        $stale = ! is_array($known) || now()->subDays(self::METHODS_DAYS)->gt((string) ($known['at'] ?? '2000-01-01'));
+
+        return is_array($known) ? array_values((array) ($known['methods'] ?? [])) : null;
     }
 
     /**

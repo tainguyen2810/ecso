@@ -3,7 +3,7 @@ import VariantTag from './VariantTag.vue';
 import DeliveryBadge from './DeliveryBadge.vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Ban, Banknote, Bookmark, ClipboardList, FilePen, Package, PackageCheck, PackageX, Tag, ScanBarcode, Trash2, ChevronDown, ChevronsRight, Clock, Columns3, Truck, Download, Filter, History, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingBasket, ShoppingCart, UserPlus, X } from 'lucide-vue-next';
+import { Ban, Banknote, Bookmark, ClipboardList, FilePen, Package, PackageCheck, PackageX, Tag, ScanBarcode, Trash2, ChevronDown, ChevronsRight, Clock, Columns3, Truck, Zap, Download, Filter, History, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingBasket, ShoppingCart, UserPlus, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
@@ -124,6 +124,9 @@ const arrangeFlagOn = computed(() => filters.flags.includes('not_arranged'));
 /** Orders to tick once the list and the waiting orders are loaded ('all' = every waiting order). */
 let pendingArrangeSelect: 'all' | string[] | null = null;
 const arrangeReady = computed(() => (arrange.value ? bannerIds(arrange.value) : []));
+/** Hỏa tốc orders waiting (the marketplace gives them a few hours): prepared first, on their own. */
+const arrangeExpress = computed(() => (arrange.value?.orders ?? []).filter((o) => o.delivery_type === 'express'));
+const arrangeExpressReady = computed(() => arrangeExpress.value.filter((o) => !o.shortage).map((o) => o.id));
 const arrangeReadyAll = computed(() => !!arrange.value && arrangeReady.value.length === arrange.value.orders.length);
 /** Order shown in the side panel (row click); the panel steps through the orders of this page. */
 const peek = ref<string | null>(null);
@@ -457,6 +460,10 @@ const selectedToArrange = computed(() => selectedOrders.value.filter((o) => o.ma
 const selectedLabels = computed(() => selectedOrders.value.filter((o) => o.marketplace_shipping && ['PACKED', 'HANDED_OVER', 'IN_TRANSIT', 'FAILED_DELIVERY'].includes(o.status)));
 const shipIds = ref<string[]>([]);
 const shipOpen = ref(false);
+/** Same words as Shopee's list: "Pickup", "Drop off / Pickup". */
+const shipMethodsLabel = (m: string[]) => [...m].sort().map((x) => (x === 'pickup' ? 'Pickup' : 'Drop off')).join(' / ');
+const shipMethodsHint = (m: string[]) => m.map((x) => (x === 'pickup' ? 'Shipper đến lấy' : 'Tự mang ra bưu cục')).join(' hoặc ');
+
 function openShip(ids: string[]) {
     shipIds.value = ids;
     shipOpen.value = true;
@@ -679,11 +686,15 @@ const orderLabel = (id: string) => orderCode(orders.value.find((o) => o.id === i
             <div class="min-w-60 flex-1">
                 <div class="font-semibold">{{ formatNumber(arrange.count) }} đơn Shopee, TikTok đang chờ Chuẩn bị hàng</div>
                 <div class="text-muted-foreground">
+                    <span v-if="arrangeExpress.length" class="inline-flex items-center gap-0.5 font-medium text-rose-600" data-testid="arrange-express-count"><Zap class="size-3" />{{ arrangeExpress.length }} đơn Hỏa tốc</span><template v-if="arrangeExpress.length"> · </template>
                     <template v-for="(part, i) in urgencyLine(arrange)" :key="part"><span :class="i === 0 && arrange.urgent ? 'text-rose-600' : ''">{{ part }}</span> · </template>
                     <span v-if="arrange.ready" class="text-emerald-700">{{ arrange.ready }} đơn đủ hàng</span>
                     <template v-if="arrange.orders.length - arrange.ready">{{ arrange.ready ? ', ' : '' }}<span class="text-rose-600">{{ arrange.orders.length - arrange.ready }} đơn thiếu hàng</span></template>
                 </div>
             </div>
+            <Button v-if="arrangeExpressReady.length && arrangeExpressReady.length < arrangeReady.length" variant="outline" class="border-rose-200 bg-card text-rose-600 hover:bg-rose-50" data-testid="arrange-express-run" @click="openShip(arrangeExpressReady)">
+                <Zap /> Chuẩn bị {{ arrangeExpressReady.length }} đơn Hỏa tốc trước
+            </Button>
             <Button variant="outline" class="bg-card" data-testid="arrange-by-product-open" @click="arrangeOpen = true"><Filter /> Chọn theo sản phẩm</Button>
             <Button data-testid="arrange-banner-run" @click="openShip(arrangeReady)">
                 <PackageCheck /> {{ arrangeReadyAll ? `Chuẩn bị ${arrangeReady.length > 1 ? 'tất cả ' : ''}${arrangeReady.length} đơn` : `Chuẩn bị ${arrangeReady.length} đơn đủ hàng` }}
@@ -976,6 +987,7 @@ const orderLabel = (id: string) => orderCode(orders.value.find((o) => o.id === i
                                     <div v-if="o.carrier && !compact" class="mt-1 flex items-center gap-1.5 whitespace-nowrap text-muted-foreground">
                                         <img v-if="/^(spx|shopee express)/i.test(o.carrier)" src="/images/carriers/spx.webp" alt="" class="h-3 w-auto" />{{ o.carrier }}
                                     </div>
+                                    <div v-if="o.ship_methods?.length && !compact" class="mt-0.5 text-muted-foreground" :title="shipMethodsHint(o.ship_methods)" data-testid="row-ship-methods">{{ shipMethodsLabel(o.ship_methods) }}</div>
                                 </template>
                                 <span v-else class="text-muted-foreground">—</span>
                             </td>

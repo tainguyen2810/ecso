@@ -12,7 +12,8 @@ test('sync center: overview, queue with task detail, problems, order log', async
     await page.getByTestId('sim-create').click();
     await expect(page.getByText(/Sàn giả lập đã tạo 2 đơn/)).toBeVisible();
 
-    await page.getByRole('link', { name: 'Trung tâm đồng bộ' }).first().click();
+    // The page's own "Nhật ký đồng bộ" button (the sidebar shows the sync button only once a real channel is connected).
+    await page.getByTestId('sync-log-link').click();
     await expect(page).toHaveURL(/\/marketplaces\/sync/);
     await expect(page.getByTestId('sync-center-shops')).toContainText('Shop Demo');
     await expect(page.getByTestId('sync-center-task-tiles')).toContainText('Thành công');

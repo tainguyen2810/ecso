@@ -12,6 +12,7 @@ import { cn } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import LabelPrint from './LabelPrint.vue';
+import DeliveryBadge from './DeliveryBadge.vue';
 
 /**
  * "Chuẩn bị hàng" for Shopee / TikTok orders: per shop, the parcel is picked up (address + slot the marketplace offers)
@@ -27,6 +28,9 @@ const tenant = useTenantStore();
 interface Slot { id: string; label: string }
 interface Address { id: string; label: string; slots: Slot[] }
 interface Group {
+    /** Shop + kiểu giao: what the choice is keyed by (Hỏa tốc orders get their own group). */
+    key?: string;
+    delivery?: { type: string; option: string | null } | null;
     account: { id: string; name: string; marketplace: string };
     orders: { id: string; external_order_id: string; code?: string | null }[];
     options: { pickup: { available: boolean; addresses: Address[] }; dropoff: { available: boolean } } | null;
@@ -56,13 +60,15 @@ watch(open, async (v) => {
         const { data } = await api.post('/orders/ship-options', { ids: props.ids });
         groups.value = data.data.groups;
         skipped.value = data.data.skipped;
-        form.value = Object.fromEntries(groups.value.map((g) => [g.account.id, initial(g)]));
+        form.value = Object.fromEntries(groups.value.map((g) => [gk(g), initial(g)]));
     } catch (e) {
         loadError.value = e instanceof ApiError ? e.message : 'Không tải được cách giao hàng từ sàn.';
     } finally {
         loading.value = false;
     }
 }, { immediate: true });
+
+const gk = (g: Group) => g.key ?? g.account.id;
 
 /** The shop's last choice when the marketplace still offers it, else pickup at the first address with slots. */
 function initial(g: Group) {
@@ -79,22 +85,22 @@ const methods = (g: Group) => [
     { value: 'pickup' as const, icon: Truck, title: 'Shipper đến lấy', hint: g.options?.pickup.available ? 'Shipper đến tận nơi lấy hàng' : 'Sàn chưa có khung giờ lấy hàng', available: !!g.options?.pickup.available },
     { value: 'dropoff' as const, icon: Store, title: 'Tự mang ra bưu cục', hint: 'Gửi tại điểm nhận của hãng vận chuyển', available: !!g.options?.dropoff.available },
 ];
-const addressOf = (g: Group) => g.options?.pickup.addresses.find((a) => a.id === form.value[g.account.id]?.address_id);
+const addressOf = (g: Group) => g.options?.pickup.addresses.find((a) => a.id === form.value[gk(g)]?.address_id);
 function pickAddress(g: Group, id: string) {
-    form.value[g.account.id] = { ...form.value[g.account.id]!, address_id: id, slot_id: g.options?.pickup.addresses.find((a) => a.id === id)?.slots[0]?.id ?? '' };
+    form.value[gk(g)] = { ...form.value[gk(g)]!, address_id: id, slot_id: g.options?.pickup.addresses.find((a) => a.id === id)?.slots[0]?.id ?? '' };
 }
 
 const ready = computed(() => groups.value.filter((g) => {
-    const f = form.value[g.account.id];
+    const f = form.value[gk(g)];
     return g.options && f && (f.method === 'dropoff' || (f.method === 'pickup' && f.slot_id));
 }));
 const count = computed(() => ready.value.reduce((n, g) => n + g.orders.length, 0));
 
 function choices(): Record<string, Choice> {
     return Object.fromEntries(ready.value.map((g) => {
-        const f = form.value[g.account.id]!;
+        const f = form.value[gk(g)]!;
         const address = addressOf(g);
-        return [g.account.id, {
+        return [gk(g), {
             method: f.method as 'pickup' | 'dropoff',
             address_id: f.method === 'pickup' ? f.address_id || null : null,
             slot_id: f.method === 'pickup' ? f.slot_id : null,
@@ -154,10 +160,11 @@ const title = computed(() => (results.value ? `Đã chuẩn bị ${okIds.value.l
 
         <div v-else class="space-y-4">
             <!-- One block per shop: two equal choice cards, then the pickup address and day as labelled fields below. -->
-            <section v-for="(g, gi) in groups" :key="g.account.id" :class="cn('space-y-3', gi > 0 && 'border-t pt-4')" data-testid="ship-group">
+            <section v-for="(g, gi) in groups" :key="gk(g)" :class="cn('space-y-3', gi > 0 && 'border-t pt-4')" data-testid="ship-group">
                 <div class="flex items-center gap-2 text-sm">
                     <MarketplaceLogo :marketplace="g.account.marketplace" :name="g.account.name" size="sm" />
                     <span class="font-semibold">{{ g.account.name }}</span>
+                    <DeliveryBadge v-if="g.delivery" :type="g.delivery.type" :option="g.delivery.option" />
                     <span class="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground tabular-nums">{{ g.orders.length }} đơn</span>
                 </div>
                 <p v-if="g.error" class="rounded-lg bg-rose-50 p-2.5 text-sm text-rose-700">{{ g.error }}</p>
@@ -166,22 +173,22 @@ const title = computed(() => (results.value ? `Đã chuẩn bị ${okIds.value.l
                         <label
                             v-for="m in methods(g)"
                             :key="m.value"
-                            :class="cn('flex h-full cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors hover:border-primary/50', form[g.account.id]!.method === m.value && 'border-primary bg-blue-50/60 ring-1 ring-primary', !m.available && 'cursor-not-allowed opacity-50 hover:border-border')"
+                            :class="cn('flex h-full cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors hover:border-primary/50', form[gk(g)]!.method === m.value && 'border-primary bg-blue-50/60 ring-1 ring-primary', !m.available && 'cursor-not-allowed opacity-50 hover:border-border')"
                         >
-                            <span :class="cn('grid size-9 shrink-0 place-items-center rounded-lg', form[g.account.id]!.method === m.value ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')"><component :is="m.icon" class="size-4" /></span>
+                            <span :class="cn('grid size-9 shrink-0 place-items-center rounded-lg', form[gk(g)]!.method === m.value ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')"><component :is="m.icon" class="size-4" /></span>
                             <span class="min-w-0 flex-1">
                                 <span class="block text-sm font-medium">{{ m.title }}</span>
                                 <span class="block text-xs leading-5 text-muted-foreground">{{ m.hint }}</span>
                             </span>
-                            <input v-model="form[g.account.id]!.method" type="radio" :value="m.value" class="mt-1 size-4 shrink-0" :disabled="!m.available" :data-testid="`ship-${m.value}-${g.account.id}`" />
+                            <input v-model="form[gk(g)]!.method" type="radio" :value="m.value" class="mt-1 size-4 shrink-0" :disabled="!m.available" :data-testid="`ship-${m.value}-${gk(g)}`" />
                         </label>
                     </div>
-                    <div v-if="form[g.account.id]!.method === 'pickup'" class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem]">
+                    <div v-if="form[gk(g)]!.method === 'pickup'" class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem]">
                         <div class="min-w-0">
                             <span class="mb-1.5 block text-xs font-medium text-muted-foreground">Nơi lấy hàng</span>
                             <Select
                                 v-if="g.options.pickup.addresses.length > 1"
-                                :model-value="form[g.account.id]!.address_id"
+                                :model-value="form[gk(g)]!.address_id"
                                 aria-label="Nơi lấy hàng"
                                 :title="addressOf(g)?.label"
                                 :options="g.options.pickup.addresses.map((a) => ({ value: a.id, label: a.label, disabled: !a.slots.length }))"
@@ -194,9 +201,9 @@ const title = computed(() => (results.value ? `Đã chuẩn bị ${okIds.value.l
                         <div>
                             <span class="mb-1.5 block text-xs font-medium text-muted-foreground">Ngày lấy hàng</span>
                             <Select
-                                v-model="form[g.account.id]!.slot_id"
+                                v-model="form[gk(g)]!.slot_id"
                                 aria-label="Khung giờ lấy hàng"
-                                :data-testid="`ship-slot-${g.account.id}`"
+                                :data-testid="`ship-slot-${gk(g)}`"
                                 :options="(addressOf(g)?.slots ?? []).map((s) => ({ value: s.id, label: s.label }))"
                             />
                         </div>

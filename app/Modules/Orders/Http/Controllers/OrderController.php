@@ -17,6 +17,7 @@ use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Http\Resources\OrderResource;
 use App\Modules\Orders\Http\Resources\ReturnResource;
 use App\Modules\Orders\Http\Resources\ShipmentResource;
+use App\Modules\Orders\Jobs\LearnShipMethodsJob;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
 use App\Modules\Orders\Models\OrderNote;
@@ -46,6 +47,7 @@ use App\Shared\Support\ReportRange;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -69,6 +71,7 @@ class OrderController extends Controller
             }, $sort === 'newest' ? 'desc' : 'asc')
             ->orderByDesc('id')
             ->paginate((int) ($filters['per_page'] ?? 30));
+        $this->learnShipMethods($page->getCollection());
 
         return OrderResource::collection($page)->additional(['meta' => ['counts' => $orders->tabCounts($filters, $request->user()->id), 'delivery' => $orders->deliveryCounts($filters, $request->user()->id), 'has_imported' => Order::query()->whereNotNull('imported_from')->exists()]])->response();
     }
@@ -655,6 +658,25 @@ class OrderController extends Controller
     }
 
     /** @return array<string, mixed> */
+    /**
+     * Orders waiting for "Chuẩn bị hàng" whose Pickup / Drop off is not known yet for their shop and kiểu giao: ask the
+     * marketplace in the background, once per shop and kiểu giao (the next load of the list shows it).
+     *
+     * @param  iterable<Order>  $orders
+     */
+    private function learnShipMethods(iterable $orders): void
+    {
+        foreach ($orders as $order) {
+            if ($order->status !== OrderStatus::READY_TO_PACK || $order->isManual() || ! in_array($order->marketplace, MarketplaceShipping::marketplaces(), true)) {
+                continue;
+            }
+            MarketplaceShipping::methodsFor($order, $stale);
+            if ($stale && Cache::add("ship-methods:{$order->marketplace_account_id}:".($order->delivery_type ?? '_'), 1, now()->addHours(6))) {
+                LearnShipMethodsJob::dispatch($order->id);
+            }
+        }
+    }
+
     private function filters(Request $request): array
     {
         return $request->validate([

@@ -86,6 +86,9 @@ class OrderResource extends JsonResource
             // Shopee / TikTok: "Chuẩn bị hàng" and the marketplace label are done from here.
             'marketplace_shipping' => ! $this->isManual() && in_array($this->marketplace, MarketplaceShipping::marketplaces(), true),
             'ship_arrangement' => $this->ship_arrangement,
+            // Before "Chuẩn bị hàng": the ways this kiểu giao can be handed over (pickup / dropoff), as Shopee lists them.
+            'ship_methods' => $this->status === OrderStatus::READY_TO_PACK && ! $this->isManual() && in_array($this->marketplace, MarketplaceShipping::marketplaces(), true)
+                ? MarketplaceShipping::methodsFor($this->resource) : null,
             'label_print_count' => (int) ($this->label_print_count ?? 0),
             'label_printed_at' => $this->label_printed_at?->toIso8601String(),
             'deliver_on' => $this->deliver_on?->toDateString(),

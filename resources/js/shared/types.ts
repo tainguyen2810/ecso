@@ -335,6 +335,8 @@ export interface OrderSummary {
     /** Shopee / TikTok Shop: "Chuẩn bị hàng" and the marketplace label are done from here. */
     marketplace_shipping?: boolean;
     ship_arrangement?: { method: 'pickup' | 'dropoff'; slot: string | null; address: string | null; at: string } | null;
+    /** Before "Chuẩn bị hàng": ways the marketplace offers for this kiểu giao ('pickup', 'dropoff'). */
+    ship_methods?: string[] | null;
     label_print_count?: number;
     label_printed_at?: string | null;
     sync_warning: string | null;

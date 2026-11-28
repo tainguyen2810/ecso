@@ -408,6 +408,35 @@ it('prepares Shopee orders from the list: pickup slot of the shop address, then 
     $api->getJson('/api/v1/orders?flags[]=label_unprinted')->assertOk()->assertJsonCount(0, 'data');
 });
 
+it('keeps Shopee\'s kiểu giao, learns its Pickup / Drop off for the list and prepares it in its own group', function () {
+    shopeeShipFake(['GET /api/v2/order/get_order_detail' => ['data' => ['data' => ['response' => ['order_list' => [[
+        'order_sn' => '2611SHIP1', 'order_status' => 'READY_TO_SHIP', 'create_time' => 1763500000, 'update_time' => 1763500000,
+        'ship_by_date' => 1763600000, 'currency' => 'VND', 'total_amount' => 120000,
+        'shipping_carrier' => 'SPX Instant', 'checkout_shipping_carrier' => 'Hỏa Tốc',
+        'recipient_address' => ['name' => 'L***n', 'full_address' => 'TP. HCM'],
+        'item_list' => [['item_id' => 11, 'item_name' => 'Áo thun', 'model_id' => 0, 'model_quantity_purchased' => 1, 'model_original_price' => 120000, 'model_discounted_price' => 120000]],
+    ]]]]]]]);
+    $account = gatewayShop($this->tenant, 'shopee');
+    TenantContext::run($this->tenant, fn () => app(OrderSync::class)->syncOne($account, '2611SHIP1', 'webhook'));
+    $order = Order::withoutGlobalScopes()->where('external_order_id', '2611SHIP1')->sole();
+    expect($order->delivery_option)->toBe('Hỏa Tốc')->and($order->delivery_type)->toBe('express')->and($order->shipping_carrier)->toBe('SPX Instant');
+    $api = actingInTenant($this->owner, $this->tenant);
+
+    // Not known yet: the list asks Shopee once in the background, the next load shows it.
+    $api->getJson('/api/v1/orders')->assertOk()->assertJsonPath('data.0.ship_methods', null);
+    $api->getJson('/api/v1/orders')->assertOk()->assertJsonPath('data.0.ship_methods', ['pickup', 'dropoff']);
+    $api->getJson('/api/v1/orders')->assertOk();
+    expect(collect(ezCalls())->where('key', 'GET /api/v2/logistics/get_shipping_parameter'))->toHaveCount(1)
+        ->and($account->refresh()->settings['ship_methods']['express']['methods'])->toBe(['pickup', 'dropoff']);
+
+    $group = $api->postJson('/api/v1/orders/ship-options', ['ids' => [$order->ulid]])->assertOk()->json('data.groups.0');
+    expect($group['key'])->toBe($account->ulid.'|express')->and($group['delivery'])->toBe(['type' => 'express', 'option' => 'Hỏa Tốc']);
+    $api->postJson('/api/v1/orders/bulk', ['ids' => [$order->ulid], 'action' => 'pack', 'shipping' => [$group['key'] => ['method' => 'dropoff']]])->assertOk()
+        ->assertJsonPath('data.0.ok', true);
+    // The choice keyed by shop and kiểu giao reached Shopee.
+    expect(array_keys((array) collect(ezCalls())->firstWhere('key', 'POST /api/v2/logistics/ship_order')['body']))->toBe(['order_sn', 'dropoff']);
+});
+
 it('packing a Shopee order asks how it goes, or uses the shop\'s last choice when Cấu hình says so', function () {
     shopeeShipFake();
     $account = gatewayShop($this->tenant, 'shopee');

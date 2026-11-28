@@ -36,7 +36,8 @@ test('failed delivery: redeliver, correct the tracking number, then the COD stat
     await page.getByTestId('shipping-tracking-input').fill(`GHN${run}B`);
     await shot(page, '02-sua-ma-van-don');
     await page.getByTestId('save-shipping').click();
-    await expect(page.getByText(`GHN${run}B`)).toBeVisible();
+    // Shown in the progress card (as a copy button) and in the shipping details.
+    await expect(page.getByText(`GHN${run}B`)).toHaveCount(2);
     const orderUrl = page.url();
 
     // The carrier's statement shows the COD collected: the order can be marked delivered while booking it.
