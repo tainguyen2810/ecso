@@ -77,7 +77,7 @@ class SupplierSummary
                 'all' => Supplier::query()->count(),
                 'active' => (clone $active)->count(),
                 'inactive' => Supplier::query()->where('is_active', false)->count(),
-                'debt' => Supplier::query()->withBalance()->having('debt', '>', 0)->get()->count(),
+                'debt' => Supplier::query()->withBalance()->having('debt', '>', 0)->toBase()->get()->count(),
             ],
             'owed' => array_map(fn ($v) => is_float($v) ? round($v, 2) : $v, $owed),
             'month' => [
