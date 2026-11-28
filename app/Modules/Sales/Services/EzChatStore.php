@@ -289,9 +289,14 @@ class EzChatStore
             return null;
         }
 
+        // Mã đơn (SON…), the marketplace / Woo id, EzChat's DH code, then the website's own number (#13850), a
+        // reference (EzChat's DH code on a Woo order, or one typed by hand) and the tracking number.
         return Order::query()->where('code', $number)->first()
             ?? Order::query()->where('external_order_id', $number)->first()
-            ?? EzChatLinkOrder::query()->where('code', $number)->first()?->order;
+            ?? EzChatLinkOrder::query()->where('code', $number)->first()?->order
+            ?? Order::query()->where('external_number', $number)->latest('placed_at')->first()
+            ?? Order::query()->where('reference', $number)->latest('placed_at')->first()
+            ?? (mb_strlen($number) >= 8 ? Order::query()->where('tracking_number', $number)->latest('placed_at')->first() : null);
     }
 
     /**
