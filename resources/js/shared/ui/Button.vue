@@ -3,6 +3,7 @@ import { computed, inject } from 'vue';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { Loader2 } from 'lucide-vue-next';
 import { cn } from '@/shared/lib/utils';
+import { useSoft } from './soft';
 
 const buttonVariants = cva(
     'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',
@@ -43,7 +44,7 @@ const props = withDefaults(
 );
 
 // Inside a popup (`soft-dialog`, see Dialog.vue): 44px, 12px corners, blue / white-with-border like the mockups.
-const soft = inject<boolean>('soft-dialog', false);
+const soft = inject<boolean>('soft-dialog', false) || useSoft();
 const softSize: Record<string, string> = { default: 'h-11 rounded-[12px] px-5 text-[15px]', lg: 'h-11 rounded-[12px] px-6 text-[15px]', sm: 'rounded-[8px]', icon: 'rounded-[10px]' };
 const softVariant: Record<string, string> = {
     default: 'bg-blue-600 text-white shadow-sm hover:bg-blue-700',

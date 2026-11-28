@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
-import { Hand, Pencil, Plus, Sparkles, Trash2, TrendingUp, Users, UsersRound } from 'lucide-vue-next';
+import { BadgePercent, Hand, Pencil, Plus, Sparkles, Trash2, TrendingUp, Users, UsersRound, WandSparkles } from 'lucide-vue-next';
 import CustomersFrame from './CustomersFrame.vue';
 import ReportChip from '../reports/ReportChip.vue';
 import { btnPrimary } from './frame';
@@ -15,6 +15,7 @@ import FormField from '@/shared/ui/FormField.vue';
 import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
+import Switch from '@/shared/ui/Switch.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { cn, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
@@ -207,30 +208,44 @@ async function remove(g: CustomerGroup) {
         </div>
     </template>
 
-    <Dialog v-model:open="dialog" :title="editing ? 'Sửa nhóm khách hàng' : 'Thêm nhóm khách hàng'">
-        <form id="group-form" class="grid gap-3 sm:grid-cols-2" @submit.prevent="save">
-            <FormField label="Tên nhóm" for="g-name" :error="error?.field('name')"><Input id="g-name" v-model="form.name" required data-testid="g-name" /></FormField>
-            <FormField label="Mã nhóm" for="g-code" :error="error?.field('code')" :hint="editing ? undefined : 'Để trống để tạo từ tên'"><Input id="g-code" v-model="form.code" /></FormField>
-            <FormField label="Giá áp dụng" for="g-tier" :error="error?.field('price_tier')">
-                <Select id="g-tier" v-model="form.price_tier" :options="Object.entries(priceTierLabels).map(([value, label]) => ({ value, label }))" />
-            </FormField>
-            <FormField label="Chiết khấu (%)" for="g-discount" :error="error?.field('discount_percent')"><Input id="g-discount" v-model="form.discount_percent" type="number" min="0" max="100" step="0.5" /></FormField>
-            <FormField label="Hạn thanh toán (ngày)" for="g-terms" :error="error?.field('payment_terms_days')" hint="Đơn quá số ngày này thì tính là nợ quá hạn."><Input id="g-terms" v-model="form.payment_terms_days" type="number" min="0" max="365" /></FormField>
-            <FormField label="Hạn mức nợ" for="g-credit" :error="error?.field('credit_limit')"><Input id="g-credit" v-model="form.credit_limit" type="number" min="0" step="any" /></FormField>
-            <FormField label="Thanh toán quen dùng" for="g-pay" class="sm:col-span-2">
-                <Select id="g-pay" v-model="form.payment_method" :options="[{ value: '', label: 'Không đặt' }, ...Object.entries(paymentMethods).map(([value, label]) => ({ value, label }))]" />
-            </FormField>
-            <fieldset class="rounded-md border px-3 py-2 sm:col-span-2">
-                <legend class="px-1 text-sm font-medium">Tự xếp khách vào nhóm</legend>
-                <p class="mb-2 text-xs text-muted-foreground">Mỗi đêm, khách chưa có nhóm đạt ngưỡng dưới đây được xếp vào nhóm này (đặt cả hai thì phải đạt cả hai). Khách đã được xếp nhóm bằng tay không bị đổi. Để trống để tắt.</p>
-                <div class="grid gap-3 sm:grid-cols-2">
-                    <FormField label="Tổng chi tiêu từ" for="g-auto-spent" :error="error?.field('auto_min_spent')"><Input id="g-auto-spent" v-model="form.auto_min_spent" type="number" min="0" step="any" data-testid="g-auto-spent" /></FormField>
-                    <FormField label="Số đơn từ" for="g-auto-orders" :error="error?.field('auto_min_orders')"><Input id="g-auto-orders" v-model="form.auto_min_orders" type="number" min="1" step="1" /></FormField>
+    <Dialog v-model:open="dialog" size="lg" :title="editing ? 'Sửa nhóm khách hàng' : 'Thêm nhóm khách hàng'" description="Điều khoản mua hàng áp cho mọi khách trong nhóm.">
+        <form id="group-form" class="divide-y divide-slate-100" @submit.prevent="save">
+            <section class="pb-5">
+                <h3 class="mb-3.5 flex items-center gap-2.5 text-[14px] font-semibold text-slate-900"><span class="grid size-7 place-items-center rounded-[8px] bg-slate-100 text-slate-500"><UsersRound class="size-4" /></span>Nhóm</h3>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <FormField label="Tên nhóm" for="g-name" required :error="error?.field('name')"><Input id="g-name" v-model="form.name" required :invalid="!!error?.field('name')" data-testid="g-name" /></FormField>
+                    <FormField label="Mã nhóm" for="g-code" :optional="!editing" :error="error?.field('code')"><Input id="g-code" v-model="form.code" :placeholder="editing ? '' : 'Tự tạo từ tên'" /></FormField>
+                    <FormField label="Mô tả" for="g-desc" class="sm:col-span-2"><Input id="g-desc" v-model="form.description" placeholder="VD: Đại lý, cửa hàng lấy sỉ từ 20 sản phẩm" /></FormField>
                 </div>
-            </fieldset>
-            <label class="flex items-center gap-2 text-sm sm:col-span-2"><input v-model="form.is_active" type="checkbox" class="size-4" data-testid="g-active" /> Đang sử dụng (bỏ chọn để không xếp thêm khách mới vào nhóm; khách đang trong nhóm giữ nguyên)</label>
-            <FormField label="Mô tả" for="g-desc" class="sm:col-span-2"><Input id="g-desc" v-model="form.description" /></FormField>
-            <p v-if="error && !error.body.errors" class="text-sm text-destructive sm:col-span-2">{{ error.message }}</p>
+            </section>
+            <section class="py-5">
+                <h3 class="mb-3.5 flex items-center gap-2.5 text-[14px] font-semibold text-slate-900"><span class="grid size-7 place-items-center rounded-[8px] bg-slate-100 text-slate-500"><BadgePercent class="size-4" /></span>Giá và thanh toán</h3>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <FormField label="Giá áp dụng" for="g-tier" :error="error?.field('price_tier')">
+                        <Select id="g-tier" v-model="form.price_tier" :options="Object.entries(priceTierLabels).map(([value, label]) => ({ value, label }))" />
+                    </FormField>
+                    <FormField label="Chiết khấu" for="g-discount" :error="error?.field('discount_percent')"><Input id="g-discount" v-model="form.discount_percent" type="number" min="0" max="100" step="0.5" suffix="%" /></FormField>
+                    <FormField label="Hạn thanh toán" for="g-terms" :error="error?.field('payment_terms_days')" hint="Quá số ngày này thì tính là nợ quá hạn"><Input id="g-terms" v-model="form.payment_terms_days" type="number" min="0" max="365" suffix="ngày" /></FormField>
+                    <FormField label="Hạn mức nợ" for="g-credit" :error="error?.field('credit_limit')" hint="Để trống = không giới hạn"><Input id="g-credit" v-model="form.credit_limit" type="number" min="0" step="any" suffix="₫" /></FormField>
+                    <FormField label="Thanh toán quen dùng" for="g-pay" class="sm:col-span-2">
+                        <Select id="g-pay" v-model="form.payment_method" :options="[{ value: '', label: 'Không đặt' }, ...Object.entries(paymentMethods).map(([value, label]) => ({ value, label }))]" />
+                    </FormField>
+                </div>
+            </section>
+            <section class="py-5">
+                <h3 class="mb-1 flex items-center gap-2.5 text-[14px] font-semibold text-slate-900"><span class="grid size-7 place-items-center rounded-[8px] bg-slate-100 text-slate-500"><WandSparkles class="size-4" /></span>Tự xếp khách vào nhóm</h3>
+                <p class="mb-3.5 pl-[38px] text-[12.5px] text-slate-500">Mỗi đêm, khách chưa có nhóm đạt mức dưới đây được xếp vào (đặt cả hai thì phải đạt cả hai). Khách đã xếp nhóm bằng tay không bị đổi. Để trống để tắt.</p>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <FormField label="Tổng chi tiêu từ" for="g-auto-spent" :error="error?.field('auto_min_spent')"><Input id="g-auto-spent" v-model="form.auto_min_spent" type="number" min="0" step="any" suffix="₫" data-testid="g-auto-spent" /></FormField>
+                    <FormField label="Số đơn từ" for="g-auto-orders" :error="error?.field('auto_min_orders')"><Input id="g-auto-orders" v-model="form.auto_min_orders" type="number" min="1" step="1" suffix="đơn" /></FormField>
+                </div>
+            </section>
+            <section class="pt-4">
+                <div class="rounded-[12px] border border-slate-200 bg-slate-50/60 px-4" data-testid="g-active">
+                    <Switch v-model="form.is_active" label="Đang sử dụng" hint="Tắt để ngừng xếp khách mới vào nhóm. Khách đang trong nhóm giữ nguyên." />
+                </div>
+            </section>
+            <p v-if="error && !error.body.errors" class="pt-4 text-[13px] text-red-600">{{ error.message }}</p>
         </form>
         <template #footer>
             <Button variant="outline" @click="dialog = false">Hủy</Button>

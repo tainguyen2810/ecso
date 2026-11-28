@@ -5,6 +5,7 @@ import { cn } from '@/shared/lib/utils';
 import { addDays, displayDate, fromIso, isoDate, parseDate, weekdayOf } from '@/shared/lib/dates';
 import { usePopover } from '@/shared/composables/usePopover';
 import CalendarMonth from './CalendarMonth.vue';
+import { SOFT_FIELD, SOFT_INVALID, useSoft } from './soft';
 
 /**
  * Date field shown and typed as dd/mm/yyyy (replaces the browser's <input type="date">, which shows mm/dd/yyyy on
@@ -27,6 +28,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ change: [value: string] }>();
 const attrs = useAttrs();
+const soft = useSoft();
 
 const text = ref(displayDate(model.value));
 const focused = ref(false);
@@ -113,7 +115,7 @@ const weekdayText = computed(() => (props.weekday ? weekdayOf(model.value) : '')
 
 <template>
     <div ref="anchor" :class="cn('relative w-full', props.class)">
-        <CalendarDays class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" :stroke-width="1.75" />
+        <CalendarDays :class="cn('pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground', soft && 'left-3.5 text-slate-400')" :stroke-width="1.75" />
         <input
             v-bind="attrs"
             :value="text"
@@ -126,7 +128,8 @@ const weekdayText = computed(() => (props.weekday ? weekdayOf(model.value) : '')
             :class="
                 cn(
                     'flex h-9 w-full rounded-md border border-input bg-card py-1 pl-8 pr-2 text-sm tabular-nums shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
-                    invalid && 'border-destructive focus-visible:ring-destructive',
+                    soft && [SOFT_FIELD, 'pl-10'],
+                    invalid && (soft ? SOFT_INVALID : 'border-destructive focus-visible:ring-destructive'),
                     weekdayText && 'pr-20',
                 )
             "
