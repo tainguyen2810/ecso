@@ -8,7 +8,8 @@ use App\Modules\Orders\Models\OrderItem;
 use App\Shared\Support\ReportRange;
 
 /**
- * Turns an order into the invoice sent to the provider (SePay's shape: template, series, buyer, items).
+ * Turns an order into the neutral invoice sent to the provider (SePay's shape: template, series, buyer, items; the
+ * other providers map it, see InvoiceLines).
  *
  * - Template "1" (hóa đơn GTGT) carries VAT per line at the order's rate; when the shop's prices include VAT the
  *   unit prices are taken back to before tax. Template "2" (hóa đơn bán hàng) has no VAT lines.
@@ -29,7 +30,8 @@ final class InvoicePayload
      */
     public static function build(Order $order, EInvoiceAccount $account, array $buyer, string $referenceCode): array
     {
-        $vat = $account->template_code === '1';
+        // Template "1" (SePay, MISA) or "1/001" (Viettel, VNPT): a hóa đơn GTGT.
+        $vat = str_starts_with((string) $account->template_code, '1');
         $rate = (float) $order->tax_rate;
         $lineRate = $vat ? (in_array((int) $rate, self::RATES, true) && (float) (int) $rate === $rate && $rate > 0 ? (int) $rate : self::NO_TAX) : null;
         $included = (bool) ($order->prices_include_tax ?? true);

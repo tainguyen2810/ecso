@@ -8,11 +8,11 @@ import { cn } from '@/shared/lib/utils';
  * Fields inside (Input, Select, Button, raw textarea/select) take the tall 10px-corner look via `soft-fields`.
  */
 const open = defineModel<boolean>('open', { required: true });
-withDefaults(defineProps<{ title: string; description?: string; size?: 'md' | 'lg' | 'xl'; icon?: Component; tone?: string }>(), {
+withDefaults(defineProps<{ title: string; description?: string; size?: 'md' | 'lg' | 'xl' | '2xl'; icon?: Component; tone?: string }>(), {
     size: 'md',
     tone: 'bg-blue-50 text-blue-600',
 });
-const widths = { md: 'max-w-[480px]', lg: 'max-w-2xl', xl: 'max-w-4xl' } as const;
+const widths = { md: 'max-w-[480px]', lg: 'max-w-2xl', xl: 'max-w-4xl', '2xl': 'max-w-[1120px]' } as const;
 provide('soft-fields', true);
 provide('soft-dialog', true);
 

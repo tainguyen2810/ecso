@@ -1,4 +1,4 @@
-import { Activity, Bell, Building2, CreditCard, Flag, Layers, LayoutDashboard, LifeBuoy, ScrollText, Settings2 } from 'lucide-vue-next';
+import { Activity, Bell, Building2, CreditCard, Flag, Layers, LayoutDashboard, LifeBuoy, ReceiptText, ScrollText, Settings2 } from 'lucide-vue-next';
 import type { Component } from 'vue';
 
 export interface AdminNavItem {
@@ -14,6 +14,7 @@ export const adminNav: AdminNavItem[] = [
     { name: 'tenants', label: 'Khách hàng', path: '/admin/tenants', icon: Building2 },
     { name: 'billing', label: 'Hóa đơn & doanh thu', path: '/admin/billing', icon: CreditCard },
     { name: 'plans', label: 'Gói dịch vụ', path: '/admin/plans', icon: Layers },
+    { name: 'einvoice', label: 'Bán hóa đơn', path: '/admin/einvoice', icon: ReceiptText },
     { name: 'monitoring', label: 'Giám sát hệ thống', path: '/admin/monitoring', icon: Activity },
     { name: 'flags', label: 'Feature flags & override gói', path: '/admin/flags', icon: Flag, phase: 9 },
     { name: 'support', label: 'Hỗ trợ khách hàng', path: '/admin/support', icon: LifeBuoy, phase: 9 },

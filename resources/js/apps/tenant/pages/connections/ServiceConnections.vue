@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 import SettingsShell from '../settings/SettingsShell.vue';
-import { FileText, MessageCircle, Truck } from 'lucide-vue-next';
+import { FileText, MessageCircle, ReceiptText, Send, ShoppingBag, Truck } from 'lucide-vue-next';
 import SettingsSection from '../settings/SettingsSection.vue';
 import { carrierLogo, einvoiceLogos, logoUrl } from '../settings/connectionsSummary';
 import ErrorState from '@/shared/ui/ErrorState.vue';
@@ -13,7 +13,10 @@ import { useTenantStore } from '@/shared/stores/tenant';
 import CarrierConnectDialog from '../shipments/CarrierConnectDialog.vue';
 import { loadCarrierAccounts, type CarrierAccountData, type CarrierCatalogItem } from '../shipments/carriers';
 import EInvoiceConnectDialog from './EInvoiceConnectDialog.vue';
-import { loadEInvoiceSettings, type EInvoiceSettings } from './einvoice';
+import BuyEInvoiceDialog from './BuyEInvoiceDialog.vue';
+import EInvoiceOrderCard from './EInvoiceOrderCard.vue';
+import EInvoiceRequestDialog from './EInvoiceRequestDialog.vue';
+import { loadEInvoiceSettings, loadEInvoiceShop, type EInvoiceOrder, type EInvoiceSettings, type EInvoiceShop } from './einvoice';
 import { loadZalo, type ZaloSettings } from './zalo';
 
 /**
@@ -28,12 +31,14 @@ const carriers = ref<CarrierCatalogItem[]>([]);
 const accounts = ref<CarrierAccountData[]>([]);
 const einvoice = ref<EInvoiceSettings | null>(null);
 const zalo = ref<ZaloSettings | null>(null);
+const shop = ref<EInvoiceShop | null>(null);
 
 async function load() {
     error.value = null;
     try {
-        const [catalog, accs, inv, z] = await Promise.all([api.get('/carriers'), loadCarrierAccounts(), loadEInvoiceSettings(), loadZalo().catch(() => null)]);
+        const [catalog, accs, inv, z, sh] = await Promise.all([api.get('/carriers'), loadCarrierAccounts(), loadEInvoiceSettings(), loadZalo().catch(() => null), loadEInvoiceShop().catch(() => null)]);
         zalo.value = z;
+        shop.value = sh;
         carriers.value = (catalog.data.data as CarrierCatalogItem[]).filter((c) => c.carrier !== 'fake' || accs.some((a) => a.carrier === 'fake'));
         accounts.value = accs;
         einvoice.value = inv;
@@ -63,6 +68,20 @@ const invoiceAccount = computed(() => (einvoice.value?.account?.status === 'disc
 const invoiceProviders = computed(() => einvoice.value?.providers ?? []);
 
 const canManage = computed(() => tenant.can('settings.manage'));
+
+const buyOpen = ref(false);
+const requestOpen = ref(false);
+const packages = computed(() => shop.value?.packages ?? []);
+const order = computed(() => shop.value?.order ?? null);
+/** "Mua gói" shows while the shop has no invoice connection, no registration running and there is something to sell. */
+const canBuy = computed(() => canManage.value && !invoiceAccount.value && !order.value && packages.value.length > 0);
+function buy() {
+    invoiceOpen.value = false;
+    buyOpen.value = true;
+}
+function ordered(o: EInvoiceOrder) {
+    if (shop.value) shop.value.order = o;
+}
 const zaloOn = computed(() => !!zalo.value?.account && zalo.value.account.status !== 'disconnected');
 const zaloRules = computed(() =>
     Object.entries(zalo.value?.account?.rules ?? {})
@@ -81,6 +100,12 @@ function invoiceState(p: { provider: string; available: boolean }): State {
     if (invoiceAccount.value?.provider === p.provider) return invoiceAccount.value.status === 'connected' ? 'ok' : 'error';
     return p.available ? 'off' : 'soon';
 }
+const providerBlurb: Record<string, string> = {
+    viettel: 'Tên đăng nhập, mật khẩu API do Viettel cấp, cùng mẫu số và ký hiệu hóa đơn.',
+    vnpt: 'Cần địa chỉ trang hóa đơn của shop và tài khoản dịch vụ (webservice) do VNPT cấp.',
+    misa: 'Đăng nhập bằng tài khoản meInvoice, chọn mẫu hóa đơn là xong.',
+    sepay: 'Dán Client ID và Client Secret lấy ở my.sepay.vn.',
+};
 const dot: Record<State, string> = { ok: 'bg-emerald-500', error: 'bg-amber-500', off: 'bg-slate-300', soon: 'bg-slate-300' };
 const stateText: Record<State, string> = { ok: 'text-emerald-600', error: 'text-amber-600', off: 'text-slate-500', soon: 'text-slate-500' };
 
@@ -128,35 +153,63 @@ const btnFor = (s: State) =>
                 </div>
             </SettingsSection>
 
-            <SettingsSection title="Hóa đơn điện tử" description="Xuất hóa đơn cho đơn bán, gửi khách qua email. Mỗi shop dùng một nhà cung cấp." :icon="FileText" tone="green">
-                <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
-                    <div v-for="p in invoiceProviders" :key="p.provider" :class="card(invoiceState(p))" :data-testid="`svc-einvoice-${p.provider}`">
-                        <div class="flex h-11 items-center">
-                            <img v-if="einvoiceLogos[p.provider]" :src="logoUrl(einvoiceLogos[p.provider])!" :alt="p.label" class="size-11 rounded-[11px] object-contain" />
-                            <span v-else class="grid size-11 place-items-center rounded-[11px] bg-slate-100 text-slate-400"><FileText class="size-5" /></span>
+            <SettingsSection title="Hóa đơn điện tử" description="Xuất hóa đơn cho đơn bán, gửi khách qua email. Mỗi shop dùng một nhà cung cấp; đổi nhà cung cấp thì hóa đơn cũ vẫn giữ trên đơn." :icon="FileText" tone="green">
+                <div class="space-y-5">
+                    <EInvoiceOrderCard v-if="order" :order="order" :can-manage="canManage" @changed="load" />
+                    <div v-else-if="canBuy" class="flex flex-wrap items-center gap-5 rounded-[14px] bg-gradient-to-r from-blue-600 to-indigo-500 p-5 text-white" data-testid="einvoice-buy-banner">
+                        <span class="grid size-14 shrink-0 place-items-center rounded-[12px] bg-white/15"><ReceiptText class="size-7" /></span>
+                        <div class="min-w-64 flex-1">
+                            <p class="text-[18px] font-semibold">Chưa có hóa đơn điện tử? Mua gói ngay tại đây</p>
+                            <p class="mt-1 text-[14px] text-white/85">Chọn gói, điền mã số thuế. Bên mình đăng ký với nhà cung cấp, làm hồ sơ với thuế giúp shop và tự kết nối vào đây. Thường xong trong 1–2 ngày làm việc.</p>
+                            <div class="mt-2 flex flex-wrap gap-1.5 text-[13px]">
+                                <span class="rounded-md bg-white/15 px-2 py-0.5">Từ {{ Math.min(...packages.map((p) => p.invoices)).toLocaleString('vi-VN') }} hóa đơn</span>
+                                <span v-if="packages.some((p) => p.signing_price !== null)" class="rounded-md bg-white/15 px-2 py-0.5">Có ký số từ xa, không cần USB token</span>
+                                <span class="rounded-md bg-white/15 px-2 py-0.5">Hỗ trợ cả hộ kinh doanh</span>
+                            </div>
                         </div>
-                        <p class="mt-3 text-[15px] font-semibold text-slate-900">{{ p.label }}</p>
-                        <p :class="cn('mt-1 flex items-start gap-1.5 text-[13px]', stateText[invoiceState(p)])">
-                            <span :class="cn('mt-1.5 size-1.5 shrink-0 rounded-full', dot[invoiceState(p)])" />
-                            <span>
-                                {{ { ok: 'Đã kết nối', error: 'Lỗi kết nối', off: invoiceAccount ? `Đang dùng ${invoiceAccount.provider_label}` : 'Chưa kết nối', soon: p.note ?? 'Sắp có' }[invoiceState(p)] }}
-                                <template v-if="invoiceAccount?.provider === p.provider && invoiceAccount.environment === 'sandbox'"> · thử nghiệm</template>
-                            </span>
-                        </p>
-                        <p v-if="invoiceAccount?.provider === p.provider" class="mt-1 truncate text-[13px] text-slate-500">
-                            {{ invoiceAccount.template_label ? `Mẫu ${invoiceAccount.template_label}` : (invoiceAccount.provider_name ?? '') }}
-                        </p>
-                        <div class="min-h-4 flex-1" />
-                        <span v-if="!p.available" :class="cn(btn, 'bg-slate-100 text-slate-500')">Sắp có</span>
-                        <button
-                            v-else-if="canManage && (!invoiceAccount || invoiceAccount.provider === p.provider)"
-                            type="button"
-                            :class="btnFor(invoiceState(p))"
-                            :data-testid="`svc-einvoice-open-${p.provider}`"
-                            @click="openInvoice(p.provider)"
-                        >
-                            {{ invoiceState(p) === 'off' ? 'Kết nối' : 'Cài đặt' }}
+                        <button type="button" class="inline-flex h-11 items-center gap-2 rounded-[10px] bg-white px-5 text-[15px] font-semibold text-blue-700 hover:bg-blue-50" data-testid="einvoice-buy-open" @click="buy">
+                            <ShoppingBag class="size-4" /> Xem gói hóa đơn
                         </button>
+                    </div>
+
+                    <p v-if="canBuy || order" class="text-[14px] text-slate-500">Hoặc kết nối tài khoản shop đang dùng</p>
+                    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                        <div v-for="p in invoiceProviders" :key="p.provider" :class="card(invoiceState(p))" :data-testid="`svc-einvoice-${p.provider}`">
+                            <div class="flex h-10 items-center">
+                                <img v-if="einvoiceLogos[p.provider]" :src="logoUrl(einvoiceLogos[p.provider])!" :alt="p.label" class="max-h-9 max-w-[130px] object-contain" />
+                                <span v-else class="grid size-10 place-items-center rounded-[10px] bg-slate-100 text-slate-400"><FileText class="size-5" /></span>
+                            </div>
+                            <p class="mt-3 text-[15px] font-semibold text-slate-900">{{ p.label }}</p>
+                            <p :class="cn('mt-1 flex items-start gap-1.5 text-[13px]', stateText[invoiceState(p)])">
+                                <span :class="cn('mt-1.5 size-1.5 shrink-0 rounded-full', dot[invoiceState(p)])" />
+                                <span>
+                                    {{ { ok: 'Đã kết nối', error: 'Lỗi kết nối', off: invoiceAccount ? `Đang dùng ${invoiceAccount.provider_label}` : 'Chưa kết nối', soon: p.note ?? 'Sắp có' }[invoiceState(p)] }}
+                                    <template v-if="invoiceAccount?.provider === p.provider && invoiceAccount.environment === 'sandbox'"> · thử nghiệm</template>
+                                </span>
+                            </p>
+                            <p class="mt-1 line-clamp-3 text-[13px] text-slate-500">
+                                <template v-if="invoiceAccount?.provider === p.provider">{{ invoiceAccount.template_label ? `Mẫu ${invoiceAccount.template_label}` : (invoiceAccount.provider_name ?? '') }}</template>
+                                <template v-else>{{ providerBlurb[p.provider] ?? '' }}</template>
+                            </p>
+                            <div class="min-h-4 flex-1" />
+                            <span v-if="!p.available" :class="cn(btn, 'bg-slate-100 text-slate-500')">Sắp có</span>
+                            <button
+                                v-else-if="canManage && (!invoiceAccount || invoiceAccount.provider === p.provider)"
+                                type="button"
+                                :class="btnFor(invoiceState(p))"
+                                :data-testid="`svc-einvoice-open-${p.provider}`"
+                                @click="openInvoice(p.provider)"
+                            >
+                                {{ invoiceState(p) === 'off' ? 'Kết nối' : 'Cài đặt' }}
+                            </button>
+                        </div>
+                    </div>
+                    <div v-if="canManage" class="flex flex-wrap items-center gap-4 rounded-[12px] border border-dashed border-slate-300 px-4 py-3" data-testid="einvoice-other">
+                        <div class="min-w-60 flex-1">
+                            <p class="text-[14px] font-medium text-slate-900">Dùng nhà cung cấp khác? <span class="font-normal text-slate-500">BKAV eHoadon, EasyInvoice, M-Invoice, FPT…</span></p>
+                            <p class="text-[13px] text-slate-500">Báo cho bên mình biết, có từ 5 shop cùng dùng là bên mình làm kết nối.</p>
+                        </div>
+                        <button type="button" class="inline-flex h-9 items-center gap-2 rounded-[10px] border border-slate-200 px-3 text-[14px] text-slate-700 hover:bg-slate-50" data-testid="einvoice-other-open" @click="requestOpen = true"><Send class="size-4" /> Gửi yêu cầu</button>
                     </div>
                 </div>
             </SettingsSection>
@@ -188,6 +241,8 @@ const btnFor = (s: State) =>
         </div>
 
         <CarrierConnectDialog v-model:open="carrierOpen" :accounts="accounts" :initial="carrierPick" @changed="load" />
-        <EInvoiceConnectDialog v-if="einvoice" v-model:open="invoiceOpen" :settings="einvoice" :initial="invoicePick" @changed="load" />
+        <EInvoiceConnectDialog v-if="einvoice" v-model:open="invoiceOpen" :settings="einvoice" :initial="invoicePick" :can-buy="canBuy" @changed="load" @buy="buy" />
+        <BuyEInvoiceDialog v-model:open="buyOpen" :packages="packages" :defaults="{ name: tenant.current?.name ?? '' }" @ordered="ordered" />
+        <EInvoiceRequestDialog v-model:open="requestOpen" />
     </SettingsShell>
 </template>

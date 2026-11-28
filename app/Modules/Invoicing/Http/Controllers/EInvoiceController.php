@@ -11,6 +11,7 @@ use App\Modules\Orders\Models\Order;
 use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Validation\Rule;
 
 /** Hóa đơn điện tử: the shop's provider connection (Cấu hình → Kết nối dịch vụ) and the invoice of each order. */
@@ -28,9 +29,11 @@ class EInvoiceController extends Controller
             'available' => true,
             'note' => null,
         ], $this->providers->keys());
-        $upcoming = collect(ProviderRegistry::UPCOMING)->map(fn ($p, $key) => ['provider' => $key, 'label' => $p['label'], 'fields' => [], 'available' => false, 'note' => $p['note']])->values()->all();
+        $upcoming = collect($this->providers->upcoming())->map(fn ($p, $key) => ['provider' => $key, 'label' => $p['label'], 'fields' => [], 'available' => false, 'note' => $p['note']])->values()->all();
+        $order = array_flip(['viettel', 'vnpt', 'misa', 'sepay', 'fake']);
+        $providers = collect([...$available, ...$upcoming])->sortBy(fn ($p) => $order[$p['provider']] ?? 99)->values()->all();
 
-        return response()->json(['data' => ['providers' => [...$available, ...$upcoming], 'account' => $this->presentAccount($this->service->account())]]);
+        return response()->json(['data' => ['providers' => $providers, 'account' => $this->presentAccount($this->service->account())]]);
     }
 
     public function connect(Request $request): JsonResponse
@@ -107,6 +110,14 @@ class EInvoiceController extends Controller
         $this->authorize('view', $einvoice->order);
 
         return response()->json(['data' => EInvoiceService::present($this->service->refresh($einvoice))]);
+    }
+
+    public function pdf(EInvoice $einvoice): Response
+    {
+        $this->authorize('view', $einvoice->order);
+        $name = 'hoa-don-'.($einvoice->invoice_number ?: $einvoice->reference_code).'.pdf';
+
+        return response($this->service->pdf($einvoice), 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="'.$name.'"', 'Cache-Control' => 'private, no-store']);
     }
 
     private function manage(): void

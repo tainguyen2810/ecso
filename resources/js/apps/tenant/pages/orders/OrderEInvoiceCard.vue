@@ -11,7 +11,7 @@ import { api, ApiError } from '@/shared/lib/api';
 import { formatDateTime, formatMoney } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
-import { canIssueAgain, currentInvoice, type EInvoiceBuyer, type OrderEInvoice } from '../connections/einvoice';
+import { canIssueAgain, currentInvoice, openInvoicePdf, type EInvoiceBuyer, type OrderEInvoice } from '../connections/einvoice';
 
 /**
  * "Hóa đơn điện tử" on the order: who the invoice goes to (from the customer, editable before issuing), "Xuất hóa đơn",
@@ -82,6 +82,14 @@ async function refresh() {
         busy.value = null;
     }
 }
+
+async function pdf(inv: Parameters<typeof openInvoicePdf>[0]) {
+    try {
+        await openInvoicePdf(inv);
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    }
+}
 </script>
 
 <template>
@@ -126,7 +134,7 @@ async function refresh() {
                         <Button size="sm" :loading="busy === 'issue'" :disabled="busy !== null" data-testid="einvoice-issue" @click="issue"><FileText /> {{ invoice?.status === 'failed' ? 'Xuất lại' : 'Xuất hóa đơn' }}</Button>
                     </template>
                     <Button v-if="invoice?.status === 'pending'" size="sm" variant="outline" :loading="busy === 'refresh'" data-testid="einvoice-refresh" @click="refresh"><RefreshCw /> Kiểm tra lại</Button>
-                    <a v-if="invoice?.status === 'issued' && invoice.pdf_url" :href="invoice.pdf_url" target="_blank" rel="noopener" class="inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm hover:bg-muted" data-testid="einvoice-pdf"><ExternalLink class="size-4" /> Xem PDF</a>
+                    <button v-if="invoice?.status === 'issued' && (invoice.pdf_url || invoice.pdf_download)" type="button" class="inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm hover:bg-muted" data-testid="einvoice-pdf" @click="pdf(invoice)"><ExternalLink class="size-4" /> Xem PDF</button>
                 </div>
                 <p v-if="invoice?.status === 'issued' && ['RETURNED', 'CANCELLED'].includes(orderStatus)" class="text-xs text-amber-700">Đơn đã trả hoặc hủy sau khi xuất: lập hóa đơn điều chỉnh/thay thế trên trang nhà cung cấp.</p>
             </template>

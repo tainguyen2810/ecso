@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { Check, Unplug } from 'lucide-vue-next';
+import { Check, CircleCheck, Lightbulb, Unplug } from 'lucide-vue-next';
 import Alert from '@/shared/ui/Alert.vue';
 import Button from '@/shared/ui/Button.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
@@ -10,15 +10,16 @@ import Switch from '@/shared/ui/Switch.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { useToast } from '@/shared/composables/useToast';
 import { cn } from '@/shared/lib/utils';
-import { issueModes, providerHelp, type EInvoiceAccountData, type EInvoiceSettings, type IssueMode } from './einvoice';
+import { einvoiceLogos, logoUrl } from '../settings/connectionsSummary';
+import { issueModes, noSandbox, providerHelp, providerSteps, type EInvoiceAccountData, type EInvoiceSettings, type IssueMode } from './einvoice';
 
 /**
  * "Hóa đơn điện tử": pick the provider, enter the shop's API keys (checked by the provider before saving), then choose
  * the default template/series and when invoices go out. The shop registers its invoice service with the provider first.
  */
 const open = defineModel<boolean>('open', { required: true });
-const props = defineProps<{ settings: EInvoiceSettings; initial?: string | null }>();
-const emit = defineEmits<{ changed: [] }>();
+const props = defineProps<{ settings: EInvoiceSettings; initial?: string | null; canBuy?: boolean }>();
+const emit = defineEmits<{ changed: []; buy: [] }>();
 const toast = useToast();
 
 const account = ref<EInvoiceAccountData | null>(null);
@@ -34,6 +35,10 @@ const editKeys = ref(false);
 
 const available = computed(() => props.settings.providers.filter((p) => p.available));
 const current = computed(() => props.settings.providers.find((p) => p.provider === provider.value) ?? null);
+const sandboxable = computed(() => !noSandbox.includes(provider.value));
+watch(provider, (p) => {
+    if (noSandbox.includes(p)) environment.value = 'production';
+});
 const connected = computed(() => account.value !== null && account.value.status !== 'disconnected' && account.value.provider === provider.value);
 
 function reset() {
@@ -111,28 +116,31 @@ async function disconnect() {
 </script>
 
 <template>
-    <Dialog v-model:open="open" title="Hóa đơn điện tử" description="Shop cần đăng ký dịch vụ hóa đơn với nhà cung cấp trước. EzChat Bán hàng chỉ gửi dữ liệu đơn sang để xuất." size="lg">
-        <div class="space-y-4" data-testid="einvoice-dialog">
+    <Dialog v-model:open="open" title="Hóa đơn điện tử" description="Shop cần đăng ký dịch vụ hóa đơn với nhà cung cấp trước. EzChat Bán hàng chỉ gửi dữ liệu đơn sang để xuất." size="2xl">
+        <div class="grid gap-6 lg:grid-cols-[1fr_320px]">
+        <div class="min-w-0 space-y-4" data-testid="einvoice-dialog">
             <div>
                 <p class="mb-1.5 text-sm text-muted-foreground">Nhà cung cấp</p>
-                <div class="flex flex-wrap gap-2">
+                <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
                     <button
                         v-for="p in settings.providers"
                         :key="p.provider"
                         type="button"
                         :disabled="!p.available || (account !== null && account.provider !== p.provider)"
                         :title="p.note ?? undefined"
-                        :class="cn('rounded-lg border px-3 py-2 text-sm', provider === p.provider && 'border-blue-400 bg-blue-50/70 font-medium ring-1 ring-blue-200', (!p.available || (account && account.provider !== p.provider)) && 'cursor-not-allowed opacity-50')"
+                        :class="cn('flex h-14 items-center gap-2.5 rounded-[12px] border px-3 text-left text-[14px]', provider === p.provider ? 'border-blue-500 bg-blue-50/60 font-medium ring-1 ring-blue-200' : 'border-slate-200 hover:border-slate-300', (!p.available || (account && account.provider !== p.provider)) && 'cursor-not-allowed opacity-50')"
                         :data-testid="`einvoice-pick-${p.provider}`"
                         @click="provider = p.provider"
                     >
-                        {{ p.label }}<span v-if="!p.available" class="ml-1 text-[11px] text-muted-foreground">(sắp có)</span>
+                        <img v-if="einvoiceLogos[p.provider]" :src="logoUrl(einvoiceLogos[p.provider])!" alt="" class="h-6 w-14 shrink-0 object-contain" />
+                        <span class="min-w-0 flex-1 truncate">{{ einvoiceLogos[p.provider] ? p.label.split(' ')[0] : p.label }}<span v-if="!p.available" class="block text-[11px] font-normal text-muted-foreground">sắp có</span></span>
+                        <CircleCheck v-if="provider === p.provider" class="size-4 shrink-0 text-blue-600" />
                     </button>
                 </div>
             </div>
 
             <form v-if="current?.available && (!connected || editKeys)" class="space-y-3" @submit.prevent="connect">
-                <div>
+                <div v-if="sandboxable">
                     <p class="mb-1.5 text-sm text-muted-foreground">Môi trường</p>
                     <div class="inline-flex rounded-lg border p-0.5 text-sm">
                         <button v-for="e in [{ v: 'sandbox', l: 'Thử nghiệm' }, { v: 'production', l: 'Chạy thật' }] as const" :key="e.v" type="button" :class="cn('rounded-md px-3 py-1', environment === e.v && 'bg-primary text-primary-foreground')" @click="environment = e.v">{{ e.l }}</button>
@@ -145,7 +153,7 @@ async function disconnect() {
                         <Input v-model="creds[field]" :type="String(field).includes('secret') || String(field).includes('password') ? 'password' : 'text'" autocomplete="off" :data-testid="`einvoice-cred-${field}`" />
                     </label>
                 </div>
-                <p v-if="providerHelp[provider]" class="text-xs text-muted-foreground">{{ providerHelp[provider] }}</p>
+                <p v-if="providerHelp[provider] && !providerSteps[provider]" class="text-xs text-muted-foreground">{{ providerHelp[provider] }}</p>
                 <Alert v-if="error" tone="red">{{ error }}</Alert>
                 <div class="flex justify-end gap-2">
                     <Button v-if="editKeys" type="button" variant="outline" @click="editKeys = false">Thôi</Button>
@@ -181,6 +189,20 @@ async function disconnect() {
                     <Button type="button" :loading="busy === 'save'" :disabled="busy !== null" data-testid="einvoice-save" @click="save">Lưu</Button>
                 </div>
             </template>
+            <p v-if="canBuy" class="border-t pt-3 text-[14px] text-slate-500">
+                Chưa có tài khoản? <button type="button" class="font-medium text-blue-600 hover:underline" data-testid="einvoice-dialog-buy" @click="emit('buy')">Mua gói hóa đơn</button>
+            </p>
+        </div>
+        <aside v-if="providerSteps[provider]" class="h-fit rounded-[14px] bg-blue-50/70 p-5" data-testid="einvoice-help">
+            <p class="flex items-center gap-2 text-[15px] font-semibold text-blue-700"><Lightbulb class="size-4" /> {{ providerSteps[provider].title }}</p>
+            <ol class="mt-3 space-y-3">
+                <li v-for="(step, i) in providerSteps[provider].steps" :key="i" class="flex gap-3 text-[14px] text-slate-700">
+                    <span class="grid size-6 shrink-0 place-items-center rounded-full border border-blue-200 bg-white text-[12px] font-semibold text-blue-700">{{ i + 1 }}</span>
+                    <!-- eslint-disable-next-line vue/no-v-html -- fixed help text from einvoice.ts, no user input -->
+                    <span v-html="step" />
+                </li>
+            </ol>
+        </aside>
         </div>
     </Dialog>
 </template>
