@@ -60,5 +60,8 @@ final class OrderData
         public readonly ?string $buyerAccountName = null,
         // Kiểu giao the buyer chose, in the marketplace's words (Shopee "Hỏa Tốc" / "Nhanh", TikTok's delivery option).
         public readonly ?string $deliveryOption = null,
+        // The code another system gave the same order (EzChat's DH1004 for an order taken in a chat and sent to
+        // the website): kept as the order's reference so a search by either code finds it.
+        public readonly ?string $reference = null,
     ) {}
 }

@@ -285,6 +285,10 @@ class OrderIngestor
             'coupon_codes' => $data->couponCodes ?: null,
             'transaction_id' => $data->transactionId,
         ]);
+        // EzChat's code for an order taken in a chat; a reference typed by hand is never replaced.
+        if ($data->reference !== null && blank($order->reference)) {
+            $order->reference = $data->reference;
+        }
         if ($data->refundedTotal !== null) {
             $order->forceFill(['refunded_amount' => $data->refundedTotal]);
         }

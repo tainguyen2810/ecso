@@ -72,6 +72,26 @@ it('keeps the whole website order: contact, addresses, coupon, tax, fees, transa
         ->assertJsonPath('data.external_number', 'WEB-801');
 });
 
+it('keeps EzChat\'s chat order code as the reference, never over one typed by hand', function () {
+    $o = $this->store->addOrder(805, 'on-hold', [[11, 1, 'G304-BK', 499000]], 'bacs');
+    $o['meta_data'] = [['key' => '_ezchat_code', 'value' => 'DH1004']];
+    $this->store->orders[805] = $o;
+
+    wooWebhook($this, 'order.created', $o)->assertOk();
+    $order = wooOrder('805');
+    expect($order->reference)->toBe('DH1004');
+
+    // A search by EzChat's code finds the website order.
+    actingInTenant($this->owner, $this->tenant)->getJson('/api/v1/orders?q=DH1004')->assertOk()
+        ->assertJsonPath('data.0.id', $order->ulid);
+
+    $order->forceFill(['reference' => 'GHI-TAY'])->save();
+    $o['status'] = 'processing';
+    $this->store->orders[805] = $o;
+    wooWebhook($this, 'order.updated', $o)->assertOk();
+    expect(wooOrder('805')->reference)->toBe('GHI-TAY');
+});
+
 it('does not take a completed COD order as paid', function () {
     $o = $this->store->addOrder(802, 'completed', [[11, 1, 'G304-BK', 499000]], 'cod');
     $o['date_paid_gmt'] = now()->utc()->format('Y-m-d\TH:i:s'); // Woo sets it on completion

@@ -262,6 +262,8 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
         $money = fn ($v) => number_format((float) $v, 2, '.', '');
         $refunded = array_sum(array_map(fn ($r) => abs((float) ($r['total'] ?? 0)), (array) ($o['refunds'] ?? [])));
         $email = trim((string) ($billing['email'] ?? ''));
+        // An order EzChat took in a chat carries EzChat's own code (DH1004).
+        $chatCode = trim((string) (collect($o['meta_data'] ?? [])->firstWhere('key', '_ezchat_code')['value'] ?? ''));
 
         return new OrderData(
             externalOrderId: (string) $o['id'],
@@ -288,6 +290,7 @@ class WooCommerceConnector implements FetchesSingleProduct, MarketplaceConnector
             buyerEmail: $email !== '' ? mb_substr($email, 0, 150) : null,
             addresses: ['billing' => self::address($billing), 'shipping' => self::address($shipping)],
             externalCustomerId: ! empty($o['customer_id']) ? (string) $o['customer_id'] : null,
+            reference: $chatCode !== '' ? mb_substr($chatCode, 0, 100) : null,
             taxTotal: $money($o['total_tax'] ?? 0),
             feeTotal: $money(array_sum(array_map(fn ($f) => (float) ($f['total'] ?? 0), (array) ($o['fee_lines'] ?? [])))),
             couponCodes: array_values(array_filter(array_map(fn ($c) => (string) ($c['code'] ?? ''), (array) ($o['coupon_lines'] ?? [])))),
