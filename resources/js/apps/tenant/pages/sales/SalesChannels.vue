@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
-import { Pencil, Plus, Store, Trash2 } from 'lucide-vue-next';
-import PageHeader from '../../PageHeader.vue';
-import Badge from '@/shared/ui/Badge.vue';
+import { Info, Pencil, Plus, Store, Trash2, Warehouse as WarehouseIcon } from 'lucide-vue-next';
+import SettingsShell from '../settings/SettingsShell.vue';
+import ChannelMark from '../reports/ChannelMark.vue';
 import Button from '@/shared/ui/Button.vue';
-import Card from '@/shared/ui/Card.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import FormField from '@/shared/ui/FormField.vue';
@@ -12,7 +11,7 @@ import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
-import { formatNumber } from '@/shared/lib/utils';
+import { cn, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { channelTypes } from '../orders/labels';
@@ -66,6 +65,17 @@ async function save() {
     }
 }
 
+/** Turn a channel on or off straight from its card. */
+async function toggle(c: SalesChannel) {
+    try {
+        await api.put(`/sales-channels/${c.id}`, { name: c.name, type: c.type, warehouse_id: c.warehouse?.id ?? null, is_active: !c.is_active });
+        c.is_active = !c.is_active;
+        toast.success(c.is_active ? `Đã bật kênh ${c.name}.` : `Đã tắt kênh ${c.name}, kênh không hiện khi tạo đơn.`);
+    } catch (e) {
+        toast.error((e as ApiError).message);
+    }
+}
+
 async function remove(c: SalesChannel) {
     try {
         await api.delete(`/sales-channels/${c.id}`);
@@ -78,34 +88,69 @@ async function remove(c: SalesChannel) {
 </script>
 
 <template>
-    <PageHeader title="Kênh bán riêng" description="Nơi bạn tự bán ngoài sàn: quầy, cửa hàng, Facebook, Zalo, website. Mỗi kênh có thể xuất từ một kho riêng.">
-        <Button v-if="tenant.can('settings.manage')" data-testid="add-channel" @click="edit(null)"><Plus /> Thêm kênh</Button>
-    </PageHeader>
-    <EzChatLinkCard :channels="rows" @changed="load" />
-    <Card>
-        <div v-if="loading" class="space-y-3 p-4"><Skeleton v-for="i in 3" :key="i" class="h-10" /></div>
-        <EmptyState v-else-if="!rows.length" :icon="Store" title="Chưa có kênh bán" description="Thêm kênh để tạo đơn bán ngoài sàn." />
-        <table v-else class="w-full text-sm" data-testid="channel-table">
-            <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                <tr><th class="px-4 py-2.5 font-medium">Tên kênh</th><th class="px-4 py-2.5 font-medium">Loại</th><th class="px-4 py-2.5 font-medium">Kho xuất mặc định</th><th class="px-4 py-2.5 text-right font-medium">Số đơn</th><th class="px-4 py-2.5 font-medium">Trạng thái</th><th class="px-4 py-2.5" /></tr>
-            </thead>
-            <tbody class="divide-y">
-                <tr v-for="c in rows" :key="c.id">
-                    <td class="px-4 py-3 font-medium">{{ c.name }}</td>
-                    <td class="px-4 py-3">{{ channelTypes[c.type] ?? c.type }}</td>
-                    <td class="px-4 py-3 text-muted-foreground">{{ c.warehouse ? `${c.warehouse.code} · ${c.warehouse.name}` : 'Kho mặc định' }}</td>
-                    <td class="px-4 py-3 text-right tabular-nums">{{ formatNumber(c.orders_count ?? 0) }}</td>
-                    <td class="px-4 py-3"><Badge :tone="c.is_active ? 'success' : 'muted'">{{ c.is_active ? 'Đang bán' : 'Đã tắt' }}</Badge></td>
-                    <td class="px-4 py-3 text-right">
-                        <template v-if="tenant.can('settings.manage')">
-                            <Button variant="ghost" size="icon" class="size-8" title="Sửa" @click="edit(c)"><Pencil /></Button>
-                            <Button v-if="!c.orders_count" variant="ghost" size="icon" class="size-8" title="Xóa" @click="remove(c)"><Trash2 /></Button>
-                        </template>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-    </Card>
+    <SettingsShell wide title="Kênh bán riêng" description="Nơi anh tự bán ngoài sàn: quầy, cửa hàng, Facebook, Zalo, website. Mỗi kênh có thể xuất từ một kho riêng.">
+        <template #actions>
+            <button
+                v-if="tenant.can('settings.manage')"
+                type="button"
+                class="inline-flex h-11 items-center gap-2 rounded-[12px] bg-blue-600 px-5 text-[15px] font-medium text-white shadow-sm hover:bg-blue-700"
+                data-testid="add-channel"
+                @click="edit(null)"
+            >
+                <Plus class="size-4" /> Thêm kênh
+            </button>
+        </template>
+        <EzChatLinkCard :channels="rows" @changed="load" />
+        <div v-if="loading" class="grid gap-4 md:grid-cols-2 2xl:grid-cols-3"><Skeleton v-for="i in 3" :key="i" class="h-48 rounded-[14px]" /></div>
+        <div v-else-if="!rows.length" class="rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+            <EmptyState :icon="Store" title="Chưa có kênh bán" description="Thêm kênh để tạo đơn bán ngoài sàn." />
+        </div>
+        <div v-else class="grid gap-4 md:grid-cols-2 2xl:grid-cols-3" data-testid="channel-table">
+            <div
+                v-for="c in rows"
+                :key="c.id"
+                :class="cn('flex flex-col rounded-[14px] border border-slate-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]', !c.is_active && 'opacity-70')"
+            >
+                <div class="flex items-start gap-3.5">
+                    <ChannelMark :kind="c.type" :name="c.name" size="lg" class="!size-11" />
+                    <div class="min-w-0 flex-1">
+                        <p class="truncate text-[16px] font-semibold text-slate-900">{{ c.name }}</p>
+                        <p class="text-[13px] text-slate-500">{{ channelTypes[c.type] ?? c.type }}<template v-if="!c.is_active"> · đã tắt</template></p>
+                    </div>
+                    <button
+                        v-if="tenant.can('settings.manage')"
+                        type="button"
+                        role="switch"
+                        :aria-checked="c.is_active"
+                        :aria-label="c.is_active ? `Tắt kênh ${c.name}` : `Bật kênh ${c.name}`"
+                        :class="cn('relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors', c.is_active ? 'bg-blue-600' : 'bg-slate-200')"
+                        @click="toggle(c)"
+                    >
+                        <span :class="cn('absolute top-0.5 size-5 rounded-full bg-white shadow transition-all', c.is_active ? 'left-[22px]' : 'left-0.5')" />
+                    </button>
+                </div>
+                <div class="mt-4 grid grid-cols-2 gap-3 rounded-[12px] bg-slate-50 p-3.5">
+                    <div><p class="text-[12px] text-slate-500">Đơn 30 ngày</p><p class="text-[18px] font-bold tabular-nums text-slate-900">{{ formatNumber(c.orders_30d ?? 0) }}</p></div>
+                    <div><p class="text-[12px] text-slate-500">Doanh thu 30 ngày</p><p class="whitespace-nowrap text-[18px] font-bold tabular-nums text-slate-900">{{ formatMoney(c.revenue_30d ?? 0) }}</p></div>
+                </div>
+                <div class="mt-3.5 flex items-center gap-2 text-[13px]">
+                    <span class="flex min-w-0 flex-1 items-center gap-1.5 truncate text-slate-500"><WarehouseIcon class="size-4 shrink-0" /> Xuất từ {{ c.warehouse ? c.warehouse.name : 'kho mặc định' }}</span>
+                    <span class="text-slate-400">{{ formatNumber(c.orders_count ?? 0) }} đơn tất cả</span>
+                    <template v-if="tenant.can('settings.manage')">
+                        <button v-if="!c.orders_count" type="button" class="grid size-8 place-items-center rounded-[8px] text-slate-400 hover:bg-red-50 hover:text-red-600" title="Xóa" :aria-label="`Xóa ${c.name}`" @click="remove(c)">
+                            <Trash2 class="size-4" />
+                        </button>
+                        <button type="button" class="inline-flex items-center gap-1.5 rounded-[9px] border border-slate-200 px-3 py-1.5 text-slate-600 hover:border-blue-300 hover:text-blue-700" :aria-label="`Sửa ${c.name}`" @click="edit(c)">
+                            <Pencil class="size-3.5" /> Sửa
+                        </button>
+                    </template>
+                </div>
+            </div>
+        </div>
+        <p v-if="rows.length" class="mt-4 flex items-center gap-2.5 rounded-[14px] border border-dashed border-slate-300 bg-white/60 px-5 py-4 text-[14px] text-slate-500">
+            <Info class="size-4 shrink-0" /> Tắt một kênh để ẩn khỏi màn tạo đơn; đơn cũ của kênh vẫn giữ trong báo cáo. Gian hàng Shopee, TikTok Shop nằm ở Kết nối gian hàng.
+        </p>
+    </SettingsShell>
 
     <Dialog v-model:open="open" :title="editing ? 'Sửa kênh bán' : 'Thêm kênh bán'">
         <form id="channel-form" class="space-y-3" @submit.prevent="save">

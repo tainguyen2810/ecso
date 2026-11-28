@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 /**
  * @property-read int|string|null $sku_count  aggregate in the warehouse list
  * @property-read int|string|null $total_on_hand  aggregate in the warehouse list
+ * @property-read float|string|null $stock_value  stock value at cost, aggregate in the warehouse list
  * @property string|null $street
  * @property string|null $province_code
  * @property string|null $ward_code

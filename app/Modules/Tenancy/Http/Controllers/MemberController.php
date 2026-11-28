@@ -11,6 +11,7 @@ use App\Modules\Tenancy\Http\Resources\RoleResource;
 use App\Modules\Tenancy\Models\TenantUser;
 use App\Modules\Tenancy\Services\MembershipService;
 use App\Modules\Tenancy\Services\RoleGuard;
+use App\Modules\Tenancy\Support\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -19,13 +20,13 @@ use Illuminate\Validation\Rule;
 
 class MemberController extends Controller
 {
-    public function index(): AnonymousResourceCollection
+    public function index(TenantContext $context): AnonymousResourceCollection
     {
         $this->authorize('viewAny', TenantUser::class);
 
         return MemberResource::collection(
             TenantUser::query()->with(['user', 'role'])->orderBy('created_at')->get()
-        );
+        )->additional(['meta' => ['limit' => $context->entitlements()->limit('limit.users')]]);
     }
 
     /**

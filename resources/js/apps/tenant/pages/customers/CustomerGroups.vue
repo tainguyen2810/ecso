@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
-import { Pencil, Plus, Trash2, UsersRound } from 'lucide-vue-next';
-import PageHeader from '../../PageHeader.vue';
-import CustomersNav from './CustomersNav.vue';
+import { Hand, Pencil, Plus, Sparkles, Trash2, Users, UsersRound, UserX } from 'lucide-vue-next';
+import SettingsShell from '../settings/SettingsShell.vue';
+import ReportKpi from '../reports/ReportKpi.vue';
 import { priceTierLabels } from './labels';
 import { paymentMethods } from '../orders/labels';
-import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
-import Card from '@/shared/ui/Card.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
@@ -16,7 +14,7 @@ import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
-import { formatDate, formatMoney, formatNumber } from '@/shared/lib/utils';
+import { cn, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
 import type { CustomerGroup } from '@/shared/types';
@@ -27,6 +25,16 @@ const canManage = computed(() => tenant.can('customers.manage'));
 const rows = ref<CustomerGroup[]>([]);
 const loading = ref(true);
 const loadError = ref<string | null>(null);
+
+const tones = ['bg-slate-100 text-slate-600', 'bg-blue-50 text-blue-600', 'bg-amber-50 text-amber-600', 'bg-emerald-50 text-emerald-600', 'bg-violet-50 text-violet-600', 'bg-pink-50 text-pink-600'];
+const isAuto = (g: CustomerGroup) => g.auto_min_spent != null || g.auto_min_orders != null;
+const autoText = (g: CustomerGroup) =>
+    [g.auto_min_spent != null ? `tổng chi tiêu từ ${formatMoney(g.auto_min_spent)}` : '', g.auto_min_orders != null ? `từ ${g.auto_min_orders} đơn` : ''].filter(Boolean).join(' và ');
+const stats = computed(() => ({
+    customers: rows.value.reduce((a, g) => a + (g.customers_count ?? 0), 0),
+    auto: rows.value.filter(isAuto).length,
+    inactive: rows.value.filter((g) => g.is_active === false).length,
+}));
 
 const dialog = ref(false);
 const editing = ref<CustomerGroup | null>(null);
@@ -88,57 +96,86 @@ async function remove(g: CustomerGroup) {
 </script>
 
 <template>
-    <PageHeader title="Khách hàng" description="Nhóm khách và điều khoản mua hàng của từng nhóm: giá áp dụng, chiết khấu, cách thanh toán quen dùng.">
-        <Button v-if="canManage" data-testid="add-group" @click="edit(null)"><Plus /> Thêm nhóm</Button>
-    </PageHeader>
-    <CustomersNav />
+    <SettingsShell wide title="Nhóm khách hàng" description="Nhóm khách và điều khoản mua hàng của từng nhóm: giá áp dụng, chiết khấu, thanh toán, công nợ.">
+        <template #actions>
+            <button
+                v-if="canManage"
+                type="button"
+                class="inline-flex h-11 items-center gap-2 rounded-[12px] bg-blue-600 px-5 text-[15px] font-medium text-white shadow-sm hover:bg-blue-700"
+                data-testid="add-group"
+                @click="edit(null)"
+            >
+                <Plus class="size-4" /> Thêm nhóm
+            </button>
+        </template>
 
-    <Card>
-        <div v-if="loading && !rows.length" class="space-y-3 p-4"><Skeleton v-for="i in 3" :key="i" class="h-10" /></div>
+        <div v-if="loading && !rows.length" class="grid gap-4 md:grid-cols-2 2xl:grid-cols-4"><Skeleton v-for="i in 4" :key="i" class="h-60 rounded-[14px]" /></div>
         <ErrorState v-else-if="loadError" :message="loadError" @retry="load" />
-        <EmptyState v-else-if="!rows.length" :icon="UsersRound" title="Chưa có nhóm khách hàng" description="Tạo nhóm như Khách lẻ, Khách sỉ, VIP để lọc khách, giao việc và ghi điều khoản mua hàng cho từng nhóm.">
-            <Button v-if="canManage" @click="edit(null)"><Plus /> Thêm nhóm</Button>
-        </EmptyState>
-        <div v-else class="overflow-x-auto">
-            <table class="w-full text-sm" data-testid="group-table">
-                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                    <tr>
-                        <th class="px-4 py-2.5 font-medium">Nhóm</th>
-                        <th class="px-4 py-2.5 font-medium">Giá áp dụng</th>
-                        <th class="px-4 py-2.5 text-right font-medium">Chiết khấu</th>
-                        <th class="px-4 py-2.5 font-medium">Thanh toán quen dùng</th>
-                        <th class="px-4 py-2.5 font-medium">Hạn thanh toán</th>
-                        <th class="px-4 py-2.5 text-right font-medium">Hạn mức nợ</th>
-                        <th class="px-4 py-2.5 text-right font-medium">Số khách</th>
-                        <th class="px-4 py-2.5 font-medium">Ngày tạo</th>
-                        <th v-if="canManage" class="px-4 py-2.5" />
-                    </tr>
-                </thead>
-                <tbody class="divide-y">
-                    <tr v-for="g in rows" :key="g.id" class="hover:bg-muted/30">
-                        <td class="px-4 py-3">
-                            <div class="font-medium">{{ g.name }} <Badge v-if="g.is_active === false" tone="muted">Ngừng sử dụng</Badge></div>
-                            <div v-if="g.auto_min_spent != null || g.auto_min_orders != null" class="text-xs text-muted-foreground">Tự xếp khi {{ [g.auto_min_spent != null ? `chi tiêu từ ${formatMoney(g.auto_min_spent)}` : '', g.auto_min_orders != null ? `từ ${g.auto_min_orders} đơn` : ''].filter(Boolean).join(' và ') }}</div>
-                            <div class="text-xs text-muted-foreground"><span class="font-mono">{{ g.code }}</span><span v-if="g.description"> · {{ g.description }}</span></div>
-                        </td>
-                        <td class="px-4 py-3">{{ priceTierLabels[g.price_tier] }}</td>
-                        <td class="px-4 py-3 text-right tabular-nums">{{ Number(g.discount_percent) ? `${Number(g.discount_percent)}%` : '—' }}</td>
-                        <td class="px-4 py-3">{{ g.payment_method ? paymentMethods[g.payment_method] : '—' }}</td>
-                        <td class="px-4 py-3">{{ g.payment_terms_days != null ? `${g.payment_terms_days} ngày` : '—' }}</td>
-                        <td class="px-4 py-3 text-right tabular-nums">{{ g.credit_limit != null ? formatMoney(g.credit_limit) : '—' }}</td>
-                        <td class="px-4 py-3 text-right tabular-nums">
-                            <RouterLink :to="{ path: '/customers', query: { group: g.id } }" class="text-primary hover:underline">{{ formatNumber(g.customers_count) }}</RouterLink>
-                        </td>
-                        <td class="whitespace-nowrap px-4 py-3 text-muted-foreground">{{ formatDate(g.created_at) }}</td>
-                        <td v-if="canManage" class="whitespace-nowrap px-4 py-3 text-right">
-                            <Button variant="ghost" size="sm" :aria-label="`Sửa ${g.name}`" @click="edit(g)"><Pencil /></Button>
-                            <Button variant="ghost" size="sm" :aria-label="`Xóa ${g.name}`" :disabled="!!g.customers_count" :title="g.customers_count ? 'Nhóm còn khách' : 'Xóa'" @click="remove(g)"><Trash2 /></Button>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+        <div v-else-if="!rows.length" class="rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+            <EmptyState :icon="UsersRound" title="Chưa có nhóm khách hàng" description="Tạo nhóm như Khách lẻ, Khách sỉ, VIP để lọc khách, giao việc và ghi điều khoản mua hàng cho từng nhóm.">
+                <Button v-if="canManage" @click="edit(null)"><Plus /> Thêm nhóm</Button>
+            </EmptyState>
         </div>
-    </Card>
+        <template v-else>
+            <div class="mb-5 grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
+                <ReportKpi label="Số nhóm" :icon="UsersRound" tone="blue" plain :value="rows.length" unit="">{{ rows.length - stats.inactive }} nhóm đang dùng</ReportKpi>
+                <ReportKpi label="Khách đã có nhóm" :icon="Users" tone="violet" plain :value="stats.customers" unit="">Bấm số khách trên nhóm để xem danh sách</ReportKpi>
+                <ReportKpi label="Nhóm tự xếp khách" :icon="Sparkles" tone="green" plain :value="stats.auto" unit="">Mỗi đêm xếp khách đạt ngưỡng vào nhóm</ReportKpi>
+                <ReportKpi label="Ngừng sử dụng" :icon="UserX" tone="amber" plain :value="stats.inactive" unit="">Không xếp thêm khách mới</ReportKpi>
+            </div>
+            <div class="grid gap-4 md:grid-cols-2 2xl:grid-cols-4" data-testid="group-table">
+                <div
+                    v-for="(g, i) in rows"
+                    :key="g.id"
+                    :class="cn('flex flex-col rounded-[14px] border border-slate-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]', g.is_active === false && 'opacity-70')"
+                >
+                    <div class="flex items-start gap-3.5">
+                        <span :class="cn('grid size-11 shrink-0 place-items-center rounded-[12px]', tones[i % tones.length])"><UsersRound class="size-5" /></span>
+                        <div class="min-w-0 flex-1">
+                            <p class="truncate text-[16px] font-semibold text-slate-900">{{ g.name }}</p>
+                            <p class="text-[13px] text-slate-500">
+                                <span class="font-mono">{{ g.code }}</span> ·
+                                <RouterLink :to="{ path: '/customers', query: { group: g.id } }" class="text-blue-700 hover:underline">{{ formatNumber(g.customers_count) }} khách</RouterLink>
+                            </p>
+                        </div>
+                        <span v-if="g.is_active === false" class="rounded-md bg-slate-100 px-2 py-0.5 text-[12px] font-medium text-slate-500">Ngừng sử dụng</span>
+                    </div>
+                    <p v-if="g.description" class="mt-2 line-clamp-2 text-[13px] text-slate-500">{{ g.description }}</p>
+                    <dl class="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 rounded-[12px] bg-slate-50 p-4 text-[13px]">
+                        <div><dt class="text-slate-500">Giá áp dụng</dt><dd class="font-semibold text-slate-900">{{ priceTierLabels[g.price_tier] }}</dd></div>
+                        <div><dt class="text-slate-500">Chiết khấu</dt><dd class="font-semibold text-slate-900">{{ Number(g.discount_percent) ? `${Number(g.discount_percent)}%` : '—' }}</dd></div>
+                        <div><dt class="text-slate-500">Thanh toán quen dùng</dt><dd class="font-semibold text-slate-900">{{ g.payment_method ? paymentMethods[g.payment_method] : '—' }}</dd></div>
+                        <div>
+                            <dt class="text-slate-500">Hạn mức nợ</dt>
+                            <dd class="font-semibold text-slate-900">{{ g.credit_limit != null ? formatMoney(g.credit_limit) : '—' }}<template v-if="g.payment_terms_days != null"> · {{ g.payment_terms_days }} ngày</template></dd>
+                        </div>
+                    </dl>
+                    <div class="mt-auto flex items-center gap-2 pt-3.5 text-[13px]">
+                        <p :class="cn('flex min-w-0 flex-1 items-center gap-1.5', isAuto(g) ? 'text-blue-700' : 'text-slate-400')">
+                            <Sparkles v-if="isAuto(g)" class="size-4 shrink-0" />
+                            <Hand v-else class="size-4 shrink-0" />
+                            <span class="truncate" :title="isAuto(g) ? `Tự xếp khi ${autoText(g)}` : undefined">{{ isAuto(g) ? `Tự xếp: ${autoText(g)}` : 'Xếp khách bằng tay' }}</span>
+                        </p>
+                        <template v-if="canManage">
+                            <button
+                                type="button"
+                                class="grid size-8 place-items-center rounded-[8px] text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40 disabled:hover:bg-transparent"
+                                :aria-label="`Xóa ${g.name}`"
+                                :disabled="!!g.customers_count"
+                                :title="g.customers_count ? 'Nhóm còn khách' : 'Xóa'"
+                                @click="remove(g)"
+                            >
+                                <Trash2 class="size-4" />
+                            </button>
+                            <button type="button" class="inline-flex items-center gap-1.5 rounded-[9px] border border-slate-200 px-3 py-1.5 text-slate-600 hover:border-blue-300 hover:text-blue-700" :aria-label="`Sửa ${g.name}`" @click="edit(g)">
+                                <Pencil class="size-3.5" /> Sửa
+                            </button>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </SettingsShell>
 
     <Dialog v-model:open="dialog" :title="editing ? 'Sửa nhóm khách hàng' : 'Thêm nhóm khách hàng'">
         <form id="group-form" class="grid gap-3 sm:grid-cols-2" @submit.prevent="save">

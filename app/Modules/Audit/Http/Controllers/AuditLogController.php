@@ -18,6 +18,12 @@ class AuditLogController extends Controller
             ->with('actor:id,name,email')
             ->where('tenant_id', $context->id())
             ->when($request->filled('action'), fn ($q) => $q->where('action', 'like', $request->string('action').'%'))
+            // A kind of work on Nhật ký hoạt động: several action prefixes (order., return., …).
+            ->when($request->filled('prefixes'), fn ($q) => $q->where(function ($w) use ($request) {
+                foreach (array_slice((array) $request->input('prefixes'), 0, 20) as $prefix) {
+                    $w->orWhere('action', 'like', str_replace(['%', '_'], ['\\%', '\\_'], (string) $prefix).'%');
+                }
+            }))
             ->orderByDesc('id')
             ->cursorPaginate(min((int) $request->integer('per_page', 50), 100));
 
