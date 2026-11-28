@@ -24,15 +24,34 @@ class VoucherLedger
 
     /**
      * @param  array{direction?: string|null, status?: string|null, from?: string|null, to?: string|null, method?: string|null, type?: string|null, party_kind?: string|null, q?: string|null, account?: string|null}  $filters
-     * @return array{page: LengthAwarePaginator<int, object>, totals: array{count: int, in: float, out: float}}
+     * @return array{page: LengthAwarePaginator<int, object>, totals: array<string, mixed>}
      */
     public function search(array $filters, int $perPage = 20): array
     {
         $account = ($filters['account'] ?? null) ? CashAccount::query()->where('ulid', $filters['account'])->value('id') : null;
         if (($filters['account'] ?? null) && ! $account) {
-            return ['page' => new LengthAwarePaginator([], 0, $perPage), 'totals' => ['count' => 0, 'in' => 0.0, 'out' => 0.0]];
+            return ['page' => new LengthAwarePaginator([], 0, $perPage), 'totals' => ['count' => 0, 'in' => 0.0, 'out' => 0.0, 'count_in' => 0, 'count_out' => 0, 'transfers' => 0, 'in_by_method' => [], 'out_by_type' => [], 'previous' => null]];
         }
-        $query = DB::query()->fromSub($this->union($account), 'v')
+        $query = $this->filtered($filters, $account);
+        $totals = $this->totals($query);
+
+        // The same filters over the period of the same length just before, for the "so với kỳ trước" chips.
+        $previous = null;
+        if (($filters['from'] ?? null) && ($filters['to'] ?? null)) {
+            $from = ReportRange::date($filters['from']);
+            $days = (int) $from->diffInDays(ReportRange::date($filters['to'])) + 1;
+            $prev = $this->totals($this->filtered(['from' => $from->subDays($days)->toDateString(), 'to' => $from->subDay()->toDateString()] + $filters, $account), false);
+            $previous = ['from' => $from->subDays($days)->toDateString(), 'to' => $from->subDay()->toDateString(), 'in' => $prev['in'], 'out' => $prev['out']];
+        }
+        $page = $query->orderByDesc('paid_at')->orderByDesc('created_at')->paginate($perPage);
+
+        return ['page' => $page, 'totals' => $totals + ['previous' => $previous]];
+    }
+
+    /** @param  array<string, mixed>  $filters */
+    private function filtered(array $filters, ?int $account): Builder
+    {
+        return DB::query()->fromSub($this->union($account), 'v')
             ->when($account, fn ($q) => $q->where('account_key', $account))
             ->when($filters['direction'] ?? null, fn ($q, $d) => $q->where('direction', $d))
             ->when(($filters['status'] ?? null) === 'active', fn ($q) => $q->whereNull('voided_at'))
@@ -48,15 +67,38 @@ class VoucherLedger
                 $q->where(fn ($w) => $w->where('number', 'like', $like)->orWhere('party_name', 'like', $like)
                     ->orWhere('document_number', 'like', $like)->orWhere('reference', 'like', $like));
             });
+    }
 
-        // What counts: not voided, not waiting for approval; a voucher voided after its day was closed still counts
-        // on its day (its reversal row counts the other way on the day of the void).
-        $totals = (clone $query)->whereIn('status', ['completed', 'reversed'])
-            ->selectRaw("COUNT(*) as n, COALESCE(SUM(CASE WHEN direction = 'receipt' THEN amount ELSE 0 END), 0) as total_in, COALESCE(SUM(CASE WHEN direction = 'payment' THEN amount ELSE 0 END), 0) as total_out")
+    /**
+     * What counts: not voided, not waiting for approval; a voucher voided after its day was closed still counts on its
+     * day (its reversal row counts the other way on the day of the void). Transfers move money between the business's
+     * own funds: counted apart, never as receipts or payments.
+     *
+     * @return array{count: int, in: float, out: float, count_in: int, count_out: int, transfers: int, in_by_method: list<array{method: string, amount: float}>, out_by_type: list<array{type: string, amount: float}>}
+     */
+    private function totals(Builder $query, bool $breakdown = true): array
+    {
+        $counted = (clone $query)->whereIn('status', ['completed', 'reversed']);
+        $row = (clone $counted)
+            ->selectRaw("COUNT(*) as n, COALESCE(SUM(CASE WHEN direction = 'receipt' THEN amount ELSE 0 END), 0) as total_in, COALESCE(SUM(CASE WHEN direction = 'payment' THEN amount ELSE 0 END), 0) as total_out, "
+                ."COALESCE(SUM(CASE WHEN direction = 'receipt' THEN 1 ELSE 0 END), 0) as n_in, COALESCE(SUM(CASE WHEN direction = 'payment' THEN 1 ELSE 0 END), 0) as n_out, "
+                ."COALESCE(SUM(CASE WHEN direction = 'transfer' THEN 1 ELSE 0 END), 0) as n_transfer")
             ->first();
-        $page = $query->orderByDesc('paid_at')->orderByDesc('created_at')->paginate($perPage);
+        $totals = [
+            'count' => (int) ($row->n ?? 0), 'in' => (float) ($row->total_in ?? 0), 'out' => (float) ($row->total_out ?? 0),
+            'count_in' => (int) ($row->n_in ?? 0), 'count_out' => (int) ($row->n_out ?? 0), 'transfers' => (int) ($row->n_transfer ?? 0),
+            'in_by_method' => [], 'out_by_type' => [],
+        ];
+        if ($breakdown) {
+            $totals['in_by_method'] = (clone $counted)->where('direction', 'receipt')->groupBy('method')
+                ->selectRaw('method, SUM(amount) as amount')->orderByDesc('amount')->limit(3)->get()
+                ->map(fn ($r) => ['method' => (string) $r->method, 'amount' => (float) $r->amount])->all();
+            $totals['out_by_type'] = (clone $counted)->where('direction', 'payment')->groupBy('type_name')
+                ->selectRaw('type_name, SUM(amount) as amount')->orderByDesc('amount')->limit(3)->get()
+                ->map(fn ($r) => ['type' => (string) $r->type_name, 'amount' => (float) $r->amount])->all();
+        }
 
-        return ['page' => $page, 'totals' => ['count' => (int) ($totals->n ?? 0), 'in' => (float) ($totals->total_in ?? 0), 'out' => (float) ($totals->total_out ?? 0)]];
+        return $totals;
     }
 
     /** A single row of the ledger, by source and public id. */

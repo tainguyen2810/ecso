@@ -31,7 +31,7 @@ it('holds large payments for approval: they count nowhere until approved, and a 
 
     expect($cash())->toEqual($before - 8000000);
     actingInTenant($owner, $tenant)->getJson('/api/v1/cash-vouchers?status=pending')->assertOk()
-        ->assertJsonCount(2, 'data')->assertJsonPath('pending', 2)->assertJsonPath('approval_threshold', '5000000')
+        ->assertJsonCount(2, 'data')->assertJsonPath('pending', 2)->assertJsonPath('pending_amount', 11000000)->assertJsonPath('approval_threshold', '5000000')
         ->assertJsonPath('totals.out', 0);
 
     // A pending one cannot be voided, only refused; the manager cannot approve.

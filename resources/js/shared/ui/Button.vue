@@ -42,20 +42,16 @@ const props = withDefaults(
     { type: 'button' },
 );
 
-// In a dialog of a Tailwind-style page (`soft-dialog`, see Dialog.vue): 44px, 12px corners, blue / white-with-border.
+// Inside a popup (`soft-dialog`, see Dialog.vue): 44px, 12px corners, blue / white-with-border like the mockups.
 const soft = inject<boolean>('soft-dialog', false);
-const softVariants: Record<string, string> = {
+const softSize: Record<string, string> = { default: 'h-11 rounded-[12px] px-5 text-[15px]', lg: 'h-11 rounded-[12px] px-6 text-[15px]', sm: 'rounded-[8px]', icon: 'rounded-[10px]' };
+const softVariant: Record<string, string> = {
     default: 'bg-blue-600 text-white shadow-sm hover:bg-blue-700',
-    outline: 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+    outline: 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900',
     ghost: 'text-slate-600 hover:bg-slate-100',
 };
 const classes = computed(() =>
-    cn(
-        buttonVariants({ variant: props.variant, size: props.size }),
-        soft && (props.size ?? 'default') === 'default' && 'h-11 rounded-[12px] px-5 text-[15px]',
-        soft && softVariants[props.variant ?? 'default'],
-        props.class,
-    ),
+    cn(buttonVariants({ variant: props.variant, size: props.size }), soft && softSize[props.size ?? 'default'], soft && softVariant[props.variant ?? 'default'], props.class),
 );
 </script>
 

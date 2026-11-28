@@ -36,13 +36,15 @@ class CashVoucherController extends Controller
             'per_page' => ['nullable', 'integer', 'min:5', 'max:100'],
         ]);
         ['page' => $page, 'totals' => $totals] = $ledger->search($filters, (int) ($filters['per_page'] ?? 20));
+        $pending = CashVoucher::query()->where('status', CashVoucher::PENDING)->toBase()->selectRaw('COUNT(*) as n, COALESCE(SUM(amount), 0) as amount')->first();
 
         return response()->json([
             'data' => VoucherRowResource::collection($page->getCollection())->resolve($request),
             'meta' => ['current_page' => $page->currentPage(), 'last_page' => $page->lastPage(), 'per_page' => $page->perPage(), 'total' => $page->total()],
             'totals' => $totals,
             // Payments waiting for approval, whatever the filters: the list shows a reminder to whoever can approve.
-            'pending' => CashVoucher::query()->where('status', CashVoucher::PENDING)->count(),
+            'pending' => (int) $pending->n,
+            'pending_amount' => (float) $pending->amount,
             'approval_threshold' => CashVoucherService::approvalThreshold(),
         ]);
     }

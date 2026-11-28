@@ -71,3 +71,13 @@
     scrollbar-width: thin;
     scrollbar-color: rgb(255 255 255 / 0.15) transparent;
 }
+
+/* Soft select (Cấu hình, popups): own chevron instead of the browser's grey arrow. */
+@utility select-soft {
+    appearance: none;
+    padding-right: 2.5rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.85rem center;
+    background-size: 1rem;
+}
