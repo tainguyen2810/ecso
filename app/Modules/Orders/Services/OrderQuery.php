@@ -104,7 +104,7 @@ class OrderQuery
         }
         if ($tag = $filters['tag'] ?? null) {
             // MariaDB's JSON_CONTAINS misses accented tags stored as \u escapes ("Kh\u00e1ch VIP"); JSON_SEARCH decodes them.
-            in_array($query->getConnection()->getDriverName(), ['mysql', 'mariadb'], true)
+            in_array($query->getModel()->getConnection()->getDriverName(), ['mysql', 'mariadb'], true)
                 ? $query->whereRaw("JSON_SEARCH(tags, 'one', ?) IS NOT NULL", [addcslashes($tag, '%_\\')])
                 : $query->whereJsonContains('tags', $tag);
         }
