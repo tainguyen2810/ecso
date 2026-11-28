@@ -41,9 +41,9 @@ test('loyalty: set up points and tiers, then give a customer points', async ({ p
     });
     const before = Number((await card.getByTestId('loyalty-points').innerText()).replace(/\D/g, '')) || 0;
     await card.getByTestId('loyalty-adjust').click();
-    await card.getByTestId('loyalty-adjust-points').fill('20');
-    await card.getByTestId('loyalty-adjust-note').fill('Bù đơn giao trễ');
-    await card.getByTestId('loyalty-adjust-save').click();
+    await page.getByTestId('loyalty-adjust-points').fill('20');
+    await page.getByTestId('loyalty-adjust-note').fill('Bù đơn giao trễ');
+    await page.getByTestId('loyalty-adjust-save').click();
     await expect(card.getByTestId('loyalty-points')).toHaveText(`${before + 20} điểm`);
     await expect(card.getByTestId('loyalty-history')).toContainText('Bù đơn giao trễ');
     await card.scrollIntoViewIfNeeded();

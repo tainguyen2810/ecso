@@ -171,7 +171,8 @@ class CustomerController extends Controller
     public function show(Customer $customer): JsonResponse
     {
         $this->authorize('view', $customer);
-        $stats = Customer::query()->withStats()->with(['customerGroup', 'assignee'])->whereKey($customer->id)->firstOrFail();
+        $stats = Customer::query()->withStats()->with(['customerGroup', 'assignee', 'loyaltyTier'])->whereKey($customer->id)->firstOrFail();
+        $stats->setAttribute('channels', self::channelsOf([$customer->id])[$customer->id] ?? []);
 
         return (new CustomerResource($stats))->additional(['data' => [
             'summary' => $this->summary($customer),
