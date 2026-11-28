@@ -59,6 +59,12 @@ class MarketplaceShipping
         return $connector instanceof ArrangesShipment ? $connector : null;
     }
 
+    /** Marketplace answers (English) the seller can act on, and what they mean for them. */
+    private const KNOWN_ERRORS = [
+        // Shopee: the order is not released for shipping yet, most often "Chờ - Đang được kiểm tra bởi Shopee".
+        '/ready to be shipped|package is not ready/i' => 'Shopee chưa cho chuẩn bị hàng đơn này: đơn đang chờ Shopee kiểm tra hoặc chưa sẵn sàng giao. Đợi Shopee kiểm tra xong (đơn tự cập nhật), rồi bấm Chuẩn bị hàng lại.',
+    ];
+
     /**
      * What the "Chuẩn bị hàng" dialog shows: one group per shop with the ways to hand over, and the orders it skips.
      *
@@ -81,13 +87,14 @@ class MarketplaceShipping
                 $reason = match (true) {
                     $connector === null => 'Đơn này không chuẩn bị hàng qua sàn được.',
                     $order->status !== OrderStatus::READY_TO_PACK => 'Đơn không ở bước Chờ đóng gói.',
+                    $order->underMarketplaceReview() => Order::REVIEW_MESSAGE,
                     default => null,
                 };
                 if ($reason !== null) {
                     $skipped[] = ['id' => $order->ulid, 'external_order_id' => $order->external_order_id, 'code' => $order->code, 'message' => $reason];
                 }
             }
-            $ready = $list->filter(fn (Order $o) => $connector !== null && $o->status === OrderStatus::READY_TO_PACK)->values();
+            $ready = $list->filter(fn (Order $o) => $connector !== null && $o->status === OrderStatus::READY_TO_PACK && ! $o->underMarketplaceReview())->values();
             if ($ready->isEmpty()) {
                 continue;
             }
@@ -98,9 +105,11 @@ class MarketplaceShipping
             } catch (ConnectorException $e) {
                 // Often the order was already prepared in the marketplace's own seller page and ECSO has not heard yet:
                 // read the orders again, set those aside, and ask again for the ones still waiting.
+                // Shopee may also still be checking an order it reported as ready: it is set aside the same way.
                 [$ready, $done] = $this->refresh($account, $ready);
                 foreach ($done as $order) {
-                    $skipped[] = ['id' => $order->ulid, 'external_order_id' => $order->external_order_id, 'code' => $order->code, 'message' => 'Đơn đã được chuẩn bị trên sàn rồi, trạng thái đã cập nhật.'];
+                    $skipped[] = ['id' => $order->ulid, 'external_order_id' => $order->external_order_id, 'code' => $order->code,
+                        'message' => $order->underMarketplaceReview() ? Order::REVIEW_MESSAGE : 'Đơn đã được chuẩn bị trên sàn rồi, trạng thái đã cập nhật.'];
                 }
                 if ($ready->isEmpty()) {
                     continue;
@@ -149,7 +158,7 @@ class MarketplaceShipping
                 $order = $this->sync->syncOne($account, $order->external_order_id, 'user')['order'] ?? $order;
             } catch (ConnectorException) {
             }
-            if ($order->status === OrderStatus::READY_TO_PACK) {
+            if ($order->status === OrderStatus::READY_TO_PACK && ! $order->underMarketplaceReview()) {
                 $waiting->push($order);
             } else {
                 $done[] = $order;
@@ -159,10 +168,17 @@ class MarketplaceShipping
         return [$waiting->values(), $done];
     }
 
-    /** The marketplace's answer without the API path EzChat puts in front of it. */
-    private static function message(ConnectorException $e): string
+    /** The marketplace's answer without the API path EzChat puts in front of it, in Vietnamese where it is known. */
+    public static function message(ConnectorException $e): string
     {
-        return (string) preg_replace('#^/\S+: #', '', $e->getMessage());
+        $message = (string) preg_replace('#^/\S+: #', '', $e->getMessage());
+        foreach (self::KNOWN_ERRORS as $pattern => $vietnamese) {
+            if (preg_match($pattern, $message)) {
+                return $vietnamese;
+            }
+        }
+
+        return $message;
     }
 
     /**

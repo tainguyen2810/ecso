@@ -23,7 +23,10 @@ export const orderStatus: Record<string, { label: string; tone: Tone }> = {
  * Status badge of an order. A status ECSO has not mapped yet (one a WooCommerce plugin added, or a new marketplace
  * status) shows the channel's own name for it, e.g. "Web: Đang giao hàng", instead of a bare "Chưa rõ trạng thái".
  */
-export function orderStatusBadge(o: { status: string; marketplace?: string | null; raw_status?: string | null; raw_status_label?: string | null }): { label: string; tone: Tone; hint?: string } {
+export const reviewHint = 'Shopee đang kiểm tra đơn này, chưa chuẩn bị hàng được. Khi Shopee kiểm tra xong, đơn tự chuyển sang Chờ đóng gói.';
+
+export function orderStatusBadge(o: { status: string; marketplace?: string | null; raw_status?: string | null; raw_status_label?: string | null; marketplace_review?: boolean }): { label: string; tone: Tone; hint?: string } {
+    if (o.marketplace_review) return { label: 'Shopee đang kiểm tra', tone: 'muted', hint: reviewHint };
     if (o.status !== 'UNKNOWN_STATUS' || !(o.raw_status_label || o.raw_status)) return orderStatus[o.status] ?? { label: o.status, tone: 'muted' };
     const web = o.marketplace === 'woocommerce';
     return {

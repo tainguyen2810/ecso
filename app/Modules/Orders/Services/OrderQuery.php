@@ -7,6 +7,7 @@ use App\Modules\Identity\Models\User;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Services\ReservationLedger;
 use App\Modules\Inventory\Services\StockReader;
+use App\Modules\Marketplace\Connectors\Shopee\ShopeeConnector;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
@@ -121,7 +122,9 @@ class OrderQuery
                 'warning' => $query->whereNotNull('sync_warning'),
                 'not_printed' => $query->whereNull('packing_slip_printed_at'),
                 // Shopee / TikTok orders: "Chuẩn bị hàng" not done yet; arranged but the marketplace label never printed.
-                'not_arranged' => $query->whereIn('marketplace', MarketplaceShipping::marketplaces())->where('status', OrderStatus::READY_TO_PACK),
+                // Orders Shopee is still checking cannot be prepared yet (Order::underMarketplaceReview): left out.
+                'not_arranged' => $query->whereIn('marketplace', MarketplaceShipping::marketplaces())->where('status', OrderStatus::READY_TO_PACK)
+                    ->where(fn (Builder $q) => $q->where('marketplace', '!=', ShopeeConnector::MARKETPLACE)->orWhereNull('raw_status')->orWhere('raw_status', '!=', ShopeeConnector::REVIEW_STATUS)),
                 'label_unprinted' => $query->whereIn('marketplace', MarketplaceShipping::marketplaces())->whereIn('status', MarketplaceShipping::LABEL_FROM)->where('label_print_count', 0),
                 // Orders taken from the previous software are settled there (what is owed came as opening debt).
                 'payment_due' => $query->where('marketplace', Order::SOURCE_MANUAL)->whereNull('imported_from')->where('status', '!=', OrderStatus::CANCELLED)

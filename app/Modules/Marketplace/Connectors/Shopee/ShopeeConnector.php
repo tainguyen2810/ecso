@@ -27,11 +27,17 @@ class ShopeeConnector extends GatewayConnector
     /** The "slot" offered when Shopee asks for no pickup time (or offers none): ship_order goes without one. */
     public const ANY_SLOT = 'shopee';
 
+    /** order_status of an order Shopee is still checking (sent only when asked with request_order_status_pending). */
+    public const REVIEW_STATUS = 'PENDING';
+
     /** Shopee order_status -> ECSO status (seeded into marketplace_status_maps). */
     public const STATUSES = [
         'UNPAID' => OrderStatus::UNPAID,
         'INVOICE_PENDING' => OrderStatus::PENDING_CONFIRMATION,
         'READY_TO_SHIP' => OrderStatus::READY_TO_PACK,
+        // "Chờ - Đang được kiểm tra bởi Shopee": paid, but Shopee is still checking it (pending_terms SYSTEM_PENDING).
+        // It waits with the orders to pack (stock stays held) but cannot be prepared yet; Order::underMarketplaceReview().
+        self::REVIEW_STATUS => OrderStatus::READY_TO_PACK,
         'PROCESSED' => OrderStatus::PACKED,
         'RETRY_SHIP' => OrderStatus::PACKED,
         'SHIPPED' => OrderStatus::IN_TRANSIT,
@@ -87,6 +93,9 @@ class ShopeeConnector extends GatewayConnector
         $res = $this->gateway->call($account, 'GET', '/api/v2/order/get_order_detail', [
             'order_sn_list' => $externalOrderId,
             'response_optional_fields' => self::ORDER_FIELDS,
+            // Without it Shopee reports an order it is still checking as READY_TO_SHIP, and "Chuẩn bị hàng" then fails
+            // with "Shipping parameters can only be obtained when package is ready to be shipped".
+            'request_order_status_pending' => 'true',
         ]);
         $order = $res['response']['order_list'][0] ?? null;
         if (! is_array($order)) {
@@ -170,7 +179,7 @@ class ShopeeConnector extends GatewayConnector
             trackingNumber: $trackingNumber,
             buyerNote: filled($o['message_to_seller'] ?? null) ? (string) $o['message_to_seller'] : null,
             cancelReason: filled($o['cancel_reason'] ?? null) ? (string) $o['cancel_reason'] : null,
-            raw: ['order_status' => $status],
+            raw: ['order_status' => $status] + (filled($o['pending_terms'] ?? null) ? ['pending_terms' => array_values((array) $o['pending_terms'])] : []),
             buyerAccountId: isset($o['buyer_user_id']) ? (string) $o['buyer_user_id'] : null,
             buyerAccountName: filled($o['buyer_username'] ?? null) ? (string) $o['buyer_username'] : null,
             // What the buyer picked at checkout ("Hỏa Tốc", "Nhanh"); shipping_carrier is who carries it (SPX Instant).
@@ -181,7 +190,7 @@ class ShopeeConnector extends GatewayConnector
     /** Tracking exists once the order is arranged for shipping; earlier it is simply not there yet. */
     private function trackingNumber(MarketplaceAccount $account, string $orderSn, string $status): ?string
     {
-        if (in_array($status, ['UNPAID', 'INVOICE_PENDING', 'READY_TO_SHIP', 'CANCELLED', 'IN_CANCEL'], true)) {
+        if (in_array($status, ['UNPAID', 'INVOICE_PENDING', self::REVIEW_STATUS, 'READY_TO_SHIP', 'CANCELLED', 'IN_CANCEL'], true)) {
             return null;
         }
         try {
