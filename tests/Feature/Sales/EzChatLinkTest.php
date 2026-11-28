@@ -84,6 +84,12 @@ it('turns an order closed in chat into an order that holds stock, once, and canc
     ezStore($this, $secret, 'GET', "{$base}/orders/lookup?number={$number}&phone=0999999999")->assertOk()->assertJson(['found' => false]);
     ezStore($this, $secret, 'GET', "{$base}/orders/lookup?number={$number}&phone=0912345678")->assertOk()
         ->assertJsonPath('order.statusName', 'Chờ xác nhận')->assertJsonPath('order.items.0.qty', 2);
+    // The same order by EzChat's DH code, the website number, a reference or the tracking number.
+    ezStore($this, $secret, 'GET', "{$base}/orders/lookup?number=DH0007&phone=0912345678")->assertJson(['found' => true]);
+    $made->forceFill(['external_number' => '13850', 'reference' => 'DH0099', 'tracking_number' => 'SPXVN0412345678'])->save();
+    foreach (['13850', '%2313850', 'DH0099', 'SPXVN0412345678'] as $other) {
+        ezStore($this, $secret, 'GET', "{$base}/orders/lookup?number={$other}&phone=0912345678")->assertJsonPath('order.number', $number);
+    }
     ezStore($this, $secret, 'GET', "{$base}/stock?sku={$product}")->assertJson(['qty' => 8]);
 
     ezStore($this, $secret, 'POST', "{$base}/orders/{$number}/cancel", [])->assertOk()->assertJson(['ok' => true]);
