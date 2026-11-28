@@ -1,5 +1,7 @@
 <?php
 
+use App\Shared\Support\ReportRange;
+
 /** Figures above "Nhà cung cấp" and "Đặt hàng nhập / Nhập hàng" (mẫu 28/11). */
 it('sums what suppliers are owed, what arrived this month and who comes first', function () {
     [$tenant, $owner] = tenantWithOwner();
@@ -19,7 +21,7 @@ it('sums what suppliers are owed, what arrived this month and who comes first', 
         ->and($s['month']['value'])->toEqual(500000)
         ->and($s['month']['top'][0]['name'])->toBe('Xưởng May Minh Long')
         ->and($s['due'][0]['id'])->toBe($po);
-    $api()->getJson('/api/v1/suppliers?sort=debt')->assertJsonPath('data.0.debt', '500000.00')->assertJsonPath('data.0.next_due', now()->toDateString());
+    $api()->getJson('/api/v1/suppliers?sort=debt')->assertJsonPath('data.0.debt', '500000.00')->assertJsonPath('data.0.next_due', ReportRange::now()->toDateString());
 
     $r = $api()->getJson('/api/v1/purchase-orders/summary?mode=receiving')->assertOk()->json('data');
     expect($r['month']['value'])->toEqual(500000)->and($r['owed']['value'])->toEqual(500000)->and($r['counts']['unpaid'])->toBe(1);
