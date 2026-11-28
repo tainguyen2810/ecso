@@ -14,6 +14,9 @@ import { useToast } from '@/shared/composables/useToast';
 import { toPhotos, type Photo } from '@/shared/lib/photos';
 import type { Supplier, Variant, Warehouse } from '@/shared/types';
 import { buildDraft, priceRise, reviewLines, SCAN_DRAFT_KEY, skuFromLine, type ReviewLine, type ScanResult } from './scan';
+import { useSoftPage } from '@/shared/composables/useSoftPage';
+
+useSoftPage('Sản phẩm');
 
 /**
  * Nhập hàng › Chụp hoá đơn: photos of a supplier invoice are read by EzChat AI, each line is matched with a SKU
@@ -321,7 +324,7 @@ const label = (l: ReviewLine) =>
                                         <span v-if="priceRise(l) !== null && Math.abs(priceRise(l)!) >= 3" :class="priceRise(l)! > 0 ? 'text-amber-700' : 'text-emerald-700'">
                                             Giá {{ priceRise(l)! > 0 ? 'tăng' : 'giảm' }} {{ Math.abs(priceRise(l)!) }}% so với giá vốn
                                         </span>
-                                        <select v-if="l.candidates.length > 1" class="rounded border bg-card px-1 py-0.5" :value="l.pick?.id ?? ''" aria-label="Gợi ý khác" @change="pickCandidate(i, ($event.target as HTMLSelectElement).value)">
+                                        <select v-if="l.candidates.length > 1" class="rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-1 py-0.5" :value="l.pick?.id ?? ''" aria-label="Gợi ý khác" @change="pickCandidate(i, ($event.target as HTMLSelectElement).value)">
                                             <option v-for="c in l.candidates" :key="c.id" :value="c.id">{{ c.sku }} ({{ Math.round(c.score * 100) }}%)</option>
                                         </select>
                                         <button type="button" class="font-medium text-primary" @click="picking = i">{{ l.pick ? 'Đổi' : 'Chọn sản phẩm' }}</button>

@@ -45,7 +45,7 @@ class CostAdjustmentController extends Controller
             ->selectRaw("COALESCE(SUM(CASE WHEN new_cost > old_cost THEN {$change} ELSE 0 END), 0) as increase")
             ->selectRaw('COALESCE(SUM(CASE WHEN new_cost < old_cost THEN 1 ELSE 0 END), 0) as down_skus')
             ->selectRaw('COALESCE(SUM(CASE WHEN new_cost > old_cost THEN 1 ELSE 0 END), 0) as up_skus')
-            ->first();
+            ->toBase()->first();
 
         return response()->json(['data' => [
             'all' => CostAdjustment::query()->count(),

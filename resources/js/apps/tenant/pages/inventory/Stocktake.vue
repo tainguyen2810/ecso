@@ -19,6 +19,9 @@ import { useToast } from '@/shared/composables/useToast';
 import { useIdempotencyKey } from '@/shared/composables/useIdempotencyKey';
 import { applyScan, stocktakeLines, variance, varianceReasons, type CountRow, type LineNotes } from './stocktake';
 import type { InventoryDocument, Warehouse } from '@/shared/types';
+import { useSoftPage } from '@/shared/composables/useSoftPage';
+
+useSoftPage('Sản phẩm');
 
 /**
  * Phiếu kiểm hàng like Sapo: count by scanning (+1 per scan) or typing, save the sheet as often as needed while
@@ -303,7 +306,7 @@ function reset() {
                                 type="number"
                                 min="0"
                                 placeholder="Chưa đếm"
-                                :class="cn('h-9 w-24 rounded-lg border bg-card px-2.5 text-right font-medium tabular-nums placeholder:text-xs placeholder:font-normal', (variance(r, counts) ?? 0) < 0 ? 'border-red-300 bg-red-50/40' : (variance(r, counts) ?? 0) > 0 ? 'border-amber-300 bg-amber-50/40' : variance(r, counts) === 0 ? 'border-emerald-300' : 'border-input')"
+                                :class="cn('h-10 w-24 rounded-[8px] border border-slate-200 bg-white px-2.5 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 text-right font-medium tabular-nums placeholder:text-xs placeholder:font-normal', (variance(r, counts) ?? 0) < 0 ? 'border-red-300 bg-red-50/40' : (variance(r, counts) ?? 0) > 0 ? 'border-amber-300 bg-amber-50/40' : variance(r, counts) === 0 ? 'border-emerald-300' : 'border-input')"
                                 :data-testid="`count-${r.sku}`"
                             />
                         </td>
@@ -313,13 +316,13 @@ function reset() {
                             <span v-else :class="variance(r, counts)! > 0 ? 'text-amber-600' : 'text-destructive'">{{ variance(r, counts)! > 0 ? '+' : '' }}{{ variance(r, counts) }}</span>
                         </td>
                         <td class="px-3 py-2">
-                            <select v-if="(variance(r, counts) ?? 0) !== 0" v-model="noteOf(r.id).reason" class="h-9 w-36 rounded-lg border border-input bg-card px-2 text-sm" aria-label="Lý do lệch" :data-testid="`reason-${r.sku}`">
+                            <select v-if="(variance(r, counts) ?? 0) !== 0" v-model="noteOf(r.id).reason" class="h-9 w-36 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-sm" aria-label="Lý do lệch" :data-testid="`reason-${r.sku}`">
                                 <option :value="undefined">Chọn lý do…</option>
                                 <option v-for="(label, key) in varianceReasons" :key="key" :value="key">{{ label }}</option>
                             </select>
                         </td>
                         <td class="px-3 py-2">
-                            <input v-if="(variance(r, counts) ?? 0) !== 0" v-model="noteOf(r.id).note" class="h-9 w-full min-w-40 rounded-lg border border-input bg-card px-2.5 text-sm" placeholder="Ghi chú" :data-testid="`note-${r.sku}`" />
+                            <input v-if="(variance(r, counts) ?? 0) !== 0" v-model="noteOf(r.id).note" class="h-9 w-full min-w-40 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2.5 text-sm" placeholder="Ghi chú" :data-testid="`note-${r.sku}`" />
                         </td>
                     </tr>
                 </tbody>

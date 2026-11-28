@@ -31,7 +31,7 @@ class StocktakeSummary
             ->selectRaw('COALESCE(SUM(CASE WHEN applied_delta > 0 THEN applied_delta ELSE 0 END), 0) as surplus_qty')
             ->selectRaw('COALESCE(SUM(CASE WHEN applied_delta < 0 THEN -applied_delta * v.cost_price ELSE 0 END), 0) as short_value')
             ->selectRaw('COALESCE(SUM(CASE WHEN applied_delta > 0 THEN applied_delta * v.cost_price ELSE 0 END), 0) as surplus_value')
-            ->first();
+            ->toBase()->first();
 
         // Counted recently = on a stocktake balanced in the last STALE_DAYS days.
         $recent = InventoryAdjustmentLine::query()->whereIn('inventory_adjustment_id', $sheets()
@@ -41,7 +41,7 @@ class StocktakeSummary
             ->whereHas('product', fn ($p) => $p->where('type', Product::TYPE_STANDARD));
         $byCategory = (clone $stale)->join('products as p', 'p.id', '=', 'product_variants.product_id')
             ->leftJoin('categories as c', 'c.id', '=', 'p.category_id')
-            ->groupBy('c.name')->selectRaw('c.name as name, COUNT(*) as n')->orderByDesc('n')->limit(4)->get()
+            ->groupBy('c.name')->selectRaw('c.name as name, COUNT(*) as n')->orderByDesc('n')->limit(4)->toBase()->get()
             ->map(fn ($r) => ['name' => $r->name, 'count' => (int) $r->n])->all();
 
         return [

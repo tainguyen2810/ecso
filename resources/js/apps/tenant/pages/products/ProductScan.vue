@@ -12,6 +12,9 @@ import { formatMoney } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { photoFile, toPhotos, type Photo } from '@/shared/lib/photos';
 import { productBody, rows as toRows, type SuggestionRow } from './scan';
+import { useSoftPage } from '@/shared/composables/useSoftPage';
+
+useSoftPage('Sản phẩm');
 
 /**
  * Sản phẩm › Tạo từ ảnh: photos (front, box, label… of one or many products) are read by EzChat AI, which groups
@@ -189,7 +192,7 @@ function reset() {
         <div class="mt-5 grid gap-4 sm:grid-cols-[1fr_200px]">
             <div>
                 <label class="mb-1 block text-sm font-medium" for="ps-note">Ghi chú thêm (không bắt buộc)</label>
-                <textarea id="ps-note" v-model="note" rows="2" maxlength="1000" class="w-full rounded-md border bg-card px-3 py-2 text-sm" placeholder="VD: router TP-Link AX23, giá nhập 820k, có 2 màu đen trắng, bảo hành 24 tháng" data-testid="product-scan-note"></textarea>
+                <textarea id="ps-note" v-model="note" rows="2" maxlength="1000" class="w-full rounded-[10px] border border-slate-200 bg-white px-3.5 py-2.5 text-[15px] leading-6 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100" placeholder="VD: router TP-Link AX23, giá nhập 820k, có 2 màu đen trắng, bảo hành 24 tháng" data-testid="product-scan-note"></textarea>
             </div>
             <div>
                 <label class="mb-1 block text-sm font-medium" for="ps-markup">Lãi trên giá nhập (%)</label>
@@ -270,7 +273,7 @@ function reset() {
                     </div>
                     <div>
                         <label class="mb-1 block font-medium">Mô tả bán hàng</label>
-                        <textarea v-model="r.description" rows="6" class="w-full rounded-md border bg-card px-3 py-2 text-sm leading-6"></textarea>
+                        <textarea v-model="r.description" rows="6" class="w-full rounded-[10px] border border-slate-200 bg-white px-3.5 py-2.5 text-[15px] leading-6 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100"></textarea>
                     </div>
                 </div>
             </Card>

@@ -10,6 +10,9 @@ import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { formatDateTime, formatMoney } from '@/shared/lib/utils';
 import type { SupplierReturnData } from '@/shared/types';
+import { useSoftPage } from '@/shared/composables/useSoftPage';
+
+useSoftPage('Sản phẩm');
 
 const rows = ref<SupplierReturnData[]>([]);
 const meta = ref({ current_page: 1, last_page: 1, total: 0 });
