@@ -48,7 +48,9 @@ class PayrollService
         return [
             'period' => $period, 'label' => $label, 'status' => $run->status ?? 'draft',
             'approved_at' => $run?->approved_at?->toIso8601String(), 'paid_at' => $run?->paid_at?->toIso8601String(),
+            'approved_by' => $run?->approved_by ? DB::table('users')->where('id', $run->approved_by)->value('name') : null,
             'lines' => $lines,
+            'advances' => $onlyUser === null ? $this->advances($period) : [],
             'totals' => [
                 'net' => array_sum(array_column($lines, 'net')), 'commission' => array_sum(array_column($lines, 'commission')),
                 'insurance' => array_sum(array_column($lines, 'insurance')), 'employer_insurance' => array_sum(array_column($lines, 'employer_insurance')),
@@ -57,6 +59,26 @@ class PayrollService
             'rules' => ['employee_insurance' => PayrollRules::EMPLOYEE_INSURANCE, 'employer_insurance' => PayrollRules::EMPLOYER_INSURANCE,
                 'personal_deduction' => PayrollRules::PERSONAL_DEDUCTION, 'dependent_deduction' => PayrollRules::DEPENDENT_DEDUCTION],
         ];
+    }
+
+    /**
+     * The month's "Tạm ứng lương" vouchers, newest first, for the list beside the payroll.
+     *
+     * @return list<array{name: string, member: string, paid_at: string|null, method: string|null, amount: float}>
+     */
+    private function advances(string $period): array
+    {
+        [$from, $to] = HouseholdTax::bounds($period);
+
+        return DB::table('cash_vouchers as cv')->join('users as u', 'u.id', '=', 'cv.staff_id')
+            ->where('cv.tenant_id', $this->context->id())->where('cv.direction', CashVoucher::PAYMENT)
+            ->where('cv.type_name', self::ADVANCE_TYPE)->whereRaw(CashVoucher::COUNTS_SQL)
+            ->whereBetween('cv.paid_at', [$from->utc(), $to->utc()])->orderByDesc('cv.paid_at')->limit(50)
+            ->get(['u.name', 'u.ulid', 'cv.paid_at', 'cv.method', 'cv.amount'])
+            ->map(fn ($r) => [
+                'name' => (string) $r->name, 'member' => (string) $r->ulid, 'method' => $r->method, 'amount' => (float) $r->amount,
+                'paid_at' => $r->paid_at ? \Carbon\CarbonImmutable::parse($r->paid_at, 'UTC')->toIso8601String() : null,
+            ])->all();
     }
 
     /** @return array<int, array<string, mixed>> */

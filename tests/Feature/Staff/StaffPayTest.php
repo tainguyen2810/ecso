@@ -80,6 +80,10 @@ it('pays commission from own sales, per unit of a category and a store bonus, re
 
     $data = actingInTenant($this->owner, $this->tenant)->getJson('/api/v1/staff/commissions?month=2026-11')->assertOk()->json('data');
     expect($data['rules'])->toHaveCount(4)->and((float) $data['store_revenue'])->toBe(1900000.0);
+    expect((float) $data['store_counter'])->toBe(1000000.0)->and((float) $data['store_online'])->toBe(900000.0);
+    // By week: sales of 5–7/11 in week 1, the return of 8/11 comes off week 2.
+    expect(collect($data['weeks'])->pluck('amount')->map(fn ($v) => (float) $v)->all())->toBe([2100000.0, -200000.0, 0.0, 0.0])
+        ->and($data['weeks'][3]['to'])->toBe('2026-11-30');
     $cashier = collect($data['members'])->firstWhere('id', $this->cashier->ulid);
     // 1% × 1.000.000 + store bonus 0.5% × 1.000.000 (store 1.9M > 1M)
     expect((float) $cashier['sales'])->toBe(1000000.0)->and((float) $cashier['commission'])->toBe(15000.0);
@@ -89,7 +93,7 @@ it('pays commission from own sales, per unit of a category and a store bonus, re
 
     // A member sees their own figures only, without the rules.
     $mine = actingInTenant($this->tech, $this->tenant)->getJson('/api/v1/staff/commissions?month=2026-11')->assertOk()->json('data');
-    expect($mine['members'])->toHaveCount(1)->and($mine['rules'])->toBe([]);
+    expect($mine['members'])->toHaveCount(1)->and($mine['rules'])->toBe([])->and($mine['weeks'])->toBe([]);
 });
 
 it('makes the payroll: pay by days, commission, advance, insurance, approve, pay into the cash book', function () {
@@ -111,10 +115,12 @@ it('makes the payroll: pay by days, commission, advance, insurance, approve, pay
         ->and((float) $line['pit'])->toBe(0.0)
         ->and((float) $line['net'])->toBe($base + 300000 + 200000 - 1000000 - 735000);
     expect(collect($data['lines'])->pluck('id'))->not->toContain($this->cashier->ulid); // no pay profile, no commission
+    expect($data['advances'])->toHaveCount(1)->and($data['advances'][0])->toMatchArray(['member' => $this->tech->ulid, 'method' => 'cash', 'amount' => 1000000.0]);
 
     // Not visible to the member until approved; then only their own line.
     expect(actingInTenant($this->tech, $this->tenant)->getJson('/api/v1/staff/payroll?month=2026-11')->json('data.lines'))->toBe([]);
-    actingInTenant($this->owner, $this->tenant)->postJson('/api/v1/staff/payroll/2026-11/approve')->assertOk()->assertJsonPath('data.status', 'approved');
+    actingInTenant($this->owner, $this->tenant)->postJson('/api/v1/staff/payroll/2026-11/approve')->assertOk()->assertJsonPath('data.status', 'approved')->assertJsonPath('data.approved_by', $this->owner->name);
+    expect(actingInTenant($this->tech, $this->tenant)->getJson('/api/v1/staff/payroll?month=2026-11')->json('data.advances'))->toBe([]);
     actingInTenant($this->owner, $this->tenant)->putJson('/api/v1/staff/payroll/2026-11/adjust/'.$this->tech->ulid, ['bonus' => 1])->assertUnprocessable();
     expect(actingInTenant($this->tech, $this->tenant)->getJson('/api/v1/staff/payroll?month=2026-11')->json('data.lines'))->toHaveCount(1);
     actingInTenant($this->tech, $this->tenant)->postJson('/api/v1/staff/payroll/2026-11/pay', ['method' => 'cash'])->assertForbidden();

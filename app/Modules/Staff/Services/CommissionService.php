@@ -8,6 +8,7 @@ use App\Modules\Analytics\Support\RevenuePolicy;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Staff\Models\CommissionRule;
 use App\Modules\Tenancy\Support\TenantContext;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -60,11 +61,37 @@ class CommissionService
             $rows[] = [
                 'id' => $m['id'], 'user_id' => $uid, 'name' => $m['name'], 'title' => $m['profile']->title ?? $m['role'],
                 'sales' => round($total), 'commission' => round(array_sum(array_column($items, 'amount'))), 'items' => $items,
-                'target' => $target, 'target_pct' => $target > 0 ? min(100, round($total / $target * 100)) : null,
+                'target' => $target, 'target_pct' => $target > 0 ? round($total / $target * 100) : null,
             ];
         }
 
-        return ['period' => $period, 'label' => $label, 'store_revenue' => round($storeRevenue), 'members' => $rows];
+        return [
+            'period' => $period, 'label' => $label, 'store_revenue' => round($storeRevenue),
+            'store_counter' => round(array_sum(array_column($sales, 'counter'))), 'store_online' => round(array_sum(array_column($sales, 'online'))),
+            'weeks' => $onlyUser === null ? $this->weeks($from, $to) : [],
+            'members' => $rows,
+        ];
+    }
+
+    /**
+     * The store's own-channel sales by week of the month (1–7, 8–14, 15–21, 22–end), returns off.
+     *
+     * @return list<array{label: string, from: string, to: string, amount: float}>
+     */
+    private function weeks(CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        $out = [];
+        foreach ([[1, 7], [8, 14], [15, 21], [22, (int) $to->day]] as $i => [$a, $b]) {
+            $start = $from->setDay($a)->startOfDay();
+            $end = $from->setDay($b)->endOfDay();
+            $sales = $this->sales($start, $end);
+            $out[] = [
+                'label' => 'Tuần '.($i + 1), 'from' => $start->toDateString(), 'to' => $end->toDateString(),
+                'amount' => round(array_sum(array_map(fn ($s) => $s['counter'] + $s['online'], $sales))),
+            ];
+        }
+
+        return $out;
     }
 
     /** @return array<string, mixed> */

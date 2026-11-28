@@ -74,6 +74,9 @@ export interface CommissionMonth {
     period: string;
     label: string;
     store_revenue: number;
+    store_counter: number;
+    store_online: number;
+    weeks: { label: string; from: string; to: string; amount: number }[];
     members: CommissionRow[];
     rules: CommissionRule[];
     manage: boolean;
@@ -108,7 +111,9 @@ export interface Payroll {
     status: 'draft' | 'approved' | 'paid';
     approved_at: string | null;
     paid_at: string | null;
+    approved_by: string | null;
     lines: PayLine[];
+    advances: { name: string; member: string; paid_at: string | null; method: string | null; amount: number }[];
     totals: { net: number; commission: number; insurance: number; employer_insurance: number; pit: number; count: number };
     rules: { employee_insurance: number; employer_insurance: number; personal_deduction: number; dependent_deduction: number };
     manage: boolean;
@@ -142,12 +147,12 @@ export function cellText(c: DayCell | undefined): string {
 export function cellClass(c: DayCell | undefined): string {
     if (!c) return '';
     return {
-        work: 'bg-emerald-50 text-emerald-800',
-        late: 'bg-amber-100 text-amber-900',
-        leave: 'bg-sky-50 text-sky-800',
-        off: 'bg-rose-50 text-rose-700',
-        open: 'bg-blue-50 text-blue-700',
-        no_out: 'bg-orange-50 text-orange-700',
+        work: 'bg-emerald-100 text-emerald-800',
+        late: 'bg-amber-200 text-amber-900',
+        leave: 'bg-sky-100 text-sky-700',
+        off: 'bg-rose-100 text-rose-700',
+        open: 'bg-blue-600 text-white ring-2 ring-blue-200',
+        no_out: 'bg-orange-100 text-orange-700',
     }[c.status];
 }
 
@@ -158,3 +163,24 @@ export function shiftMonth(month: string, by: number): string {
     return `${Math.floor(n / 12)}-${String((n % 12) + 1).padStart(2, '0')}`;
 }
 export const monthLabel = (month: string) => `Tháng ${Number(month.slice(5))}/${month.slice(0, 4)}`;
+
+export const WEEKDAYS = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'] as const;
+
+/** Headline figures of a month of attendance: who works today, work days, late arrivals, days to look at again. */
+export function attendanceSummary(m: AttendanceMonth) {
+    const today = m.today === null ? [] : m.members.map((r) => ({ r, c: r.days[String(m.today)] }));
+    const cells = m.members.flatMap((r) => Object.values(r.days));
+    const lateMembers = m.members.filter((r) => Object.values(r.days).some((c) => c.late > 0)).length;
+    return {
+        members: m.members.length,
+        workingToday: today.filter(({ c }) => c && c.status !== 'leave' && c.status !== 'off').length,
+        onShift: today.filter(({ c }) => c?.status === 'open').length,
+        awayToday: today.filter(({ c }) => c?.status === 'leave' || c?.status === 'off').map(({ r }) => r.name),
+        workDays: m.members.reduce((s, r) => s + r.work_days, 0),
+        hours: Math.round(m.members.reduce((s, r) => s + r.hours, 0) * 10) / 10,
+        late: cells.filter((c) => c.late > 0).length,
+        lateMembers,
+        noOut: cells.filter((c) => c.status === 'no_out').length,
+        unpaid: cells.filter((c) => c.status === 'off').length,
+    };
+}
