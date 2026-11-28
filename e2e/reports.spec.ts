@@ -64,7 +64,7 @@ test('reports: sales and profit, stock ledger, cashbook', async ({ page }) => {
 
     await page.getByRole('link', { name: 'Báo cáo kho' }).click();
     await page.getByRole('link', { name: 'Xuất nhập tồn' }).click();
-    await page.getByTestId('ledger-detail').check();
+    await page.getByTestId('ledger-detail').click();
     await expect(page.getByTestId('ledger-table')).toContainText('Hủy / mất');
     await shot(page, '06-stock-ledger');
 

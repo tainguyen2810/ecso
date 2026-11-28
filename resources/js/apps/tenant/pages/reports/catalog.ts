@@ -1,8 +1,10 @@
 import { adjustmentReasons } from '../inventory/labels';
-import { paymentMethods, returnStatus, returnTypes } from '../orders/labels';
+import { orderStatus, paymentMethods, returnStatus, returnTypes } from '../orders/labels';
 
 export type ColumnType = 'text' | 'number' | 'money' | 'pct' | 'date' | 'datetime';
 export type Tone = 'danger' | 'success' | 'muted';
+export type BadgeTone = 'success' | 'danger' | 'warning' | 'muted' | 'default';
+export type KpiTone = 'blue' | 'green' | 'amber' | 'red' | 'violet' | 'slate';
 
 export interface Column {
     key: string;
@@ -14,6 +16,14 @@ export interface Column {
     sub?: (row: any) => string | null;
     link?: (row: any) => string | null;
     tone?: (row: any) => Tone | undefined;
+    /** Channel mark (marketplace or own-channel kind) shown before the value. */
+    logo?: (row: any) => string | null;
+    /** A percentage drawn as a small bar beside the figure. */
+    bar?: boolean;
+    /** Initials in a circle before the value (people). */
+    avatar?: boolean;
+    /** Shown as a coloured pill instead of plain text. */
+    badge?: (row: any) => { label: string; tone: BadgeTone } | null;
     /** Footer value taken from data.totals[key] (or this function). */
     total?: boolean | ((data: any) => string | number | null);
 }
@@ -23,6 +33,8 @@ export interface Kpi {
     value: string | number;
     type?: ColumnType;
     hint?: string;
+    /** Colour of the card's icon and figure; guessed from the label when left out. */
+    tone?: KpiTone;
 }
 
 export interface DetailReport {
@@ -48,6 +60,11 @@ export interface DetailReport {
     action?: { label: string; to: string };
 }
 
+/** Gross profit over what the customer paid for the goods (total without the delivery fee), one decimal. */
+const marginOf = (r: any) => {
+    const revenue = Number(r.total) - Number(r.shipping_fee);
+    return revenue > 0 ? Math.round((Number(r.gross_profit) / revenue) * 1000) / 10 : null;
+};
 const variant = (r: any) => r.variant?.name ?? '—';
 const variantSku = (r: any) => r.variant?.sku ?? null;
 const variantLink = (r: any) => (r.variant?.id ? `/inventory/sku/${r.variant.id}` : null);
@@ -68,6 +85,12 @@ export const reports: Record<string, DetailReport> = {
         period: 'range',
         search: true,
         empty: 'Chưa có hàng bán trong khoảng thời gian này.',
+        kpis: (d) => [
+            { label: 'Doanh thu', value: d.totals.net, type: 'money', tone: 'blue', hint: `${Number(d.totals.units ?? 0).toLocaleString('vi-VN')} sản phẩm · ${Number(d.totals.orders ?? 0).toLocaleString('vi-VN')} đơn` },
+            { label: 'Chiết khấu', value: d.totals.discount, type: 'money', tone: 'amber' },
+            { label: 'Lãi gộp', value: d.totals.gross_profit, type: 'money', tone: 'green' },
+            { label: 'Lãi sau phí sàn', value: d.totals.profit_after_fees, type: 'money', tone: Number(d.totals.profit_after_fees) < 0 ? 'red' : 'green', hint: d.totals.fees !== undefined ? `Phí sàn ${Math.round(Number(d.totals.fees)).toLocaleString('vi-VN')} ₫` : undefined },
+        ],
         note: 'Tính các đơn đã ghi nhận doanh thu trong kỳ, giống trang Tài chính: đơn sàn khi sàn báo hoàn thành, đơn kênh riêng khi giao xong. Chiết khấu là chiết khấu từng dòng hàng; chiết khấu cả đơn không chia về từng sản phẩm. Phí sàn của mỗi đơn (theo đối soát, chưa có thì ước tính theo bảng phí của shop) được chia cho các dòng hàng theo giá trị; đơn kênh riêng không có phí sàn.',
         columns: () => [
             { key: 'variant', label: 'Sản phẩm', value: variant, sub: variantSku, link: variantLink },
@@ -78,7 +101,7 @@ export const reports: Record<string, DetailReport> = {
             { key: 'net', label: 'Doanh thu', type: 'money', total: true },
             { key: 'cogs', label: 'Giá vốn', type: 'money', total: true },
             { key: 'gross_profit', label: 'Lãi gộp', type: 'money', total: true, tone: negative('gross_profit') },
-            { key: 'margin', label: 'Biên', type: 'pct' },
+            { key: 'margin', label: 'Biên', type: 'pct', bar: true },
             { key: 'fees', label: 'Phí sàn', type: 'money', total: true, sub: (r) => (r.fees_unknown_orders ? 'thiếu bảng phí' : null) },
             { key: 'profit_after_fees', label: 'Lãi sau phí sàn', type: 'money', total: true, tone: negative('profit_after_fees') },
         ],
@@ -148,9 +171,10 @@ export const reports: Record<string, DetailReport> = {
             { label: 'Lãi gộp', value: d.totals.gross_profit, type: 'money' },
         ],
         columns: () => [
-            { key: 'number', label: 'Mã đơn', link: (r) => `/orders/${r.id}`, sub: (r) => r.channel },
+            { key: 'number', label: 'Mã đơn', link: (r) => `/orders/${r.id}`, sub: (r) => r.channel, logo: (r) => r.channel_kind ?? null },
             { key: 'placed_at', label: 'Ngày bán', type: 'datetime' },
-            { key: 'customer', label: 'Khách hàng' },
+            { key: 'customer', label: 'Khách hàng', avatar: true },
+            { key: 'status', label: 'Tình trạng', value: (r) => orderStatus[r.status]?.label ?? r.status, badge: (r) => orderStatus[r.status] ?? null },
             { key: 'units', label: 'SL', type: 'number', total: true },
             { key: 'goods', label: 'Tiền hàng', type: 'money', total: true },
             { key: 'discount', label: 'Chiết khấu', type: 'money', total: true },
@@ -158,6 +182,14 @@ export const reports: Record<string, DetailReport> = {
             { key: 'total', label: 'Khách phải trả', type: 'money', total: true },
             { key: 'cogs', label: 'Giá vốn', type: 'money', total: true },
             { key: 'gross_profit', label: 'Lãi gộp', type: 'money', total: true, tone: negative('gross_profit') },
+            {
+                key: 'margin',
+                label: 'Biên',
+                type: 'pct',
+                bar: true,
+                value: (r) => marginOf(r),
+                total: (d) => marginOf(d.totals),
+            },
         ],
     },
     'sales-lines': {
@@ -181,7 +213,7 @@ export const reports: Record<string, DetailReport> = {
         ],
         columns: () => [
             { key: 'placed_at', label: 'Ngày bán', type: 'datetime' },
-            { key: 'order', label: 'Mã đơn', value: (r) => r.order.number, link: (r) => `/orders/${r.order.id}`, sub: (r) => r.channel },
+            { key: 'order', label: 'Mã đơn', value: (r) => r.order.number, link: (r) => `/orders/${r.order.id}`, sub: (r) => r.channel, logo: (r) => r.channel_kind ?? null },
             { key: 'customer', label: 'Khách hàng' },
             { key: 'product', label: 'Sản phẩm', value: (r) => r.product.name, sub: (r) => (r.product.service ? 'Dịch vụ' : r.product.sku), link: (r) => (r.product.id ? `/inventory/sku/${r.product.id}` : null) },
             { key: 'quantity', label: 'SL', type: 'number', total: true },
@@ -230,6 +262,19 @@ export const reports: Record<string, DetailReport> = {
         period: 'range',
         tabs: { order: 'Theo đơn trả', product: 'Theo sản phẩm' },
         empty: 'Không có đơn trả hàng nào trong kỳ.',
+        kpis: (d) =>
+            d.totals.refund_amount !== undefined
+                ? [
+                      { label: 'Đơn trả hàng', value: d.totals.returns, type: 'number', tone: 'blue' },
+                      { label: 'Số lượng trả', value: d.totals.quantity, type: 'number', tone: 'amber' },
+                      { label: 'Tiền hoàn khách', value: d.totals.refund_amount, type: 'money', tone: 'red' },
+                  ]
+                : [
+                      { label: 'Số lượng trả', value: d.totals.quantity, type: 'number', tone: 'blue' },
+                      { label: 'Bán lại được', value: d.totals.sellable, type: 'number', tone: 'green' },
+                      { label: 'Hỏng', value: d.totals.damaged, type: 'number', tone: 'red' },
+                      { label: 'Giá trị hàng trả', value: d.totals.value, type: 'money', tone: 'amber' },
+                  ],
         columns: (_d, by) =>
             by === 'product'
                 ? [
@@ -246,7 +291,7 @@ export const reports: Record<string, DetailReport> = {
                       { key: 'created_at', label: 'Ngày tạo', type: 'datetime' },
                       { key: 'customer', label: 'Khách hàng', value: (r) => r.customer ?? '—' },
                       { key: 'type', label: 'Loại', value: (r) => returnTypes[r.type] ?? r.type },
-                      { key: 'status', label: 'Trạng thái', value: (r) => returnStatus[r.status]?.label ?? r.status },
+                      { key: 'status', label: 'Trạng thái', value: (r) => returnStatus[r.status]?.label ?? r.status, badge: (r) => returnStatus[r.status] ?? null },
                       { key: 'quantity', label: 'SL', type: 'number', total: true },
                       { key: 'refund_amount', label: 'Hoàn tiền', type: 'money', total: true },
                   ],
@@ -260,6 +305,12 @@ export const reports: Record<string, DetailReport> = {
         period: 'range',
         tabs: { method: 'Theo phương thức', staff: 'Theo nhân viên', day: 'Theo ngày', warehouse: 'Theo kho' },
         empty: 'Không có khoản thanh toán nào trong kỳ.',
+        kpis: (d) => [
+            { label: 'Thực thu', value: d.totals.net, type: 'money', tone: 'blue' },
+            { label: 'Đã thu', value: d.totals.received, type: 'money', tone: 'green' },
+            { label: 'Đã hoàn cho khách', value: d.totals.refunded, type: 'money', tone: 'red' },
+            { label: 'Số phiếu', value: d.totals.entries, type: 'number', tone: 'violet' },
+        ],
         note: 'Đơn trên sàn do sàn thu tiền nên không có ở đây. Khoản đã hủy không được tính.',
         columns: (_d, by) => [
             {
@@ -312,6 +363,12 @@ export const reports: Record<string, DetailReport> = {
         period: 'range',
         tabs: { supplier: 'Theo nhà cung cấp', product: 'Theo sản phẩm', day: 'Theo ngày' },
         empty: 'Chưa nhập hàng trong kỳ.',
+        kpis: (d) => [
+            { label: 'Nhập thuần', value: d.totals.net, type: 'money', tone: 'blue' },
+            { label: 'Giá trị nhập', value: d.totals.value, type: 'money', tone: 'violet', hint: `${Number(d.totals.receipts ?? 0).toLocaleString('vi-VN')} phiếu nhập` },
+            { label: 'Số lượng nhập', value: d.totals.quantity, type: 'number', tone: 'green' },
+            { label: 'Hàng trả NCC', value: d.totals.returned, type: 'money', tone: 'amber' },
+        ],
         columns: (_d, by) => [
             {
                 key: 'label',
@@ -355,7 +412,7 @@ export const reports: Record<string, DetailReport> = {
                   ]
                 : [
             { key: 'customer', label: 'Khách hàng', value: (r) => r.customer.name, sub: (r) => [r.customer.code, r.customer.group].filter(Boolean).join(' · '), link: (r) => `/customers/${r.customer.id}` },
-            { key: 'is_new', label: 'Loại', value: (r) => (r.is_new ? 'Khách mới' : 'Quay lại'), tone: (r) => (r.is_new ? 'success' : undefined) },
+            { key: 'is_new', label: 'Loại', value: (r) => (r.is_new ? 'Khách mới' : 'Quay lại'), badge: (r) => (r.is_new ? { label: 'Khách mới', tone: 'success' } : { label: 'Quay lại', tone: 'default' }) },
             { key: 'orders', label: 'Đơn trong kỳ', type: 'number' },
             { key: 'revenue', label: 'Doanh thu', type: 'money', total: (d) => d.summary.revenue },
             { key: 'average', label: 'Giá trị TB/đơn', type: 'money' },
@@ -470,6 +527,11 @@ export const reports: Record<string, DetailReport> = {
         period: 'range',
         tabs: { method: 'Theo phương thức', staff: 'Theo nhân viên', supplier: 'Theo nhà cung cấp', day: 'Theo ngày' },
         empty: 'Chưa trả tiền nhà cung cấp nào trong kỳ.',
+        kpis: (d) => [
+            { label: 'Đã trả nhà cung cấp', value: d.totals.paid, type: 'money', tone: 'blue' },
+            { label: 'Số phiếu chi', value: d.totals.entries, type: 'number', tone: 'violet' },
+            { label: 'Trung bình mỗi phiếu', value: d.totals.entries ? Math.round(Number(d.totals.paid) / Number(d.totals.entries)) : 0, type: 'money', tone: 'slate' },
+        ],
         columns: (_d, by) => [
             {
                 key: 'label',
@@ -492,6 +554,12 @@ export const reports: Record<string, DetailReport> = {
         warehouse: true,
         tabs: { document: 'Theo phiếu', product: 'Theo sản phẩm', reason: 'Theo lý do' },
         empty: 'Không có phiếu điều chỉnh nào được duyệt trong kỳ.',
+        kpis: (d) => [
+            { label: 'Số phiếu', value: d.totals.documents, type: 'number', tone: 'blue' },
+            { label: 'Số lượng tăng', value: d.totals.increase, type: 'number', tone: 'green' },
+            { label: 'Số lượng giảm', value: d.totals.decrease, type: 'number', tone: 'red' },
+            { label: 'Giá trị chênh lệch', value: d.totals.value, type: 'money', tone: Number(d.totals.value) < 0 ? 'red' : 'green' },
+        ],
         note: 'Giá trị tính theo giá vốn bình quân hiện tại; số âm là hàng giảm (thiếu, hỏng, mất).',
         columns: (_d, by) => [
             {

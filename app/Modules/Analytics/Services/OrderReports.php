@@ -43,7 +43,7 @@ class OrderReports
         $rows = (clone $base)
             ->orderByDesc('o.placed_at')->limit(self::limit())
             ->get(['o.ulid', 'o.external_order_id', 'o.code', 'o.placed_at', 'o.status', 'o.total', 'o.shipping_fee', 'o.discount', 'o.buyer_name', 'c.name as customer',
-                DB::raw("COALESCE(ma.shop_name, sc.name, 'Khác') as channel"), 'it.units', 'it.goods', 'it.line_discount', 'it.cogs'])
+                DB::raw("COALESCE(ma.shop_name, sc.name, 'Khác') as channel"), DB::raw('COALESCE(ma.marketplace, sc.type) as channel_kind'), 'it.units', 'it.goods', 'it.line_discount', 'it.cogs'])
             ->map(function ($r) {
                 $revenue = (float) $r->total - (float) $r->shipping_fee;
                 $cogs = (float) $r->cogs;
@@ -55,6 +55,7 @@ class OrderReports
                     'status' => $r->status,
                     'customer' => $r->customer ?? $this->buyer($r->buyer_name),
                     'channel' => $r->channel,
+                    'channel_kind' => $r->channel_kind,
                     'units' => (int) $r->units,
                     'goods' => round((float) $r->goods, 2),
                     'discount' => round((float) $r->line_discount + (float) $r->discount, 2),
@@ -99,7 +100,7 @@ class OrderReports
             .'COALESCE(SUM(i.quantity * i.unit_price - i.discount), 0) as amount, COALESCE(SUM(COALESCE(i.cost_snapshot, 0) * i.quantity), 0) as cogs')->first();
         $rows = (clone $base)
             ->orderByDesc('o.placed_at')->orderBy('i.id')->limit(self::limit())
-            ->get(['o.ulid as order_id', 'o.external_order_id', 'o.code', 'o.placed_at', 'o.buyer_name', 'c.name as customer', DB::raw("COALESCE(ma.shop_name, sc.name, 'Khác') as channel"),
+            ->get(['o.ulid as order_id', 'o.external_order_id', 'o.code', 'o.placed_at', 'o.buyer_name', 'c.name as customer', DB::raw("COALESCE(ma.shop_name, sc.name, 'Khác') as channel"), DB::raw('COALESCE(ma.marketplace, sc.type) as channel_kind'),
                 'i.name', 'i.quantity', 'i.unit_price', 'i.discount', 'i.cost_snapshot', 'i.mapping_status', 'v.ulid as variant_id', 'v.sku', 'p.name as product_name', 'v.name as variant_name'])
             ->map(function ($r) {
                 $amount = (float) $r->quantity * (float) $r->unit_price - (float) $r->discount;
@@ -110,6 +111,7 @@ class OrderReports
                     'placed_at' => CarbonImmutable::parse($r->placed_at)->toIso8601String(),
                     'customer' => $r->customer ?? $this->buyer($r->buyer_name),
                     'channel' => $r->channel,
+                    'channel_kind' => $r->channel_kind,
                     'product' => [
                         'id' => $r->variant_id,
                         'sku' => $r->sku,
