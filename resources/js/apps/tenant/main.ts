@@ -8,6 +8,8 @@ import { useAuthStore } from '@/shared/stores/auth';
 import { registerServiceWorker } from './pwa';
 
 const app = createApp(App).use(createPinia()).use(router);
+// Every form takes the Tailwind look (44px fields, 10px corners); see shared/ui/soft.ts.
+app.provide('soft-fields', true);
 
 setUnauthorizedHandler(() => {
     const auth = useAuthStore();

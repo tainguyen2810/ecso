@@ -81,3 +81,13 @@
     background-position: right 0.85rem center;
     background-size: 1rem;
 }
+
+/* Checkboxes and radios in the tenant forms: blue, 18px, so they match the soft fields. */
+@layer base {
+    input[type='checkbox'],
+    input[type='radio'] {
+        accent-color: var(--color-blue-600);
+        width: 1.05rem;
+        height: 1.05rem;
+    }
+}

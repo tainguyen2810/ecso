@@ -6,6 +6,7 @@ import Button from '@/shared/ui/Button.vue';
 import Input from '@/shared/ui/Input.vue';
 import { composeAddress, loadProvinces, loadWards, suggestAddress, type AddressParts, type AddressSuggestion, type Province, type Ward } from '@/shared/lib/geo';
 import { cn } from '@/shared/lib/utils';
+import { useSoft } from '@/shared/ui/soft';
 
 /**
  * Standard Vietnamese address (units since 1 July 2025): Tỉnh/Thành phố → Phường/Xã → số nhà, đường.
@@ -104,6 +105,8 @@ async function readQuick() {
 function onPaste() {
     setTimeout(readQuick, 0);
 }
+const soft = useSoft();
+const labelClass = soft ? 'block text-[13.5px] font-medium text-slate-700' : 'text-sm font-medium leading-none';
 </script>
 
 <template>
@@ -121,9 +124,9 @@ function onPaste() {
         </div>
 
         <div v-if="quick" class="space-y-1.5">
-            <label :for="`${idPrefix}-quick`" class="text-sm font-medium leading-none">Gõ nhanh địa chỉ <span class="font-normal text-muted-foreground">(dán cả dòng, hệ thống tự tách)</span></label>
+            <label :for="`${idPrefix}-quick`" :class="labelClass">Gõ nhanh địa chỉ <span class="font-normal text-muted-foreground">(dán cả dòng, hệ thống tự tách)</span></label>
             <div class="flex gap-2">
-                <Input :id="`${idPrefix}-quick`" v-model="quickText" class="border-dashed" placeholder="VD: 12 Nguyễn Huệ, P. Bến Nghé, Q.1, TP.HCM" data-testid="address-quick" @paste="onPaste" @keydown.enter.prevent="readQuick" />
+                <Input :id="`${idPrefix}-quick`" v-model="quickText" placeholder="VD: 12 Nguyễn Huệ, P. Bến Nghé, Q.1, TP.HCM" data-testid="address-quick" @paste="onPaste" @keydown.enter.prevent="readQuick" />
                 <Button variant="outline" :disabled="!quickText.trim() || reading" data-testid="address-quick-read" @click="readQuick"><Sparkles /> Tách</Button>
             </div>
             <p v-if="quickMiss" class="text-xs text-amber-700">Chưa nhận ra đủ tỉnh/phường, chọn tiếp bên dưới.</p>
@@ -131,7 +134,7 @@ function onPaste() {
 
         <div :class="cn('grid gap-3', columns === 2 && 'sm:grid-cols-2')">
             <div class="space-y-1.5">
-                <label :for="`${idPrefix}-province`" class="text-sm font-medium leading-none">Tỉnh / Thành phố{{ mark }}</label>
+                <label :for="`${idPrefix}-province`" :class="labelClass">Tỉnh / Thành phố{{ mark }}</label>
                 <Combobox
                     :id="`${idPrefix}-province`"
                     :model-value="model.province_code"
@@ -144,7 +147,7 @@ function onPaste() {
                 <p v-if="errors.province_code" class="text-xs text-destructive">{{ errors.province_code }}</p>
             </div>
             <div class="space-y-1.5">
-                <label :for="`${idPrefix}-ward`" class="text-sm font-medium leading-none">Phường / Xã{{ mark }}</label>
+                <label :for="`${idPrefix}-ward`" :class="labelClass">Phường / Xã{{ mark }}</label>
                 <Combobox
                     :id="`${idPrefix}-ward`"
                     :model-value="model.ward_code"
@@ -159,7 +162,7 @@ function onPaste() {
             </div>
         </div>
         <div class="space-y-1.5">
-            <label :for="`${idPrefix}-street`" class="text-sm font-medium leading-none">{{ streetLabel }}{{ mark }} <span class="font-normal text-muted-foreground">(số nhà, ngõ, tên đường, tòa nhà)</span></label>
+            <label :for="`${idPrefix}-street`" :class="labelClass">{{ streetLabel }}{{ mark }} <span class="font-normal text-muted-foreground">(số nhà, ngõ, tên đường, tòa nhà)</span></label>
             <Input :id="`${idPrefix}-street`" :model-value="model.street" :invalid="!!errors.street" maxlength="255" data-testid="address-street" @update:model-value="(v) => set({ street: String(v ?? '') })" />
             <p v-if="errors.street" class="text-xs text-destructive">{{ errors.street }}</p>
         </div>

@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue';
 import { ChevronDown } from 'lucide-vue-next';
 import { fold, matches } from '@/shared/lib/geo';
 import { cn } from '@/shared/lib/utils';
+import { SOFT_FIELD, SOFT_INVALID, useSoft } from '@/shared/ui/soft';
 
 /**
  * A select with a search box: typing (with or without Vietnamese marks) filters the options; ↑↓ Enter choose,
@@ -97,6 +98,7 @@ function onKey(e: KeyboardEvent) {
     nextTick(scrollActive);
 }
 defineExpose({ focus: () => input.value?.focus() });
+const soft = useSoft();
 </script>
 
 <template>
@@ -114,7 +116,8 @@ defineExpose({ focus: () => input.value?.focus() });
             :class="
                 cn(
                     'flex h-9 w-full rounded-md border border-input bg-card py-1 pl-3 pr-8 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
-                    invalid && 'border-destructive focus-visible:ring-destructive',
+                    soft && [SOFT_FIELD, 'pl-3.5 pr-10'],
+                    invalid && (soft ? SOFT_INVALID : 'border-destructive focus-visible:ring-destructive'),
                 )
             "
             @focus="show"
@@ -123,7 +126,7 @@ defineExpose({ focus: () => input.value?.focus() });
             @keydown="onKey"
             @blur="close"
         />
-        <ChevronDown class="pointer-events-none absolute right-2.5 top-2.5 size-4 text-muted-foreground" />
+        <ChevronDown :class="cn('pointer-events-none absolute right-2.5 top-2.5 size-4 text-muted-foreground', soft && 'right-3.5 top-3.5 text-slate-400')" />
         <ul v-if="open" ref="list" role="listbox" class="absolute z-30 mt-1 max-h-72 w-full min-w-56 overflow-y-auto rounded-md border bg-card py-1 shadow-lg">
             <li v-for="(o, i) in filtered" :key="o.value" role="option" :aria-selected="o.value === model">
                 <button

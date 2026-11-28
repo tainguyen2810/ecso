@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { cn } from '@/shared/lib/utils';
+import { SOFT_FIELD, useSoft } from './soft';
 import { parseTime } from '@/shared/lib/dates';
 import DateInput from './DateInput.vue';
 
@@ -10,6 +11,7 @@ import DateInput from './DateInput.vue';
  */
 defineOptions({ inheritAttrs: false });
 const model = defineModel<string | null | undefined>();
+const soft = useSoft();
 const props = defineProps<{ class?: string; max?: string; disabled?: boolean; invalid?: boolean }>();
 
 const date = ref((model.value ?? '').slice(0, 10));
@@ -44,7 +46,7 @@ function onTime(e: Event) {
             inputmode="numeric"
             placeholder="hh:mm"
             aria-label="Giờ"
-            :class="cn('h-9 w-20 rounded-md border border-input bg-card px-2 text-center text-sm tabular-nums shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50', invalid && 'border-destructive')"
+            :class="cn('h-9 w-20 rounded-md border border-input bg-card px-2 text-center text-sm tabular-nums shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50', soft && [SOFT_FIELD, 'w-24'], invalid && 'border-destructive')"
             @change="onTime"
             @keydown.enter.prevent="onTime"
         />
