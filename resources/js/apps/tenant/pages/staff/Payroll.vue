@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, provide, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { BadgePlus, Banknote, CalendarCheck, Check, CheckCircle2, ChevronRight, HandCoins, Lock, Pencil, ShieldCheck, Undo2, UserPlus, Wallet } from 'lucide-vue-next';
+import { BadgePlus, Banknote, CalendarCheck, Check, CheckCircle2, ChevronRight, Clock, HandCoins, Info, Lock, Pencil, ShieldCheck, Undo2, UserPlus, Wallet } from 'lucide-vue-next';
 import Button from '@/shared/ui/Button.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
@@ -25,6 +25,8 @@ import { monthLabel, thisMonth, type PayLine, type Payroll, type StaffProfile } 
  * thuế TNCN. A draft follows attendance and sales live; Duyệt freezes it; Chi lương books one voucher per member in the
  * cash book. A member sees only their own payslip, once approved.
  */
+// Fields, buttons and dialogs in the Tailwind style (soft-cards, like Cấu hình).
+provide('soft-cards', true);
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
@@ -358,10 +360,10 @@ const dayText = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(
     </template>
 
     <Dialog v-model:open="adjOpen" :title="`Thưởng, khấu trừ: ${selected?.name ?? ''}`">
-        <div class="grid grid-cols-2 gap-3 text-sm">
-            <label class="block"><span class="mb-1 block font-medium">Thưởng (đ)</span><Input v-model.number="adjForm.bonus" type="number" min="0" step="100000" /></label>
-            <label class="block"><span class="mb-1 block font-medium">Khấu trừ khác (đ)</span><Input v-model.number="adjForm.deduction" type="number" min="0" step="50000" /></label>
-            <label class="col-span-2 block"><span class="mb-1 block font-medium">Ghi chú</span><Input v-model="adjForm.note" maxlength="255" placeholder="VD: thưởng Black Friday, đi trễ 3 lần" /></label>
+        <div class="grid grid-cols-2 gap-4">
+            <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Thưởng (đ)</span><Input v-model.number="adjForm.bonus" type="number" min="0" step="100000" /></label>
+            <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Khấu trừ khác (đ)</span><Input v-model.number="adjForm.deduction" type="number" min="0" step="50000" /></label>
+            <label class="col-span-2 block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Ghi chú</span><Input v-model="adjForm.note" maxlength="255" placeholder="VD: thưởng Black Friday, đi trễ 3 lần" /></label>
         </div>
         <template #footer>
             <Button variant="outline" @click="adjOpen = false">Huỷ</Button>
@@ -370,15 +372,18 @@ const dayText = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(
     </Dialog>
 
     <Dialog v-model:open="advOpen" title="Tạm ứng lương" description="Ghi một phiếu chi vào Sổ quỹ và tự trừ vào lương tháng này.">
-        <div class="space-y-3 text-sm">
-            <label class="block"><span class="mb-1 block font-medium">Nhân viên</span>
+        <div class="space-y-4">
+            <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Nhân viên</span>
                 <Select v-model="advForm.member" :options="[{ value: '', label: 'Chọn nhân viên' }, ...members.map((m) => ({ value: m.id, label: m.name }))]" />
             </label>
-            <div class="grid grid-cols-2 gap-3">
-                <label class="block"><span class="mb-1 block font-medium">Số tiền (đ)</span><Input v-model.number="advForm.amount" type="number" min="1000" step="100000" /></label>
-                <label class="block"><span class="mb-1 block font-medium">Chi bằng</span><Select v-model="advForm.method" :options="[{ value: 'cash', label: 'Tiền mặt' }, { value: 'bank_transfer', label: 'Chuyển khoản' }]" /></label>
+            <div class="grid grid-cols-2 gap-4">
+                <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Số tiền (đ)</span><Input v-model.number="advForm.amount" type="number" min="1000" step="100000" /></label>
+                <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Chi bằng</span><Select v-model="advForm.method" :options="[{ value: 'cash', label: 'Tiền mặt' }, { value: 'bank_transfer', label: 'Chuyển khoản' }]" /></label>
             </div>
-            <label class="block"><span class="mb-1 block font-medium">Ghi chú</span><Input v-model="advForm.note" maxlength="255" /></label>
+            <div class="-mt-1 flex flex-wrap gap-2">
+                <button v-for="v in [500000, 1000000, 2000000, 3000000]" :key="v" type="button" :class="cn('rounded-[9px] border px-3 py-1.5 text-[13px] tabular-nums', advForm.amount === v ? 'border-blue-600 bg-blue-50 font-medium text-blue-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50')" @click="advForm.amount = v">{{ formatNumber(v) }}</button>
+            </div>
+            <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Ghi chú</span><Input v-model="advForm.note" maxlength="255" placeholder="VD: tạm ứng giữa tháng" /></label>
         </div>
         <template #footer>
             <Button variant="outline" @click="advOpen = false">Huỷ</Button>
@@ -387,9 +392,9 @@ const dayText = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(
     </Dialog>
 
     <Dialog v-model:open="payOpen" title="Chi lương ra sổ quỹ" :description="`Ghi ${data?.lines.filter((l) => l.net > 0).length ?? 0} phiếu chi 'Lương nhân viên', tổng ${formatMoney(data?.totals.net ?? 0)}.`">
-        <div class="grid grid-cols-2 gap-3 text-sm">
-            <label class="block"><span class="mb-1 block font-medium">Chi bằng</span><Select v-model="payForm.method" :options="[{ value: 'bank_transfer', label: 'Chuyển khoản' }, { value: 'cash', label: 'Tiền mặt' }]" /></label>
-            <label v-if="payForm.method === 'bank_transfer'" class="block"><span class="mb-1 block font-medium">Tài khoản chi</span><Input v-model="payForm.account" maxlength="40" placeholder="VD: VCB 0123" /></label>
+        <div class="grid grid-cols-2 gap-4">
+            <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Chi bằng</span><Select v-model="payForm.method" :options="[{ value: 'bank_transfer', label: 'Chuyển khoản' }, { value: 'cash', label: 'Tiền mặt' }]" /></label>
+            <label v-if="payForm.method === 'bank_transfer'" class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Tài khoản chi</span><Input v-model="payForm.account" maxlength="40" placeholder="VD: VCB 0123" /></label>
         </div>
         <template #footer>
             <Button variant="outline" @click="payOpen = false">Huỷ</Button>
@@ -397,27 +402,43 @@ const dayText = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(
         </template>
     </Dialog>
 
-    <Dialog v-model:open="profOpen" title="Hồ sơ lương" size="lg">
-        <div class="space-y-4 text-sm">
-            <label class="block"><span class="mb-1 block font-medium">Nhân viên</span>
-                <Select :model-value="profMember" :options="members.map((m) => ({ value: m.id, label: `${m.name}${m.profile.set ? '' : ' (chưa có hồ sơ)'}` }))" @update:model-value="pickMember(String($event))" />
-            </label>
-            <div class="grid gap-3 sm:grid-cols-3">
-                <label class="block"><span class="mb-1 block font-medium">Chức danh</span><Input v-model="prof.title" maxlength="100" placeholder="VD: Thu ngân" /></label>
-                <label class="block"><span class="mb-1 block font-medium">Trả lương</span><Select v-model="prof.pay_type" :options="[{ value: 'month', label: 'Theo tháng (theo công)' }, { value: 'hour', label: 'Theo giờ' }]" /></label>
-                <label v-if="prof.pay_type === 'month'" class="block"><span class="mb-1 block font-medium">Lương cơ bản (đ)</span><Input v-model.number="prof.base_salary" type="number" min="0" step="100000" /></label>
-                <label v-else class="block"><span class="mb-1 block font-medium">Lương mỗi giờ (đ)</span><Input v-model.number="prof.hourly_rate" type="number" min="0" step="1000" /></label>
-                <label v-if="prof.pay_type === 'month'" class="block"><span class="mb-1 block font-medium">Số công chuẩn / tháng</span><Input v-model.number="prof.standard_days" type="number" min="1" max="31" /></label>
-                <label class="block"><span class="mb-1 block font-medium">Phụ cấp / tháng (đ)</span><Input v-model.number="prof.allowance" type="number" min="0" step="100000" /></label>
-                <label class="block"><span class="mb-1 block font-medium">Mục tiêu doanh số (đ)</span><Input v-model.number="prof.sales_target" type="number" min="0" step="1000000" /></label>
-                <label class="block"><span class="mb-1 block font-medium">Lương đóng bảo hiểm (đ)</span><Input v-model.number="prof.insured_salary" type="number" min="0" step="100000" /><span class="mt-1 block text-xs text-muted-foreground">Để 0 nếu không đóng bảo hiểm</span></label>
-                <label class="block"><span class="mb-1 block font-medium">Người phụ thuộc</span><Input v-model.number="prof.dependents" type="number" min="0" max="20" /></label>
-                <div class="grid grid-cols-2 gap-2">
-                    <label class="block"><span class="mb-1 block font-medium">Vào ca</span><Input v-model="prof.shift_start" type="time" /></label>
-                    <label class="block"><span class="mb-1 block font-medium">Tan ca</span><Input v-model="prof.shift_end" type="time" /></label>
-                </div>
+    <Dialog v-model:open="profOpen" title="Hồ sơ lương" description="Lương, phụ cấp, bảo hiểm và ca làm của một nhân viên. Bảng lương tháng chưa duyệt tự tính lại." size="lg">
+        <div class="space-y-6">
+            <div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_14rem]">
+                <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Nhân viên</span>
+                    <Select :model-value="profMember" :options="members.map((m) => ({ value: m.id, label: `${m.name}${m.profile.set ? '' : ' (chưa có hồ sơ)'}` }))" @update:model-value="pickMember(String($event))" />
+                </label>
+                <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Chức danh</span><Input v-model="prof.title" maxlength="100" placeholder="VD: Thu ngân" /></label>
             </div>
-            <p class="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">Giờ vào ca dùng để tính đi trễ (quá 10 phút). Lương theo tháng = lương cơ bản × số công / số công chuẩn.</p>
+            <section>
+                <p class="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wider text-slate-400"><Wallet class="size-3.5" /> Lương</p>
+                <div class="mb-4 flex rounded-[12px] bg-slate-100 p-1 text-[14px]" role="group" aria-label="Trả lương">
+                    <button type="button" :class="cn('flex-1 rounded-[9px] px-3.5 py-2 text-slate-500', prof.pay_type === 'month' && 'bg-white font-semibold text-slate-900 shadow-sm')" @click="prof.pay_type = 'month'">Theo tháng (theo công)</button>
+                    <button type="button" :class="cn('flex-1 rounded-[9px] px-3.5 py-2 text-slate-500', prof.pay_type === 'hour' && 'bg-white font-semibold text-slate-900 shadow-sm')" @click="prof.pay_type = 'hour'">Theo giờ</button>
+                </div>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <label v-if="prof.pay_type === 'month'" class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Lương cơ bản (đ)</span><Input v-model.number="prof.base_salary" type="number" min="0" step="100000" /></label>
+                    <label v-else class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Lương mỗi giờ (đ)</span><Input v-model.number="prof.hourly_rate" type="number" min="0" step="1000" /></label>
+                    <label v-if="prof.pay_type === 'month'" class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Số công chuẩn / tháng</span><Input v-model.number="prof.standard_days" type="number" min="1" max="31" /></label>
+                    <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Phụ cấp / tháng (đ)</span><Input v-model.number="prof.allowance" type="number" min="0" step="100000" /></label>
+                    <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Mục tiêu doanh số (đ)</span><Input v-model.number="prof.sales_target" type="number" min="0" step="1000000" /></label>
+                </div>
+            </section>
+            <section>
+                <p class="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wider text-slate-400"><ShieldCheck class="size-3.5" /> Bảo hiểm, thuế</p>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Lương đóng bảo hiểm (đ)</span><Input v-model.number="prof.insured_salary" type="number" min="0" step="100000" /><span class="mt-1.5 block text-[13px] text-slate-500">Để 0 nếu không đóng bảo hiểm</span></label>
+                    <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Người phụ thuộc</span><Input v-model.number="prof.dependents" type="number" min="0" max="20" /><span class="mt-1.5 block text-[13px] text-slate-500">Mỗi người giảm trừ thuế {{ formatMoney(data?.rules.dependent_deduction ?? 0) }}</span></label>
+                </div>
+            </section>
+            <section>
+                <p class="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wider text-slate-400"><Clock class="size-3.5" /> Ca làm</p>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Vào ca</span><Input v-model="prof.shift_start" type="time" /></label>
+                    <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Tan ca</span><Input v-model="prof.shift_end" type="time" /></label>
+                </div>
+            </section>
+            <p class="flex gap-2.5 rounded-[12px] border border-blue-100 bg-blue-50/60 px-4 py-3 text-[13px] text-slate-600"><Info class="mt-0.5 size-4 shrink-0 text-blue-600" />Giờ vào ca dùng để tính đi trễ (quá 10 phút). Lương theo tháng = lương cơ bản × số công / số công chuẩn.</p>
         </div>
         <template #footer>
             <Button variant="outline" @click="profOpen = false">Huỷ</Button>

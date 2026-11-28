@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, inject } from 'vue';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { Loader2 } from 'lucide-vue-next';
 import { cn } from '@/shared/lib/utils';
@@ -42,7 +42,21 @@ const props = withDefaults(
     { type: 'button' },
 );
 
-const classes = computed(() => cn(buttonVariants({ variant: props.variant, size: props.size }), props.class));
+// In a dialog of a Tailwind-style page (`soft-dialog`, see Dialog.vue): 44px, 12px corners, blue / white-with-border.
+const soft = inject<boolean>('soft-dialog', false);
+const softVariants: Record<string, string> = {
+    default: 'bg-blue-600 text-white shadow-sm hover:bg-blue-700',
+    outline: 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+    ghost: 'text-slate-600 hover:bg-slate-100',
+};
+const classes = computed(() =>
+    cn(
+        buttonVariants({ variant: props.variant, size: props.size }),
+        soft && (props.size ?? 'default') === 'default' && 'h-11 rounded-[12px] px-5 text-[15px]',
+        soft && softVariants[props.variant ?? 'default'],
+        props.class,
+    ),
+);
 </script>
 
 <template>

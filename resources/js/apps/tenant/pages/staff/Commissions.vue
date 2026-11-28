@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, provide, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { HandCoins, Info, MessageCircle, Plus, Store, Target, Trophy, Wrench } from 'lucide-vue-next';
 import Button from '@/shared/ui/Button.vue';
@@ -23,6 +23,8 @@ import { monthLabel, RULE_KINDS, ruleValue, thisMonth, type CommissionMonth, typ
  * Nhân viên › Hoa hồng: the ways commission is paid (set once, switched on and off) and each member's figures of the
  * month so far. Returns come off by themselves. A member sees only their own figures.
  */
+// Fields, buttons and dialogs in the Tailwind style (soft-cards, like Cấu hình).
+provide('soft-cards', true);
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
@@ -253,31 +255,31 @@ const medal = ['bg-amber-100 text-amber-700', 'bg-slate-200 text-slate-600', 'bg
     </template>
 
     <Dialog v-model:open="open" :title="editingId ? 'Sửa cách tính hoa hồng' : 'Thêm cách tính hoa hồng'" size="md">
-        <div class="space-y-4 text-sm">
-            <label class="block"><span class="mb-1 block font-medium">Kiểu tính</span>
+        <div class="space-y-4">
+            <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Kiểu tính</span>
                 <Select v-model="form.kind" :options="(Object.keys(RULE_KINDS) as RuleKind[]).map((k) => ({ value: k, label: RULE_KINDS[k].label }))" />
-                <span class="mt-1 block text-xs text-muted-foreground">{{ RULE_KINDS[form.kind].hint }}</span>
+                <span class="mt-1.5 block text-[13px] text-slate-500">{{ RULE_KINDS[form.kind].hint }}</span>
             </label>
-            <label class="block"><span class="mb-1 block font-medium">Tên</span><Input v-model="form.name" :placeholder="RULE_KINDS[form.kind].label" maxlength="100" /></label>
-            <div class="grid grid-cols-2 gap-3">
-                <label v-if="form.kind !== 'category_unit'" class="block"><span class="mb-1 block font-medium">Tỷ lệ (%)</span><Input v-model.number="form.rate" type="number" step="0.1" min="0" max="100" /></label>
+            <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Tên</span><Input v-model="form.name" :placeholder="RULE_KINDS[form.kind].label" maxlength="100" /></label>
+            <div class="grid grid-cols-2 gap-4">
+                <label v-if="form.kind !== 'category_unit'" class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Tỷ lệ (%)</span><Input v-model.number="form.rate" type="number" step="0.1" min="0" max="100" /></label>
                 <template v-else>
-                    <label class="block"><span class="mb-1 block font-medium">Tiền mỗi sản phẩm (đ)</span><Input v-model.number="form.amount" type="number" min="0" step="1000" /></label>
-                    <label class="block"><span class="mb-1 block font-medium">Danh mục</span>
+                    <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Tiền mỗi sản phẩm (đ)</span><Input v-model.number="form.amount" type="number" min="0" step="1000" /></label>
+                    <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Danh mục</span>
                         <Select v-model="form.category_id" :options="[{ value: '', label: 'Chọn danh mục' }, ...categories.map((c) => ({ value: c.id, label: c.parent ? `${c.parent.name} › ${c.name}` : c.name }))]" />
                     </label>
                 </template>
-                <label v-if="form.kind === 'store_bonus'" class="block"><span class="mb-1 block font-medium">Khi doanh số tháng vượt (đ)</span><Input v-model.number="form.threshold" type="number" min="0" step="1000000" /></label>
+                <label v-if="form.kind === 'store_bonus'" class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Khi doanh số tháng vượt (đ)</span><Input v-model.number="form.threshold" type="number" min="0" step="1000000" /></label>
             </div>
             <div>
-                <label class="flex items-center gap-2 font-medium"><input v-model="form.everyone" type="checkbox" class="size-4" /> Áp cho tất cả nhân viên</label>
-                <div v-if="!form.everyone" class="mt-2 grid max-h-40 gap-1.5 overflow-y-auto rounded-lg border p-2 sm:grid-cols-2">
-                    <label v-for="m in members" :key="m.id" class="flex items-center gap-2"><input v-model="form.user_ids" type="checkbox" :value="m.id" class="size-4" /> {{ m.name }}</label>
+                <label class="flex items-center gap-2.5 font-medium text-slate-700"><input v-model="form.everyone" type="checkbox" class="size-[18px] rounded border-slate-300 accent-blue-600" /> Áp cho tất cả nhân viên</label>
+                <div v-if="!form.everyone" class="mt-3 grid max-h-44 gap-1 overflow-y-auto rounded-[12px] border border-slate-200 p-2 sm:grid-cols-2">
+                    <label v-for="m in members" :key="m.id" class="flex items-center gap-2.5 rounded-[8px] px-2 py-1.5 hover:bg-slate-50"><input v-model="form.user_ids" type="checkbox" :value="m.id" class="size-[18px] rounded border-slate-300 accent-blue-600" /> {{ m.name }}</label>
                 </div>
             </div>
         </div>
         <template #footer>
-            <Button v-if="editingId" variant="ghost" class="mr-auto text-rose-700" @click="remove">Xoá</Button>
+            <Button v-if="editingId" variant="ghost" class="mr-auto !text-rose-600 hover:!bg-rose-50" @click="remove">Xoá</Button>
             <Button variant="outline" @click="open = false">Huỷ</Button>
             <Button :loading="saving" data-testid="rule-save" @click="save">Lưu</Button>
         </template>
