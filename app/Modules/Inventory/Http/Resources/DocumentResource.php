@@ -78,6 +78,8 @@ class DocumentResource extends JsonResource
                 'decided_at' => $doc->decided_at?->toIso8601String(),
                 'decision_note' => $doc->decision_note,
                 'counted_at' => $doc->counted_at?->toIso8601String(),
+                'short_qty' => $this->when($doc->getAttribute('short_qty') !== null || array_key_exists('short_qty', $doc->getAttributes()), fn () => (int) $doc->getAttribute('short_qty')),
+                'surplus_qty' => $this->when(array_key_exists('surplus_qty', $doc->getAttributes()), fn () => (int) $doc->getAttribute('surplus_qty')),
             ],
             $doc instanceof StockTransfer => [
                 'kind' => 'transfer',
@@ -86,6 +88,10 @@ class DocumentResource extends JsonResource
                 'to_warehouse' => $warehouse($doc->toWarehouse),
                 'dispatched_at' => $doc->dispatched_at?->toIso8601String(),
                 'received_at' => $doc->received_at?->toIso8601String(),
+                'total_qty' => $this->when(array_key_exists('total_qty', $doc->getAttributes()), fn () => (int) $doc->getAttribute('total_qty')),
+                // Null on lines received in full before short receiving existed: counts as all of it.
+                'received_qty' => $this->when(array_key_exists('received_total', $doc->getAttributes()) && $doc->status === StockTransfer::RECEIVED,
+                    fn () => (int) ($doc->getAttribute('received_total') ?? $doc->getAttribute('total_qty'))),
                 // Pending "thất lạc" adjustment for what did not arrive.
                 'shortage' => $doc->shortage_adjustment_id ? InventoryAdjustment::query()->whereKey($doc->shortage_adjustment_id)->first(['ulid', 'number', 'status'])?->only(['ulid', 'number', 'status']) : null,
             ],

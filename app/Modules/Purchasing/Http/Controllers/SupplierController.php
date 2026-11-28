@@ -11,6 +11,7 @@ use App\Modules\Purchasing\Models\Supplier;
 use App\Modules\Purchasing\Services\SupplierAllocation;
 use App\Modules\Purchasing\Services\SupplierExporter;
 use App\Modules\Purchasing\Services\SupplierService;
+use App\Modules\Purchasing\Services\SupplierSummary;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -20,7 +21,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SupplierController extends Controller
 {
-    public function index(Request $request): AnonymousResourceCollection
+    public function index(Request $request, SupplierAllocation $allocations): AnonymousResourceCollection
     {
         $this->authorize('viewAny', Supplier::class);
         $filters = $request->validate([
@@ -48,7 +49,26 @@ class SupplierController extends Controller
             default => $query->orderBy('suppliers.name'),
         };
 
-        return SupplierResource::collection($query->paginate((int) ($filters['per_page'] ?? 30)));
+        $page = $query->paginate((int) ($filters['per_page'] ?? 30));
+        // Overdue part and next due date of what each supplier on the page is still owed.
+        $owed = $page->getCollection()->filter(fn (Supplier $s) => (float) $s->getAttribute('debt') > 0)->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $allocated = $allocations->forSuppliers($owed);
+        foreach ($page->getCollection() as $supplier) {
+            if ($a = $allocated[$supplier->id] ?? null) {
+                $dates = array_filter(array_map(fn ($o) => $o['open'] > 0 ? $o['due_date'] : null, $a['orders']));
+                $supplier->setAttribute('overdue', $a['overdue']);
+                $supplier->setAttribute('next_due', $dates ? min($dates) : null);
+            }
+        }
+
+        return SupplierResource::collection($page);
+    }
+
+    public function summary(SupplierSummary $summary): JsonResponse
+    {
+        $this->authorize('viewAny', Supplier::class);
+
+        return response()->json(['data' => $summary->get()]);
     }
 
     public function export(SupplierExporter $exporter): StreamedResponse

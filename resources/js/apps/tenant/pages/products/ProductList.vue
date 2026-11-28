@@ -1,20 +1,21 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, provide, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Bookmark, Boxes, ChevronDown, ChevronRight, Columns3, Download, FileSpreadsheet, ImageIcon, ImageOff, Images, Package, Plus, Printer, RefreshCw, RotateCcw, Search, SlidersHorizontal, Sparkles, Tags, Upload, X } from 'lucide-vue-next';
-import PageHeader from '../../PageHeader.vue';
-import Pagination from '../../components/Pagination.vue';
+import { Bookmark, Boxes, ChevronDown, ChevronRight, Columns3, Download, FileSpreadsheet, ImageIcon, ImageOff, Images, Package, Plus, Printer, RefreshCw, RotateCcw, SlidersHorizontal, Sparkles, Tags, Upload, X } from 'lucide-vue-next';
 import StockOverview from '../../components/StockOverview.vue';
-import Tabs from '../../components/Tabs.vue';
 import ImportDialog from './ImportDialog.vue';
-import HeaderLink from '../../components/HeaderLink.vue';
-import Badge from '@/shared/ui/Badge.vue';
+import ProductsHead from './ui/ProductsHead.vue';
+import HeadLink from './ui/HeadLink.vue';
+import HeadButton from './ui/HeadButton.vue';
+import LineTabs from './ui/LineTabs.vue';
+import SearchField from './ui/SearchField.vue';
+import NumberPager from './ui/NumberPager.vue';
+import StatusChip from './ui/StatusChip.vue';
+import { card, th, thead } from './ui/ui';
 import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
 import Button from '@/shared/ui/Button.vue';
-import Card from '@/shared/ui/Card.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
-import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError, downloadFile } from '@/shared/lib/api';
@@ -34,7 +35,10 @@ const products = ref<Product[]>([]);
 const categories = ref<Ref[]>([]);
 const brands = ref<Ref[]>([]);
 const tags = ref<string[]>([]);
-const meta = ref({ current_page: 1, last_page: 1, total: 0 });
+const meta = ref({ current_page: 1, last_page: 1, total: 0, per_page: 20 });
+/** Products per status tab (from the list response). */
+const counts = ref<Record<string, number>>({});
+provide('soft-cards', true);
 const loading = ref(true);
 const loadError = ref<string | null>(null);
 const q = (key: string) => (typeof route.query[key] === 'string' ? (route.query[key] as string) : '');
@@ -77,7 +81,7 @@ async function exportXlsx() {
 }
 
 const statusLabels = { active: 'Đang bán', inactive: 'Ngừng bán', archived: 'Lưu trữ' } as const;
-const statusTone = { active: 'success', inactive: 'muted', archived: 'muted' } as const;
+const statusTone = { active: 'green', inactive: 'slate', archived: 'slate' } as const;
 
 async function load() {
     loading.value = true;
@@ -94,6 +98,7 @@ async function load() {
         });
         products.value = data.data;
         meta.value = data.meta;
+        counts.value = data.counts ?? {};
         selected.value = new Set();
     } catch (e) {
         loadError.value = (e as ApiError).message;
@@ -243,7 +248,7 @@ const visibleCount = computed(
         (showTaxonomy.value ? 1 : 0) -
         (columns.value.channels ? 1 : 0) +
         (showChannels.value ? 1 : 0) +
-        2 +
+        1 +
         (canManage.value && !trashed.value ? 1 : 0),
 );
 
@@ -271,6 +276,16 @@ async function fetchImages() {
     }
 }
 
+const bulkBtn = 'rounded-[8px] border border-slate-200 bg-white px-3 py-1.5 font-medium text-slate-700 hover:border-blue-300 hover:text-blue-700';
+/** Stock state of a row: out (nothing to sell), low (at or below the safety stock) or ok. Services and combos without stock rows count as ok. */
+function stockState(p: Product): 'out' | 'low' | 'ok' {
+    if (p.type === 'service' || p.type === 'subscription') return 'ok';
+    const a = p.stock?.available ?? 0;
+    if (a <= 0) return 'out';
+    const safety = p.stock?.safety ?? 0;
+    return safety && a <= safety ? 'low' : 'ok';
+}
+
 const allSelected = computed(() => products.value.length > 0 && products.value.every((p) => selected.value.has(p.id)));
 function toggleAll() {
     selected.value = allSelected.value ? new Set() : new Set(products.value.map((p) => p.id));
@@ -278,58 +293,49 @@ function toggleAll() {
 </script>
 
 <template>
-    <PageHeader title="Danh sách sản phẩm">
+    <ProductsHead title="Danh sách sản phẩm" description="Sản phẩm, biến thể, giá bán và nơi đang bán. Tồn kho lấy theo tất cả các kho.">
         <template #links>
-            <HeaderLink :icon="Download" :disabled="exporting" @click="exportXlsx">Xuất file</HeaderLink>
-            <HeaderLink v-if="canManage" :icon="Upload" data-testid="import-button" @click="importOpen = true">Nhập file</HeaderLink>
-            <HeaderLink :icon="Tags" to="/products/taxonomy">Danh mục và thương hiệu</HeaderLink>
-            <HeaderLink v-if="canManage" :icon="Boxes" :to="{ path: '/products/new', query: { type: 'combo' } }" data-testid="new-combo">Thêm combo</HeaderLink>
-            <HeaderLink v-if="canManage" :icon="RefreshCw" :to="{ path: '/products/new', query: { type: 'subscription' } }" data-testid="new-subscription">Thêm thuê bao</HeaderLink>
-            <HeaderLink :icon="Printer" to="/products/labels">In tem mã vạch</HeaderLink>
+            <HeadLink :icon="Download" :disabled="exporting" @click="exportXlsx">Xuất file</HeadLink>
+            <HeadLink v-if="canManage" :icon="Upload" data-testid="import-button" @click="importOpen = true">Nhập file</HeadLink>
+            <HeadLink :icon="Tags" to="/products/taxonomy">Danh mục và thương hiệu</HeadLink>
+            <HeadLink v-if="canManage" :icon="Boxes" :to="{ path: '/products/new', query: { type: 'combo' } }" data-testid="new-combo">Thêm combo</HeadLink>
+            <HeadLink v-if="canManage" :icon="RefreshCw" :to="{ path: '/products/new', query: { type: 'subscription' } }" data-testid="new-subscription">Thêm thuê bao</HeadLink>
+            <HeadLink :icon="Printer" to="/products/labels">In tem mã vạch</HeadLink>
         </template>
-        <RouterLink v-if="canManage" to="/products/scan"><Button variant="outline" data-testid="product-from-photos"><Sparkles /> Tạo từ ảnh</Button></RouterLink>
-        <RouterLink v-if="canManage" to="/products/new"><Button data-testid="new-product"><Plus /> Thêm sản phẩm</Button></RouterLink>
-    </PageHeader>
+        <HeadButton v-if="canManage" :icon="Sparkles" to="/products/scan" data-testid="product-from-photos">Tạo từ ảnh</HeadButton>
+        <HeadButton v-if="canManage" :icon="Plus" to="/products/new" primary data-testid="new-product">Thêm sản phẩm</HeadButton>
+    </ProductsHead>
 
-    <StockOverview v-if="summary" :summary="summary" :active="filters.stock || 'all'" @select="pickStock" />
+    <StockOverview v-if="summary" :summary="summary" mode="products" :active-products="counts.active ?? null" :active="filters.stock || 'all'" @select="pickStock" />
 
-    <Card v-if="missingImages && !imagesHidden && !trashed" class="mb-4 flex flex-wrap items-center gap-4 border-primary/20 bg-primary/5 p-4" data-testid="images-banner">
-        <span class="grid size-10 shrink-0 place-items-center rounded-lg border border-dashed bg-card text-slate-400"><ImageOff class="size-5" /></span>
+    <div v-if="missingImages && !imagesHidden && !trashed" class="mb-5 flex flex-wrap items-center gap-4 rounded-[14px] border border-blue-200 bg-blue-50/70 px-5 py-3.5" data-testid="images-banner">
+        <span class="grid size-10 shrink-0 place-items-center rounded-[10px] border border-dashed border-blue-300 bg-white text-blue-500"><ImageOff class="size-5" /></span>
         <div class="min-w-0 flex-1">
-            <p class="font-medium">{{ formatNumber(missingImages) }} sản phẩm chưa có ảnh nhưng đang bán trên sàn</p>
-            <p class="text-sm text-muted-foreground">Lấy ảnh từ các shop đã liên kết. Sản phẩm đã có ảnh thì giữ nguyên.</p>
+            <p class="text-[14px] font-semibold text-slate-800">{{ formatNumber(missingImages) }} sản phẩm chưa có ảnh nhưng đang bán trên sàn</p>
+            <p class="text-[13px] text-slate-500">Lấy ảnh từ các shop đã liên kết. Sản phẩm đã có ảnh thì giữ nguyên.</p>
         </div>
         <Button :loading="fetchingImages" data-testid="images-fetch" @click="fetchImages"><Images /> Lấy ảnh từ sàn</Button>
-        <button type="button" class="rounded p-1 text-muted-foreground hover:bg-muted" aria-label="Ẩn" @click="hideImagesBanner"><X class="size-4" /></button>
-    </Card>
+        <button type="button" class="rounded p-1 text-slate-400 hover:bg-white hover:text-slate-700" aria-label="Ẩn" @click="hideImagesBanner"><X class="size-4" /></button>
+    </div>
 
-    <Card>
-        <div class="border-b px-3">
-            <Tabs
-                v-model="filters.status"
-                variant="underline"
-                :tabs="[
-                    { value: 'all', label: 'Tất cả sản phẩm' },
-                    { value: 'active', label: 'Đang bán' },
-                    { value: 'inactive', label: 'Ngừng bán' },
-                    { value: 'archived', label: 'Lưu trữ' },
-                    { value: 'trashed', label: 'Đã xóa' },
-                ]"
-            />
-        </div>
-        <div class="flex flex-wrap items-center gap-3 border-b px-4 py-3">
-            <div class="relative w-full sm:min-w-64 sm:flex-1">
-                <Search class="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                <Input v-model="filters.q" data-testid="product-search" placeholder="Tìm kiếm theo mã sản phẩm, tên sản phẩm, barcode" class="pl-8" />
-            </div>
+    <section :class="cn(card, 'overflow-hidden')">
+        <LineTabs
+            v-model="filters.status"
+            :tabs="[
+                { value: 'all', label: 'Tất cả sản phẩm', count: counts.all },
+                { value: 'active', label: 'Đang bán', count: counts.active },
+                { value: 'inactive', label: 'Ngừng bán', count: counts.inactive },
+                { value: 'archived', label: 'Lưu trữ', count: counts.archived },
+                { value: 'trashed', label: 'Đã xóa', count: counts.trashed || null },
+            ]"
+        />
+        <div class="flex flex-wrap items-center gap-3 border-b border-slate-100 px-5 py-3">
+            <SearchField v-model="filters.q" placeholder="Tìm theo mã sản phẩm, tên sản phẩm, barcode" data-testid="product-search" />
             <Select v-if="categories.length" v-model="filters.category" :options="[{ value: '', label: 'Danh mục' }, ...categories.map((c) => ({ value: c.id, label: c.name }))]" class="w-full sm:w-44" aria-label="Danh mục" />
             <Select v-if="brands.length" v-model="filters.brand" class="w-full sm:w-44" aria-label="Thương hiệu" :options="[{ value: '', label: 'Thương hiệu' }, ...brands.map((b) => ({ value: b.id, label: b.name }))]" />
-            <Button variant="outline" size="sm" data-testid="more-filters" :class="cn(moreFilters && 'bg-muted')" @click="moreFilters = !moreFilters">
-                <SlidersHorizontal /> Bộ lọc khác<span v-if="activeExtra" class="rounded-full bg-primary px-1.5 text-xs text-primary-foreground">{{ activeExtra }}</span>
-            </Button>
             <Select
                 v-model="filters.sort"
-                class="w-full sm:w-44"
+                class="w-full sm:w-52"
                 aria-label="Sắp xếp"
                 :options="[
                     { value: 'newest', label: 'Mới tạo trước' },
@@ -341,34 +347,50 @@ function toggleAll() {
                     { value: '-price', label: 'Giá bán giảm dần' },
                 ]"
             />
+            <button
+                type="button"
+                data-testid="more-filters"
+                :class="cn('inline-flex h-11 items-center gap-2 whitespace-nowrap rounded-[10px] border border-slate-200 px-3.5 text-[14px] text-slate-700 hover:border-blue-300', moreFilters && 'border-blue-300 bg-blue-50/60')"
+                @click="moreFilters = !moreFilters"
+            >
+                <SlidersHorizontal class="size-4" /> Bộ lọc khác<span v-if="activeExtra" class="rounded-full bg-blue-600 px-1.5 text-[12px] text-white">{{ activeExtra }}</span>
+            </button>
             <div class="relative">
-                <Button variant="outline" size="sm" data-testid="columns-button" @click="columnsOpen = !columnsOpen"><Columns3 /> Cột</Button>
-                <div v-if="columnsOpen" class="absolute left-0 top-10 z-20 w-56 rounded-md border bg-card p-2 text-sm shadow-lg" data-testid="columns-menu">
-                    <label v-for="(label, key) in columnLabels" :key="key" class="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-muted">
+                <button type="button" data-testid="columns-button" class="inline-flex h-11 items-center gap-2 rounded-[10px] border border-slate-200 px-3.5 text-[14px] text-slate-700 hover:border-blue-300" @click="columnsOpen = !columnsOpen"><Columns3 class="size-4" /> Cột</button>
+                <div v-if="columnsOpen" class="absolute right-0 top-12 z-20 w-56 rounded-[12px] border border-slate-200 bg-white p-2 text-sm shadow-lg" data-testid="columns-menu">
+                    <label v-for="(label, key) in columnLabels" :key="key" class="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-50">
                         <input v-model="columns[key]" type="checkbox" /> {{ label }}
                     </label>
                 </div>
             </div>
-            <Button v-if="activeExtra || filters.q || filters.category || filters.brand || filters.status !== 'active'" variant="outline" size="sm" data-testid="save-view" @click="saveView"><Bookmark /> Lưu bộ lọc</Button>
+            <button
+                v-if="activeExtra || filters.q || filters.category || filters.brand || filters.status !== 'active'"
+                type="button"
+                data-testid="save-view"
+                class="inline-flex h-11 items-center gap-2 whitespace-nowrap rounded-[10px] border border-slate-200 px-3.5 text-[14px] text-slate-700 hover:border-blue-300"
+                @click="saveView"
+            >
+                <Bookmark class="size-4" /> Lưu bộ lọc
+            </button>
         </div>
-        <div v-if="savedViews.length" class="flex flex-wrap items-center gap-2 border-b px-4 py-2 text-xs" data-testid="saved-views">
-            <span class="text-muted-foreground">Bộ lọc đã lưu:</span>
-            <span v-for="v in savedViews" :key="v.name" class="inline-flex items-center gap-1 rounded-full border bg-card pl-2.5 pr-1">
-                <button type="button" class="py-0.5 hover:text-primary" @click="applyView(v)">{{ v.name }}</button>
-                <button type="button" class="rounded-full p-0.5 text-muted-foreground hover:bg-muted" :aria-label="`Xóa bộ lọc ${v.name}`" @click="removeView(v.name)"><X class="size-3" /></button>
+        <div v-if="savedViews.length" class="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-2.5 text-[13px]" data-testid="saved-views">
+            <span class="text-slate-500">Bộ lọc đã lưu:</span>
+            <span v-for="v in savedViews" :key="v.name" class="inline-flex items-center gap-1 rounded-md bg-slate-100 pl-2 pr-1 text-slate-700">
+                <button type="button" class="py-0.5 font-medium hover:text-blue-700" @click="applyView(v)">{{ v.name }}</button>
+                <button type="button" class="rounded p-0.5 text-slate-400 hover:bg-white hover:text-slate-700" :aria-label="`Xóa bộ lọc ${v.name}`" @click="removeView(v.name)"><X class="size-3" /></button>
             </span>
         </div>
-        <div v-if="moreFilters" class="flex flex-wrap items-end gap-3 border-b bg-muted/30 px-4 py-3 text-sm" data-testid="extra-filters">
+        <div v-if="moreFilters" class="flex flex-wrap items-end gap-3 border-b border-slate-100 bg-slate-50/60 px-5 py-3 text-sm" data-testid="extra-filters">
             <label class="grid gap-1">
-                <span class="text-xs text-muted-foreground">Loại</span>
+                <span class="text-xs text-slate-500">Loại</span>
                 <Select v-model="filters.type" class="w-40" aria-label="Loại sản phẩm" :options="[{ value: '', label: 'Mọi loại' }, { value: 'standard', label: 'Sản phẩm thường' }, { value: 'combo', label: 'Combo' }, { value: 'service', label: 'Dịch vụ' }, { value: 'subscription', label: 'Thuê bao' }]" />
             </label>
             <label class="grid gap-1">
-                <span class="text-xs text-muted-foreground">Tag</span>
+                <span class="text-xs text-slate-500">Tag</span>
                 <Select v-model="filters.tag" class="w-40" aria-label="Tag" :options="[{ value: '', label: 'Mọi tag' }, ...tags.map((t) => ({ value: t, label: t }))]" />
             </label>
             <label class="grid gap-1">
-                <span class="text-xs text-muted-foreground">Tồn kho</span>
+                <span class="text-xs text-slate-500">Tồn kho</span>
                 <Select
                     v-model="filters.stock"
                     class="w-44"
@@ -383,29 +405,29 @@ function toggleAll() {
                 />
             </label>
             <label class="grid gap-1">
-                <span class="text-xs text-muted-foreground">Ảnh</span>
+                <span class="text-xs text-slate-500">Ảnh</span>
                 <Select v-model="filters.image" class="w-40" aria-label="Ảnh" data-testid="image-filter" :options="[{ value: '', label: 'Mọi sản phẩm' }, { value: 'none', label: 'Chưa có ảnh' }]" />
             </label>
             <div class="grid gap-1">
-                <span class="text-xs text-muted-foreground">Ngày tạo</span>
+                <span class="text-xs text-slate-500">Ngày tạo</span>
                 <DateRangeInput v-model:from="filters.created_from" v-model:to="filters.created_to" clearable placeholder="Mọi ngày" aria-label="Ngày tạo" />
             </div>
             <Button v-if="activeExtra" variant="ghost" size="sm" @click="clearExtra"><X /> Xóa bộ lọc</Button>
         </div>
 
-        <div v-if="selected.size" class="flex flex-wrap items-center gap-3 border-b bg-secondary/60 px-4 py-2 text-sm">
-            <span class="font-medium">Đã chọn {{ selected.size }}</span>
-            <Button size="sm" variant="outline" @click="bulkStatus('active')">Đang bán</Button>
-            <Button size="sm" variant="outline" @click="bulkStatus('inactive')">Ngừng bán</Button>
-            <Button size="sm" variant="outline" @click="bulkStatus('archived')">Lưu trữ</Button>
-            <Button size="sm" variant="outline" data-testid="bulk-print" @click="printSelected">In tem mã vạch</Button>
-            <Button size="sm" variant="outline" data-testid="bulk-to-order" title="Giá theo web, không đẩy tồn lên web, khách đặt rồi mới nhập" @click="bulkSourcing('order')">Hàng đặt</Button>
-            <Button size="sm" variant="outline" @click="bulkSourcing('stock')">Hàng có sẵn</Button>
-            <Button size="sm" variant="outline" class="text-destructive" data-testid="bulk-delete" @click="bulkDelete">Xóa</Button>
-            <button class="ml-auto text-xs text-muted-foreground hover:text-foreground" @click="selected = new Set()">Bỏ chọn</button>
+        <div v-if="selected.size" class="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-blue-50/60 px-5 py-2.5 text-[13px]" data-testid="bulk-bar">
+            <b class="mr-2 text-slate-800">Đã chọn {{ selected.size }}</b>
+            <button type="button" :class="bulkBtn" @click="bulkStatus('active')">Đang bán</button>
+            <button type="button" :class="bulkBtn" @click="bulkStatus('inactive')">Ngừng bán</button>
+            <button type="button" :class="bulkBtn" @click="bulkStatus('archived')">Lưu trữ</button>
+            <button type="button" :class="bulkBtn" data-testid="bulk-print" @click="printSelected">In tem mã vạch</button>
+            <button type="button" :class="bulkBtn" data-testid="bulk-to-order" title="Giá theo web, không đẩy tồn lên web, khách đặt rồi mới nhập" @click="bulkSourcing('order')">Hàng đặt</button>
+            <button type="button" :class="bulkBtn" @click="bulkSourcing('stock')">Hàng có sẵn</button>
+            <button type="button" :class="cn(bulkBtn, 'border-red-200 text-red-600 hover:border-red-300 hover:text-red-700')" data-testid="bulk-delete" @click="bulkDelete">Xóa</button>
+            <button type="button" class="ml-auto text-slate-500 hover:text-slate-900" @click="selected = new Set()">Bỏ chọn</button>
         </div>
 
-        <div v-if="loading && !products.length" class="space-y-3 p-4"><Skeleton v-for="i in 6" :key="i" class="h-12" /></div>
+        <div v-if="loading && !products.length" class="space-y-3 p-5"><Skeleton v-for="i in 6" :key="i" class="h-12" /></div>
         <ErrorState v-else-if="loadError" :message="loadError" @retry="load" />
         <EmptyState
             v-else-if="!products.length"
@@ -418,43 +440,42 @@ function toggleAll() {
                 <RouterLink to="/products/new"><Button><Plus /> Thêm sản phẩm</Button></RouterLink>
             </div>
         </EmptyState>
-        <div v-else class="overflow-x-auto" :class="loading && 'opacity-60'">
-            <table class="w-full text-sm" data-testid="product-table">
-                <thead class="whitespace-nowrap border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+        <div v-else class="overflow-x-auto 2xl:overflow-visible" :class="loading && 'opacity-60'">
+            <table class="w-full min-w-[1000px]" data-testid="product-table">
+                <thead :class="thead">
                     <tr>
-                        <th v-if="canManage && !trashed" class="w-10 px-4 py-2.5"><input type="checkbox" :checked="allSelected" aria-label="Chọn tất cả" @change="toggleAll" /></th>
-                        <th class="w-14 py-2.5 pl-4 font-medium">Ảnh</th>
-                        <th class="px-4 py-2.5 font-medium">Sản phẩm</th>
-                        <th v-if="showChannels" class="px-4 py-2.5 font-medium">Bán trên</th>
-                        <th v-if="showTaxonomy" class="px-4 py-2.5 font-medium">Danh mục</th>
-                        <th v-if="columns.price" class="px-4 py-2.5 text-right font-medium">Giá bán lẻ</th>
-                        <th v-if="columns.available" class="px-4 py-2.5 text-center font-medium">Có thể bán</th>
-                        <th v-if="columns.on_hand" class="px-4 py-2.5 text-center font-medium">Tồn kho</th>
-                        <th v-if="columns.status" class="px-4 py-2.5 font-medium">Trạng thái</th>
-                        <th v-if="columns.created" class="px-4 py-2.5 font-medium">Ngày khởi tạo</th>
+                        <th v-if="canManage && !trashed" :class="cn(th, 'w-10')"><input type="checkbox" class="size-4 rounded" :checked="allSelected" aria-label="Chọn tất cả" @change="toggleAll" /></th>
+                        <th :class="th">Sản phẩm</th>
+                        <th v-if="showChannels" :class="th">Bán trên</th>
+                        <th v-if="showTaxonomy" :class="th">Danh mục</th>
+                        <th v-if="columns.price" :class="cn(th, 'text-right')">Giá bán lẻ</th>
+                        <th v-if="columns.available" :class="cn(th, 'text-right')">Có thể bán</th>
+                        <th v-if="columns.on_hand" :class="cn(th, 'text-right')">Tồn kho</th>
+                        <th v-if="columns.status" :class="th">Trạng thái</th>
+                        <th v-if="columns.created" :class="th">Ngày tạo</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y">
+                <tbody>
                     <template v-for="p in products" :key="p.id">
-                        <tr class="hover:bg-muted/30">
-                            <td v-if="canManage && !trashed" class="px-4 py-3"><input type="checkbox" :checked="selected.has(p.id)" :aria-label="`Chọn ${p.name}`" @change="toggle(selected, p.id)" /></td>
-                            <td class="py-3 pl-4">
-                                <img v-if="p.images?.length" :src="p.images[0]!.url" alt="" class="size-10 rounded border object-cover" />
-                                <span v-else class="flex size-10 items-center justify-center rounded border bg-muted/50 text-muted-foreground"><ImageIcon class="size-4" /></span>
-                            </td>
+                        <tr :class="cn('border-t border-slate-100 hover:bg-slate-50/70', selected.has(p.id) && 'bg-blue-50/40')">
+                            <td v-if="canManage && !trashed" class="w-10 px-4 py-3"><input type="checkbox" class="size-4 rounded" :checked="selected.has(p.id)" :aria-label="`Chọn ${p.name}`" @change="toggle(selected, p.id)" /></td>
                             <td class="px-4 py-3">
-                                <div class="flex items-center gap-2">
-                                    <button class="rounded p-0.5 text-muted-foreground hover:bg-muted" :aria-label="expanded.has(p.id) ? 'Thu gọn' : 'Xem biến thể'" @click="toggle(expanded, p.id)">
+                                <div class="flex items-center gap-3">
+                                    <button class="-ml-1 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" :aria-label="expanded.has(p.id) ? 'Thu gọn' : 'Xem biến thể'" @click="toggle(expanded, p.id)">
                                         <ChevronDown v-if="expanded.has(p.id)" class="size-4" />
                                         <ChevronRight v-else class="size-4" />
                                     </button>
+                                    <img v-if="p.images?.length" :src="p.images[0]!.url" alt="" class="size-11 shrink-0 rounded-[10px] border border-slate-200 object-cover" />
+                                    <span v-else class="grid size-11 shrink-0 place-items-center rounded-[10px] border border-dashed border-slate-300 bg-slate-50 text-slate-400"><ImageIcon class="size-4" /></span>
                                     <div class="min-w-0">
-                                        <span v-if="trashed" class="font-medium">{{ p.name }}</span>
-                                        <RouterLink v-else :to="`/products/${p.id}`" class="font-medium text-primary hover:underline">{{ p.name }}</RouterLink>
-                                        <Badge v-if="p.type === 'combo'" class="ml-1.5">Combo</Badge>
-                                        <Badge v-else-if="p.type === 'service'" class="ml-1.5">Dịch vụ</Badge>
-                                        <Badge v-else-if="p.type === 'subscription'" tone="info" class="ml-1.5">Thuê bao</Badge>
-                                        <p class="truncate text-xs text-muted-foreground">
+                                        <p class="flex flex-wrap items-center gap-2">
+                                            <span v-if="trashed" class="text-[14px] font-medium text-slate-800">{{ p.name }}</span>
+                                            <RouterLink v-else :to="`/products/${p.id}`" class="text-[14px] font-medium text-blue-700 hover:underline">{{ p.name }}</RouterLink>
+                                            <StatusChip v-if="p.type === 'combo'" tone="violet">Combo</StatusChip>
+                                            <StatusChip v-else-if="p.type === 'service'">Dịch vụ</StatusChip>
+                                            <StatusChip v-else-if="p.type === 'subscription'" tone="blue">Thuê bao</StatusChip>
+                                        </p>
+                                        <p class="truncate text-[12px] text-slate-500">
                                             {{ p.variants_count }} biến thể ·
                                             <span class="font-mono">{{ p.variants?.slice(0, 2).map((v) => v.sku).join(', ') }}{{ (p.variants?.length ?? 0) > 2 ? '…' : '' }}</span>
                                         </p>
@@ -462,39 +483,37 @@ function toggleAll() {
                                 </div>
                             </td>
                             <td v-if="showChannels" class="px-4 py-3">
-                                <div class="flex gap-1"><MarketplaceLogo v-for="s in p.sold_on" :key="s.id" :marketplace="s.marketplace" :name="s.name" size="sm" :title="s.name" /></div>
+                                <div class="flex -space-x-1"><MarketplaceLogo v-for="sh in p.sold_on" :key="sh.id" :marketplace="sh.marketplace" :name="sh.name" size="sm" :title="sh.name" class="ring-2 ring-white" /></div>
                             </td>
-                            <td v-if="showTaxonomy" class="px-4 py-3">
-                                {{ p.category?.name ?? '—' }}<span v-if="p.brand" class="block text-xs text-muted-foreground">{{ p.brand.name }}</span>
+                            <td v-if="showTaxonomy" class="px-4 py-3 text-[14px]">
+                                {{ p.category?.name ?? '—' }}<span v-if="p.brand" class="block text-[12px] text-slate-500">{{ p.brand.name }}</span>
                             </td>
-                            <td v-if="columns.price" class="whitespace-nowrap px-4 py-3 text-right tabular-nums">{{ priceRange(p) }}</td>
-                            <td v-if="columns.available" :class="cn('px-4 py-3 text-center tabular-nums', (p.stock?.available ?? 0) <= 0 && 'text-destructive')">
-                                {{ formatNumber(p.stock?.available ?? 0) }}
-                                <span v-if="(p.stock?.available ?? 0) <= 0" class="block text-[11px] font-medium text-rose-600">Hết hàng</span>
-
+                            <td v-if="columns.price" class="whitespace-nowrap px-4 py-3 text-right text-[14px] font-medium tabular-nums">{{ priceRange(p) }}</td>
+                            <td v-if="columns.available" :class="cn('whitespace-nowrap px-4 py-3 text-right text-[14px] font-semibold tabular-nums', stockState(p) === 'out' ? 'text-red-600' : stockState(p) === 'low' ? 'text-amber-600' : 'text-slate-900')">
+                                {{ p.type === 'service' ? '—' : formatNumber(p.stock?.available ?? 0) }}
+                                <span v-if="stockState(p) === 'out'" class="block text-[11px] font-medium text-red-500">Hết hàng</span>
+                                <span v-else-if="stockState(p) === 'low'" class="block text-[11px] font-medium text-amber-600">Sắp hết</span>
                             </td>
-                            <td v-if="columns.on_hand" class="px-4 py-3 text-center tabular-nums">
-                                {{ formatNumber(p.stock?.on_hand ?? 0) }}
-                            </td>
+                            <td v-if="columns.on_hand" class="px-4 py-3 text-right text-[14px] tabular-nums text-slate-600">{{ p.type === 'service' ? '—' : formatNumber(p.stock?.on_hand ?? 0) }}</td>
                             <td v-if="columns.status" class="whitespace-nowrap px-4 py-3">
                                 <div v-if="trashed" class="flex items-center gap-2">
-                                    <Badge tone="danger">Đã xóa</Badge>
+                                    <StatusChip tone="red">Đã xóa</StatusChip>
                                     <Button v-if="canManage" size="sm" variant="outline" :disabled="restoring === p.id" :data-testid="`restore-${p.id}`" @click="restore(p)"><RotateCcw /> Khôi phục</Button>
                                 </div>
-                                <Badge v-else :tone="statusTone[p.status]">{{ statusLabels[p.status] }}</Badge>
+                                <StatusChip v-else :tone="statusTone[p.status]">{{ statusLabels[p.status] }}</StatusChip>
                             </td>
-                            <td v-if="columns.created" class="whitespace-nowrap px-4 py-3 text-muted-foreground">{{ formatDate(p.created_at) }}</td>
+                            <td v-if="columns.created" class="whitespace-nowrap px-4 py-3 text-[13px] text-slate-500">{{ formatDate(p.created_at) }}</td>
                         </tr>
-                        <tr v-if="expanded.has(p.id)" class="bg-muted/20">
+                        <tr v-if="expanded.has(p.id)" class="bg-slate-50/60">
                             <td :colspan="visibleCount" class="px-4 py-2">
-                                <table class="ml-12 w-[calc(100%-3rem)] text-xs">
-                                    <tr v-for="v in p.variants" :key="v.id" class="border-b border-dashed last:border-0">
-                                        <td class="py-1.5 pr-4 font-mono font-medium">{{ v.sku }}</td>
-                                        <td class="py-1.5 pr-4">{{ v.name ?? '—' }}</td>
-                                        <td class="py-1.5 pr-4 font-mono text-muted-foreground">{{ v.barcode ?? '' }}</td>
-                                        <td class="py-1.5 pr-4 text-right tabular-nums">{{ formatMoney(v.ref_price) }}</td>
-                                        <td class="py-1.5 pr-4 text-right tabular-nums text-muted-foreground">{{ Number(v.wholesale_price) ? `Buôn ${formatMoney(v.wholesale_price)}` : '' }}</td>
-                                        <td class="py-1.5 text-right"><RouterLink :to="`/inventory/sku/${v.id}`" class="text-primary hover:underline">Thẻ kho</RouterLink></td>
+                                <table class="ml-20 w-[calc(100%-5rem)]">
+                                    <tr v-for="v in p.variants" :key="v.id" class="border-b border-dashed border-slate-200 last:border-0">
+                                        <td class="py-2 pr-6 font-mono text-[12px] font-semibold">{{ v.sku }}</td>
+                                        <td class="py-2 pr-6 text-[13px]">{{ v.name ?? '—' }}</td>
+                                        <td class="py-2 pr-6 font-mono text-[12px] text-slate-500">{{ v.barcode ?? '' }}</td>
+                                        <td class="py-2 pr-6 text-right text-[13px] tabular-nums">{{ formatMoney(v.ref_price) }}</td>
+                                        <td class="py-2 pr-6 text-right text-[13px] tabular-nums text-slate-500">{{ Number(v.wholesale_price) ? `Buôn ${formatMoney(v.wholesale_price)}` : '' }}</td>
+                                        <td class="py-2 text-right text-[13px]"><RouterLink :to="`/inventory/sku/${v.id}`" class="font-medium text-blue-700 hover:underline">Thẻ kho</RouterLink></td>
                                     </tr>
                                 </table>
                             </td>
@@ -503,8 +522,8 @@ function toggleAll() {
                 </tbody>
             </table>
         </div>
-        <Pagination :page="meta.current_page" :last-page="meta.last_page" :total="meta.total" @go="(p) => ((filters.page = p), load())" />
-    </Card>
+        <NumberPager :page="meta.current_page" :last-page="meta.last_page" :total="meta.total" :per-page="meta.per_page ?? 20" :count="products.length" unit="sản phẩm" @go="(p) => ((filters.page = p), load())" />
+    </section>
 
     <ImportDialog v-model:open="importOpen" @imported="load" />
 </template>

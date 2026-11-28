@@ -135,6 +135,7 @@ class StockController extends Controller
             // SKUs without any balance row count as out of stock too.
             'out_of_stock' => max(0, $skus - (int) ($states->in_stock ?? 0)),
             'low_stock' => (int) ($states->low_stock ?? 0),
+            'in_stock' => (int) ($states->in_stock ?? 0),
         ]]);
     }
 

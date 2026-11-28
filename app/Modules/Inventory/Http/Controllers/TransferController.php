@@ -6,11 +6,15 @@ use App\Http\Controllers\Controller;
 use App\Modules\Access\Support\DataAccess;
 use App\Modules\Inventory\Http\Controllers\Concerns\ResolvesLines;
 use App\Modules\Inventory\Http\Resources\DocumentResource;
+use App\Modules\Inventory\Models\InventoryAdjustment;
 use App\Modules\Inventory\Models\StockTransfer;
+use App\Modules\Inventory\Models\StockTransferLine;
 use App\Modules\Inventory\Services\InventoryDocumentService;
+use App\Shared\Support\ReportRange;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -29,9 +33,39 @@ class TransferController extends Controller
 
         return DocumentResource::collection(
             StockTransfer::query()->with(['fromWarehouse', 'toWarehouse', 'creator:id,name'])->withCount('lines')
+                ->withSum('lines as total_qty', 'quantity')->withSum('lines as received_total', 'received_qty')
                 ->when($status, fn ($q) => $q->where('status', $status))
                 ->orderByDesc('id')->paginate(20)
         );
+    }
+
+    /** Figures above "Chuyển hàng" (mẫu 28/11): sheets per status, what is on the road, received this month, received short. */
+    public function summary(): JsonResponse
+    {
+        $this->authorize('viewAny', StockTransfer::class);
+        $counts = StockTransfer::query()->groupBy('status')->selectRaw('status, COUNT(*) as n')->pluck('n', 'status')->map(fn ($n) => (int) $n);
+        $quantity = fn ($q) => (int) StockTransferLine::query()->whereIn('stock_transfer_id', $q->select('id'))->sum('quantity');
+        $month = ReportRange::now()->startOfMonth();
+        $received = StockTransfer::query()->where('status', StockTransfer::RECEIVED)->where('received_at', '>=', $month);
+        $short = StockTransfer::query()->whereNotNull('shortage_adjustment_id');
+
+        return response()->json(['data' => [
+            'counts' => [
+                'all' => (int) $counts->sum(),
+                'draft' => $counts[StockTransfer::DRAFT] ?? 0,
+                'in_transit' => $counts[StockTransfer::IN_TRANSIT] ?? 0,
+                'received' => $counts[StockTransfer::RECEIVED] ?? 0,
+                'cancelled' => $counts[StockTransfer::CANCELLED] ?? 0,
+            ],
+            'in_transit' => ['count' => $counts[StockTransfer::IN_TRANSIT] ?? 0, 'quantity' => $quantity(StockTransfer::query()->where('status', StockTransfer::IN_TRANSIT))],
+            'month' => ['count' => (clone $received)->count(), 'quantity' => $quantity(clone $received)],
+            'short' => [
+                'count' => (clone $short)->count(),
+                'pending' => (clone $short)->whereIn('shortage_adjustment_id', InventoryAdjustment::query()->where('status', InventoryAdjustment::PENDING)->select('id'))->count(),
+                'quantity' => (int) StockTransferLine::query()->whereIn('stock_transfer_id', (clone $short)->select('id'))->whereNotNull('received_qty')
+                    ->sum(DB::raw('quantity - received_qty')),
+            ],
+        ]]);
     }
 
     public function store(Request $request): JsonResponse

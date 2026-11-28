@@ -107,7 +107,7 @@ class ProductController extends Controller
         $products = Product::query()
             ->when($trashed, fn (Builder $q) => $q->onlyTrashed()->with(['category', 'brand', 'variants' => fn ($v) => $v->withTrashed()]), fn (Builder $q) => $q->with(['category', 'brand', 'variants', 'images']))
             ->leftJoinSub($stock, 's', 's.product_id', '=', 'products.id')
-            ->select('products.*', 's.on_hand', 's.reserved')
+            ->select('products.*', 's.on_hand', 's.reserved', 's.safety')
             // After select(): select() replaces the column list, which would drop the count.
             ->withCount(['variants' => fn ($v) => $v->when($trashed, fn ($t) => $t->withTrashed())])
             ->when($filters['q'] ?? null, function (Builder $q, string $term) use ($trashed) {
@@ -143,7 +143,17 @@ class ProductController extends Controller
         $this->withComboStock($products->getCollection(), $stockReader);
         $this->withShops($products->getCollection());
 
-        return ProductResource::collection($products);
+        // Counts for the status tabs (Tất cả, Đang bán, Ngừng bán, Lưu trữ, Đã xóa), not narrowed by the other filters.
+        $byStatus = Product::query()->selectRaw('status, COUNT(*) as n')->groupBy('status')->pluck('n', 'status');
+        $counts = [
+            'all' => (int) $byStatus->except(Product::STATUS_ARCHIVED)->sum(),
+            'active' => (int) ($byStatus[Product::STATUS_ACTIVE] ?? 0),
+            'inactive' => (int) ($byStatus[Product::STATUS_INACTIVE] ?? 0),
+            'archived' => (int) ($byStatus[Product::STATUS_ARCHIVED] ?? 0),
+            'trashed' => Product::onlyTrashed()->count(),
+        ];
+
+        return ProductResource::collection($products)->additional(['counts' => $counts]);
     }
 
     public function store(ProductRequest $request, ProductService $service): JsonResponse
