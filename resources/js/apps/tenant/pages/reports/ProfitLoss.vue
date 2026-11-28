@@ -6,6 +6,7 @@ import ReportDetailHead from './ReportDetailHead.vue';
 import ReportKpi from './ReportKpi.vue';
 import ReportChip from './ReportChip.vue';
 import ChannelMark from './ChannelMark.vue';
+import { channelLabel, channelName, groupChannels } from './channels';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
@@ -165,11 +166,12 @@ const channels = ref<ChannelRow[]>([]);
 async function loadChannels() {
     try {
         const d = (await api.get('/reports/sales', { params: { ...range.value, by: 'channel' } })).data.data;
-        channels.value = d.profit_hidden ? [] : (d.rows as ChannelRow[]).filter((r) => r.profit_after_fees !== undefined && r.goods > 0).slice(0, 6);
+        channels.value = d.profit_hidden ? [] : (d.rows as ChannelRow[]).filter((r) => r.profit_after_fees !== undefined && r.goods > 0);
     } catch {
         channels.value = [];
     }
 }
+const channelGroups = computed(() => groupChannels(channels.value, (c) => c.kind));
 onMounted(loadChannels);
 watch(() => [range.value.from, range.value.to], loadChannels);
 
@@ -295,19 +297,22 @@ const card = 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2
                             </div>
                             <RouterLink :to="{ name: 'report-sales', query: { ...range, by: 'channel' } }" class="shrink-0 text-[13px] font-medium text-blue-700 hover:underline">Chi tiết</RouterLink>
                         </header>
-                        <ul class="divide-y divide-slate-100 px-5">
-                            <li v-for="c in channels" :key="c.label" class="flex items-center gap-3 py-3">
-                                <ChannelMark :kind="c.kind" :name="c.label" size="lg" />
-                                <div class="min-w-0 flex-1">
-                                    <p class="truncate text-[14px] font-medium text-slate-900">{{ c.label }}</p>
-                                    <p class="text-[12px] text-slate-500">Doanh thu {{ short(c.goods) }}</p>
-                                </div>
-                                <div class="text-right">
-                                    <p :class="cn('text-[14px] font-semibold tabular-nums', (c.profit_after_fees ?? 0) < 0 ? 'text-red-600' : 'text-emerald-600')">{{ formatNumber(Math.round(c.profit_after_fees ?? 0)) }}</p>
-                                    <p v-if="c.margin_after_fees != null" class="text-[12px] text-slate-500">biên {{ vn(c.margin_after_fees) }}%</p>
-                                </div>
-                            </li>
-                        </ul>
+                        <div v-for="g in channelGroups" :key="g.key">
+                            <p class="bg-slate-50/80 px-5 py-2 text-[12px] font-semibold uppercase tracking-wider text-slate-500">{{ g.label }}</p>
+                            <ul class="divide-y divide-slate-100 px-5">
+                                <li v-for="c in g.rows" :key="`${c.kind}-${c.label}`" class="flex items-center gap-3 py-3">
+                                    <ChannelMark :kind="c.kind" :name="channelName(c.kind)" />
+                                    <div class="min-w-0 flex-1">
+                                        <p class="truncate text-[14px] font-medium text-slate-900">{{ channelLabel(c.label, c.kind) }}</p>
+                                        <p class="truncate text-[12px] text-slate-500">{{ channelName(c.kind) }} · doanh thu {{ short(c.goods) }}</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p :class="cn('text-[14px] font-semibold tabular-nums', (c.profit_after_fees ?? 0) < 0 ? 'text-red-600' : 'text-emerald-600')">{{ formatNumber(Math.round(c.profit_after_fees ?? 0)) }}</p>
+                                        <p v-if="c.margin_after_fees != null" class="text-[12px] text-slate-500">biên {{ vn(c.margin_after_fees) }}%</p>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
                     </section>
                 </div>
             </div>

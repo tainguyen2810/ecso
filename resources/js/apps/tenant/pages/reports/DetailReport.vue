@@ -41,6 +41,7 @@ import { useReportQuery } from './useReportQuery';
 import ReportDetailHead from './ReportDetailHead.vue';
 import ReportKpi from './ReportKpi.vue';
 import ChannelMark from './ChannelMark.vue';
+import { channelName, groupChannels } from './channels';
 
 /**
  * One frame for the 18 table reports of catalog.ts (mẫu Tailwind 28/11): head with quick periods and the reports of
@@ -191,23 +192,29 @@ function kpiFigure(k: Kpi): { value: number | null; unit: string; text?: string 
 }
 const kpiCols = computed(() => ({ 1: 'sm:grid-cols-1', 2: 'sm:grid-cols-2', 3: 'sm:grid-cols-3', 4: 'sm:grid-cols-2 xl:grid-cols-4', 5: 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5' })[Math.min(kpis.value.length, 5)]);
 
-/** Orders and sale lines: one chip per channel, counted on the rows shown (only when they are all there). */
+/**
+ * Orders and sale lines: one chip per shop of each channel (a Shopee and a TikTok shop with the same name are two
+ * chips), grouped Sàn TMĐT / Website / Chat / Tại cửa hàng, counted on the rows shown (only when they are all there).
+ */
 const logoCol = computed(() => columns.value.find((c) => c.logo));
 const chip = ref('');
 watch(() => [route.params.report, tab.value, data.value], () => (chip.value = ''));
+const chipKey = (r: any) => `${logoCol.value!.logo!(r) ?? ''}|${logoCol.value!.sub!(r) ?? '—'}`;
 const chips = computed(() => {
     const c = logoCol.value;
     if (!c?.sub || !data.value || data.value.truncated) return [];
-    const map = new Map<string, { name: string; kind: string | null; count: number }>();
+    const map = new Map<string, { key: string; name: string; kind: string | null; channel: string; count: number }>();
     for (const r of allRows.value) {
-        const name = c.sub(r) ?? '—';
-        const e = map.get(name) ?? { name, kind: c.logo!(r), count: 0 };
+        const key = chipKey(r);
+        const kind = c.logo!(r);
+        const e = map.get(key) ?? { key, name: c.sub(r) ?? '—', kind, channel: channelName(kind), count: 0 };
         e.count++;
-        map.set(name, e);
+        map.set(key, e);
     }
     return map.size > 1 ? [...map.values()].sort((a, b) => b.count - a.count) : [];
 });
-const rows = computed<any[]>(() => (chip.value && logoCol.value?.sub ? allRows.value.filter((r) => logoCol.value!.sub!(r) === chip.value) : allRows.value));
+const chipGroups = computed(() => groupChannels(chips.value, (c) => c.kind));
+const rows = computed<any[]>(() => (chip.value && logoCol.value?.sub ? allRows.value.filter((r) => chipKey(r) === chip.value) : allRows.value));
 
 /** 20 rows a page; printing takes every row. */
 const pageSize = ref(20);
@@ -292,7 +299,7 @@ async function exportCsv() {
             exporting.value = false;
         }
     }
-    const exportRows: any[] = (r.rows?.(source) ?? source.rows).filter((row: any) => !chip.value || logoCol.value?.sub?.(row) === chip.value);
+    const exportRows: any[] = (r.rows?.(source) ?? source.rows).filter((row: any) => !chip.value || !logoCol.value?.sub || chipKey(row) === chip.value);
     const suffix = r.period === 'range' ? `${range.value.from}-${range.value.to}` : r.period === 'date' ? date.value : today;
     downloadCsv(
         `${r.key}${r.tabs ? `-${tab.value}` : ''}-${suffix}.csv`,
@@ -415,15 +422,21 @@ async function exportCsv() {
                     >
                         Mọi kênh · {{ formatNumber(allRows.length) }}
                     </button>
-                    <button
-                        v-for="c in chips"
-                        :key="c.name"
-                        type="button"
-                        :class="cn('inline-flex h-9 items-center gap-2 rounded-[10px] px-3 text-[14px]', chip === c.name ? 'bg-slate-900 font-medium text-white' : 'border border-slate-200 bg-white text-slate-600 hover:border-blue-300')"
-                        @click="chip = chip === c.name ? '' : c.name"
-                    >
-                        <ChannelMark :kind="c.kind" :name="c.name" size="sm" class="!size-5" /> {{ c.name }} · {{ formatNumber(c.count) }}
-                    </button>
+                    <template v-for="g in chipGroups" :key="g.key">
+                        <span class="mx-1 hidden h-6 w-px bg-slate-200 sm:block" aria-hidden="true" />
+                        <span class="text-[12px] font-semibold uppercase tracking-wider text-slate-400">{{ g.label }}</span>
+                        <button
+                            v-for="c in g.rows"
+                            :key="c.key"
+                            type="button"
+                            :title="c.channel"
+                            :data-testid="`channel-chip-${c.kind ?? 'other'}`"
+                            :class="cn('inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-[10px] py-1 pl-1.5 pr-3 text-[14px]', chip === c.key ? 'bg-slate-900 font-medium text-white' : 'border border-slate-200 bg-white text-slate-700 hover:border-blue-300')"
+                            @click="chip = chip === c.key ? '' : c.key"
+                        >
+                            <ChannelMark :kind="c.kind" :name="c.channel" size="sm" /> {{ c.name }} <span :class="chip === c.key ? 'text-slate-300' : 'text-slate-400'">· {{ formatNumber(c.count) }}</span>
+                        </button>
+                    </template>
                 </template>
                 <p v-if="report.note" class="ml-auto flex items-start gap-1.5 text-[13px] text-slate-500">
                     <Info class="mt-0.5 size-4 shrink-0 text-slate-400" />
@@ -452,7 +465,7 @@ async function exportCsv() {
                                     :class="cn('px-3 py-3.5 first:pl-5 last:pr-5', c.type === 'datetime' && 'whitespace-nowrap', numeric(c) && 'whitespace-nowrap text-right tabular-nums', cellClass(c, row))"
                                 >
                                     <div v-if="c.logo" class="flex items-center gap-3 whitespace-nowrap">
-                                        <ChannelMark :kind="c.logo(row)" :name="c.sub?.(row) ?? undefined" />
+                                        <ChannelMark :kind="c.logo(row)" :name="channelName(c.logo(row))" />
                                         <div class="min-w-0">
                                             <RouterLink v-if="c.link?.(row)" :to="c.link(row)!" class="font-mono text-[13px] font-medium text-blue-700 hover:underline">{{ show(c.type, raw(c, row)) }}</RouterLink>
                                             <span v-else class="font-mono text-[13px]">{{ show(c.type, raw(c, row)) }}</span>

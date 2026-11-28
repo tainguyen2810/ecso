@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { RouteLocationRaw } from 'vue-router';
-import { ArrowDown, ArrowUp, ChartColumn, Globe, MessageCircle, Phone, Repeat, Star, Store, Users } from 'lucide-vue-next';
-import { channelTypes } from '../orders/labels';
+import { ArrowDown, ArrowUp, ChartColumn, Repeat, Star, Users } from 'lucide-vue-next';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api } from '@/shared/lib/api';
@@ -12,6 +11,8 @@ import ReportKpi from './ReportKpi.vue';
 import ReportChip from './ReportChip.vue';
 import ReportLinkCard from './ReportLinkCard.vue';
 import SideCard from './SideCard.vue';
+import ChannelMark from './ChannelMark.vue';
+import { channelLabel, channelName, groupChannels } from './channels';
 import type { ReportLink } from './groups';
 import { change, initials, pct, previousRange, short, useDashboard } from './dashboard';
 import { downloadCsv, toCsv } from './range';
@@ -59,44 +60,41 @@ const returnRate = computed(() => (s.value.customers ? (s.value.returning / s.va
 const returningRevenue = computed(() => (s.value.revenue ? (s.value.returning_revenue / s.value.revenue) * 100 : null));
 const newSource = computed(() => {
     const rows = ((data.value?.channels.rows ?? []) as any[]).filter((r) => r.new > 0).sort((a, b) => b.new - a.new);
-    return rows[0]?.label ?? null;
+    return rows[0] ? channelLabel(rows[0].label, rows[0].kind) : null;
 });
 const oldestDebt = computed(() => Math.max(0, ...((data.value?.receivables?.rows ?? []) as any[]).map((r) => Number(r.age_days ?? 0))));
-/** "Khách theo kênh bán": real logos for the marketplaces and Zalo, a plain icon for the shop's own channels. */
-const marketLogos: Record<string, string> = { shopee: '/images/marketplaces/shopee.webp', tiktok: '/images/marketplaces/tiktok.webp', lazada: '/images/marketplaces/lazada.webp', tiki: '/images/marketplaces/tiki.webp', zalo: '/images/channels/zalo.webp' };
-const kindTones: Record<string, { bar: string; icon: string }> = {
-    shopee: { bar: 'bg-orange-500', icon: '' },
-    tiktok: { bar: 'bg-slate-900', icon: '' },
-    lazada: { bar: 'bg-indigo-500', icon: '' },
-    tiki: { bar: 'bg-sky-500', icon: '' },
-    zalo: { bar: 'bg-blue-500', icon: '' },
-    website: { bar: 'bg-violet-500', icon: 'bg-violet-50 text-violet-600' },
-    phone: { bar: 'bg-emerald-500', icon: 'bg-emerald-50 text-emerald-600' },
-};
-const kindIcons: Record<string, unknown> = { website: Globe, phone: Phone, facebook: MessageCircle };
-const byChannel = computed(() => {
-    const rows = ((data.value?.channels.rows ?? []) as any[]).filter((r) => Number(r.customers) > 0);
-    const total = rows.reduce((t, r) => t + Number(r.customers), 0);
+const oldestName = computed(() => (((data.value?.receivables?.rows ?? []) as any[]).find((r) => Number(r.age_days ?? 0) === oldestDebt.value)?.customer?.name ?? null) as string | null);
+/**
+ * "Khách theo kênh bán" (mẫu 28/11 b): every channel with orders in the period, grouped Sàn TMĐT / Website / Chat /
+ * Tại cửa hàng, each shop or site one row with its real logo (marketplace buyers often have no customer record, so a
+ * TikTok shop with orders but no known customer still shows).
+ */
+const channelRows = computed(() => {
+    const rows = ((data.value?.channels.rows ?? []) as any[]).filter((r) => Number(r.orders) > 0 || Number(r.customers) > 0);
+    const customers = rows.reduce((t, r) => t + Number(r.customers), 0);
+    const orders = rows.reduce((t, r) => t + Number(r.orders), 0);
+    const share = (r: any) => (customers ? (Number(r.customers) / customers) * 100 : orders ? (Number(r.orders) / orders) * 100 : 0);
     return rows
-        .slice()
-        .sort((a, b) => Number(b.customers) - Number(a.customers))
-        .slice(0, 6)
-        .map((r, i) => {
-            const kind = String(r.kind ?? 'other');
-            return {
-                key: `${kind}-${r.label}-${i}`,
-                label: r.label === 'Khác' && channelTypes[kind] ? channelTypes[kind] : r.label,
-                name: kind,
-                logo: marketLogos[kind] ?? null,
-                icon: kindIcons[kind] ?? Store,
-                tone: kindTones[kind] ?? { bar: 'bg-blue-600', icon: 'bg-blue-50 text-blue-600' },
-                customers: Number(r.customers),
-                new: Number(r.new),
-                orders: Number(r.orders),
-                share: total ? (Number(r.customers) / total) * 100 : 0,
-            };
-        });
+        .map((r, i) => ({
+            key: `${r.kind}-${r.label}-${i}`,
+            kind: (r.kind ?? null) as string | null,
+            label: channelLabel(r.label, r.kind),
+            channel: channelName(r.kind),
+            customers: Number(r.customers),
+            new: Number(r.new),
+            orders: Number(r.orders),
+            share: share(r),
+        }))
+        .sort((x, y) => y.customers - x.customers || y.orders - x.orders);
 });
+const byChannel = computed(() =>
+    groupChannels(channelRows.value, (r) => r.kind).map((g) => ({
+        ...g,
+        customers: g.rows.reduce((t, r) => t + r.customers, 0),
+        share: g.rows.reduce((t, r) => t + r.share, 0),
+    })),
+);
+const byCustomers = computed(() => channelRows.value.some((r) => r.customers > 0));
 const deltaCustomers = computed(() => change(s.value.customers, prev.value?.customers));
 const deltaReturning = computed(() => change(s.value.returning, prev.value?.returning));
 const avatarTones = ['bg-blue-50 text-blue-600', 'bg-emerald-50 text-emerald-600', 'bg-violet-50 text-violet-600', 'bg-amber-50 text-amber-600', 'bg-sky-50 text-sky-600'];
@@ -159,10 +157,10 @@ defineExpose({ exportCsv });
                         :link="link('Khách mua hàng')!"
                         :target="target"
                         :stats="[
-                            { label: 'Khách mua', value: formatNumber(s.customers) },
-                            { label: 'Khách mới', value: formatNumber(s.new), tone: 'violet' },
-                            { label: 'Quay lại', value: formatNumber(s.returning), tone: 'green' },
-                            { label: 'Mua từ 3 lần', value: formatNumber(s.loyal) },
+                            { label: 'Khách mua', value: formatNumber(s.customers), unit: 'khách', hint: `${formatNumber(knownOrders)} đơn${s.customers ? ` · ${(knownOrders / s.customers).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} đơn/khách` : ''}` },
+                            { label: 'Khách mới', value: formatNumber(s.new), unit: 'khách', hint: newShare !== null ? `${pct(newShare)} số khách` : null, tone: 'violet' },
+                            { label: 'Quay lại', value: formatNumber(s.returning), unit: 'khách', hint: returnRate !== null ? `${pct(returnRate)} số khách` : null, tone: 'green' },
+                            { label: 'Mua từ 3 lần', value: formatNumber(s.loyal), unit: 'khách', hint: 'Khách thân thiết' },
                         ]"
                     />
                     <div class="grid gap-4 lg:grid-cols-2">
@@ -171,7 +169,11 @@ defineExpose({ exportCsv });
                             :link="link('Doanh thu, lợi nhuận theo khách')!"
                             :target="target"
                             tone="green"
-                            :stats="[{ label: 'TB/khách', value: `${formatNumber(Math.round(perCustomer))} đ` }, ...(top10Share !== null ? [{ label: 'Top 10', value: pct(top10Share) }] : [])]"
+                            :stats="[
+                                { label: 'Trung bình/khách', value: formatNumber(Math.round(perCustomer)), unit: 'đ', hint: 'Doanh thu thuần' },
+                                ...(top10Share !== null ? [{ label: 'Top 10 khách', value: pct(top10Share), hint: 'Phần doanh thu' }] : []),
+                                ...(profitPerCustomer !== null ? [{ label: 'Lãi gộp/khách', value: formatNumber(Math.round(profitPerCustomer)), unit: 'đ', hint: 'Sau giá vốn', tone: 'green' as const }] : []),
+                            ]"
                         />
                         <ReportLinkCard
                             v-if="link('Công nợ khách hàng') && data.receivables"
@@ -180,28 +182,59 @@ defineExpose({ exportCsv });
                             tone="amber"
                             :badge="data.receivables.totals.customers ? `${data.receivables.totals.customers} khách` : null"
                             badge-tone="amber"
-                            :stats="[{ label: 'Còn nợ', value: short(data.receivables.totals.due), tone: 'amber' }, ...(oldestDebt ? [{ label: 'Lâu nhất', value: `${oldestDebt} ngày`, tone: (oldestDebt > 30 ? 'red' : 'amber') as 'red' | 'amber' }] : [])]"
+                            :stats="[
+                                { label: 'Còn nợ', value: short(data.receivables.totals.due), hint: `${formatNumber(data.receivables.totals.customers)} khách`, tone: 'amber' },
+                                { label: 'Đơn còn nợ', value: formatNumber(data.receivables.totals.orders), unit: 'đơn', hint: 'Tính đến hôm nay' },
+                                ...(oldestDebt ? [{ label: 'Lâu nhất', value: formatNumber(oldestDebt), unit: 'ngày', hint: oldestName, tone: (oldestDebt > 30 ? 'red' : 'amber') as 'red' | 'amber' }] : []),
+                            ]"
                         />
                     </div>
                 </div>
 
                 <template v-if="byChannel.length">
                     <h2 class="mb-3 mt-6 text-[12px] font-semibold uppercase tracking-wider text-slate-400">Khách theo kênh bán</h2>
-                    <div class="rounded-2xl border border-slate-200 bg-white px-6 py-2 shadow-sm" data-testid="customers-by-channel">
-                        <div v-for="c in byChannel" :key="c.key" class="border-b border-slate-100 py-4 last:border-0">
-                            <div class="flex items-center gap-3">
-                                <img v-if="c.logo" :src="c.logo" :alt="c.name" class="size-8 shrink-0 rounded-[9px] object-contain" />
-                                <span v-else :class="['grid size-8 shrink-0 place-items-center rounded-[9px]', c.tone.icon]"><component :is="c.icon" class="size-4" /></span>
-                                <span class="min-w-0 flex-1 truncate text-[15px] font-medium text-slate-800">{{ c.label }}</span>
-                                <span class="text-[15px] font-semibold tabular-nums text-slate-900">{{ formatNumber(c.customers) }} khách</span>
-                                <span class="w-12 text-right text-[13px] tabular-nums text-slate-500">{{ pct(c.share) }}</span>
-                            </div>
-                            <div class="mt-2.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                                <div :class="['h-full rounded-full', c.tone.bar]" :style="{ width: `${Math.max(2, c.share)}%` }" />
-                            </div>
-                            <p v-if="c.new" class="mt-1.5 text-xs text-slate-500">{{ formatNumber(c.new) }} khách mới · {{ formatNumber(c.orders) }} đơn</p>
-                        </div>
-                    </div>
+                    <section class="overflow-hidden rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]" data-testid="customers-by-channel">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="text-[12px] font-semibold uppercase tracking-wide text-slate-500">
+                                    <th class="py-3 pl-5 text-left font-semibold">Kênh, shop</th>
+                                    <th class="hidden py-3 text-left font-semibold md:table-cell">Tỷ trọng</th>
+                                    <th class="py-3 text-right font-semibold">Khách</th>
+                                    <th class="hidden py-3 text-right font-semibold sm:table-cell">Khách mới</th>
+                                    <th class="py-3 text-right font-semibold">Đơn</th>
+                                    <th class="py-3 pr-5 text-right font-semibold">%</th>
+                                </tr>
+                            </thead>
+                            <tbody v-for="g in byChannel" :key="g.key" :data-testid="`channel-group-${g.key}`">
+                                <tr class="bg-slate-50/80">
+                                    <td colspan="6" class="px-5 py-2">
+                                        <span class="flex items-center justify-between gap-3 text-[12px] font-semibold uppercase tracking-wider text-slate-500">
+                                            <span>{{ g.label }}</span>
+                                            <span class="font-medium normal-case tracking-normal">{{ byCustomers ? `${formatNumber(g.customers)} khách` : `${formatNumber(g.rows.reduce((t, r) => t + r.orders, 0))} đơn` }} · {{ pct(g.share) }}</span>
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr v-for="c in g.rows" :key="c.key" class="border-t border-slate-100">
+                                    <td class="py-3 pl-5">
+                                        <span class="flex min-w-0 items-center gap-3">
+                                            <ChannelMark :kind="c.kind" :name="c.channel" />
+                                            <span class="min-w-0">
+                                                <span class="block truncate text-[14px] font-medium text-slate-900">{{ c.label }}</span>
+                                                <span v-if="c.channel !== c.label" class="block truncate text-[12px] text-slate-500">{{ c.channel }}</span>
+                                            </span>
+                                        </span>
+                                    </td>
+                                    <td class="hidden w-[30%] py-3 pr-6 md:table-cell">
+                                        <div class="h-2 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-blue-600" :style="{ width: `${c.share ? Math.max(1, c.share) : 0}%` }" /></div>
+                                    </td>
+                                    <td class="py-3 text-right font-semibold tabular-nums text-slate-900">{{ formatNumber(c.customers) }}</td>
+                                    <td class="hidden py-3 text-right tabular-nums text-slate-600 sm:table-cell">{{ formatNumber(c.new) }}</td>
+                                    <td class="py-3 text-right tabular-nums text-slate-600">{{ formatNumber(c.orders) }}</td>
+                                    <td class="py-3 pr-5 text-right text-[13px] tabular-nums text-slate-500">{{ pct(c.share) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </section>
                 </template>
             </div>
 

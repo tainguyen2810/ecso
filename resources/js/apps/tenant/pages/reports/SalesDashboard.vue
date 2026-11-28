@@ -2,7 +2,8 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter, type RouteLocationRaw } from 'vue-router';
 import { ArrowDown, ArrowRight, ArrowUp, Box, Receipt, CircleCheck, CircleHelp, CreditCard, FileText, Hexagon, ShoppingCart, TrendingUp, TriangleAlert, Truck, Undo2 } from 'lucide-vue-next';
-import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
+import ChannelMark from './ChannelMark.vue';
+import { channelLabel, channelName, groupChannels } from './channels';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import StackedBarChart from '@/shared/ui/charts/StackedBarChart.vue';
@@ -147,10 +148,16 @@ const spark = computed(() => {
 });
 
 // Channels.
-const kindLabels: Record<string, string> = { shopee: 'Shopee', tiktok: 'TikTok Shop', lazada: 'Lazada', tiki: 'Tiki', woocommerce: 'Website', pos: 'Bán tại quầy', manual: 'Kênh riêng' };
-const channelColors: Record<string, string> = { shopee: '#ee4d2d', tiktok: '#111827', lazada: '#1a2a9c', tiki: '#1a94ff', woocommerce: '#7c3aed', pos: '#10b981' };
+const channelColors: Record<string, string> = { shopee: '#ee4d2d', tiktok: '#111827', lazada: '#1a2a9c', tiki: '#1a94ff', woocommerce: '#873eff', zalo: '#0068ff', facebook: '#0866ff', pos: '#10b981' };
 const channelTotal = computed(() => channels.value.reduce((s: number, c: any) => s + Number(c.goods), 0));
 const channelPcts = computed(() => wholePercents(channels.value.map((c: any) => Number(c.goods))));
+/** Channels grouped Sàn TMĐT / Website / Chat / Tại cửa hàng, each shop or site one row (mẫu 28/11 b). */
+const channelGroups = computed(() =>
+    groupChannels(
+        channels.value.map((c: any, i: number) => ({ ...c, pct: channelPcts.value[i], name: channelLabel(c.label, c.kind), channel: channelName(c.kind) })),
+        (c) => c.kind,
+    ).map((g) => ({ ...g, goods: g.rows.reduce((t: number, c: any) => t + Number(c.goods), 0) })),
+);
 
 // Delivery status of orders placed in the period.
 const deliveryColors: Record<string, string> = { delivered: '#10b981', shipping: '#3b82f6', waiting: '#f59e0b', return_requested: '#a78bfa', failed: '#f87171', unknown: '#cbd5e1' };
@@ -330,22 +337,29 @@ const card = 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2
                     </div>
                     <span class="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{{ channels.length }} kênh</span>
                 </header>
-                <ul v-if="channels.length" class="divide-y divide-slate-100 px-5">
-                    <li v-for="(c, i) in channels.slice(0, 7)" :key="`${c.kind}-${c.label}`" class="py-3">
-                        <div class="flex items-center gap-3">
-                            <MarketplaceLogo :marketplace="c.kind ?? 'manual'" :name="c.label" size="sm" />
-                            <div class="min-w-0 flex-1">
-                                <p class="truncate text-sm font-medium text-slate-800">{{ c.label }}</p>
-                                <p class="text-xs text-muted-foreground">{{ kindLabels[c.kind] ?? 'Kênh riêng' }}</p>
-                            </div>
-                            <span class="text-sm font-semibold tabular-nums text-slate-900">{{ formatMoney(c.goods) }}</span>
-                            <span class="w-9 text-right text-xs tabular-nums text-muted-foreground">{{ channelPcts[i] }}%</span>
-                        </div>
-                        <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                            <div class="h-full rounded-full" :style="{ width: `${channelTotal ? (Number(c.goods) / channelTotal) * 100 : 0}%`, background: channelColors[c.kind] ?? '#3b82f6' }" />
-                        </div>
-                    </li>
-                </ul>
+                <div v-if="channels.length">
+                    <div v-for="g in channelGroups" :key="g.key" :data-testid="`sales-channel-group-${g.key}`">
+                        <p class="flex items-center justify-between gap-3 bg-slate-50/80 px-5 py-2 text-[12px] font-semibold uppercase tracking-wider text-slate-500">
+                            <span>{{ g.label }}</span><span class="font-medium normal-case tracking-normal tabular-nums">{{ formatMoney(g.goods) }}</span>
+                        </p>
+                        <ul class="divide-y divide-slate-100 px-5">
+                            <li v-for="c in g.rows" :key="`${c.kind}-${c.label}`" class="py-3">
+                                <div class="flex items-center gap-3">
+                                    <ChannelMark :kind="c.kind ?? 'manual'" :name="c.channel" />
+                                    <div class="min-w-0 flex-1">
+                                        <p class="truncate text-sm font-medium text-slate-800">{{ c.name }}</p>
+                                        <p v-if="c.channel !== c.name" class="text-xs text-muted-foreground">{{ c.channel }}</p>
+                                    </div>
+                                    <span class="text-sm font-semibold tabular-nums text-slate-900">{{ formatMoney(c.goods) }}</span>
+                                    <span class="w-9 text-right text-xs tabular-nums text-muted-foreground">{{ c.pct }}%</span>
+                                </div>
+                                <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                    <div class="h-full rounded-full" :style="{ width: `${channelTotal ? (Number(c.goods) / channelTotal) * 100 : 0}%`, background: channelColors[c.kind] ?? '#3b82f6' }" />
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
                 <p v-else class="p-5 text-sm text-muted-foreground">Chưa có đơn ghi nhận doanh thu trong kỳ.</p>
             </section>
         </div>

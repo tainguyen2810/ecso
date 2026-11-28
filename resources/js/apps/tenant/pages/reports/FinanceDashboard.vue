@@ -84,6 +84,14 @@ const oldestDebt = computed(() => {
     const ages = ((data.value?.receivables.rows ?? []) as any[]).map((r) => r.age_days).filter((d): d is number => d !== null && d !== undefined);
     return ages.length ? Math.max(...ages) : null;
 });
+const ofRevenue = (v: number) => (line('revenue') > 0 ? `${(Math.abs(v) / line('revenue') * 100).toLocaleString('vi-VN', { maximumFractionDigits: 1 })}% doanh thu` : null);
+const oldestName = computed(() => {
+    const rows = ((data.value?.receivables.rows ?? []) as any[]).filter((r) => r.age_days === oldestDebt.value);
+    return rows[0]?.customer?.name ?? null;
+});
+const overdueCustomers = computed(() => ((data.value?.receivables.rows ?? []) as any[]).filter((r) => Number(r.overdue) > 0).length);
+const bookDelta = computed(() => (data.value ? data.value.book.closing - data.value.book.opening : 0));
+const signed = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${short(Math.abs(v))}`;
 const weeks = computed(() => (data.value?.book.weeks ?? []) as { from: string; to: string; in: number; out: number }[]);
 const weekMax = computed(() => Math.max(...weeks.value.flatMap((w) => [w.in, w.out]), 0));
 const dm = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
@@ -154,32 +162,32 @@ defineExpose({ exportCsv });
                         :target="target"
                         tone="green"
                         :stats="[
-                            { label: 'Doanh thu thuần', value: formatMoney(line('revenue')) },
-                            { label: 'Giá vốn', value: formatMoney(line('cogs')) },
-                            { label: 'Phí sàn', value: formatMoney(line('marketplace_fees')) },
-                            { label: 'Chi phí', value: formatMoney(costs) },
-                            { label: 'Lợi nhuận', value: formatMoney(line('profit')), tone: line('profit') < 0 ? 'red' : 'green' },
+                            { label: 'Doanh thu thuần', value: short(line('revenue')), hint: lineChange('revenue') !== null ? `${lineChange('revenue')! >= 0 ? '↑' : '↓'} ${pct(lineChange('revenue')!)} so với kỳ trước` : 'Đơn hoàn thành trong kỳ' },
+                            { label: 'Giá vốn', value: short(line('cogs')), hint: ofRevenue(line('cogs')) },
+                            { label: 'Phí sàn', value: short(line('marketplace_fees')), hint: ofRevenue(line('marketplace_fees')), tone: line('marketplace_fees') ? 'amber' : undefined },
+                            { label: 'Chi phí', value: short(costs), hint: costs ? ofRevenue(costs) : 'Chưa có khoản chi phí' },
+                            { label: 'Lợi nhuận', value: short(line('profit')), hint: margin !== null ? `Biên ${margin.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}%` : null, tone: line('profit') < 0 ? 'red' : 'green' },
                         ]"
                     />
                 </section>
                 <section>
                     <h2 class="mb-3 text-[12px] font-semibold uppercase tracking-wider text-slate-400">Dòng tiền</h2>
                     <div class="grid gap-4 lg:grid-cols-2">
-                        <ReportLinkCard v-if="link('Sổ quỹ')" :link="link('Sổ quỹ')!" :target="target" :stats="[{ label: 'Đầu kỳ', value: short(data.book.opening) }, { label: 'Cuối kỳ', value: short(data.book.closing), tone: 'green' }]" />
-                        <ReportLinkCard v-if="link('Thu chi theo loại')" :link="link('Thu chi theo loại')!" :target="target" tone="violet" :stats="[{ label: 'Thu', value: short(data.book.in), tone: 'green' }, { label: 'Chi', value: short(data.book.out), tone: 'red' }]" />
+                        <ReportLinkCard v-if="link('Sổ quỹ')" :link="link('Sổ quỹ')!" :target="target" :stats="[{ label: 'Đầu kỳ', value: short(data.book.opening), hint: `Ngày ${dm(range.from)}` }, { label: 'Cuối kỳ', value: short(data.book.closing), hint: `${signed(bookDelta)} trong kỳ`, tone: data.book.closing < 0 ? 'red' : 'green' }, { label: 'Số khoản', value: formatNumber(data.book.count ?? 0), unit: 'khoản', hint: 'Phiếu thu, chi trong kỳ' }]" />
+                        <ReportLinkCard v-if="link('Thu chi theo loại')" :link="link('Thu chi theo loại')!" :target="target" tone="violet" :stats="[{ label: 'Thu', value: short(data.book.in), hint: 'Tiền vào các quỹ', tone: 'green' }, { label: 'Chi', value: short(data.book.out), hint: 'Tiền ra các quỹ', tone: 'red' }, { label: 'Chênh lệch', value: signed(data.book.in - data.book.out), hint: data.book.in >= data.book.out ? 'Thu nhiều hơn chi' : 'Chi nhiều hơn thu', tone: data.book.in - data.book.out < 0 ? 'red' : 'green' }]" />
                     </div>
                 </section>
                 <section>
                     <h2 class="mb-3 text-[12px] font-semibold uppercase tracking-wider text-slate-400">Công nợ</h2>
                     <div class="grid gap-4 lg:grid-cols-2">
-                        <ReportLinkCard v-if="link('Công nợ khách hàng')" :link="link('Công nợ khách hàng')!" :target="target" tone="amber" :stats="[{ label: 'Còn nợ', value: short(data.receivables.totals.due), tone: 'amber' }, { label: 'Khách', value: formatNumber(data.receivables.totals.customers) }, ...(oldestDebt !== null ? [{ label: 'Lâu nhất', value: `${formatNumber(oldestDebt)} ngày` }] : [])]" />
+                        <ReportLinkCard v-if="link('Công nợ khách hàng')" :link="link('Công nợ khách hàng')!" :target="target" tone="amber" :stats="[{ label: 'Còn nợ', value: short(data.receivables.totals.due), hint: `${formatNumber(data.receivables.totals.orders)} đơn còn nợ`, tone: 'amber' }, { label: 'Khách nợ', value: formatNumber(data.receivables.totals.customers), unit: 'khách', hint: overdueCustomers ? `${formatNumber(overdueCustomers)} khách quá hạn` : 'Chưa có khách quá hạn' }, ...(oldestDebt !== null ? [{ label: 'Lâu nhất', value: formatNumber(oldestDebt), unit: 'ngày', hint: oldestName, tone: (oldestDebt > 30 ? 'red' : undefined) as 'red' | undefined }] : [])]" />
                         <ReportLinkCard
                             v-if="link('Công nợ nhà cung cấp') && data.payables"
                             :link="link('Công nợ nhà cung cấp')!"
                             :target="target"
                             tone="red"
                             :badge="overdueSuppliers ? `${overdueSuppliers} quá hạn` : null"
-                            :stats="[{ label: 'Phải trả', value: short(data.payables.totals.debt), tone: 'red' }, { label: 'NCC', value: formatNumber(data.payables.totals.suppliers) }]"
+                            :stats="[{ label: 'Phải trả', value: short(data.payables.totals.debt), hint: 'Tổng còn nợ hôm nay', tone: 'red' }, { label: 'Nhà cung cấp', value: formatNumber(data.payables.totals.suppliers), unit: 'NCC', hint: 'Còn phải trả' }, { label: 'Quá hạn', value: formatNumber(overdueSuppliers), unit: 'NCC', hint: overdueSuppliers ? 'Cần thanh toán' : 'Chưa có NCC quá hạn', tone: overdueSuppliers ? 'red' : undefined }]"
                         />
                     </div>
                 </section>

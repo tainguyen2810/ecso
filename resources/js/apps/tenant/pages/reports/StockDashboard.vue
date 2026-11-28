@@ -127,10 +127,10 @@ defineExpose({ exportCsv });
                 <section>
                     <h2 class="mb-3 text-[12px] font-semibold uppercase tracking-wider text-slate-400">Tồn kho</h2>
                     <div class="grid gap-4 lg:grid-cols-2">
-                        <ReportLinkCard v-if="link('Báo cáo tồn kho')" :link="link('Báo cáo tồn kho')!" :target="target" :stats="[{ label: 'Giá trị', value: short(value) }, { label: 'SKU', value: formatNumber(data.onHand.totals.skus) }]" />
-                        <ReportLinkCard v-if="link('Báo cáo tồn kho chi tiết')" :link="link('Báo cáo tồn kho chi tiết')!" :target="target" :stats="[{ label: 'Có thể bán', value: formatNumber(detail.available), tone: 'green' }, { label: 'Đang về', value: formatNumber(detail.incoming) }]" />
-                        <ReportLinkCard v-if="link('Xuất nhập tồn')" :link="link('Xuất nhập tồn')!" :target="target" tone="violet" :stats="[{ label: 'Nhập', value: formatNumber(data.ledger.totals.in) }, { label: 'Xuất', value: formatNumber(data.ledger.totals.out) }]" />
-                        <ReportLinkCard v-if="link('Sổ kho')" :link="link('Sổ kho')!" :target="target" tone="slate" :stats="[{ label: 'SKU có biến động', value: formatNumber(moved) }]" />
+                        <ReportLinkCard v-if="link('Báo cáo tồn kho')" :link="link('Báo cáo tồn kho')!" :target="target" :stats="[{ label: 'Giá trị', value: short(value), hint: 'Theo giá vốn' }, { label: 'SKU', value: formatNumber(data.onHand.totals.skus), unit: 'SKU', hint: 'Đang có hàng' }]" />
+                        <ReportLinkCard v-if="link('Báo cáo tồn kho chi tiết')" :link="link('Báo cáo tồn kho chi tiết')!" :target="target" :stats="[{ label: 'Có thể bán', value: formatNumber(detail.available), unit: 'sp', hint: 'Trừ hàng đã giữ', tone: 'green' }, { label: 'Đã giữ', value: formatNumber(detail.reserved), unit: 'sp', hint: 'Cho đơn chưa giao' }, { label: 'Đang về', value: formatNumber(detail.incoming), unit: 'sp', hint: 'Đơn nhập chưa về' }]" />
+                        <ReportLinkCard v-if="link('Xuất nhập tồn')" :link="link('Xuất nhập tồn')!" :target="target" tone="violet" :stats="[{ label: 'Nhập', value: formatNumber(data.ledger.totals.in), unit: 'sp', hint: 'Trong kỳ', tone: 'green' }, { label: 'Xuất', value: formatNumber(data.ledger.totals.out), unit: 'sp', hint: 'Trong kỳ' }]" />
+                        <ReportLinkCard v-if="link('Sổ kho')" :link="link('Sổ kho')!" :target="target" tone="slate" :stats="[{ label: 'SKU có biến động', value: formatNumber(moved), unit: 'SKU', hint: 'Có nhập hoặc xuất trong kỳ' }]" />
                     </div>
                 </section>
                 <section>
@@ -144,7 +144,7 @@ defineExpose({ exportCsv });
                             :link="link('Báo cáo kiểm kê hàng hóa')!"
                             :target="target"
                             tone="green"
-                            :stats="data.adjustments.totals.documents ? [{ label: 'Phiếu', value: formatNumber(data.adjustments.totals.documents) }, { label: 'Giá trị lệch', value: short(data.adjustments.totals.value) }] : []"
+                            :stats="data.adjustments.totals.documents ? [{ label: 'Phiếu', value: formatNumber(data.adjustments.totals.documents), unit: 'phiếu', hint: 'Kiểm kê trong kỳ' }, { label: 'Giá trị lệch', value: short(data.adjustments.totals.value), hint: 'Theo giá vốn' }] : []"
                         />
                     </div>
                 </section>

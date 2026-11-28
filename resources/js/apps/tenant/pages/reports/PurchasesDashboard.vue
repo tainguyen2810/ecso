@@ -148,10 +148,10 @@ defineExpose({ exportCsv });
                         :link="link('Báo cáo hàng nhập kho')!"
                         :target="target"
                         :stats="[
-                            { label: 'Phiếu nhập', value: formatNumber(totals.receipts) },
-                            { label: 'Số lượng', value: `${formatNumber(totals.quantity)} sp` },
-                            { label: 'Giá trị', value: formatMoney(totals.value) },
-                            { label: 'Trả NCC', value: formatMoney(totals.returned), tone: totals.returned ? 'violet' : undefined },
+                            { label: 'Phiếu nhập', value: formatNumber(totals.receipts), unit: 'phiếu', hint: 'Đã nhập kho trong kỳ' },
+                            { label: 'Số lượng', value: formatNumber(totals.quantity), unit: 'sp', hint: totals.receipts ? `TB ${formatNumber(Math.round(totals.quantity / totals.receipts))} sp/phiếu` : null },
+                            { label: 'Giá trị', value: short(totals.value), hint: 'Theo giá nhập' },
+                            { label: 'Trả NCC', value: short(totals.returned), hint: `Còn ${short(totals.net)} sau trả`, tone: totals.returned ? 'violet' : undefined },
                         ]"
                     />
                 </section>
@@ -164,8 +164,8 @@ defineExpose({ exportCsv });
                             :target="target"
                             tone="green"
                             :stats="[
-                                { label: 'Đã trả', value: short(paid), tone: paid ? 'green' : undefined },
-                                { label: 'Số phiếu', value: formatNumber(data.methods.totals.entries) },
+                                { label: 'Đã trả', value: short(paid), hint: paidShare !== null ? `${paidShare.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}% giá trị nhập` : null, tone: paid ? 'green' : undefined },
+                                { label: 'Số phiếu', value: formatNumber(data.methods.totals.entries), unit: 'phiếu', hint: 'Phiếu chi trả NCC' },
                             ]"
                         />
                         <ReportLinkCard
@@ -175,9 +175,9 @@ defineExpose({ exportCsv });
                             tone="amber"
                             :badge="overdueRows.length ? `${overdueRows.length} quá hạn` : null"
                             :stats="[
-                                { label: 'Còn phải trả', value: short(debt), tone: debt ? 'amber' : undefined },
-                                { label: 'NCC', value: formatNumber(debtRows.length) },
-                                ...(overdueRows.length ? [{ label: 'Quá hạn', value: formatNumber(overdueRows.length), tone: 'red' as const }] : []),
+                                { label: 'Còn phải trả', value: short(debt), hint: 'Tính đến hôm nay', tone: debt ? 'amber' : undefined },
+                                { label: 'Nhà cung cấp', value: formatNumber(debtRows.length), unit: 'NCC', hint: 'Còn nợ' },
+                                { label: 'Quá hạn', value: formatNumber(overdueRows.length), unit: 'NCC', hint: overdueRows.length ? 'Cần thanh toán' : 'Chưa có NCC quá hạn', tone: overdueRows.length ? ('red' as const) : undefined },
                             ]"
                         />
                     </div>

@@ -6,6 +6,7 @@ import ReportKpi from './ReportKpi.vue';
 import ReportChip from './ReportChip.vue';
 import SideCard from './SideCard.vue';
 import ChannelMark from './ChannelMark.vue';
+import { channelLabel, channelName, channelNames, groupChannels } from './channels';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
@@ -81,11 +82,16 @@ function label(r: Row): string {
         const [y, m, d] = r.label.split('-');
         return `${d}/${m}/${y}`;
     }
-    return r.label;
+    return by.value === 'channel' ? channelLabel(r.label, r.kind) : r.label;
 }
+/** "Theo kênh": rows grouped Sàn TMĐT / Website / Chat / Tại cửa hàng (mẫu 28/11 b); other tabs one plain list. */
+const rowGroups = computed(() => {
+    const rows = (data.value?.rows ?? []) as Row[];
+    return by.value === 'channel' ? groupChannels(rows, (r) => r.kind) : [{ key: 'all', label: '', rows }];
+});
 function kindLabel(kind: string | null): string | null {
     if (!kind) return null;
-    return marketplaceNames[kind] ?? channelTypes[kind] ?? kind;
+    return channelNames[kind] ?? marketplaceNames[kind] ?? channelTypes[kind] ?? kind;
 }
 
 function exportCsv() {
@@ -217,12 +223,15 @@ const thing = computed(() => ({ day: 'Ngày', channel: 'Kênh', staff: 'Nhân vi
                     </div>
                     <div class="overflow-x-auto" :class="loading && 'opacity-60'">
                         <table class="w-full text-[14px]" data-testid="sales-table">
-                            <tbody class="divide-y divide-slate-100">
-                                <tr v-for="r in data.rows" :key="r.label + r.kind" :class="!r.orders && 'opacity-60'">
+                            <tbody v-for="g in rowGroups" :key="g.key" class="divide-y divide-slate-100" :data-testid="g.label ? `sales-group-${g.key}` : undefined">
+                                <tr v-if="g.label" class="bg-slate-50/80">
+                                    <td class="px-5 py-2 text-[12px] font-semibold uppercase tracking-wider text-slate-500">{{ g.label }}</td>
+                                </tr>
+                                <tr v-for="r in g.rows" :key="r.label + r.kind" :class="!r.orders && 'opacity-60'">
                                     <td class="px-5 py-4">
                                         <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
                                             <div class="flex min-w-[180px] flex-1 items-center gap-3">
-                                                <ChannelMark v-if="by === 'channel'" :kind="r.kind" :name="r.label" size="lg" />
+                                                <ChannelMark v-if="by === 'channel'" :kind="r.kind" :name="channelName(r.kind)" size="lg" />
                                                 <span v-else-if="by === 'day'" class="grid size-10 shrink-0 place-items-center rounded-[10px] bg-slate-100 text-center leading-none text-slate-600">
                                                     <span><b class="block text-[14px]">{{ r.label.slice(8, 10) }}</b><span class="text-[10px] uppercase">{{ weekday(r.label) }}</span></span>
                                                 </span>
