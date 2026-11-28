@@ -1,21 +1,65 @@
 <script setup lang="ts">
-import { inject } from 'vue';
-import { cn } from '@/shared/lib/utils';
+import { inject } from "vue";
+import { cn } from "@/shared/lib/utils";
 
 /**
  * Sapo-like card: white, 3px corners, soft shadow, no outline. Section heading is bold uppercase by default (docs/DESIGN-SYSTEM.md); `:caps="false"` for a plain title.
  * Inside a frame that provides `soft-cards` (Cấu hình), cards take the report style: 14px corners, light border, plain title.
  */
-withDefaults(defineProps<{ class?: string; title?: string; description?: string; caps?: boolean }>(), { caps: true });
-const soft = inject<boolean>('soft-cards', false);
+withDefaults(
+    defineProps<{
+        class?: string;
+        title?: string;
+        description?: string;
+        caps?: boolean;
+    }>(),
+    { caps: true },
+);
+const soft = inject<boolean>("soft-cards", false);
 </script>
 
 <template>
-    <div :class="cn(soft ? 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]' : 'rounded-lg bg-card shadow-card', $props.class)">
-        <div v-if="title || $slots.actions" :class="cn('flex min-h-[52px] items-center justify-between gap-4 border-b py-3', soft ? 'border-slate-100 px-5 py-4' : 'px-4')">
+    <div
+        :class="
+            cn(
+                soft
+                    ? 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]'
+                    : 'rounded-lg bg-card shadow-card',
+                $props.class,
+            )
+        "
+    >
+        <div
+            v-if="title || $slots.actions"
+            :class="
+                cn(
+                    'flex min-h-[52px] items-center justify-between gap-4 border-b py-3',
+                    soft ? 'border-slate-100 px-5 py-4' : 'px-4',
+                )
+            "
+        >
             <div>
-                <h3 :class="soft ? 'font-semibold text-slate-900' : caps ? 'text-[13px] font-bold uppercase tracking-wide' : 'text-[15px] font-medium'">{{ title }}</h3>
-                <p v-if="description" :class="soft ? 'mt-0.5 text-[13px] text-slate-500' : 'mt-0.5 text-xs text-muted-foreground'">{{ description }}</p>
+                <h3
+                    :class="
+                        soft
+                            ? 'font-semibold text-slate-900'
+                            : caps
+                              ? 'text-[13px] font-bold uppercase tracking-wide'
+                              : 'text-[15px] font-medium'
+                    "
+                >
+                    {{ title }}
+                </h3>
+                <p
+                    v-if="description"
+                    :class="
+                        soft
+                            ? 'mt-0.5 text-[13px] text-slate-500'
+                            : 'mt-0.5 text-xs text-muted-foreground'
+                    "
+                >
+                    {{ description }}
+                </p>
             </div>
             <slot name="actions" />
         </div>

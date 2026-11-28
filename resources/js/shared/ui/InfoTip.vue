@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { Info } from 'lucide-vue-next';
+import { ref } from "vue";
+import { Info } from "lucide-vue-next";
 
 /**
  * "ⓘ" next to a figure: on hover, focus or tap it explains how the figure is computed and where it comes from.
@@ -11,7 +11,11 @@ const open = ref(false);
 </script>
 
 <template>
-    <span class="relative inline-flex" @mouseenter="open = true" @mouseleave="open = false">
+    <span
+        class="relative inline-flex"
+        @mouseenter="open = true"
+        @mouseleave="open = false"
+    >
         <button
             type="button"
             class="grid size-4 place-items-center rounded-full text-muted-foreground hover:text-primary focus-visible:text-primary focus-visible:outline-none"

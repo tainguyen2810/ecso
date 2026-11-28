@@ -1,10 +1,18 @@
 <script setup lang="ts">
-import { computed, ref, useAttrs, watch } from 'vue';
-import { CalendarDays } from 'lucide-vue-next';
-import { cn } from '@/shared/lib/utils';
-import { addDays, displayDate, fromIso, isoDate, parseDate, weekdayOf } from '@/shared/lib/dates';
-import { usePopover } from '@/shared/composables/usePopover';
-import CalendarMonth from './CalendarMonth.vue';
+import { computed, ref, useAttrs, watch } from "vue";
+import { CalendarDays } from "lucide-vue-next";
+import { cn } from "@/shared/lib/utils";
+import {
+    addDays,
+    displayDate,
+    fromIso,
+    isoDate,
+    parseDate,
+    weekdayOf,
+} from "@/shared/lib/dates";
+import { usePopover } from "@/shared/composables/usePopover";
+import CalendarMonth from "./CalendarMonth.vue";
+import { SOFT_FIELD, SOFT_INVALID, useSoft } from "./soft";
 
 /**
  * Date field shown and typed as dd/mm/yyyy (replaces the browser's <input type="date">, which shows mm/dd/yyyy on
@@ -23,10 +31,11 @@ const props = defineProps<{
     /** Show the weekday after the date ("Chủ nhật"). */
     weekday?: boolean;
     /** Shortcut chips under the calendar: upcoming days (delivery dates) or none. */
-    quick?: 'future';
+    quick?: "future";
 }>();
 const emit = defineEmits<{ change: [value: string] }>();
 const attrs = useAttrs();
+const soft = useSoft();
 
 const text = ref(displayDate(model.value));
 const focused = ref(false);
@@ -37,21 +46,22 @@ const pop = usePopover(anchor, panel);
 const start = fromIso(model.value) ?? new Date();
 const view = ref({ year: start.getFullYear(), month: start.getMonth() });
 watch(model, (v) => {
-    if (!focused.value || parseDate(text.value) !== (v || null)) text.value = displayDate(v);
+    if (!focused.value || parseDate(text.value) !== (v || null))
+        text.value = displayDate(v);
     const d = fromIso(v);
     if (d) view.value = { year: d.getFullYear(), month: d.getMonth() };
 });
 
 // The value when the field was last committed: `change` fires only when the date really changed since then.
-let committed = model.value || '';
+let committed = model.value || "";
 watch(model, (v) => {
-    if (!focused.value) committed = v || '';
+    if (!focused.value) committed = v || "";
 });
 function set(value: string) {
-    if ((model.value || '') !== value) model.value = value;
+    if ((model.value || "") !== value) model.value = value;
     if (committed !== value) {
         committed = value;
-        emit('change', value);
+        emit("change", value);
     }
 }
 
@@ -67,8 +77,8 @@ function onInput(e: Event) {
 }
 function commit() {
     const t = text.value.trim();
-    if (t === '') {
-        set('');
+    if (t === "") {
+        set("");
         return;
     }
     const v = parseDate(t);
@@ -95,25 +105,38 @@ function pick(iso: string) {
 }
 function shift(step: number) {
     const m = view.value.month + step;
-    view.value = { year: view.value.year + Math.floor(m / 12), month: ((m % 12) + 12) % 12 };
+    view.value = {
+        year: view.value.year + Math.floor(m / 12),
+        month: ((m % 12) + 12) % 12,
+    };
 }
 
 const today = isoDate(new Date());
 const quickDays = computed(() =>
-    props.quick === 'future'
+    props.quick === "future"
         ? [
-              { label: 'Hôm nay', iso: today },
-              { label: 'Ngày mai', iso: addDays(today, 1) },
-              { label: '+2 ngày', iso: addDays(today, 2) },
+              { label: "Hôm nay", iso: today },
+              { label: "Ngày mai", iso: addDays(today, 1) },
+              { label: "+2 ngày", iso: addDays(today, 2) },
           ]
-        : [{ label: 'Hôm nay', iso: today }],
+        : [{ label: "Hôm nay", iso: today }],
 );
-const weekdayText = computed(() => (props.weekday ? weekdayOf(model.value) : ''));
+const weekdayText = computed(() =>
+    props.weekday ? weekdayOf(model.value) : "",
+);
 </script>
 
 <template>
     <div ref="anchor" :class="cn('relative w-full', props.class)">
-        <CalendarDays class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" :stroke-width="1.75" />
+        <CalendarDays
+            :class="
+                cn(
+                    'pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground',
+                    soft && 'left-3.5 text-slate-400',
+                )
+            "
+            :stroke-width="1.75"
+        />
         <input
             v-bind="attrs"
             :value="text"
@@ -126,18 +149,26 @@ const weekdayText = computed(() => (props.weekday ? weekdayOf(model.value) : '')
             :class="
                 cn(
                     'flex h-9 w-full rounded-md border border-input bg-card py-1 pl-8 pr-2 text-sm tabular-nums shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
-                    invalid && 'border-destructive focus-visible:ring-destructive',
+                    soft && [SOFT_FIELD, 'pl-10'],
+                    invalid &&
+                        (soft
+                            ? SOFT_INVALID
+                            : 'border-destructive focus-visible:ring-destructive'),
                     weekdayText && 'pr-20',
                 )
             "
-            @focus="(focused = true), pop.show()"
+            @focus="((focused = true), pop.show())"
             @click="pop.show()"
             @input="onInput"
             @blur="onBlur"
             @keydown.enter.prevent="onEnter"
             @keydown.tab="pop.close()"
         />
-        <span v-if="weekdayText" class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{{ weekdayText }}</span>
+        <span
+            v-if="weekdayText"
+            class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground"
+            >{{ weekdayText }}</span
+        >
         <Teleport to="body">
             <div
                 v-if="pop.open.value"
@@ -147,19 +178,43 @@ const weekdayText = computed(() => (props.weekday ? weekdayOf(model.value) : '')
                 data-testid="date-popover"
                 @mousedown.prevent
             >
-                <CalendarMonth :year="view.year" :month="view.month" :selected="model ?? ''" :min="min" :max="max" @pick="pick" @prev="shift(-1)" @next="shift(1)" />
+                <CalendarMonth
+                    :year="view.year"
+                    :month="view.month"
+                    :selected="model ?? ''"
+                    :min="min"
+                    :max="max"
+                    @pick="pick"
+                    @prev="shift(-1)"
+                    @next="shift(1)"
+                />
                 <div class="mt-2 flex gap-1.5 border-t pt-2">
                     <button
                         v-for="q in quickDays"
                         :key="q.label"
                         type="button"
-                        :disabled="(!!min && q.iso < min) || (!!max && q.iso > max)"
-                        :class="cn('rounded-full border px-2.5 py-0.5 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40', model === q.iso && 'border-blue-200 bg-blue-50 font-semibold text-blue-700')"
+                        :disabled="
+                            (!!min && q.iso < min) || (!!max && q.iso > max)
+                        "
+                        :class="
+                            cn(
+                                'rounded-full border px-2.5 py-0.5 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40',
+                                model === q.iso &&
+                                    'border-blue-200 bg-blue-50 font-semibold text-blue-700',
+                            )
+                        "
                         @click="pick(q.iso)"
                     >
                         {{ q.label }}
                     </button>
-                    <button v-if="model" type="button" class="ml-auto rounded px-2 text-xs text-muted-foreground hover:text-foreground" @click="pick('')">Xóa</button>
+                    <button
+                        v-if="model"
+                        type="button"
+                        class="ml-auto rounded px-2 text-xs text-muted-foreground hover:text-foreground"
+                        @click="pick('')"
+                    >
+                        Xóa
+                    </button>
                 </div>
             </div>
         </Teleport>
