@@ -4,14 +4,15 @@ import DeliveryBadge from './DeliveryBadge.vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Ban, Banknote, Bookmark, ClipboardList, FilePen, Package, PackageCheck, PackageX, Tag, ScanBarcode, Trash2, ChevronDown, ChevronsRight, Clock, Columns3, Truck, Zap, Download, Filter, History, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingBasket, ShoppingCart, UserPlus, X } from 'lucide-vue-next';
-import PageHeader from '../../PageHeader.vue';
+import ProductsHead from '../products/ui/ProductsHead.vue';
+import HeadButton from '../products/ui/HeadButton.vue';
+import LineTabs from '../products/ui/LineTabs.vue';
+import { card } from '../products/ui/ui';
 import Pagination from '../../components/Pagination.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
-import Tabs from '../../components/Tabs.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
 import Button from '@/shared/ui/Button.vue';
-import Card from '@/shared/ui/Card.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
@@ -35,6 +36,8 @@ import { downloadPickList } from './packing';
 import { useAuthStore } from '@/shared/stores/auth';
 import OrderPipeline from './OrderPipeline.vue';
 import OrderQuickView from './OrderQuickView.vue';
+import ChannelPicker from './ChannelPicker.vue';
+import ChannelMark from '../reports/ChannelMark.vue';
 import type { MarketplaceAccountData, OrderDetail, OrderSummary, Ref, SalesChannel, Variant, Warehouse } from '@/shared/types';
 import DateRangeInput from '@/shared/ui/DateRangeInput.vue';
 
@@ -47,6 +50,8 @@ const orders = ref<OrderSummary[]>([]);
 const counts = ref<Record<string, number>>({});
 /** The shop brought orders over from Sapo (Chuyển dữ liệu): offer a chip for them. */
 const hasImported = ref(false);
+/** Orders per shop / own channel for the "Kênh bán" picker. */
+const sources = ref<{ accounts: Record<string, number>; channels: Record<string, number> }>({ accounts: {}, channels: {} });
 const meta = ref({ current_page: 1, last_page: 1, total: 0 });
 /** "Kiểu giao" row: Shopee / TikTok orders per delivery group and per carrier under the other filters. */
 const delivery = ref<{ types: Record<string, number>; carriers: { name: string; count: number }[] }>({ types: {}, carriers: [] });
@@ -105,6 +110,9 @@ const filters = reactive({
     delivery: str('delivery'),
     carrier: str('carrier'),
     flags: route.query.flags ? String(route.query.flags).split(',') : ([] as string[]),
+    /** "Kênh bán" picker: shops on the marketplaces and own channels, any of them. */
+    accounts: route.query.accounts ? String(route.query.accounts).split(',') : ([] as string[]),
+    channels: route.query.channels ? String(route.query.channels).split(',') : ([] as string[]),
     sort: str('sort') || 'newest',
     page: Number(route.query.page ?? 1),
 });
@@ -204,6 +212,8 @@ function query() {
         delivery: filters.delivery || undefined,
         carrier: filters.carrier || undefined,
         flags: filters.flags.length ? filters.flags : undefined,
+        accounts: filters.accounts.length ? filters.accounts : undefined,
+        channels: filters.channels.length ? filters.channels : undefined,
         sort: filters.sort === 'newest' ? undefined : filters.sort,
         page: filters.page > 1 ? filters.page : undefined,
     };
@@ -219,6 +229,8 @@ async function load() {
         query: {
             ...query(),
             flags: filters.flags.length ? filters.flags.join(',') : undefined,
+            accounts: filters.accounts.length ? filters.accounts.join(',') : undefined,
+            channels: filters.channels.length ? filters.channels.join(',') : undefined,
             customer_label: filters.customer ? customerLabel.value || undefined : undefined,
             sku_label: filters.sku ? skuLabel.value || undefined : undefined,
         },
@@ -231,6 +243,7 @@ async function load() {
         counts.value = data.meta.counts ?? {};
         delivery.value = data.meta.delivery ?? { types: {}, carriers: [] };
         hasImported.value = !!data.meta.has_imported;
+        sources.value = data.meta.sources ?? { accounts: {}, channels: {} };
         selected.value = new Set([...selected.value].filter((id) => orders.value.some((o) => o.id === id) || arrangeById.value.has(id)));
         if (pendingArrangeSelect && arrange.value) {
             const pick = pendingArrangeSelect === 'all' ? arrange.value.orders.map((o) => o.id) : pendingArrangeSelect.filter((id) => arrangeById.value.has(id));
@@ -309,7 +322,7 @@ watch(() => filters.q, () => {
     searchTimer = setTimeout(() => ((filters.page = 1), load()), 300);
 });
 watch(
-    () => [filters.tab, filters.account, filters.source, filters.marketplace, filters.channel, filters.warehouse, filters.assignee, filters.status, filters.payment_status, filters.from, filters.to, filters.customer, filters.sku, filters.tag, filters.deliver_from, filters.deliver_to, filters.delivery, filters.carrier, filters.sort, filters.flags.join()],
+    () => [filters.tab, filters.account, filters.source, filters.marketplace, filters.channel, filters.warehouse, filters.assignee, filters.status, filters.payment_status, filters.from, filters.to, filters.customer, filters.sku, filters.tag, filters.deliver_from, filters.deliver_to, filters.delivery, filters.carrier, filters.sort, filters.flags.join(), filters.accounts.join(), filters.channels.join()],
     () => ((filters.page = 1), (selected.value = new Set()), (peek.value = null), load()),
 );
 
@@ -379,7 +392,7 @@ function removeView(name: string) {
     savedViews.value = savedViews.value.filter((v) => v.name !== name);
     writeStore('views', savedViews.value);
 }
-const hasFilters = computed(() => filters.tab !== 'all' || !!filters.q || !!filters.source || !!filters.marketplace || !!filters.channel || !!filters.warehouse || !!filters.account || !!filters.assignee || filters.flags.length > 0 || !!filters.delivery || !!filters.carrier || advancedCount.value > 0);
+const hasFilters = computed(() => filters.tab !== 'all' || !!filters.q || !!filters.source || !!filters.marketplace || !!filters.channel || !!filters.warehouse || !!filters.account || !!filters.assignee || filters.flags.length > 0 || !!filters.delivery || !!filters.carrier || filters.accounts.length > 0 || filters.channels.length > 0 || advancedCount.value > 0);
 
 const columnLabels = { date: 'Ngày tạo đơn', customer: 'Tên khách hàng', products: 'Sản phẩm', shipping: 'Vận chuyển', status: 'Trạng thái đơn hàng', payment: 'Thanh toán', deadline: 'Hạn giao / hẹn giao', assignee: 'Người xử lý', total: 'Khách phải trả' } as const;
 type ColumnKey = keyof typeof columnLabels;
@@ -588,23 +601,43 @@ async function exportOrders() {
     }
 }
 
-/** Channel buttons above the list: every marketplace with a connected shop, then own sales channels. */
-const channelChips = computed(() => {
-    const keys = [...new Set(accounts.value.map((a) => a.marketplace))];
-    return keys.map((key) => ({ key, label: marketplaceNames[key] ?? accounts.value.find((a) => a.marketplace === key)?.marketplace_name ?? key }));
-});
-function pickChannel(key: string) {
+/** "Kênh bán" picker → the list: picked shops and channels replace the old one-marketplace / one-source filters. */
+function pickSources(accs: string[], chans: string[]) {
+    filters.marketplace = '';
     filters.account = '';
     filters.channel = '';
-    if (key === 'manual' || key === 'sapo') {
-        filters.marketplace = '';
-        filters.source = key;
-    } else {
-        filters.source = '';
-        filters.marketplace = key;
-    }
+    filters.source = '';
+    filters.accounts = accs;
+    filters.channels = chans;
 }
-const channelPicked = (key: string) => (key === '' ? !filters.marketplace && !filters.source : key === 'manual' || key === 'sapo' ? filters.source === key : filters.marketplace === key);
+function pickSource(v: string) {
+    pickSources([], []);
+    filters.source = v;
+}
+/** "Đang lọc" chips under the search: one per marketplace with the number of its picked shops (mẫu 2). */
+const sourceChips = computed(() => {
+    const chips: { key: string; label: string; mark: string; clear: () => void }[] = [];
+    const by = new Map<string, string[]>();
+    for (const id of filters.accounts) {
+        const a = accounts.value.find((x) => x.id === id);
+        const k = a?.marketplace ?? '?';
+        by.set(k, [...(by.get(k) ?? []), id]);
+    }
+    for (const [k, ids] of by) {
+        const a = accounts.value.find((x) => x.id === ids[0]);
+        const name = k === 'woocommerce' ? 'Website' : (marketplaceNames[k] ?? a?.marketplace_name ?? 'Sàn');
+        const label = ids.length === 1 ? `${name} · ${a?.shop_name ?? '…'}` : `${name} · ${ids.length} ${k === 'woocommerce' ? 'website' : 'shop'}`;
+        chips.push({ key: `a-${k}`, label, mark: k, clear: () => (filters.accounts = filters.accounts.filter((x) => !ids.includes(x))) });
+    }
+    for (const id of filters.channels) {
+        const c = channels.value.find((x) => x.id === id);
+        chips.push({ key: `c-${id}`, label: c?.name ?? '…', mark: c?.type ?? 'store', clear: () => (filters.channels = filters.channels.filter((x) => x !== id)) });
+    }
+    if (filters.marketplace) chips.push({ key: 'm', label: marketplaceNames[filters.marketplace] ?? filters.marketplace, mark: filters.marketplace, clear: () => (filters.marketplace = '') });
+    if (filters.source === 'manual') chips.push({ key: 's', label: 'Kênh bán riêng', mark: 'store', clear: () => (filters.source = '') });
+    if (filters.source === 'sapo') chips.push({ key: 's', label: 'Đơn cũ từ Sapo', mark: 'other', clear: () => (filters.source = '') });
+    return chips;
+});
 
 /** The next step of an order, done from its row (same rules as the bulk actions). */
 const nextAction: Record<string, string> = { PENDING_CONFIRMATION: 'confirm', READY_TO_PACK: 'pack', PACKED: 'handover' };
@@ -680,13 +713,13 @@ const orderLabel = (id: string) => orderCode(orders.value.find((o) => o.id === i
 </script>
 
 <template>
-    <PageHeader title="Đơn hàng" description="Đơn từ mọi sàn và kênh bán riêng, tự cập nhật khi có đơn mới.">
-        <Button variant="outline" :loading="loading" @click="refresh"><RefreshCw /> Làm mới</Button>
-        <Button variant="outline" :loading="busy === 'export'" data-testid="export-orders" @click="exportOrders"><Download /> Xuất Excel</Button>
-        <Button v-if="tenant.can('orders.pack')" variant="outline" data-testid="open-packing" @click="$router.push('/orders/pack')"><ScanBarcode /> Đóng gói</Button>
-        <Button v-if="tenant.can('orders.create') && drafts.length" variant="outline" data-testid="open-drafts" @click="draftsOpen = true"><FilePen /> Đơn nháp ({{ drafts.length }})</Button>
-        <Button v-if="tenant.can('orders.create')" data-testid="create-order" @click="$router.push('/orders/new')"><Plus /> Tạo đơn</Button>
-    </PageHeader>
+    <ProductsHead section="Đơn hàng" title="Danh sách đơn hàng" description="Đơn từ mọi sàn và kênh bán riêng, tự cập nhật khi có đơn mới.">
+        <HeadButton :icon="RefreshCw" :disabled="loading" @click="refresh">Làm mới</HeadButton>
+        <HeadButton :icon="Download" :disabled="busy === 'export'" data-testid="export-orders" @click="exportOrders">Xuất Excel</HeadButton>
+        <HeadButton v-if="tenant.can('orders.pack')" :icon="ScanBarcode" data-testid="open-packing" @click="$router.push('/orders/pack')">Quét đóng gói</HeadButton>
+        <HeadButton v-if="tenant.can('orders.create') && drafts.length" :icon="FilePen" data-testid="open-drafts" @click="draftsOpen = true">Đơn nháp ({{ drafts.length }})</HeadButton>
+        <HeadButton v-if="tenant.can('orders.create')" primary :icon="Plus" data-testid="create-order" @click="$router.push('/orders/new')">Tạo đơn</HeadButton>
+    </ProductsHead>
 
     <Dialog v-model:open="draftsOpen" title="Đơn nháp" description="Đơn đang soạn dở: chưa có mã đơn, chưa giữ hàng trong kho. Mở ra để sửa tiếp và tạo đơn." size="lg">
         <ul class="divide-y rounded-md border" data-testid="draft-list">
@@ -718,8 +751,8 @@ const orderLabel = (id: string) => orderCode(orders.value.find((o) => o.id === i
 
     <OrderPipeline ref="pipeline" :active="activeQueue" @select="selectQueue" />
 
-    <Card>
-        <div class="border-b px-3"><Tabs v-model="filters.tab" :tabs="tabs" variant="underline" data-testid="order-tabs" /></div>
+    <div :class="card">
+        <LineTabs v-model="filters.tab" :tabs="tabs" data-testid="order-tabs" />
         <div v-if="arrange?.count && tenant.can('orders.update')" class="mx-4 mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-card px-4 py-3 text-sm" data-testid="arrange-banner">
             <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground"><PackageCheck class="size-5" /></span>
             <div class="min-w-60 flex-1">
@@ -746,6 +779,21 @@ const orderLabel = (id: string) => orderCode(orders.value.find((o) => o.id === i
                     <Search class="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
                     <Input v-model="filters.q" class="pl-8" placeholder="Tìm theo mã đơn, mã sàn/Woo, mã vận đơn, SKU, tên sản phẩm, tên hoặc SĐT khách…" data-testid="order-search" />
                 </div>
+                <ChannelPicker
+                    :accounts="accounts"
+                    :channels="channels"
+                    :picked-accounts="filters.accounts"
+                    :picked-channels="filters.channels"
+                    :counts="sources"
+                    :source="filters.source"
+                    :has-imported="hasImported"
+                    @apply="pickSources"
+                    @source="pickSource"
+                />
+                <select v-if="warehouses.length > 1" v-model="filters.warehouse" class="h-9 rounded-[10px] border border-slate-200 bg-white px-3 text-sm text-slate-700" aria-label="Kho xuất" data-testid="warehouse-quick">
+                    <option value="">Mọi kho</option>
+                    <option v-for="w in warehouses" :key="w.id" :value="w.id">{{ w.name }}</option>
+                </select>
                 <Button variant="outline" :class="cn((moreFilters || advancedCount) && 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-50')" :aria-expanded="moreFilters" data-testid="more-filters" @click="moreFilters ? (moreFilters = false) : openFilters()">
                     <Filter /> Bộ lọc khác <span v-if="advancedCount" class="rounded-full bg-primary px-1.5 text-xs text-primary-foreground">{{ advancedCount }}</span>
                 </Button>
@@ -770,13 +818,7 @@ const orderLabel = (id: string) => orderCode(orders.value.find((o) => o.id === i
                     <button type="button" class="ml-auto rounded p-1 text-muted-foreground hover:bg-muted" aria-label="Đóng bộ lọc" @click="moreFilters = false"><X class="size-4" /></button>
                 </div>
                 <div class="grid max-h-[min(560px,calc(100vh-220px))] gap-3 overflow-y-auto p-4 sm:grid-cols-2 lg:grid-cols-3">
-                    <p class="text-[11px] font-bold uppercase tracking-wide text-slate-400 sm:col-span-2 lg:col-span-3">Đơn đến từ đâu</p>
-                    <FormField label="Kênh bán riêng" for="f-channel">
-                        <Select id="f-channel" v-model="draft.channel" :disabled="filters.source === 'marketplace' || !channels.length" :options="[{ value: '', label: 'Mọi kênh riêng' }, ...channels.map((c) => ({ value: c.id, label: c.name }))]" />
-                    </FormField>
-                    <FormField label="Gian hàng trên sàn" for="f-account">
-                        <Select id="f-account" v-model="draft.account" :disabled="filters.source === 'manual' || !accounts.length" :options="[{ value: '', label: accounts.length ? 'Tất cả gian hàng' : 'Chưa kết nối sàn' }, ...accounts.map((a) => ({ value: a.id, label: a.shop_name }))]" />
-                    </FormField>
+                    <p class="text-[11px] font-bold uppercase tracking-wide text-slate-400 sm:col-span-2 lg:col-span-3">Kho</p>
                     <FormField label="Kho xuất" for="f-warehouse">
                         <Select id="f-warehouse" v-model="draft.warehouse" :disabled="warehouses.length < 2" :options="[{ value: '', label: 'Mọi kho' }, ...warehouses.map((w) => ({ value: w.id, label: w.name }))]" data-testid="filter-warehouse" />
                     </FormField>
@@ -829,25 +871,13 @@ const orderLabel = (id: string) => orderCode(orders.value.find((o) => o.id === i
                 </div>
             </div>
 
-            <!-- One button per marketplace (with its logo) and one for own sales channels, instead of a "source" dropdown. -->
-            <div class="flex flex-wrap items-center gap-1.5" role="group" aria-label="Lọc theo kênh" data-testid="channel-chips">
-                <button type="button" :class="cn('h-8 rounded-lg border px-3 text-sm', channelPicked('') ? 'border-slate-900 bg-slate-900 font-medium text-white' : 'bg-card text-slate-700 hover:bg-muted')" @click="pickChannel('')">Tất cả</button>
-                <button
-                    v-for="c in channelChips"
-                    :key="c.key"
-                    type="button"
-                    :class="cn('flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-sm', channelPicked(c.key) ? 'border-slate-900 bg-slate-900 font-medium text-white' : 'bg-card text-slate-700 hover:bg-muted')"
-                    :data-testid="`channel-${c.key}`"
-                    @click="pickChannel(c.key)"
-                >
-                    <MarketplaceLogo :marketplace="c.key" :name="c.label" size="sm" class="size-4" /> {{ c.label }}
-                </button>
-                <button type="button" :class="cn('flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-sm', channelPicked('manual') ? 'border-slate-900 bg-slate-900 font-medium text-white' : 'bg-card text-slate-700 hover:bg-muted')" data-testid="channel-manual" @click="pickChannel('manual')">
-                    <MarketplaceLogo marketplace="manual" name="Kênh bán riêng" size="sm" class="size-4" /> Kênh bán riêng
-                </button>
-                <button v-if="hasImported || filters.source === 'sapo'" type="button" :class="cn('flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-sm', channelPicked('sapo') ? 'border-slate-900 bg-slate-900 font-medium text-white' : 'bg-card text-slate-700 hover:bg-muted')" data-testid="channel-sapo" @click="pickChannel('sapo')">
-                    <History class="size-4" /> Đơn cũ từ Sapo
-                </button>
+            <div v-if="sourceChips.length" class="flex flex-wrap items-center gap-1.5" data-testid="source-chips">
+                <span class="mr-1 text-xs text-muted-foreground">Đang lọc:</span>
+                <span v-for="c in sourceChips" :key="c.key" class="inline-flex h-7 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 pl-1.5 pr-1 text-xs font-medium text-blue-800" data-testid="source-chip">
+                    <ChannelMark :kind="c.mark" size="sm" class="!size-4 !rounded" />{{ c.label }}
+                    <button type="button" class="rounded p-0.5 hover:bg-blue-100" :aria-label="`Bỏ lọc ${c.label}`" @click="c.clear()"><X class="size-3" /></button>
+                </span>
+                <button type="button" class="text-xs text-muted-foreground hover:underline" data-testid="source-clear" @click="pickSources([], [])">Xóa lọc</button>
             </div>
 
             <div v-if="savedViews.length" class="flex flex-wrap items-center gap-2 text-xs" data-testid="saved-views">
@@ -953,7 +983,7 @@ const orderLabel = (id: string) => orderCode(orders.value.find((o) => o.id === i
         </EmptyState>
         <div v-else class="overflow-x-auto">
             <table :class="cn('w-full text-sm', compact && '[&_tbody_td]:py-1.5 [&_tbody_td]:whitespace-nowrap')" :data-density="compact ? 'compact' : 'full'" data-testid="order-table">
-                <thead class="border-b bg-slate-50 text-left text-xs font-semibold text-foreground/80">
+                <thead class="border-b border-slate-100 bg-slate-50/70 text-left text-[12px] font-semibold uppercase tracking-wider text-slate-400">
                     <tr>
                         <th class="w-8 py-3 pl-3" />
                         <th class="w-8 py-3"><input type="checkbox" :checked="allSelected" aria-label="Chọn tất cả" @change="toggleAll" /></th>
@@ -1070,7 +1100,7 @@ const orderLabel = (id: string) => orderCode(orders.value.find((o) => o.id === i
             </table>
         </div>
         <Pagination :page="meta.current_page" :last-page="meta.last_page" :total="meta.total" @go="(p) => ((filters.page = p), load())" />
-    </Card>
+    </div>
     <OrderQuickView v-if="peek" :id="peek" :position="peekIndex + 1" :total="orders.length" @close="peek = null" @prev="peekStep(-1)" @next="peekStep(1)" @changed="refresh" />
 
     <!-- Room under the list so the floating bulk bar never hides the last rows or the pages. -->

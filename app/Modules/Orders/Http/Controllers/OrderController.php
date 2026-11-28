@@ -73,7 +73,7 @@ class OrderController extends Controller
             ->paginate((int) ($filters['per_page'] ?? 30));
         $this->learnShipMethods($page->getCollection());
 
-        return OrderResource::collection($page)->additional(['meta' => ['counts' => $orders->tabCounts($filters, $request->user()->id), 'delivery' => $orders->deliveryCounts($filters, $request->user()->id), 'has_imported' => Order::query()->whereNotNull('imported_from')->exists()]])->response();
+        return OrderResource::collection($page)->additional(['meta' => ['counts' => $orders->tabCounts($filters, $request->user()->id), 'delivery' => $orders->deliveryCounts($filters, $request->user()->id), 'sources' => $orders->sourceCounts($filters, $request->user()->id), 'has_imported' => Order::query()->whereNotNull('imported_from')->exists()]])->response();
     }
 
     /** "Orders to handle" strip above the order list. */
@@ -685,6 +685,11 @@ class OrderController extends Controller
             'status' => ['nullable', Rule::in(OrderStatus::ALL)],
             'account' => ['nullable', 'string'],
             'channel' => ['nullable', 'string'],
+            // "Kênh bán" picker: several shops and own channels at once (an order matches any of them).
+            'accounts' => ['nullable', 'array', 'max:100'],
+            'accounts.*' => ['string', 'max:40'],
+            'channels' => ['nullable', 'array', 'max:100'],
+            'channels.*' => ['string', 'max:40'],
             'customer' => ['nullable', 'string'],
             'warehouse' => ['nullable', 'string'],
             'source' => ['nullable', Rule::in(['manual', 'marketplace', 'sapo', 'new'])],

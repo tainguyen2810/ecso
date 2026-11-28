@@ -141,7 +141,11 @@ it('lists by tab with figures, pauses and cancels', function () {
     expect($res->json('meta.counts.all'))->toBe(2)
         ->and($res->json('meta.counts.expiring'))->toBe(1)
         ->and($res->json('meta.counts.overdue'))->toBe(1)
-        ->and($res->json('meta.kpi.monthly'))->toBe('200000.00');
+        ->and($res->json('meta.kpi.monthly'))->toBe('200000.00')
+        // Side cards: the one ending within 30 days, and the running period's monthly worth per service.
+        ->and($res->json('meta.kpi.calendar.0.ends_on'))->toBe('2026-12-03')
+        ->and($res->json('meta.kpi.by_product.0.subscriptions'))->toBe(1)
+        ->and($res->json('meta.kpi.by_product.0.monthly'))->toBe('200000.00');
     $overdue = collect($res->json('data'))->firstWhere('label', 'b.vn');
     expect($overdue['days_left'])->toBe(-7)->and($overdue['state'])->toBe('expired');
 

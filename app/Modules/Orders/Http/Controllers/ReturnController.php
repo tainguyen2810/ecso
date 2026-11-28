@@ -11,6 +11,7 @@ use App\Modules\Marketplace\Services\ReturnSync;
 use App\Modules\Orders\Http\Resources\ReturnResource;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderReturn;
+use App\Modules\Orders\Models\OrderReturnLine;
 use App\Modules\Orders\Services\ReturnService;
 use App\Modules\Sales\Models\OrderPayment;
 use Illuminate\Http\JsonResponse;
@@ -42,7 +43,46 @@ class ReturnController extends Controller
                 ->orWhere('return_tracking_number', $term)->orWhere('external_return_id', $term)
                 ->orWhereHas('order', fn ($o) => $o->where('external_order_id', 'like', "%{$term}%"))))
             ->orderByRaw("FIELD(status, 'received', 'in_transit', 'requested', 'approved', 'inspected', 'closed', 'rejected')")
-            ->orderByDesc('id')->paginate(30));
+            ->orderByDesc('id')->paginate(30))->additional(['meta' => ['summary' => $this->summary()]]);
+    }
+
+    /**
+     * Khách trả hàng figures (mẫu 28/11): returns on the way back and waiting for inspection, money refunded this month,
+     * how much of what came back could be sold again, reasons and most returned products over 30 days, tab counts.
+     *
+     * @return array<string, mixed>
+     */
+    private function summary(): array
+    {
+        $since = now()->subDays(30);
+        $pending = OrderReturn::query()->where('type', '!=', OrderReturn::TYPE_REFUND_ONLY)->whereIn('status', [OrderReturn::REQUESTED, OrderReturn::APPROVED, OrderReturn::IN_TRANSIT]);
+        $refunded = OrderReturn::query()->where('status', '!=', OrderReturn::REJECTED)->where('refund_amount', '>', 0)->where('created_at', '>=', now()->startOfMonth());
+        $checked = OrderReturnLine::query()->whereIn('order_return_id', OrderReturn::query()->whereIn('status', [OrderReturn::INSPECTED, OrderReturn::CLOSED])->where('created_at', '>=', now()->subDays(90))->select('id'))
+            ->selectRaw('COALESCE(SUM(received_qty), 0) as received, COALESCE(SUM(sellable_qty), 0) as sellable, COALESCE(SUM(damaged_qty), 0) as damaged')->first();
+        $recent = OrderReturn::query()->where('created_at', '>=', $since)->where('status', '!=', OrderReturn::REJECTED);
+        $total = (clone $recent)->count();
+
+        return [
+            'counts' => OrderReturn::query()->selectRaw('status, COUNT(*) as n')->groupBy('status')->pluck('n', 'status')->map(fn ($n) => (int) $n)->all() + ['all' => OrderReturn::query()->count(), 'pending_receipt' => (clone $pending)->count()],
+            'on_the_way' => (clone $pending)->count(),
+            'on_the_way_late' => (clone $pending)->where('created_at', '<', now()->subDays(7))->count(),
+            'to_inspect' => OrderReturn::query()->where('status', OrderReturn::RECEIVED)->count(),
+            'to_inspect_items' => (int) OrderReturnLine::query()->whereIn('order_return_id', OrderReturn::query()->where('status', OrderReturn::RECEIVED)->select('id'))->sum('quantity'),
+            'refunded' => round((float) (clone $refunded)->sum('refund_amount')),
+            'refunded_count' => (clone $refunded)->count(),
+            'resellable_pct' => (int) $checked->received > 0 ? (int) round(100 * (int) $checked->sellable / (int) $checked->received) : null,
+            'damaged' => (int) $checked->damaged,
+            'reasons_total' => $total,
+            'reasons' => (clone $recent)->selectRaw("COALESCE(NULLIF(TRIM(reason), ''), 'Không ghi lý do') as label, COUNT(*) as n")->groupBy('label')->orderByDesc('n')->limit(5)->get()
+                ->map(fn ($r) => ['label' => $r->label, 'count' => (int) $r->n])->values(),
+            'products' => OrderReturnLine::query()->whereIn('order_return_id', (clone $recent)->select('id'))
+                ->join('product_variants', 'product_variants.id', '=', 'order_return_lines.product_variant_id')
+                ->join('products', 'products.id', '=', 'product_variants.product_id')
+                ->groupBy('product_variants.id', 'products.name', 'product_variants.name')
+                ->selectRaw('products.name as product, product_variants.name as variant, SUM(order_return_lines.quantity) as qty')
+                ->orderByDesc('qty')->limit(5)->get()
+                ->map(fn ($r) => ['name' => $r->product, 'variant' => $r->variant, 'quantity' => (int) $r->qty])->values(),
+        ];
     }
 
     public function show(OrderReturn $return): ReturnResource

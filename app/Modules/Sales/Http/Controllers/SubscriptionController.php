@@ -290,6 +290,19 @@ class SubscriptionController extends Controller
             'in_grace' => $overdue->filter(fn (CustomerSubscription $s) => $s->state($today) === 'overdue')->count(),
             'monthly' => number_format($monthly($day), 2, '.', ''),
             'monthly_prev' => number_format($monthly($today->copy()->subMonthNoOverflow()->toDateString()), 2, '.', ''),
+            // "Lịch hết hạn": the next ones to end in 30 days, soonest first (side card).
+            'calendar' => (clone $expiring)->with(['customer:id,ulid,name', 'product' => fn ($q) => $q->withTrashed()->select('id', 'ulid', 'name'), 'variant:id,ref_price'])
+                ->orderBy('customer_subscriptions.ends_on')->limit(6)->get(['customer_subscriptions.*'])
+                ->map(fn (CustomerSubscription $s) => ['id' => $s->ulid, 'ends_on' => $s->ends_on?->toDateString(), 'customer' => $s->customer?->name, 'product' => $s->product?->name, 'price' => $s->variant?->ref_price])->values(),
+            // "Doanh thu theo dịch vụ": running periods per service, worth per month.
+            'by_product' => CustomerSubscriptionPeriod::query()->where('customer_subscription_periods.status', CustomerSubscriptionPeriod::ACTIVE)
+                ->where('customer_subscription_periods.starts_on', '<=', $day)->where('customer_subscription_periods.ends_on', '>=', $day)
+                ->join('customer_subscriptions', 'customer_subscriptions.id', '=', 'customer_subscription_periods.customer_subscription_id')
+                ->join('products', 'products.id', '=', 'customer_subscriptions.product_id')
+                ->groupBy('products.id', 'products.name')
+                ->selectRaw('products.name as name, count(distinct customer_subscriptions.id) as subscriptions, sum(customer_subscription_periods.amount / customer_subscription_periods.months) as monthly')
+                ->orderByDesc('monthly')->limit(6)->get()
+                ->map(fn ($r) => ['name' => $r->name, 'subscriptions' => (int) $r->subscriptions, 'monthly' => number_format((float) $r->monthly, 2, '.', '')])->values(),
         ];
     }
 }

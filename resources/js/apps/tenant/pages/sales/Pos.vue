@@ -618,12 +618,12 @@ const warehouseOptions = computed(() => warehouses.value.filter((w) => w.status 
                 <RouterLink to="/pos/shifts" class="grid size-9 place-items-center rounded-lg text-slate-300 hover:bg-white/10" title="Lịch sử ca" data-testid="pos-shift-history"><History class="size-4" /></RouterLink>
                 <button
                     type="button"
-                    :class="cn('flex h-9 items-center gap-1.5 rounded-lg px-3 font-medium', shift ? 'bg-white/10 hover:bg-white/15' : 'bg-amber-400 text-slate-900 hover:bg-amber-300')"
+                    :class="cn('flex h-9 items-center gap-1.5 rounded-lg px-3 font-medium', shift ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25' : 'bg-amber-400 text-slate-900 hover:bg-amber-300')"
                     :title="shift ? shiftLabel : undefined"
                     data-testid="pos-shift"
                     @click="openShiftDialog"
                 >
-                    <Clock class="size-4" /> <span class="max-w-64 truncate">{{ shift ? shiftLabel : 'Mở ca' }}</span>
+                    <span v-if="shift" class="size-2 rounded-full bg-emerald-400" /><Clock v-else class="size-4" /> <span class="max-w-64 truncate">{{ shift ? shiftLabel : 'Mở ca' }}</span>
                 </button>
             </div>
         </header>
@@ -645,7 +645,7 @@ const warehouseOptions = computed(() => warehouses.value.filter((w) => w.status 
                 </div>
 
                 <div class="flex flex-col overflow-hidden rounded-xl border bg-white lg:min-h-64 lg:flex-1">
-                    <div class="hidden grid-cols-[2.5rem_minmax(0,1fr)_8.5rem_7rem_7rem_2.5rem] items-center gap-3 border-b bg-slate-50 px-4 py-2.5 text-xs font-medium text-muted-foreground md:grid">
+                    <div class="hidden grid-cols-[2.5rem_minmax(0,1fr)_8.5rem_7rem_7rem_2.5rem] items-center gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-3 text-[12px] font-semibold uppercase tracking-wider text-slate-400 md:grid">
                         <span>#</span><span>Sản phẩm</span><span class="text-center">Số lượng</span><span class="text-right">Đơn giá</span><span class="text-right">Thành tiền</span><span />
                     </div>
                     <div class="lg:min-h-0 lg:flex-1 lg:overflow-y-auto" data-testid="pos-cart">
@@ -693,6 +693,7 @@ const warehouseOptions = computed(() => warehouses.value.filter((w) => w.status 
                 </div>
 
                 <div>
+                    <p class="mb-2 flex items-center justify-between text-[12px] font-semibold uppercase tracking-wider text-slate-400"><span>{{ search.trim() ? `Kết quả cho “${search.trim()}”` : 'Sản phẩm bán tại quầy' }}</span><span class="font-normal normal-case tracking-normal">Bấm để thêm</span></p>
                     <div class="grid max-h-[8.5rem] grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6" data-testid="pos-products">
                         <button
                             v-for="v in results"
@@ -715,7 +716,6 @@ const warehouseOptions = computed(() => warehouses.value.filter((w) => w.status 
                             </span>
                         </button>
                     </div>
-                    <p class="mt-1.5 text-xs text-muted-foreground">{{ search.trim() ? `Kết quả cho “${search.trim()}” · bấm để thêm` : 'Sản phẩm đang bán · bấm để thêm nhanh' }}</p>
                 </div>
             </section>
 
@@ -769,9 +769,9 @@ const warehouseOptions = computed(() => warehouses.value.filter((w) => w.status 
                         <div class="flex items-center justify-between gap-2"><span class="text-muted-foreground">Mã giảm giá</span><input v-model="cart.coupon" :disabled="!online" :placeholder="online ? 'Nhập mã' : 'Cần có mạng'" maxlength="40" class="h-9 w-32 rounded-lg border bg-white px-2.5 text-right uppercase" data-testid="pos-coupon" /></div>
                         <p v-if="cart.coupon?.trim() && promo?.code_error" class="text-right text-xs text-destructive">{{ promo.code_error }}</p>
                         <div v-if="taxRule.rate > 0" class="flex justify-between text-muted-foreground" data-testid="pos-tax"><span>{{ taxRule.included ? 'Trong đó' : 'Cộng' }} thuế GTGT {{ taxRule.rate }}%</span><span class="tabular-nums">{{ formatMoney(totals.tax) }}</span></div>
-                        <div class="flex items-end justify-between border-t pt-3">
-                            <span class="font-semibold">Khách phải trả</span>
-                            <span class="text-3xl font-bold tabular-nums text-primary" data-testid="pos-total">{{ formatMoney(totals.total) }}</span>
+                        <div class="!mt-4 rounded-[14px] bg-gradient-to-br from-blue-600 to-indigo-600 px-5 py-4 text-white shadow-sm">
+                            <p class="text-[13px] text-blue-100">Khách phải trả</p>
+                            <p class="mt-1 text-[34px] font-bold leading-none tabular-nums" data-testid="pos-total">{{ formatMoney(totals.total) }}</p>
                         </div>
                     </div>
 
@@ -822,7 +822,7 @@ const warehouseOptions = computed(() => warehouses.value.filter((w) => w.status 
                             </div>
                         </template>
                         <div v-if="change > 0" class="flex items-center justify-between rounded-xl bg-emerald-50 px-4 py-3 text-emerald-800">
-                            <span>Tiền thối lại</span><span class="text-2xl font-bold tabular-nums" data-testid="pos-change">{{ formatMoney(change) }}</span>
+                            <span>Tiền thừa trả khách</span><span class="text-2xl font-bold tabular-nums" data-testid="pos-change">{{ formatMoney(change) }}</span>
                         </div>
                         <div v-if="shortfall > 0" class="flex items-center justify-between rounded-xl bg-red-50 px-4 py-3 text-red-700">
                             <span>{{ cart.customer ? 'Ghi nợ' : 'Còn thiếu' }}</span><span class="text-xl font-bold tabular-nums">{{ formatMoney(shortfall) }}</span>
