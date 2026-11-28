@@ -4,7 +4,7 @@ defineProps<{ label: string; for?: string; error?: string; hint?: string }>();
 
 <template>
     <div class="space-y-1.5">
-        <label :for="$props.for" class="text-sm font-medium leading-none">{{ label }}</label>
+        <label :for="$props.for" class="text-sm font-medium leading-none text-slate-700">{{ label }}</label>
         <slot />
         <p v-if="error" class="text-xs text-destructive">{{ error }}</p>
         <p v-else-if="hint" class="text-xs text-muted-foreground">{{ hint }}</p>

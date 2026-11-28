@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { Plus, X } from 'lucide-vue-next';
+import { BellRing, MessageCircle, Plus, Users, X } from 'lucide-vue-next';
 import SettingsPage from './SettingsPage.vue';
 import SettingsSection from './SettingsSection.vue';
 import { useSettingsForm } from './useSettingsForm';
@@ -37,7 +37,7 @@ function addDay() {
 <template>
     <SettingsPage title="Thuê bao" :saving="s.saving.value" :dirty="s.dirty.value" :can-save="s.canSave.value" @save="s.save" @cancel="s.cancel">
         <template v-if="s.form.value">
-            <SettingsSection title="Nhắc khách gia hạn" description="Mỗi sáng hệ thống xem thuê bao nào còn đúng số ngày dưới đây thì nhắc khách, mỗi mốc một lần. Dịch vụ tắt nhắc ở trang sản phẩm thì không nhắc.">
+            <SettingsSection title="Nhắc khách gia hạn" :icon="BellRing" description="Mỗi sáng hệ thống xem thuê bao nào còn đúng số ngày dưới đây thì nhắc khách, mỗi mốc một lần. Dịch vụ tắt nhắc ở trang sản phẩm thì không nhắc.">
                 <div class="space-y-2" data-testid="remind-days">
                     <div v-for="(d, i) in s.form.value.remind_days" :key="i" class="flex items-center gap-2">
                         <input v-model.number="s.form.value.remind_days[i]" type="number" min="0" max="60" class="h-9 w-24 rounded-md border border-input bg-card px-2 text-right tabular-nums" :aria-label="`Mốc nhắc ${i + 1}`" :data-testid="`remind-day-${i}`" />
@@ -49,14 +49,14 @@ function addDay() {
                     <Button v-if="s.form.value.remind_days.length < 6" variant="ghost" size="sm" class="text-primary" data-testid="add-remind-day" @click="addDay"><Plus /> Thêm mốc nhắc</Button>
                 </div>
             </SettingsSection>
-            <SettingsSection title="Gửi qua Zalo" description="Tin Zalo ZNS gửi tới số điện thoại của khách, theo mẫu đã được Zalo duyệt.">
+            <SettingsSection title="Gửi qua Zalo" :icon="MessageCircle" tone="green" description="Tin Zalo ZNS gửi tới số điện thoại của khách, theo mẫu đã được Zalo duyệt.">
                 <Switch v-model="s.form.value.zalo" label="Nhắc khách bằng Zalo ZNS" hint="Cần Zalo OA của shop và một mẫu tin cho sự kiện Nhắc gia hạn thuê bao." data-testid="subs-zalo" />
                 <Alert v-if="s.form.value.zalo && zalo && !zaloTemplate" tone="amber" class="mt-2 text-sm" data-testid="zalo-missing">
                     Chưa chọn mẫu tin cho "Nhắc gia hạn thuê bao". Vào <RouterLink to="/settings/connections/zalo" class="font-medium text-primary hover:underline">Kết nối dịch vụ › Zalo</RouterLink> để chọn mẫu. Chưa có mẫu thì hệ thống chỉ ghi lịch sử, không gửi tin.
                 </Alert>
                 <p v-else-if="zaloTemplate" class="mt-1 text-sm text-muted-foreground">Mẫu đang dùng: <span class="font-medium text-foreground">{{ zaloTemplate }}</span></p>
             </SettingsSection>
-            <SettingsSection title="Báo nhân viên" description="Thông báo trên điện thoại của nhân viên có quyền xem đơn.">
+            <SettingsSection title="Báo nhân viên" :icon="Users" tone="violet" description="Thông báo trên điện thoại của nhân viên có quyền xem đơn.">
                 <Switch v-model="s.form.value.notify_staff" label="Mỗi sáng báo số thuê bao sắp hết hạn" hint="Gồm thuê bao hết hạn trong 7 ngày tới và đã hết hạn. Bấm vào thông báo để mở danh sách cần gia hạn." data-testid="subs-notify" />
             </SettingsSection>
         </template>

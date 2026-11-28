@@ -2,23 +2,24 @@
 import { computed, onMounted, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 import SettingsShell from '../settings/SettingsShell.vue';
-import Badge from '@/shared/ui/Badge.vue';
-import Button from '@/shared/ui/Button.vue';
-import Card from '@/shared/ui/Card.vue';
+import { FileText, MessageCircle, Truck } from 'lucide-vue-next';
+import SettingsSection from '../settings/SettingsSection.vue';
+import { carrierLogo, einvoiceLogos, logoUrl } from '../settings/connectionsSummary';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { cn } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import CarrierConnectDialog from '../shipments/CarrierConnectDialog.vue';
-import { carrierMarks, loadCarrierAccounts, type CarrierAccountData, type CarrierCatalogItem } from '../shipments/carriers';
+import { loadCarrierAccounts, type CarrierAccountData, type CarrierCatalogItem } from '../shipments/carriers';
 import EInvoiceConnectDialog from './EInvoiceConnectDialog.vue';
-import { loadEInvoiceSettings, providerMarks, type EInvoiceSettings } from './einvoice';
+import { loadEInvoiceSettings, type EInvoiceSettings } from './einvoice';
 import { loadZalo, type ZaloSettings } from './zalo';
 
 /**
- * Cấu hình → "Kết nối dịch vụ": every outside service the shop connects with its own account, in one place.
- * Carriers open the same dialog as Vận chuyển; e-invoice has its own; Zalo ZNS has its own page.
+ * Cấu hình → "Kết nối dịch vụ" (mẫu 28/11): every outside service the shop connects with its own account, as cards
+ * with the service's real logo. Carriers open the same dialog as Vận chuyển; e-invoice has its own; Zalo ZNS has its
+ * own page. Each connection saves on its own, so the page has no Lưu button.
  */
 const tenant = useTenantStore();
 const loading = ref(true);
@@ -59,109 +60,131 @@ function openInvoice(key: string) {
     invoiceOpen.value = true;
 }
 const invoiceAccount = computed(() => (einvoice.value?.account?.status === 'disconnected' ? null : (einvoice.value?.account ?? null)));
-const invoiceProviders = computed(() => {
-    const list = einvoice.value?.providers ?? [];
-    // Viettel and VNPT share one "waiting for documents" row, as on the mockup.
-    const waiting = list.filter((p) => !p.available && p.provider !== 'misa');
-    return [
-        ...list.filter((p) => p.available || p.provider === 'misa'),
-        ...(waiting.length ? [{ provider: 'waiting', label: waiting.map((p) => p.label.split(' ')[0]).join(', '), fields: {}, available: false, note: 'Chờ tài liệu từ nhà cung cấp' }] : []),
-    ];
-});
+const invoiceProviders = computed(() => einvoice.value?.providers ?? []);
 
 const canManage = computed(() => tenant.can('settings.manage'));
 const zaloOn = computed(() => !!zalo.value?.account && zalo.value.account.status !== 'disconnected');
-const zaloRules = computed(() => Object.values(zalo.value?.account?.rules ?? {}).filter((r) => r.enabled).length);
+const zaloRules = computed(() =>
+    Object.entries(zalo.value?.account?.rules ?? {})
+        .filter(([, r]) => r.enabled)
+        .map(([k]) => zalo.value?.events[k] ?? k),
+);
+
+type State = 'ok' | 'error' | 'off' | 'soon';
+function carrierState(key: string, available: boolean): State {
+    const accs = carrierAccounts(key);
+    if (accs.some((a) => a.status === 'error')) return 'error';
+    if (accs.length) return 'ok';
+    return available ? 'off' : 'soon';
+}
+function invoiceState(p: { provider: string; available: boolean }): State {
+    if (invoiceAccount.value?.provider === p.provider) return invoiceAccount.value.status === 'connected' ? 'ok' : 'error';
+    return p.available ? 'off' : 'soon';
+}
+const dot: Record<State, string> = { ok: 'bg-emerald-500', error: 'bg-amber-500', off: 'bg-slate-300', soon: 'bg-slate-300' };
+const stateText: Record<State, string> = { ok: 'text-emerald-600', error: 'text-amber-600', off: 'text-slate-500', soon: 'text-slate-500' };
+
+const stats = computed(() => {
+    const states = [...carriers.value.map((c) => carrierState(c.carrier, c.available)), ...invoiceProviders.value.map(invoiceState), zaloOn.value ? (zalo.value?.account?.status === 'connected' ? 'ok' : 'error') : 'off'];
+    return { ok: states.filter((s) => s === 'ok').length, error: states.filter((s) => s === 'error').length, more: states.filter((s) => s === 'off').length };
+});
+const card = (s: State) => cn('flex flex-col rounded-[12px] border bg-white p-4', s === 'error' ? 'border-amber-300 ring-1 ring-amber-200' : 'border-slate-200');
+const btn = 'mt-auto flex h-10 w-full items-center justify-center rounded-[10px] text-[14px] font-medium';
+const btnFor = (s: State) =>
+    cn(btn, s === 'ok' ? 'border border-slate-200 text-slate-800 hover:bg-slate-50' : s === 'error' ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-blue-600 text-white hover:bg-blue-700');
 </script>
 
 <template>
-    <SettingsShell title="Kết nối dịch vụ" description="Nhập khóa API do hãng cấp cho shop. Shop dùng tài khoản của chính mình, EzChat Bán hàng không thu thêm phí.">
+    <SettingsShell title="Kết nối dịch vụ" description="Vận chuyển, hóa đơn điện tử và tin nhắn Zalo của shop. Mỗi kết nối lưu riêng khi bấm Kết nối hoặc Cài đặt.">
         <ErrorState v-if="error" :message="error" @retry="load" />
-        <div v-else-if="loading" class="space-y-4"><Skeleton class="h-40" /><Skeleton class="h-40" /></div>
-        <div v-else class="space-y-5" data-testid="service-connections">
-            <Card caps title="Vận chuyển" description="Tạo vận đơn, in nhãn, cập nhật hành trình tự động">
-                <div class="divide-y">
-                    <div v-for="c in carriers" :key="c.carrier" class="flex flex-wrap items-center gap-3 px-5 py-3" :data-testid="`svc-carrier-${c.carrier}`">
-                        <span :class="cn('grid h-9 w-11 shrink-0 place-items-center rounded-md text-[11px] font-bold text-white', carrierMarks[c.carrier]?.bg ?? 'bg-slate-500')">{{ carrierMarks[c.carrier]?.short ?? c.carrier }}</span>
-                        <div class="min-w-0 flex-1">
-                            <div class="font-medium">{{ c.label }}</div>
-                            <div class="text-xs text-muted-foreground">
-                                <template v-if="carrierAccounts(c.carrier).length">{{ carrierAccounts(c.carrier).map((a) => a.name).join(' · ') }}</template>
-                                <template v-else-if="!c.available">{{ c.note }}</template>
-                                <template v-else>Chưa kết nối</template>
-                            </div>
+        <div v-else-if="loading" class="space-y-4"><Skeleton class="h-24" /><Skeleton class="h-56" /><Skeleton class="h-56" /></div>
+        <div v-else class="space-y-6" data-testid="service-connections">
+            <div class="flex flex-wrap items-center gap-x-10 gap-y-3 rounded-[14px] border border-slate-200/80 bg-white px-6 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]" data-testid="svc-stats">
+                <div><p class="text-[14px] text-slate-500">Đang chạy</p><p class="text-[24px] font-bold text-emerald-600">{{ stats.ok }}</p></div>
+                <div><p class="text-[14px] text-slate-500">Cần xem lại</p><p :class="cn('text-[24px] font-bold', stats.error ? 'text-amber-600' : 'text-slate-900')">{{ stats.error }}</p></div>
+                <div><p class="text-[14px] text-slate-500">Có thể kết nối thêm</p><p class="text-[24px] font-bold text-slate-900">{{ stats.more }}</p></div>
+                <p class="min-w-60 flex-1 text-[13px] text-slate-500 lg:max-w-md lg:text-right">Nhập khóa API do hãng cấp cho shop. EzChat Bán hàng không thu thêm phí kết nối.</p>
+            </div>
+
+            <SettingsSection title="Vận chuyển" description="Tạo vận đơn, in nhãn, cập nhật hành trình tự động. Shop dùng tài khoản của chính mình." :icon="Truck">
+                <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
+                    <div v-for="c in carriers" :key="c.carrier" :class="card(carrierState(c.carrier, c.available))" :data-testid="`svc-carrier-${c.carrier}`">
+                        <div class="flex h-10 items-center">
+                            <img v-if="carrierLogo(c.carrier)" :src="carrierLogo(c.carrier)!" :alt="c.label" class="max-h-9 max-w-[140px] object-contain" />
+                            <span v-else class="grid size-10 place-items-center rounded-[10px] bg-slate-100 text-slate-500"><Truck class="size-5" /></span>
                         </div>
-                        <Badge v-if="carrierAccounts(c.carrier).some((a) => a.status === 'error')" tone="danger">Lỗi kết nối</Badge>
-                        <Badge v-else-if="carrierAccounts(c.carrier).length" tone="success">Đã kết nối</Badge>
-                        <Badge v-else-if="!c.available" tone="muted">Sắp có</Badge>
-                        <Button v-if="c.available && canManage" size="sm" :variant="carrierAccounts(c.carrier).length ? 'outline' : 'default'" @click="openCarrier(c.carrier)">
-                            {{ carrierAccounts(c.carrier).length ? 'Cài đặt' : 'Kết nối' }}
-                        </Button>
+                        <p class="mt-3 text-[15px] font-semibold text-slate-900">{{ c.label }}</p>
+                        <p :class="cn('mt-1 flex items-start gap-1.5 text-[13px]', stateText[carrierState(c.carrier, c.available)])">
+                            <span :class="cn('mt-1.5 size-1.5 shrink-0 rounded-full', dot[carrierState(c.carrier, c.available)])" />
+                            <span>{{ { ok: 'Đã kết nối', error: 'Lỗi kết nối', off: 'Chưa kết nối', soon: c.note ?? 'Sắp có' }[carrierState(c.carrier, c.available)] }}</span>
+                        </p>
+                        <p v-if="carrierAccounts(c.carrier).length" class="mt-1 line-clamp-2 text-[13px] text-slate-500">{{ carrierAccounts(c.carrier).map((a) => a.name).join(' · ') }}</p>
+                        <div class="min-h-4 flex-1" />
+                        <span v-if="!c.available" :class="cn(btn, 'bg-slate-100 text-slate-500')">Sắp có</span>
+                        <button v-else-if="canManage" type="button" :class="btnFor(carrierState(c.carrier, c.available))" @click="openCarrier(c.carrier)">
+                            {{ { ok: 'Cài đặt', error: 'Kết nối lại', off: 'Kết nối', soon: 'Kết nối' }[carrierState(c.carrier, c.available)] }}
+                        </button>
                     </div>
                 </div>
-            </Card>
+            </SettingsSection>
 
-            <Card caps title="Hóa đơn điện tử" description="Xuất hóa đơn cho đơn bán, gửi khách qua email">
-                <div class="divide-y">
-                    <div v-for="p in invoiceProviders" :key="p.provider" class="flex flex-wrap items-center gap-3 px-5 py-3" :data-testid="`svc-einvoice-${p.provider}`">
-                        <span :class="cn('grid h-9 w-11 shrink-0 place-items-center rounded-md text-[11px] font-bold text-white', providerMarks[p.provider]?.bg ?? 'bg-slate-400')">{{ providerMarks[p.provider]?.short ?? 'VT' }}</span>
-                        <div class="min-w-0 flex-1">
-                            <div class="font-medium">{{ p.label }}</div>
-                            <div class="text-xs text-muted-foreground">
-                                <template v-if="invoiceAccount?.provider === p.provider">{{ invoiceAccount.provider_name ?? 'Đã kết nối' }}<template v-if="invoiceAccount.template_label"> · {{ invoiceAccount.template_label }}</template></template>
-                                <template v-else-if="!p.available">{{ p.note }}</template>
-                                <template v-else-if="invoiceAccount">Đang dùng {{ invoiceAccount.provider_label }}. Mỗi shop dùng một nhà cung cấp.</template>
-                                <template v-else>Chưa kết nối</template>
-                            </div>
+            <SettingsSection title="Hóa đơn điện tử" description="Xuất hóa đơn cho đơn bán, gửi khách qua email. Mỗi shop dùng một nhà cung cấp." :icon="FileText" tone="green">
+                <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
+                    <div v-for="p in invoiceProviders" :key="p.provider" :class="card(invoiceState(p))" :data-testid="`svc-einvoice-${p.provider}`">
+                        <div class="flex h-11 items-center">
+                            <img v-if="einvoiceLogos[p.provider]" :src="logoUrl(einvoiceLogos[p.provider])!" :alt="p.label" class="size-11 rounded-[11px] object-contain" />
+                            <span v-else class="grid size-11 place-items-center rounded-[11px] bg-slate-100 text-slate-400"><FileText class="size-5" /></span>
                         </div>
-                        <template v-if="invoiceAccount?.provider === p.provider">
-                            <Badge v-if="invoiceAccount.environment === 'sandbox'" tone="warning">thử nghiệm</Badge>
-                            <Badge :tone="invoiceAccount.status === 'connected' ? 'success' : 'danger'">{{ invoiceAccount.status === 'connected' ? 'Đã kết nối' : 'Lỗi kết nối' }}</Badge>
-                        </template>
-                        <Badge v-else-if="!p.available" tone="muted">Sắp có</Badge>
-                        <Button
-                            v-if="p.available && canManage && (!invoiceAccount || invoiceAccount.provider === p.provider)"
-                            size="sm"
-                            :variant="invoiceAccount ? 'outline' : 'default'"
+                        <p class="mt-3 text-[15px] font-semibold text-slate-900">{{ p.label }}</p>
+                        <p :class="cn('mt-1 flex items-start gap-1.5 text-[13px]', stateText[invoiceState(p)])">
+                            <span :class="cn('mt-1.5 size-1.5 shrink-0 rounded-full', dot[invoiceState(p)])" />
+                            <span>
+                                {{ { ok: 'Đã kết nối', error: 'Lỗi kết nối', off: invoiceAccount ? `Đang dùng ${invoiceAccount.provider_label}` : 'Chưa kết nối', soon: p.note ?? 'Sắp có' }[invoiceState(p)] }}
+                                <template v-if="invoiceAccount?.provider === p.provider && invoiceAccount.environment === 'sandbox'"> · thử nghiệm</template>
+                            </span>
+                        </p>
+                        <p v-if="invoiceAccount?.provider === p.provider" class="mt-1 truncate text-[13px] text-slate-500">
+                            {{ invoiceAccount.template_label ? `Mẫu ${invoiceAccount.template_label}` : (invoiceAccount.provider_name ?? '') }}
+                        </p>
+                        <div class="min-h-4 flex-1" />
+                        <span v-if="!p.available" :class="cn(btn, 'bg-slate-100 text-slate-500')">Sắp có</span>
+                        <button
+                            v-else-if="canManage && (!invoiceAccount || invoiceAccount.provider === p.provider)"
+                            type="button"
+                            :class="btnFor(invoiceState(p))"
                             :data-testid="`svc-einvoice-open-${p.provider}`"
                             @click="openInvoice(p.provider)"
                         >
-                            {{ invoiceAccount ? 'Cài đặt' : 'Kết nối' }}
-                        </Button>
+                            {{ invoiceState(p) === 'off' ? 'Kết nối' : 'Cài đặt' }}
+                        </button>
                     </div>
                 </div>
-            </Card>
+            </SettingsSection>
 
-            <Card caps title="Tin nhắn cho khách">
-                <div class="flex flex-wrap items-center gap-3 px-5 py-3">
-                    <span class="grid h-9 w-11 shrink-0 place-items-center rounded-md bg-blue-600 text-[11px] font-bold text-white">Zalo</span>
+            <SettingsSection title="Tin nhắn cho khách" description="Gửi tin xác nhận đơn, giao hàng, nhắc thanh toán." :icon="MessageCircle" tone="violet">
+                <div class="flex flex-wrap items-center gap-4 rounded-[12px] border border-slate-200 p-4">
+                    <img :src="logoUrl('channels/zalo.webp')!" alt="Zalo" class="size-12 rounded-[12px] object-contain" />
                     <div class="min-w-0 flex-1">
-                        <div class="font-medium">Zalo ZNS</div>
-                        <div class="text-xs text-muted-foreground">
-                            <template v-if="zaloOn">OA {{ zalo?.account?.oa_name ?? zalo?.account?.app_id }} · {{ zaloRules }} sự kiện đang gửi</template>
-                            <template v-else>Báo xác nhận đơn, đang giao, đã giao qua Zalo</template>
-                        </div>
+                        <p class="text-[15px] font-semibold text-slate-900">Zalo ZNS</p>
+                        <p v-if="zaloOn" :class="cn('mt-0.5 flex items-center gap-1.5 text-[13px]', zalo?.account?.status === 'connected' ? 'text-emerald-600' : 'text-amber-600')">
+                            <span :class="cn('size-1.5 rounded-full', zalo?.account?.status === 'connected' ? 'bg-emerald-500' : 'bg-amber-500')" />
+                            OA {{ zalo?.account?.oa_name ?? zalo?.account?.app_id }} · {{ zaloRules.length }} mẫu tin đang bật
+                        </p>
+                        <p v-else class="mt-0.5 text-[13px] text-slate-500">Báo xác nhận đơn, đang giao, đã giao qua Zalo</p>
                     </div>
-                    <Badge v-if="zaloOn" :tone="zalo?.account?.status === 'connected' ? 'success' : 'danger'">{{ zalo?.account?.status === 'connected' ? 'Đã kết nối' : 'Lỗi kết nối' }}</Badge>
-                    <RouterLink v-if="canManage" to="/settings/connections/zalo" data-testid="svc-zalo-open">
-                        <Button size="sm" :variant="zaloOn ? 'outline' : 'default'">{{ zaloOn ? 'Cài đặt' : 'Kết nối' }}</Button>
+                    <div v-if="zaloRules.length" class="flex flex-wrap gap-1.5">
+                        <span v-for="r in zaloRules" :key="r" class="rounded-md bg-emerald-50 px-2 py-0.5 text-[13px] font-medium text-emerald-700">{{ r }}</span>
+                    </div>
+                    <RouterLink
+                        v-if="canManage"
+                        to="/settings/connections/zalo"
+                        :class="cn('flex h-10 items-center rounded-[10px] px-4 text-[14px] font-medium', zaloOn ? 'border border-slate-200 text-slate-800 hover:bg-slate-50' : 'bg-blue-600 text-white hover:bg-blue-700')"
+                        data-testid="svc-zalo-open"
+                    >
+                        {{ zaloOn ? 'Cài đặt' : 'Kết nối' }}
                     </RouterLink>
                 </div>
-            </Card>
-
-            <Card caps title="Sàn thương mại điện tử">
-                <template #actions><RouterLink to="/marketplaces" class="text-sm text-primary hover:underline">Mở Kết nối sàn</RouterLink></template>
-                <div class="divide-y">
-                    <div v-for="m in [{ k: 'S', bg: 'bg-orange-500', name: 'Shopee', note: 'Chờ Shopee duyệt app' }, { k: 'TT', bg: 'bg-slate-900', name: 'TikTok Shop', note: 'Chờ TikTok duyệt app' }, { k: 'Tiki', bg: 'bg-sky-500', name: 'Tiki', note: 'Kết nối từng shop, không chờ duyệt' }]" :key="m.name" class="flex flex-wrap items-center gap-3 px-5 py-3">
-                        <span :class="cn('grid h-9 w-11 shrink-0 place-items-center rounded-md text-[11px] font-bold text-white', m.bg)">{{ m.k }}</span>
-                        <div class="min-w-0 flex-1">
-                            <div class="font-medium">{{ m.name }}</div>
-                            <div class="text-xs text-muted-foreground">{{ m.note }}</div>
-                        </div>
-                        <Badge tone="muted">Sắp có</Badge>
-                    </div>
-                </div>
-            </Card>
+            </SettingsSection>
         </div>
 
         <CarrierConnectDialog v-model:open="carrierOpen" :accounts="accounts" :initial="carrierPick" @changed="load" />
