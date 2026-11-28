@@ -95,6 +95,35 @@ class SyncActivityQuery
         return ['by_status' => $byStatus, 'by_type' => $byType];
     }
 
+    /**
+     * Tasks per hour of the last 24 hours (every type, any status), oldest hour first, for the Sync Center chart.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array<int, array{at: string, n: int}>
+     */
+    public function hourly(array $filters): array
+    {
+        $start = CarbonImmutable::now()->startOfHour()->subHours(23);
+        $counts = [];
+        foreach ($this->types($filters) as $type) {
+            $query = $this->query($type, ['from' => $start->toIso8601String()] + array_diff_key($filters, ['from' => 1, 'to' => 1]));
+            if ($query === null) {
+                continue;
+            }
+            $time = $query->getModel()->qualifyColumn($this->timeColumn($type));
+            $rows = $query->toBase()->reorder()->selectRaw("DATE_FORMAT({$time}, '%Y-%m-%d %H:00:00') as h, COUNT(*) as n")->groupBy('h')->pluck('n', 'h');
+            foreach ($rows as $hour => $n) {
+                $counts[$hour] = ($counts[$hour] ?? 0) + (int) $n;
+            }
+        }
+
+        return collect(range(0, 23))->map(function (int $i) use ($start, $counts) {
+            $at = $start->addHours($i)->utc();
+
+            return ['at' => $at->toIso8601String(), 'n' => $counts[$at->format('Y-m-d H:00:00')] ?? 0];
+        })->all();
+    }
+
     /** Finds one task by its key ("type:id"). */
     public function find(string $type, int $id): ?Model
     {

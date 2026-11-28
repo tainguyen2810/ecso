@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, provide, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { AlertTriangle, ChevronLeft, CircleCheck, History, Link2, ListChecks, PackagePlus, RefreshCw, Send, ShoppingCart, Tag, Unplug, Webhook } from 'lucide-vue-next';
+import { AlertTriangle, CircleCheck, History, Link2, ListChecks, PackagePlus, RefreshCw, Send, ShoppingCart, Tag, Unplug, Webhook } from 'lucide-vue-next';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -9,10 +9,13 @@ import EmptyState from '@/shared/ui/EmptyState.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import FormField from '@/shared/ui/FormField.vue';
 import Input from '@/shared/ui/Input.vue';
-import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
-import StatTile from '@/shared/ui/StatTile.vue';
+import ChannelHead from './ChannelHead.vue';
+import ReportKpi from '../reports/ReportKpi.vue';
+import ReportChip from '../reports/ReportChip.vue';
+import { btn } from './channel';
+import { cn } from '@/shared/lib/utils';
 import Switch from '@/shared/ui/Switch.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
@@ -26,6 +29,7 @@ const route = useRoute();
 const router = useRouter();
 const toast = useToast();
 const tenant = useTenantStore();
+provide('soft-cards', true);
 
 const account = ref<MarketplaceAccountData | null>(null);
 const overview = ref({ orders_this_week: 0, new_products: 0, pending_prices: 0, sync_errors: 0 });
@@ -81,11 +85,11 @@ async function run(key: string, fn: () => Promise<string | void>) {
 }
 
 const switches: { key: keyof MarketplaceSyncSettings; label: string; hint: string }[] = [
-    { key: 'sync_orders', label: 'Đơn hàng Woo về EzChat Bán hàng', hint: 'Vào Danh sách đơn hàng, nguồn WooCommerce, giữ hàng ngay' },
-    { key: 'sync_stock', label: 'Tồn kho EzChat Bán hàng lên Woo', hint: 'Số có thể bán của kho bên dưới' },
+    { key: 'sync_orders', label: 'Đơn hàng Woo về phần mềm', hint: 'Vào Danh sách đơn hàng, nguồn Website, giữ hàng ngay' },
+    { key: 'sync_stock', label: 'Tồn kho lên Woo', hint: 'Số có thể bán của kho bên dưới' },
     { key: 'sync_prices', label: 'Giá hai chiều', hint: 'Theo nguồn giá từng sản phẩm; giá khuyến mãi Woo là giá bán thực tế' },
     { key: 'import_new_products', label: 'Sản phẩm mới trên Woo', hint: 'Vào danh sách chờ duyệt' },
-    { key: 'push_status', label: 'Trạng thái đơn hai chiều', hint: 'Xác nhận, đóng gói, bàn giao, hủy trong EzChat Bán hàng được ghi lên website. Tắt: chỉ website → EzChat Bán hàng' },
+    { key: 'push_status', label: 'Trạng thái đơn hai chiều', hint: 'Xác nhận, đóng gói, bàn giao, huỷ trong phần mềm được ghi lên website. Tắt: chỉ website → phần mềm' },
 ];
 
 const intervals = [5, 15, 30, 60].map((m) => ({ value: String(m), label: m === 60 ? '1 giờ' : `${m} phút` }));
@@ -195,47 +199,75 @@ const approveAllPrices = () => run('price-all', async () => {
 });
 
 const statusLabel = computed(() => (account.value?.status !== 'connected' ? 'Đã ngắt' : account.value.last_error ? 'Có lỗi' : 'Đang kết nối'));
+const hookBad = computed(() => account.value?.webhook_health?.ok === false);
 const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].sale_price !== null && p.variants[0].regular_price !== null && p.variants[0].sale_price !== p.variants[0].regular_price;
 </script>
 
 <template>
-    <RouterLink to="/marketplaces" class="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ChevronLeft class="size-4" /> Kết nối sàn</RouterLink>
-
     <div v-if="loading && !account" class="space-y-4"><Skeleton class="h-16" /><Skeleton class="h-64" /></div>
     <ErrorState v-else-if="loadError" :message="loadError" @retry="load" />
     <template v-else-if="account">
-        <div class="mb-5 flex flex-wrap items-center justify-between gap-4">
-            <div class="flex items-center gap-3">
-                <MarketplaceLogo :marketplace="account.marketplace" :name="account.marketplace_name" size="lg" class="size-11" />
-                <div>
-                    <h1 class="text-xl font-semibold tracking-tight">{{ account.shop_name }}</h1>
-                    <p class="text-sm text-muted-foreground">
-                        {{ account.base_url }} ·
-                        <span :class="account.status === 'connected' && !account.last_error ? 'text-success' : 'text-destructive'">{{ statusLabel }}</span>
-                        <template v-if="account.last_synced_at"> · lấy sản phẩm lần cuối {{ formatDateTime(account.last_synced_at) }}</template>
-                    </p>
-                </div>
-            </div>
-            <div v-if="canEdit && account.status === 'connected'" class="flex flex-wrap gap-2">
-                <Button variant="outline" :loading="busy === 'sync-orders'" data-testid="woo-sync-orders" @click="syncOrders"><ShoppingCart /> Đồng bộ đơn ngay</Button>
-                <Button variant="outline" :loading="busy === 'sync'" @click="resync"><RefreshCw /> Lấy lại sản phẩm</Button>
-                <Button variant="outline" :loading="busy === 'push'" @click="pushStock"><Send /> Đẩy tồn kho</Button>
-                <Button variant="outline" class="text-destructive" :loading="busy === 'disconnect'" @click="disconnect"><Unplug /> Ngắt kết nối</Button>
-            </div>
+        <ChannelHead
+            :title="account.shop_name"
+            marketplace="woocommerce"
+            :crumbs="[{ label: 'Website', to: '/marketplaces?san=woocommerce' }]"
+            :description="`Website WooCommerce · ${account.base_url ?? ''}${account.last_synced_at ? ` · lấy sản phẩm lần cuối ${formatDateTime(account.last_synced_at)}` : ''}`"
+        >
+            <template #chips>
+                <span :class="cn('inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[12px] font-medium', account.status === 'connected' && !account.last_error ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600')">
+                    <i :class="cn('size-1.5 rounded-full', account.status === 'connected' && !account.last_error ? 'bg-emerald-500' : 'bg-red-500')" />{{ statusLabel }}
+                </span>
+            </template>
+            <template v-if="canEdit && account.status === 'connected'">
+                <button type="button" :class="btn.outline" :disabled="busy === 'sync-orders'" data-testid="woo-sync-orders" @click="syncOrders"><ShoppingCart class="size-4" /> Đồng bộ đơn ngay</button>
+                <button type="button" :class="btn.outline" :disabled="busy === 'sync'" @click="resync"><RefreshCw :class="cn('size-4', busy === 'sync' && 'animate-spin')" /> Lấy lại sản phẩm</button>
+                <button type="button" :class="btn.outline" :disabled="busy === 'push'" @click="pushStock"><Send class="size-4" /> Đẩy tồn kho</button>
+                <button type="button" :class="cn(btn.outline, 'border-red-200 text-red-600 hover:border-red-300 hover:text-red-700')" :disabled="busy === 'disconnect'" @click="disconnect"><Unplug class="size-4" /> Ngắt kết nối</button>
+            </template>
+        </ChannelHead>
+
+        <p v-if="account.last_error" class="mb-5 flex items-center gap-2 rounded-[14px] border border-rose-200 bg-rose-50/70 px-5 py-3 text-sm"><AlertTriangle class="size-4 text-rose-500" /> {{ account.last_error }}</p>
+
+        <div class="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="woo-overview">
+            <ReportKpi label="Đơn tuần này" :icon="ShoppingCart" tone="violet" plain :value="overview.orders_this_week" unit="">Đơn từ website trong 7 ngày gần nhất</ReportKpi>
+            <ReportKpi label="Sản phẩm đã liên kết" :icon="Link2" tone="blue" plain :value="null" :text="`${formatNumber(account.stats?.mapped ?? 0)} / ${formatNumber(account.stats?.listings ?? 0)}`" unit="">
+                <template #chips><RouterLink :to="`/marketplaces/${account.id}/listings`"><ReportChip tone="blue">Liên kết sản phẩm →</ReportChip></RouterLink></template>
+                {{ overview.new_products ? `${formatNumber(overview.new_products)} sản phẩm mới chờ duyệt` : 'Không có sản phẩm mới chờ duyệt' }}
+            </ReportKpi>
+            <ReportKpi label="Nhận đơn tức thì" :icon="Webhook" :tone="hookBad ? 'amber' : 'green'" plain :value="null" :text="!account.webhook_health ? 'Chưa kiểm tra' : account.webhook_health.ok ? 'Đang chạy' : 'Chậm'" unit="">
+                {{ account.webhook_health ? `Kiểm tra lúc ${formatDateTime(account.webhook_health.checked_at)}` : 'Bấm Kiểm tra ngay để thử' }}
+            </ReportKpi>
+            <ReportKpi label="Lỗi đồng bộ" :icon="overview.sync_errors ? AlertTriangle : CircleCheck" :tone="overview.sync_errors ? 'red' : 'green'" plain :value="overview.sync_errors" unit="">
+                <template v-if="overview.sync_errors" #chips><RouterLink :to="`/marketplaces/sync?tab=log&account=${account.id}`"><ReportChip tone="red">Xem lỗi →</ReportChip></RouterLink></template>
+                {{ overview.sync_errors ? 'Đơn hoặc tồn chưa đồng bộ được' : 'Không có đơn hay tồn lỗi' }}
+            </ReportKpi>
         </div>
 
-        <p v-if="account.last_error" class="mb-4 flex items-center gap-2 rounded-md border border-rose-200 bg-rose-50/70 px-4 py-2.5 text-sm"><AlertTriangle class="size-4 text-rose-500" /> {{ account.last_error }}</p>
+        <div class="grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
+            <div class="min-w-0 space-y-5">
+            <Card :class="hookBad ? '!border-amber-200 !bg-amber-50/50' : ''" title="Nhận đơn tức thì từ website" description="Woo tự tắt webhook sau nhiều lần gửi lỗi; EzChat Bán hàng kiểm tra mỗi giờ và bật lại." data-testid="woo-webhooks">
+                <template v-if="canEdit && account.status === 'connected'" #actions>
+                    <Button size="sm" variant="outline" :loading="busy === 'webhooks'" data-testid="woo-check-webhooks" @click="checkWebhooks"><Webhook /> Kiểm tra ngay</Button>
+                </template>
+                <div class="space-y-2 px-5 py-4 text-sm">
+                    <p v-if="!account.webhook_health" class="text-muted-foreground">Chưa kiểm tra lần nào.</p>
+                    <template v-else>
+                        <p class="flex items-center gap-2">
+                            <CircleCheck v-if="account.webhook_health.ok" class="size-4 text-emerald-600" /><AlertTriangle v-else class="size-4 text-rose-500" />
+                            <span :class="account.webhook_health.ok ? 'text-emerald-700' : 'text-rose-600'">{{ account.webhook_health.ok ? 'Đang hoạt động' : 'Không kiểm tra được' }}</span>
+                            <span class="text-xs text-muted-foreground">· {{ formatDateTime(account.webhook_health.checked_at) }}</span>
+                        </p>
+                        <p v-if="account.webhook_health.error" class="text-rose-600">{{ account.webhook_health.error }}</p>
+                        <p v-if="account.webhook_health.reactivated.length" class="text-amber-700">Đã bật lại: {{ account.webhook_health.reactivated.map((t) => topicLabels[t] ?? t).join(', ') }}</p>
+                        <p v-if="account.webhook_health.missing.length" class="text-amber-700">Đã tạo lại: {{ account.webhook_health.missing.map((t) => topicLabels[t] ?? t).join(', ') }}</p>
+                    </template>
+                    <p class="text-xs text-muted-foreground">Dù webhook lỗi, EzChat Bán hàng vẫn đối soát đơn theo chu kỳ ở trên nên không mất đơn.</p>
+                </div>
+                <div class="flex gap-2 border-t px-5 py-3 text-sm">
+                    <RouterLink :to="`/marketplaces/sync?tab=log&account=${account.id}`" class="inline-flex items-center gap-1 text-primary hover:underline"><History class="size-4" /> Lịch sử và lỗi đồng bộ</RouterLink>
+                </div>
+            </Card>
 
-        <Card class="mb-4" data-testid="woo-overview">
-            <div class="grid divide-y sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x">
-                <StatTile :icon="Link2" label="Sản phẩm đã liên kết" :value="`${formatNumber(account.stats?.mapped ?? 0)} / ${formatNumber(account.stats?.listings ?? 0)}`" :to="`/marketplaces/${account.id}/listings`" />
-                <StatTile :icon="PackagePlus" label="Chờ duyệt (SP mới)" :value="formatNumber(overview.new_products)" :tone="overview.new_products ? 'amber' : 'slate'" />
-                <StatTile :icon="ShoppingCart" label="Đơn tuần này" :value="formatNumber(overview.orders_this_week)" tone="green" />
-                <StatTile :icon="AlertTriangle" label="Lỗi đồng bộ" :value="formatNumber(overview.sync_errors)" :tone="overview.sync_errors ? 'red' : 'slate'" :to="`/marketplaces/sync?tab=log&account=${account.id}`" />
-            </div>
-        </Card>
-
-        <div class="grid gap-4 lg:grid-cols-2">
             <Card title="Đồng bộ" data-testid="woo-settings">
                 <div class="divide-y px-5 py-2">
                     <Switch
@@ -266,6 +298,8 @@ const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].
                 </div>
             </Card>
 
+            </div>
+            <div class="min-w-0 space-y-5">
             <Card title="Sản phẩm mới chờ duyệt" data-testid="woo-new-products">
                 <template v-if="canEdit && pending.length" #actions>
                     <Button size="sm" :loading="busy === 'approve-all'" data-testid="woo-approve-all" @click="approve(null)">Duyệt tất cả</Button>
@@ -293,32 +327,6 @@ const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].
                 </ul>
                 <p class="border-t px-5 py-3 text-xs text-muted-foreground">Giá khuyến mãi (nếu có) được dùng làm giá bán khi tạo sản phẩm.</p>
             </Card>
-        </div>
-
-        <div class="mt-4 grid gap-4 lg:grid-cols-2">
-            <Card title="Nhận đơn tức thì từ website" description="Woo tự tắt webhook sau nhiều lần gửi lỗi; EzChat Bán hàng kiểm tra mỗi giờ và bật lại." data-testid="woo-webhooks">
-                <template v-if="canEdit && account.status === 'connected'" #actions>
-                    <Button size="sm" variant="outline" :loading="busy === 'webhooks'" data-testid="woo-check-webhooks" @click="checkWebhooks"><Webhook /> Kiểm tra ngay</Button>
-                </template>
-                <div class="space-y-2 px-5 py-4 text-sm">
-                    <p v-if="!account.webhook_health" class="text-muted-foreground">Chưa kiểm tra lần nào.</p>
-                    <template v-else>
-                        <p class="flex items-center gap-2">
-                            <CircleCheck v-if="account.webhook_health.ok" class="size-4 text-emerald-600" /><AlertTriangle v-else class="size-4 text-rose-500" />
-                            <span :class="account.webhook_health.ok ? 'text-emerald-700' : 'text-rose-600'">{{ account.webhook_health.ok ? 'Đang hoạt động' : 'Không kiểm tra được' }}</span>
-                            <span class="text-xs text-muted-foreground">· {{ formatDateTime(account.webhook_health.checked_at) }}</span>
-                        </p>
-                        <p v-if="account.webhook_health.error" class="text-rose-600">{{ account.webhook_health.error }}</p>
-                        <p v-if="account.webhook_health.reactivated.length" class="text-amber-700">Đã bật lại: {{ account.webhook_health.reactivated.map((t) => topicLabels[t] ?? t).join(', ') }}</p>
-                        <p v-if="account.webhook_health.missing.length" class="text-amber-700">Đã tạo lại: {{ account.webhook_health.missing.map((t) => topicLabels[t] ?? t).join(', ') }}</p>
-                    </template>
-                    <p class="text-xs text-muted-foreground">Dù webhook lỗi, EzChat Bán hàng vẫn đối soát đơn theo chu kỳ ở trên nên không mất đơn.</p>
-                </div>
-                <div class="flex gap-2 border-t px-5 py-3 text-sm">
-                    <RouterLink :to="`/marketplaces/sync?tab=log&account=${account.id}`" class="inline-flex items-center gap-1 text-primary hover:underline"><History class="size-4" /> Lịch sử và lỗi đồng bộ</RouterLink>
-                </div>
-            </Card>
-
             <Card id="status-map" title="Ánh xạ trạng thái" description="Trạng thái đơn trên website (kể cả trạng thái do plugin thêm) tương ứng trạng thái nào trong EzChat Bán hàng. Dòng có chữ Gợi ý được chọn sẵn theo tên, bấm Lưu để áp dụng." data-testid="woo-status-map">
                 <template v-if="canEdit" #actions>
                     <Button size="sm" :loading="busy === 'status-map'" data-testid="woo-save-status-map" @click="saveMap"><ListChecks /> Lưu</Button>
@@ -357,9 +365,10 @@ const hasSale = (p: NewListingData) => p.variants.length === 1 && p.variants[0].
                     <Button type="submit" variant="outline">Thêm</Button>
                 </form>
             </Card>
+            </div>
         </div>
 
-        <Card v-if="account.settings?.sync_prices || prices.length" title="Giá từ website chờ duyệt" description="Giá bằng 0 hoặc lệch quá 50% so với giá EzChat Bán hàng thì không tự áp dụng." class="mt-4" data-testid="woo-pending-prices">
+        <Card v-if="account.settings?.sync_prices || prices.length" title="Giá từ website chờ duyệt" description="Giá bằng 0 hoặc lệch quá 50% so với giá trong phần mềm thì không tự áp dụng." class="mt-5" data-testid="woo-pending-prices">
             <template v-if="canEdit && prices.length" #actions>
                 <Button size="sm" :loading="busy === 'price-all'" data-testid="woo-prices-approve-all" @click="approveAllPrices">Áp dụng tất cả</Button>
             </template>

@@ -75,6 +75,7 @@ class SyncDashboard
                 'reconcile_overdue' => $this->health->overdueReconciles($this->context->id()),
             ],
             'tasks' => $this->activity->counts($filters),
+            'hourly' => $this->activity->hourly($filters),
             'problems' => [
                 'open_errors' => (int) $openErrors->sum(),
                 'errors_by_code' => (object) $errorsByCode->all(),

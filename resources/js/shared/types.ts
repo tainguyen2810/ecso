@@ -784,6 +784,8 @@ export interface SyncOverviewData {
     tasks: { by_status: Record<SyncTaskStatus, number>; by_type: Record<SyncTaskType, Record<SyncTaskStatus, number>> };
     problems: { open_errors: number; errors_by_code: Record<string, number>; dead_letters: number; stock_drift: number; failed_by_code: Record<string, number> };
     last_synced_at: string | null;
+    /** Tasks of every type started in each of the last 24 hours, oldest first. */
+    hourly?: { at: string; n: number }[];
     shops: SyncShopData[];
     error_codes: Record<string, { label: string; hint: string; auto_retry: boolean }>;
     permissions: { operate: boolean; export: boolean };

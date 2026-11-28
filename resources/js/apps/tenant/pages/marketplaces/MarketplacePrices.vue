@@ -1,25 +1,26 @@
 <script setup lang="ts">
-import PageHeader from '../../PageHeader.vue';
-import { computed, onMounted, ref, watch } from 'vue';
-import { Download, Lock, LockOpen, Search } from 'lucide-vue-next';
+import { computed, onMounted, provide, ref, watch } from 'vue';
+import { ArrowDown, ArrowUp, Check, CheckCheck, Download, Lock, LockOpen, Pencil, Search } from 'lucide-vue-next';
+import ChannelHead from './ChannelHead.vue';
+import ReportKpi from '../reports/ReportKpi.vue';
+import { btn, card, pill, th } from './channel';
+import Select from '@/shared/ui/Select.vue';
 import Pagination from '../../components/Pagination.vue';
-import Tabs from '../../components/Tabs.vue';
 import Button from '@/shared/ui/Button.vue';
-import Card from '@/shared/ui/Card.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import Input from '@/shared/ui/Input.vue';
 import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
-import StatTile from '@/shared/ui/StatTile.vue';
 import { api, ApiError } from '@/shared/lib/api';
-import { formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
+import { formatDate, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import type { PriceBoardCell, PriceBoardRow } from '@/shared/types';
 import { BadgePercent, Clock, FileSpreadsheet, TrendingDown } from 'lucide-vue-next';
 
 /** Bảng giá sàn: price now vs price from the fee table on each marketplace shop; apply, lock, price file. */
+provide('soft-cards', true);
 const toast = useToast();
 const tenant = useTenantStore();
 const canEdit = computed(() => tenant.can('marketplace.connect'));
@@ -49,7 +50,10 @@ async function load(page = 1) {
         loading.value = false;
     }
 }
-onMounted(() => load());
+onMounted(() => {
+    load();
+    api.get('/marketplace-pricing/rules').then(({ data }) => (rules.value = data.data)).catch(() => undefined);
+});
 watch(tab, () => load());
 let timer: ReturnType<typeof setTimeout> | undefined;
 watch(q, () => {
@@ -58,14 +62,6 @@ watch(q, () => {
 });
 
 const actionable = (c?: PriceBoardCell) => !!c && (c.status === 'pending' || c.status === 'loss' || c.status === 'failed');
-function toggleRow(r: PriceBoardRow, on: boolean) {
-    for (const c of Object.values(r.cells)) {
-        if (on) selected.value.add(c.listing_id);
-        else selected.value.delete(c.listing_id);
-    }
-    selected.value = new Set(selected.value);
-}
-const rowSelected = (r: PriceBoardRow) => Object.values(r.cells).some((c) => selected.value.has(c.listing_id));
 const exportable = computed(() => rows.value.some((r) => Object.values(r.cells).some((c) => c.status === 'export')));
 
 async function run(key: string, fn: () => Promise<string | void>) {
@@ -124,108 +120,214 @@ function exportFile(accountId: string) {
     window.location.href = `/api/v1/marketplace-pricing/board/export?account=${accountId}`;
 }
 const diffText = (c: PriceBoardCell) => (c.current !== null && c.new !== null ? c.new - c.current : null);
+const tabs = computed(() => [
+    { value: 'pending' as const, label: 'Chờ duyệt', count: counts.value.pending },
+    { value: 'loss' as const, label: 'Lỗ sau phí', count: counts.value.loss },
+    { value: 'locked' as const, label: 'Đang khoá', count: counts.value.locked },
+    { value: 'all' as const, label: 'Tất cả', count: counts.value.all },
+]);
+
+/** One line per product and shop (mẫu 28/11), from the rows the board returns per variant. */
+const shop = ref('');
+const lines = computed(() =>
+    rows.value.flatMap((row) =>
+        accounts.value
+            .filter((a) => row.cells[a.id] && (!shop.value || shop.value === a.id))
+            .filter((a) => tab.value === 'all' || (tab.value === 'locked' ? row.cells[a.id].locked : tab.value === 'loss' ? row.cells[a.id].below_margin || row.cells[a.id].status === 'loss' : actionable(row.cells[a.id])))
+            .map((account) => ({ row, account, cell: row.cells[account.id] })),
+    ),
+);
+function toggleCell(id: string) {
+    const next = new Set(selected.value);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    selected.value = next;
+}
+const outcome = (c: PriceBoardCell) => (c.new !== null && !c.locked ? c.new_outcome : c.current_outcome) ?? c.new_outcome;
+function marginText(c: PriceBoardCell) {
+    const m = outcome(c)?.margin_pct;
+    return m === null || m === undefined ? '—' : `${(Math.round(m * 10) / 10).toLocaleString('vi-VN')}%`;
+}
+function marginTone(c: PriceBoardCell) {
+    const m = outcome(c)?.margin_pct;
+    if (m === null || m === undefined) return 'text-slate-400';
+    if (m < 0) return 'text-red-600';
+    if (c.min_margin_pct !== null && m < c.min_margin_pct) return 'text-amber-600';
+    return 'text-emerald-600';
+}
+
+/** Fee table of each shop, from Cấu hình › Chính sách giá. */
+type FeeRule = { commission_pct: number | null; payment_pct: number | null; service_pct: number | null; fixed_fee: number | null; rounding: number; min_margin_pct: number; auto_apply: boolean };
+const rules = ref<{ account: { id: string; shop_name: string; marketplace: string; marketplace_name: string }; saved: boolean; shop: FeeRule }[]>([]);
+const pctText = (v: number) => `${(Math.round(v * 10) / 10).toLocaleString('vi-VN')}%`;
+const totalPct = (r: FeeRule) => (r.commission_pct ?? 0) + (r.payment_pct ?? 0) + (r.service_pct ?? 0);
+function feeParts(r: FeeRule) {
+    return [
+        { label: 'Phí hoa hồng', v: r.commission_pct },
+        { label: 'Phí thanh toán', v: r.payment_pct },
+        { label: 'Phí dịch vụ', v: r.service_pct },
+    ]
+        .filter((f) => f.v)
+        .map((f) => ({ label: f.label, value: pctText(f.v!) }))
+        .concat(r.fixed_fee ? [{ label: 'Phí cố định mỗi đơn', value: formatMoney(r.fixed_fee) }] : []);
+}
+const feeLine = computed(() => rules.value.map((r) => `${r.account.shop_name} ${pctText(totalPct(r.shop))}`).join(' · '));
+const uniq = <T,>(xs: T[]) => [...new Set(xs)];
+const ruleSummary = computed(() => {
+    const m = uniq(rules.value.map((r) => r.shop.min_margin_pct));
+    const ro = uniq(rules.value.map((r) => r.shop.rounding));
+    const au = uniq(rules.value.map((r) => r.shop.auto_apply));
+    return {
+        margin: m.length === 1 ? pctText(m[0]) : `${pctText(Math.min(...m))} – ${pctText(Math.max(...m))}`,
+        rounding: ro.length === 1 ? (ro[0] <= 1 ? 'Không làm tròn' : `lên ${formatMoney(ro[0])}`) : 'Theo từng gian hàng',
+        auto: au.length === 1 ? (au[0] ? 'Bật' : 'Tắt') : 'Theo từng gian hàng',
+    };
+});
 </script>
 
 <template>
-    <PageHeader title="Bảng giá sàn" :back="{ to: '/marketplaces', label: 'Kết nối sàn' }">
-        <template #description>Giá niêm yết từng sàn tính từ giá gốc và <RouterLink to="/settings/pricing" class="text-primary hover:underline">bảng phí</RouterLink>. Duyệt rồi áp dụng, hoặc xuất file giá để tải lên Seller Center.</template>
-        <Button v-for="a in accounts" v-show="exportable" :key="a.id" variant="outline" :data-testid="`export-${a.id}`" @click="exportFile(a.id)"><Download /> File giá {{ a.shop_name }}</Button>
-        <Button v-if="canEdit && selected.size" variant="outline" :loading="busy?.startsWith('lock')" @click="lock([...selected], true)"><Lock /> Khóa giá đã chọn</Button>
-        <Button v-if="canEdit" :loading="busy === 'apply'" :disabled="!counts.pending" data-testid="apply-prices" @click="askApply(selected.size ? [...selected] : null)">
-            {{ selected.size ? `Áp dụng đã chọn (${selected.size})` : `Áp dụng tất cả (${counts.pending})` }}
-        </Button>
-    </PageHeader>
+    <ChannelHead title="Bảng giá sàn">
+        <template #default>
+            <button v-for="a in accounts" v-show="exportable" :key="a.id" type="button" :class="btn.outline" :data-testid="`export-${a.id}`" @click="exportFile(a.id)"><Download class="size-4" /> File giá {{ a.shop_name }}</button>
+            <button v-if="canEdit && selected.size" type="button" :class="btn.outline" :disabled="busy?.startsWith('lock')" @click="lock([...selected], true)"><Lock class="size-4" /> Khoá giá đã chọn</button>
+            <button v-if="canEdit" type="button" :class="btn.primary" :disabled="busy === 'apply' || !counts.pending" data-testid="apply-prices" @click="askApply(selected.size ? [...selected] : null)">
+                <CheckCheck class="size-4" /> {{ selected.size ? `Áp dụng đã chọn (${selected.size})` : `Áp dụng tất cả (${counts.pending})` }}
+            </button>
+        </template>
+    </ChannelHead>
+    <p class="-mt-4 mb-6 text-[15px] text-slate-500">Giá niêm yết từng sàn tính từ giá gốc và <RouterLink to="/settings/pricing" class="text-blue-600 hover:underline">bảng phí</RouterLink>. Duyệt rồi áp dụng, hoặc xuất file giá để tải lên Seller Center.</p>
 
-    <Card class="mb-4">
-        <div class="grid divide-y sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x">
-            <StatTile :icon="Clock" label="Chờ duyệt giá mới" :value="formatNumber(counts.pending)" :tone="counts.pending ? 'amber' : 'slate'" />
-            <StatTile :icon="TrendingDown" label="Lỗ hoặc dưới lãi tối thiểu" :value="formatNumber(counts.loss)" :tone="counts.loss ? 'red' : 'slate'" />
-            <StatTile :icon="Lock" label="Đang khóa giá" :value="formatNumber(counts.locked)" tone="slate" />
-            <StatTile :icon="BadgePercent" label="Bảng phí cập nhật" :value="rulesUpdatedAt ? formatDateTime(rulesUpdatedAt) : null" tone="blue" />
-        </div>
-    </Card>
+    <div class="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <ReportKpi label="Chờ duyệt giá mới" :icon="Clock" tone="blue" plain :value="counts.pending" unit="">Giá gốc hoặc bảng phí vừa đổi</ReportKpi>
+        <ReportKpi label="Lỗ hoặc dưới lãi tối thiểu" :icon="TrendingDown" tone="red" :value="counts.loss" unit="">Sau phí sàn, lãi dưới mức tối thiểu</ReportKpi>
+        <ReportKpi label="Đang khoá giá" :icon="Lock" tone="slate" plain :value="counts.locked" unit="">Giữ nguyên giá sàn, không tự đổi</ReportKpi>
+        <ReportKpi label="Bảng phí cập nhật" :icon="BadgePercent" tone="violet" plain :value="null" :text="rulesUpdatedAt ? formatDate(rulesUpdatedAt) : '—'" unit="">{{ feeLine || 'Khai ở Cấu hình › Chính sách giá' }}</ReportKpi>
+    </div>
 
-    <Card>
-        <div class="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-            <Tabs v-model="tab" :tabs="[{ value: 'pending', label: 'Chờ duyệt', count: counts.pending }, { value: 'loss', label: 'Lỗ sau phí', count: counts.loss }, { value: 'locked', label: 'Đang khóa', count: counts.locked }, { value: 'all', label: 'Tất cả', count: counts.all }]" />
-            <div class="relative w-64"><Search class="absolute left-2.5 top-2.5 size-4 text-muted-foreground" /><Input v-model="q" placeholder="Tìm SKU, tên sản phẩm…" class="pl-8" /></div>
+    <div class="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_400px]">
+        <div :class="[card, 'min-w-0 overflow-hidden']">
+            <div class="flex flex-wrap items-center gap-3 border-b border-slate-100 p-4">
+                <div class="flex max-w-full flex-wrap gap-1 rounded-[12px] bg-slate-100 p-1 text-[14px]">
+                    <button v-for="t in tabs" :key="t.value" type="button" :class="pill(tab === t.value)" @click="tab = t.value">
+                        {{ t.label }} <span :class="['rounded-md px-1.5 text-[12px] tabular-nums', tab === t.value ? 'bg-blue-50 text-blue-700' : 'bg-white/70 text-slate-500']">{{ formatNumber(t.count) }}</span>
+                    </button>
+                </div>
+                <div class="ml-auto flex flex-wrap items-center gap-3">
+                    <Select v-if="accounts.length > 1" v-model="shop" class="h-10 w-48" :options="[{ value: '', label: 'Tất cả gian hàng' }, ...accounts.map((a) => ({ value: a.id, label: a.shop_name }))]" />
+                    <div class="relative w-full sm:w-72"><Search class="absolute left-3 top-3 size-4 text-slate-400" /><Input v-model="q" placeholder="Tìm SKU, tên sản phẩm…" class="h-10 pl-9" /></div>
+                </div>
+            </div>
+            <div v-if="selected.size" class="flex flex-wrap items-center gap-3 border-b border-slate-100 bg-blue-50/40 px-4 py-2.5 text-[14px]">
+                <span class="font-medium text-slate-800">{{ selected.size }} giá đã chọn</span>
+                <button type="button" class="text-slate-500 hover:text-slate-900" @click="selected = new Set()">Bỏ chọn</button>
+                <button v-if="canEdit" type="button" :class="[btn.smallPrimary, 'ml-auto']" :disabled="busy === 'apply'" @click="askApply([...selected])"><Check class="size-4" /> Áp dụng {{ selected.size }} giá</button>
+            </div>
+            <div v-if="loading && !rows.length" class="space-y-2 p-4"><Skeleton v-for="i in 5" :key="i" class="h-12" /></div>
+            <EmptyState v-else-if="!accounts.length" :icon="FileSpreadsheet" title="Chưa có bảng phí" description="Khai bảng phí cho từng gian hàng ở Cấu hình → Thuế và chính sách giá." />
+            <EmptyState v-else-if="!lines.length" :icon="FileSpreadsheet" :title="tab === 'pending' ? 'Không có giá cần duyệt' : 'Không có sản phẩm'" description="Giá trên sàn đang khớp với bảng phí." />
+            <div v-else class="overflow-x-auto">
+                <table class="w-full text-[14px]" data-testid="price-board">
+                    <thead class="border-b border-slate-100 text-left">
+                        <tr>
+                            <th v-if="canEdit" :class="[th, 'w-10']" />
+                            <th :class="th">Sản phẩm</th>
+                            <th :class="th">Gian hàng</th>
+                            <th :class="[th, 'text-right']">Giá gốc</th>
+                            <th :class="[th, 'text-right']">Giá vốn</th>
+                            <th :class="[th, 'text-right']">Đang bán</th>
+                            <th :class="[th, 'text-right']">Giá mới</th>
+                            <th :class="[th, 'text-right']" title="Giá bán trừ phí sàn và giá vốn">Lãi sau phí</th>
+                            <th :class="th" />
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        <tr v-for="l in lines" :key="l.cell.listing_id" :class="l.cell.below_margin ? 'bg-red-50/40' : selected.has(l.cell.listing_id) ? 'bg-blue-50/30' : ''">
+                            <td v-if="canEdit" class="px-4 py-3"><input type="checkbox" class="size-4 accent-blue-600" :checked="selected.has(l.cell.listing_id)" :aria-label="l.row.name ?? l.row.sku" @change="toggleCell(l.cell.listing_id)" /></td>
+                            <td class="max-w-72 px-4 py-3">
+                                <RouterLink v-if="l.row.product_id" :to="`/products/${l.row.product_id}`" class="block truncate font-medium text-slate-900 hover:text-blue-600">{{ l.row.name }}</RouterLink>
+                                <span v-else class="block truncate font-medium text-slate-900">{{ l.row.name }}</span>
+                                <span class="block truncate text-[12px] text-slate-500">{{ l.row.variant_name ? `${l.row.variant_name} · ` : '' }}<span class="font-mono">{{ l.row.sku }}</span></span>
+                            </td>
+                            <td class="whitespace-nowrap px-4 py-3"><span class="inline-flex items-center gap-2 text-slate-700"><MarketplaceLogo :marketplace="l.account.marketplace" :name="l.account.shop_name" size="sm" />{{ l.account.shop_name }}</span></td>
+                            <td class="whitespace-nowrap px-4 py-3 text-right tabular-nums">{{ formatMoney(l.row.base) }}</td>
+                            <td class="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-500">{{ l.row.cost ? formatMoney(l.row.cost) : '—' }}</td>
+                            <td class="whitespace-nowrap px-4 py-3 text-right tabular-nums">
+                                {{ l.cell.current !== null ? formatMoney(l.cell.current) : '—' }}
+                                <span v-if="l.cell.below_margin && l.cell.current_outcome" class="block text-[12px] text-red-600">thu về {{ formatMoney(Math.round(l.cell.current_outcome.net)) }}</span>
+                            </td>
+                            <td class="whitespace-nowrap px-4 py-3 text-right tabular-nums">
+                                <template v-if="l.cell.locked">
+                                    <span class="text-slate-500">giữ {{ formatMoney(l.cell.current) }}</span>
+                                    <span class="block text-[12px] text-slate-400">tính ra {{ formatMoney(l.cell.new) }}</span>
+                                </template>
+                                <template v-else-if="l.cell.new !== null">
+                                    <span class="font-semibold text-slate-900">{{ formatMoney(l.cell.new) }}</span>
+                                    <span v-if="l.cell.status === 'export'" class="block text-[12px] text-blue-600">trong file giá</span>
+                                    <span v-else-if="l.cell.status === 'pushing'" class="block text-[12px] text-blue-600">đang đẩy lên sàn…</span>
+                                    <span v-else-if="l.cell.status === 'failed'" class="block max-w-56 whitespace-normal text-[12px] text-red-600" :title="l.cell.push_error ?? ''">sàn chưa nhận: {{ l.cell.push_error }}</span>
+                                    <span v-else-if="l.cell.raised && actionable(l.cell)" class="block text-[12px] text-amber-600">nâng lên lãi tối thiểu {{ l.cell.min_margin_pct }}%</span>
+                                    <span v-else-if="actionable(l.cell) && diffText(l.cell) !== null" :class="['flex items-center justify-end gap-0.5 text-[12px]', diffText(l.cell)! >= 0 ? 'text-blue-600' : 'text-slate-500']"><component :is="diffText(l.cell)! >= 0 ? ArrowUp : ArrowDown" class="size-3" />{{ formatMoney(Math.abs(diffText(l.cell)!)) }}</span>
+                                    <span v-else class="block text-[12px] text-slate-400">không đổi</span>
+                                </template>
+                                <span v-else class="text-slate-400">—</span>
+                            </td>
+                            <td class="whitespace-nowrap px-4 py-3 text-right tabular-nums">
+                                <span :class="['font-semibold', marginTone(l.cell)]">{{ outcome(l.cell)?.profit != null ? formatMoney(Math.round(outcome(l.cell)!.profit!)) : '—' }}</span>
+                                <span v-if="outcome(l.cell)?.margin_pct != null" class="block text-[12px] text-slate-500">{{ marginText(l.cell) }} trên giá vốn</span>
+                            </td>
+                            <td class="whitespace-nowrap px-4 py-3 text-right">
+                                <div v-if="canEdit" class="inline-flex items-center gap-1">
+                                    <button v-if="actionable(l.cell)" type="button" :class="[btn.small, 'border-blue-100 bg-blue-50 text-blue-700']" :disabled="busy === `apply-${l.cell.listing_id}`" @click="askApply([l.cell.listing_id])">Áp dụng</button>
+                                    <button v-if="l.cell.locked" type="button" class="grid size-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900" title="Mở khoá giá" aria-label="Mở khoá giá" @click="lock([l.cell.listing_id], false)"><LockOpen class="size-4" /></button>
+                                    <button v-else type="button" class="grid size-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-900" title="Khoá giá: phần mềm không đổi giá SKU này trên sàn" aria-label="Khoá giá" @click="lock([l.cell.listing_id], true)"><Lock class="size-4" /></button>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <Pagination v-if="rows.length" :page="meta.current_page" :last-page="meta.last_page" :total="meta.total" @go="load" />
+            <p class="border-t border-slate-100 px-5 py-3 text-[12px] text-slate-500">
+                <template v-if="accounts.some((a) => a.by_api)"><b>Áp dụng</b> đẩy giá mới thẳng lên Shopee và TikTok Shop sau khi bạn xem lại và xác nhận. Giá đổi là giá niêm yết; chương trình giảm giá đang chạy trên sàn vẫn giữ nguyên. </template>
+                <template v-if="accounts.some((a) => !a.by_api)">Sàn chưa đổi giá qua API được thì <b>Áp dụng</b> ghi giá mới vào <b>file giá</b> (Excel: mã sản phẩm, mã phân loại, SKU, giá mới) để bạn tải lên công cụ cập nhật hàng loạt của sàn. Khi sàn hiện đúng giá mới, phần mềm tự đánh dấu xong.</template>
+            </p>
         </div>
-        <div v-if="loading && !rows.length" class="space-y-2 p-4"><Skeleton v-for="i in 5" :key="i" class="h-12" /></div>
-        <EmptyState v-else-if="!accounts.length" :icon="FileSpreadsheet" title="Chưa có bảng phí" description="Khai bảng phí cho từng gian hàng ở Cấu hình → Thuế và chính sách giá." />
-        <EmptyState v-else-if="!rows.length" :icon="FileSpreadsheet" :title="tab === 'pending' ? 'Không có giá cần duyệt' : 'Không có sản phẩm'" description="Giá trên sàn đang khớp với bảng phí." />
-        <div v-else class="overflow-x-auto">
-            <table class="w-full text-sm" data-testid="price-board">
-                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                    <tr>
-                        <th class="px-4 py-2.5 font-medium">Sản phẩm</th>
-                        <th class="px-3 py-2.5 text-right font-medium">Giá gốc</th>
-                        <th class="px-3 py-2.5 text-right font-medium">Giá vốn</th>
-                        <template v-for="a in accounts" :key="a.id">
-                            <th class="border-l px-3 py-2.5 text-right font-medium"><span class="inline-flex items-center gap-1.5"><MarketplaceLogo :marketplace="a.marketplace" :name="a.shop_name" size="sm" />Hiện tại</span></th>
-                            <th class="px-3 py-2.5 text-right font-medium">Giá mới</th>
-                        </template>
-                        <th class="px-4 py-2.5" />
-                    </tr>
-                </thead>
-                <tbody class="divide-y">
-                    <tr v-for="r in rows" :key="r.variant_id" :class="r.flags.loss ? 'bg-rose-50/60' : ''">
-                        <td class="px-4 py-2.5">
-                            <label class="flex items-start gap-2">
-                                <input v-if="canEdit" type="checkbox" class="mt-1" :checked="rowSelected(r)" @change="toggleRow(r, ($event.target as HTMLInputElement).checked)" />
-                                <span>
-                                    <RouterLink v-if="r.product_id" :to="`/products/${r.product_id}`" class="font-medium hover:text-primary">{{ r.name }}</RouterLink>
-                                    <span v-if="r.variant_name" class="text-muted-foreground"> · {{ r.variant_name }}</span>
-                                    <span v-if="r.flags.loss" class="ml-1 rounded-full bg-rose-100 px-1.5 text-xs text-rose-700">lỗ sau phí</span>
-                                    <span class="block font-mono text-xs text-muted-foreground">{{ r.sku }}</span>
-                                </span>
-                            </label>
-                        </td>
-                        <td class="whitespace-nowrap px-3 text-right tabular-nums">{{ formatMoney(r.base) }}</td>
-                        <td class="whitespace-nowrap px-3 text-right tabular-nums text-muted-foreground">{{ r.cost ? formatMoney(r.cost) : '—' }}</td>
-                        <template v-for="a in accounts" :key="a.id">
-                            <template v-if="r.cells[a.id]">
-                                <td class="whitespace-nowrap border-l px-3 text-right tabular-nums">
-                                    {{ r.cells[a.id].current !== null ? formatMoney(r.cells[a.id].current) : '—' }}
-                                    <span v-if="r.cells[a.id].below_margin && r.cells[a.id].current_outcome" class="block text-xs text-destructive">
-                                        thu về {{ formatMoney(Math.round(r.cells[a.id].current_outcome!.net)) }}{{ (r.cells[a.id].current_outcome!.profit ?? 0) < 0 ? ` · lỗ ${formatMoney(-Math.round(r.cells[a.id].current_outcome!.profit!))}` : '' }}
-                                    </span>
-                                </td>
-                                <td class="whitespace-nowrap px-3 text-right tabular-nums">
-                                    <template v-if="r.cells[a.id].locked">
-                                        <span class="text-muted-foreground">giữ {{ formatMoney(r.cells[a.id].current) }}</span>
-                                        <span class="block text-xs text-muted-foreground">tính ra {{ formatMoney(r.cells[a.id].new) }}</span>
-                                    </template>
-                                    <template v-else-if="r.cells[a.id].new !== null">
-                                        <span class="font-semibold">{{ formatMoney(r.cells[a.id].new) }}</span>
-                                        <span v-if="r.cells[a.id].status === 'export'" class="block text-xs text-blue-600">trong file giá</span>
-                                        <span v-else-if="r.cells[a.id].status === 'pushing'" class="block text-xs text-blue-600">đang đẩy lên sàn…</span>
-                                        <span v-else-if="r.cells[a.id].status === 'failed'" class="block max-w-56 whitespace-normal text-xs text-destructive" :title="r.cells[a.id].push_error ?? ''">sàn chưa nhận: {{ r.cells[a.id].push_error }}</span>
-                                        <span v-else-if="r.cells[a.id].raised && actionable(r.cells[a.id])" class="block text-xs text-amber-600">nâng lên lãi tối thiểu {{ r.cells[a.id].min_margin_pct }}%</span>
-                                        <span v-else-if="actionable(r.cells[a.id]) && diffText(r.cells[a.id]) !== null" class="block text-xs text-amber-600">{{ diffText(r.cells[a.id])! > 0 ? '+' : '' }}{{ formatMoney(diffText(r.cells[a.id])) }}</span>
-                                        <span v-else class="block text-xs text-muted-foreground">không đổi</span>
-                                    </template>
-                                    <span v-else class="text-muted-foreground">—</span>
-                                </td>
-                            </template>
-                            <td v-else colspan="2" class="border-l px-3 text-center text-xs text-muted-foreground">chưa liên kết</td>
-                        </template>
-                        <td class="whitespace-nowrap px-4 text-right text-sm">
-                            <template v-if="canEdit">
-                                <button v-if="Object.values(r.cells).some(actionable)" type="button" class="text-primary hover:underline" @click="askApply(Object.values(r.cells).filter(actionable).map((c) => c.listing_id))">Áp dụng</button>
-                                <button v-if="r.flags.locked" type="button" class="ml-2 inline-flex items-center gap-1 text-muted-foreground hover:text-foreground" @click="lock(Object.values(r.cells).filter((c) => c.locked).map((c) => c.listing_id), false)"><LockOpen class="size-3.5" /> Mở khóa</button>
-                                <button v-else type="button" class="ml-2 text-muted-foreground hover:text-foreground" title="Khóa giá: EzChat Bán hàng không đổi giá SKU này trên sàn" @click="lock(Object.values(r.cells).map((c) => c.listing_id), true)"><Lock class="size-3.5" /></button>
-                            </template>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-        <Pagination v-if="rows.length" :page="meta.current_page" :last-page="meta.last_page" :total="meta.total" @go="load" />
-        <p class="border-t px-5 py-3 text-xs text-muted-foreground">
-            <template v-if="accounts.some((a) => a.by_api)"><b>Áp dụng</b> đẩy giá mới thẳng lên Shopee và TikTok Shop sau khi bạn xem lại và xác nhận. Giá đổi là giá niêm yết; chương trình giảm giá đang chạy trên sàn vẫn giữ nguyên. </template>
-            <template v-if="accounts.some((a) => !a.by_api)">Sàn chưa đổi giá qua API được thì <b>Áp dụng</b> ghi giá mới vào <b>file giá</b> (Excel: mã sản phẩm, mã phân loại, SKU, giá mới) để bạn tải lên công cụ cập nhật hàng loạt của sàn. Khi sàn hiện đúng giá mới, EzChat Bán hàng tự đánh dấu xong.</template>
-        </p>
-    </Card>
+
+        <aside class="grid content-start gap-5 md:grid-cols-2 2xl:grid-cols-1">
+            <div :class="[card, 'p-5']" data-testid="price-fees">
+                <div class="mb-4 flex items-start justify-between gap-3">
+                    <div>
+                        <h2 class="text-[17px] font-semibold text-slate-900">Bảng phí từng gian hàng</h2>
+                        <p class="text-[13px] text-slate-500">Giá mới = giá gốc cộng phí để giữ lãi mong muốn</p>
+                    </div>
+                    <RouterLink to="/settings/pricing" :class="btn.small"><Pencil class="size-3.5" /> Sửa</RouterLink>
+                </div>
+                <p v-if="!rules.length" class="text-[14px] text-slate-500">Chưa có gian hàng nào cần bảng phí.</p>
+                <div v-for="r in rules" :key="r.account.id" class="mb-3 rounded-[12px] border border-slate-200 p-4 last:mb-0">
+                    <div class="flex items-center gap-3">
+                        <MarketplaceLogo :marketplace="r.account.marketplace" :name="r.account.shop_name" size="md" />
+                        <div class="min-w-0 flex-1">
+                            <div class="truncate font-semibold text-slate-900">{{ r.account.shop_name }}</div>
+                            <div class="text-[12px] text-slate-500">{{ r.account.marketplace_name }}<span v-if="!r.saved" class="text-amber-600"> · số tham khảo</span></div>
+                        </div>
+                        <span class="text-[17px] font-bold tabular-nums text-slate-900">{{ pctText(totalPct(r.shop)) }}</span>
+                    </div>
+                    <dl class="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-[13px]">
+                        <div v-for="f in feeParts(r.shop)" :key="f.label" class="flex justify-between"><dt class="text-slate-500">{{ f.label }}</dt><dd class="tabular-nums text-slate-800">{{ f.value }}</dd></div>
+                    </dl>
+                </div>
+            </div>
+            <div v-if="rules.length" :class="[card, 'p-5']" data-testid="price-rules">
+                <h2 class="mb-2 text-[17px] font-semibold text-slate-900">Quy tắc làm giá</h2>
+                <dl class="divide-y divide-slate-100 text-[14px]">
+                    <div class="flex justify-between py-2.5"><dt class="text-slate-500">Lãi tối thiểu sau phí</dt><dd class="font-semibold text-slate-900">{{ ruleSummary.margin }}</dd></div>
+                    <div class="flex justify-between py-2.5"><dt class="text-slate-500">Làm tròn giá</dt><dd class="font-semibold text-slate-900">{{ ruleSummary.rounding }}</dd></div>
+                    <div class="flex justify-between py-2.5"><dt class="text-slate-500">Giá khuyến mãi trên sàn</dt><dd class="font-semibold text-slate-900">Giữ nguyên</dd></div>
+                    <div class="flex justify-between py-2.5"><dt class="text-slate-500">Tự áp dụng giá mới</dt><dd class="font-semibold text-slate-900">{{ ruleSummary.auto }}</dd></div>
+                </dl>
+            </div>
+        </aside>
+    </div>
 
     <Dialog v-model:open="confirmOpen" title="Đẩy giá lên sàn" :description="`${formatNumber(preview.length)} giá sẽ đổi ngay trên sàn. Xem lại trước khi đẩy.`" size="lg">
         <table class="w-full text-sm" data-testid="price-push-preview">
