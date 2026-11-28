@@ -216,3 +216,33 @@ it('gives the dashboard revenue by day and marketplace, queues and yesterday for
     actingInTenant($otherOwner, $other)->getJson('/api/v1/orders/summary')->assertOk()
         ->assertJsonPath('data.revenue_by_channel', [])->assertJsonPath('data.queues.all', 0);
 });
+
+it('keeps the delivery type from the marketplace and filters, counts and sorts by it', function () {
+    $standard = fakeOrder($this->shop, [[$this->shirt, 1]], 'fake_ready', ['delivery_option' => 'Nhanh', 'carrier' => 'SPX Express', 'ship_by' => now()->addHours(2)->toIso8601String()]);
+    $express = fakeOrder($this->shop, [[$this->shirt, 1]], 'fake_ready', ['delivery_option' => 'Hỏa Tốc', 'carrier' => 'SPX Instant', 'ship_by' => now()->addHours(5)->toIso8601String()]);
+    $old = fakeOrder($this->shop, [[$this->pants, 1]], 'fake_ready', ['carrier' => 'SPX Instant', 'ship_by' => now()->addDay()->toIso8601String()]);
+    fakeOrder($this->shop, [[$this->pants, 1]], 'fake_ready', ['delivery_option' => 'Hàng Cồng Kềnh', 'carrier' => 'Giao Hàng Nhanh']);
+
+    expect($express->delivery_type)->toBe('express')->and($express->delivery_option)->toBe('Hỏa Tốc')
+        ->and($standard->delivery_type)->toBe('standard')
+        ->and($old->delivery_type)->toBe('express')->and($old->delivery_option)->toBeNull();
+
+    $api = actingInTenant($this->owner, $this->tenant);
+    $api->getJson('/api/v1/orders')->assertOk()
+        ->assertJsonPath('meta.delivery.types.express', 2)
+        ->assertJsonPath('meta.delivery.types.standard', 1)
+        ->assertJsonPath('meta.delivery.types.bulky', 1)
+        ->assertJsonPath('meta.delivery.types.economy', 0)
+        ->assertJsonPath('meta.delivery.carriers.0', ['name' => 'SPX Instant', 'count' => 2]);
+
+    $api->getJson('/api/v1/orders?delivery=express')->assertJsonCount(2, 'data')
+        // The chips keep their counts while one of them is picked.
+        ->assertJsonPath('meta.delivery.types.standard', 1)
+        ->assertJsonPath('data.0.delivery_type', 'express');
+    $api->getJson('/api/v1/orders?carrier=Giao Hàng Nhanh')->assertJsonCount(1, 'data')->assertJsonPath('data.0.delivery_option', 'Hàng Cồng Kềnh');
+
+    // "Hỏa tốc trước": express orders first even when a standard one is due sooner, then the soonest deadline.
+    $ids = collect($api->getJson('/api/v1/orders?sort=urgent')->json('data'))->pluck('id')->take(3)->all();
+    expect($ids)->toBe([$express->ulid, $old->ulid, $standard->ulid]);
+    $api->getJson('/api/v1/orders?delivery=fast')->assertStatus(422);
+});

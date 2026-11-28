@@ -4,7 +4,6 @@ namespace App\Modules\Marketplace\Services;
 
 use App\Modules\Marketplace\Connectors\WooCommerce\WooClient;
 use App\Modules\Marketplace\Connectors\WooCommerce\WooCommerceConnector;
-use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Orders\Domain\OrderStatus;
 use Illuminate\Support\Facades\Cache;
@@ -42,7 +41,7 @@ class WooStatusLabels
 
         try {
             $rows = WooClient::forAccount($account)->get('reports/orders/totals');
-        } catch (ConnectorException|\Throwable) {
+        } catch (\Throwable) {
             return $labels;
         }
         $fresh = [];

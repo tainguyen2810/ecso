@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DeliveryBadge from './DeliveryBadge.vue';
 import { orderCode, secondaryCodes } from '@/shared/orderCode';
 import VariantTag from './VariantTag.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -207,7 +208,7 @@ const source = computed(() => (order.value ? (order.value.channel?.name ?? order
                         </div>
                         <ul class="mt-3 space-y-1.5 text-muted-foreground">
                             <li v-if="order.buyer_phone || order.shipping_address" class="flex gap-2"><MapPin class="mt-0.5 size-4 shrink-0" /><span><span v-if="order.customer && order.buyer_name" class="text-foreground">{{ order.buyer_name }} · </span><span class="text-foreground">{{ order.buyer_phone }}</span><br v-if="order.buyer_phone" />{{ order.shipping_address }}</span></li>
-                            <li v-if="order.carrier || order.tracking_number" class="flex gap-2"><Truck class="mt-0.5 size-4 shrink-0" /><span>{{ order.carrier ?? 'Vận chuyển' }} · <span :class="order.tracking_number ? 'font-mono text-foreground' : ''">{{ order.tracking_number ?? 'chưa có mã vận đơn' }}</span></span></li>
+                            <li v-if="order.carrier || order.tracking_number" class="flex gap-2"><Truck class="mt-0.5 size-4 shrink-0" /><span><DeliveryBadge :type="order.delivery_type" :option="order.delivery_option" class="mr-1" />{{ order.carrier ?? 'Vận chuyển' }} · <span :class="order.tracking_number ? 'font-mono text-foreground' : ''">{{ order.tracking_number ?? 'chưa có mã vận đơn' }}</span></span></li>
                             <li v-if="order.warehouse" class="flex gap-2"><Warehouse class="mt-0.5 size-4 shrink-0" />{{ order.warehouse.name }}</li>
                         </ul>
                     </section>

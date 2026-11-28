@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import VariantTag from './VariantTag.vue';
+import DeliveryBadge from './DeliveryBadge.vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Ban, Banknote, Bookmark, ClipboardList, FilePen, Package, PackageCheck, PackageX, Tag, ScanBarcode, Trash2, ChevronDown, ChevronsRight, Clock, Columns3, Download, Filter, History, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingBasket, ShoppingCart, UserPlus, X } from 'lucide-vue-next';
+import { Ban, Banknote, Bookmark, ClipboardList, FilePen, Package, PackageCheck, PackageX, Tag, ScanBarcode, Trash2, ChevronDown, ChevronsRight, Clock, Columns3, Truck, Zap, Download, Filter, History, Plus, Printer, ReceiptText, RefreshCw, Search, ShoppingBasket, ShoppingCart, UserPlus, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
@@ -22,7 +23,7 @@ import { api, ApiError, downloadFile } from '@/shared/lib/api';
 import { cn, formatDate, formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
-import { actionLabel, actionLabels, deadlineLabel, marketplaceNames, orderFlags, orderStatus, orderStatusBadge, orderTabs, paymentMethods, paymentStatus } from './labels';
+import { actionLabel, actionLabels, deadlineLabel, deliveryTypes, marketplaceNames, orderFlags, orderStatus, orderStatusBadge, orderTabs, paymentMethods, paymentStatus } from './labels';
 import PrintDialog from './PrintDialog.vue';
 import ShipDialog from './ShipDialog.vue';
 import ArrangeByProduct from './ArrangeByProduct.vue';
@@ -47,6 +48,10 @@ const counts = ref<Record<string, number>>({});
 /** The shop brought orders over from Sapo (Chuyển dữ liệu): offer a chip for them. */
 const hasImported = ref(false);
 const meta = ref({ current_page: 1, last_page: 1, total: 0 });
+/** "Kiểu giao" row: Shopee / TikTok orders per delivery group and per carrier under the other filters. */
+const delivery = ref<{ types: Record<string, number>; carriers: { name: string; count: number }[] }>({ types: {}, carriers: [] });
+const deliveryTotal = computed(() => Object.values(delivery.value.types).reduce((a, b) => a + b, 0));
+const deliveryChips = computed(() => deliveryTypes.filter((t) => t.value !== 'other' || (delivery.value.types.other ?? 0) > 0 || filters.delivery === 'other'));
 const loading = ref(true);
 const loadError = ref<string | null>(null);
 const accounts = ref<MarketplaceAccountData[]>([]);
@@ -97,6 +102,8 @@ const filters = reactive({
     tag: str('tag'),
     deliver_from: str('deliver_from'),
     deliver_to: str('deliver_to'),
+    delivery: str('delivery'),
+    carrier: str('carrier'),
     flags: route.query.flags ? String(route.query.flags).split(',') : ([] as string[]),
     sort: str('sort') || 'newest',
     page: Number(route.query.page ?? 1),
@@ -117,6 +124,9 @@ const arrangeFlagOn = computed(() => filters.flags.includes('not_arranged'));
 /** Orders to tick once the list and the waiting orders are loaded ('all' = every waiting order). */
 let pendingArrangeSelect: 'all' | string[] | null = null;
 const arrangeReady = computed(() => (arrange.value ? bannerIds(arrange.value) : []));
+/** Hỏa tốc orders waiting (the marketplace gives them a few hours): prepared first, on their own. */
+const arrangeExpress = computed(() => (arrange.value?.orders ?? []).filter((o) => o.delivery_type === 'express'));
+const arrangeExpressReady = computed(() => arrangeExpress.value.filter((o) => !o.shortage).map((o) => o.id));
 const arrangeReadyAll = computed(() => !!arrange.value && arrangeReady.value.length === arrange.value.orders.length);
 /** Order shown in the side panel (row click); the panel steps through the orders of this page. */
 const peek = ref<string | null>(null);
@@ -191,6 +201,8 @@ function query() {
         tag: filters.tag || undefined,
         deliver_from: filters.deliver_from || undefined,
         deliver_to: filters.deliver_to || undefined,
+        delivery: filters.delivery || undefined,
+        carrier: filters.carrier || undefined,
         flags: filters.flags.length ? filters.flags : undefined,
         sort: filters.sort === 'newest' ? undefined : filters.sort,
         page: filters.page > 1 ? filters.page : undefined,
@@ -217,6 +229,7 @@ async function load() {
         orders.value = data.data;
         meta.value = data.meta;
         counts.value = data.meta.counts ?? {};
+        delivery.value = data.meta.delivery ?? { types: {}, carriers: [] };
         hasImported.value = !!data.meta.has_imported;
         selected.value = new Set([...selected.value].filter((id) => orders.value.some((o) => o.id === id) || arrangeById.value.has(id)));
         if (pendingArrangeSelect && arrange.value) {
@@ -264,7 +277,7 @@ watch(() => filters.q, () => {
     searchTimer = setTimeout(() => ((filters.page = 1), load()), 300);
 });
 watch(
-    () => [filters.tab, filters.account, filters.source, filters.marketplace, filters.channel, filters.warehouse, filters.assignee, filters.status, filters.payment_status, filters.from, filters.to, filters.customer, filters.sku, filters.tag, filters.deliver_from, filters.deliver_to, filters.sort, filters.flags.join()],
+    () => [filters.tab, filters.account, filters.source, filters.marketplace, filters.channel, filters.warehouse, filters.assignee, filters.status, filters.payment_status, filters.from, filters.to, filters.customer, filters.sku, filters.tag, filters.deliver_from, filters.deliver_to, filters.delivery, filters.carrier, filters.sort, filters.flags.join()],
     () => ((filters.page = 1), (selected.value = new Set()), (peek.value = null), load()),
 );
 
@@ -274,7 +287,8 @@ function toggleFlag(flag: string) {
     // "Cần chuẩn bị hàng": every waiting order, soonest deadline first, ticked over all pages ready for the bar.
     if (flag === 'not_arranged' && on) {
         filters.tab = 'all';
-        filters.sort = 'ship_by';
+        // Hỏa tốc first: the marketplace gives those a few hours, then the soonest deadline.
+        filters.sort = 'urgent';
         pendingArrangeSelect = 'all';
     }
 }
@@ -333,14 +347,14 @@ function removeView(name: string) {
     savedViews.value = savedViews.value.filter((v) => v.name !== name);
     writeStore('views', savedViews.value);
 }
-const hasFilters = computed(() => filters.tab !== 'all' || !!filters.q || !!filters.source || !!filters.marketplace || !!filters.channel || !!filters.warehouse || !!filters.account || !!filters.assignee || filters.flags.length > 0 || advancedCount.value > 0);
+const hasFilters = computed(() => filters.tab !== 'all' || !!filters.q || !!filters.source || !!filters.marketplace || !!filters.channel || !!filters.warehouse || !!filters.account || !!filters.assignee || filters.flags.length > 0 || !!filters.delivery || !!filters.carrier || advancedCount.value > 0);
 
-const columnLabels = { date: 'Ngày tạo đơn', customer: 'Tên khách hàng', products: 'Sản phẩm', status: 'Trạng thái đơn hàng', payment: 'Thanh toán', deadline: 'Hạn giao / hẹn giao', assignee: 'Người xử lý', total: 'Khách phải trả' } as const;
+const columnLabels = { date: 'Ngày tạo đơn', customer: 'Tên khách hàng', products: 'Sản phẩm', shipping: 'Vận chuyển', status: 'Trạng thái đơn hàng', payment: 'Thanh toán', deadline: 'Hạn giao / hẹn giao', assignee: 'Người xử lý', total: 'Khách phải trả' } as const;
 type ColumnKey = keyof typeof columnLabels;
 // Like Sapo's list: one line per order; products and assignee can be turned on from "Cột".
 // v2: the product column (photo + name) is on by default in the new layout; the order time shows under the code
 // and the payment under the total unless their own columns are turned on. Older saved choices are not reused.
-const columns = ref<Record<ColumnKey, boolean>>({ date: false, customer: true, products: true, status: true, payment: false, deadline: true, assignee: false, total: true, ...readStore('columns-v2', {}) });
+const columns = ref<Record<ColumnKey, boolean>>({ date: false, customer: true, products: true, shipping: true, status: true, payment: false, deadline: true, assignee: false, total: true, ...readStore('columns-v2', {}) });
 watch(columns, (v) => writeStore('columns-v2', v), { deep: true });
 compact.value = readStore('compact', false);
 watch(compact, (v) => writeStore('compact', v));
@@ -446,6 +460,10 @@ const selectedToArrange = computed(() => selectedOrders.value.filter((o) => o.ma
 const selectedLabels = computed(() => selectedOrders.value.filter((o) => o.marketplace_shipping && ['PACKED', 'HANDED_OVER', 'IN_TRANSIT', 'FAILED_DELIVERY'].includes(o.status)));
 const shipIds = ref<string[]>([]);
 const shipOpen = ref(false);
+/** Same words as Shopee's list: "Pickup", "Drop off / Pickup". */
+const shipMethodsLabel = (m: string[]) => [...m].sort().map((x) => (x === 'pickup' ? 'Pickup' : 'Drop off')).join(' / ');
+const shipMethodsHint = (m: string[]) => m.map((x) => (x === 'pickup' ? 'Shipper đến lấy' : 'Tự mang ra bưu cục')).join(' hoặc ');
+
 function openShip(ids: string[]) {
     shipIds.value = ids;
     shipOpen.value = true;
@@ -668,11 +686,15 @@ const orderLabel = (id: string) => orderCode(orders.value.find((o) => o.id === i
             <div class="min-w-60 flex-1">
                 <div class="font-semibold">{{ formatNumber(arrange.count) }} đơn Shopee, TikTok đang chờ Chuẩn bị hàng</div>
                 <div class="text-muted-foreground">
+                    <span v-if="arrangeExpress.length" class="inline-flex items-center gap-0.5 font-medium text-rose-600" data-testid="arrange-express-count"><Zap class="size-3" />{{ arrangeExpress.length }} đơn Hỏa tốc</span><template v-if="arrangeExpress.length"> · </template>
                     <template v-for="(part, i) in urgencyLine(arrange)" :key="part"><span :class="i === 0 && arrange.urgent ? 'text-rose-600' : ''">{{ part }}</span> · </template>
                     <span v-if="arrange.ready" class="text-emerald-700">{{ arrange.ready }} đơn đủ hàng</span>
                     <template v-if="arrange.orders.length - arrange.ready">{{ arrange.ready ? ', ' : '' }}<span class="text-rose-600">{{ arrange.orders.length - arrange.ready }} đơn thiếu hàng</span></template>
                 </div>
             </div>
+            <Button v-if="arrangeExpressReady.length && arrangeExpressReady.length < arrangeReady.length" variant="outline" class="border-rose-200 bg-card text-rose-600 hover:bg-rose-50" data-testid="arrange-express-run" @click="openShip(arrangeExpressReady)">
+                <Zap /> Chuẩn bị {{ arrangeExpressReady.length }} đơn Hỏa tốc trước
+            </Button>
             <Button variant="outline" class="bg-card" data-testid="arrange-by-product-open" @click="arrangeOpen = true"><Filter /> Chọn theo sản phẩm</Button>
             <Button data-testid="arrange-banner-run" @click="openShip(arrangeReady)">
                 <PackageCheck /> {{ arrangeReadyAll ? `Chuẩn bị ${arrangeReady.length > 1 ? 'tất cả ' : ''}${arrangeReady.length} đơn` : `Chuẩn bị ${arrangeReady.length} đơn đủ hàng` }}
@@ -817,6 +839,34 @@ const orderLabel = (id: string) => orderCode(orders.value.find((o) => o.id === i
                     <button type="button" class="text-xs text-muted-foreground hover:underline" @click="clearAdvanced">Xóa bộ lọc</button>
                 </template>
             </div>
+            <div v-if="deliveryTotal || filters.delivery || filters.carrier" class="flex flex-wrap items-center gap-1.5" data-testid="delivery-filter">
+                <span class="mr-1 text-xs text-muted-foreground">Kiểu giao:</span>
+                <button
+                    type="button"
+                    :class="cn('rounded-full border px-2.5 py-1 text-xs', !filters.delivery ? 'border-primary/30 bg-blue-50 font-medium text-blue-700' : 'bg-card text-muted-foreground hover:bg-muted')"
+                    @click="filters.delivery = ''"
+                >
+                    Tất cả · {{ formatNumber(deliveryTotal) }}
+                </button>
+                <button
+                    v-for="t in deliveryChips"
+                    :key="t.value"
+                    type="button"
+                    :class="cn('inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs', filters.delivery === t.value ? 'border-primary/30 bg-blue-50 font-medium text-blue-700' : 'bg-card text-muted-foreground hover:bg-muted', t.value === 'express' && filters.delivery !== t.value && (delivery.types.express ?? 0) > 0 && 'text-rose-600')"
+                    :data-testid="`delivery-${t.value}`"
+                    @click="filters.delivery = filters.delivery === t.value ? '' : t.value"
+                >
+                    <component :is="t.icon" class="size-3" />{{ t.label }} <span class="tabular-nums opacity-75">· {{ formatNumber(delivery.types[t.value] ?? 0) }}</span>
+                </button>
+                <label v-if="delivery.carriers.length || filters.carrier" class="ml-1 inline-flex items-center gap-1 rounded-full border bg-card py-0.5 pl-2.5 pr-1 text-xs text-muted-foreground">
+                    <Truck class="size-3" />
+                    <select v-model="filters.carrier" class="rounded border-0 bg-transparent py-0.5 pl-0 pr-6 text-xs font-medium text-foreground focus:ring-1" aria-label="Đơn vị vận chuyển" data-testid="carrier-filter">
+                        <option value="">Đơn vị vận chuyển: Tất cả</option>
+                        <option v-if="filters.carrier && !delivery.carriers.some((c) => c.name === filters.carrier)" :value="filters.carrier">{{ filters.carrier }}</option>
+                        <option v-for="c in delivery.carriers" :key="c.name" :value="c.name">{{ c.name }} · {{ formatNumber(c.count) }}</option>
+                    </select>
+                </label>
+            </div>
         </div>
         <div class="flex items-center justify-between gap-3 border-b px-4 py-2 text-xs text-muted-foreground">
             <span><b class="text-foreground tabular-nums">{{ formatNumber(meta.total) }} đơn</b>{{ hasFilters ? ' khớp bộ lọc' : '' }}</span>
@@ -826,6 +876,7 @@ const orderLabel = (id: string) => orderCode(orders.value.find((o) => o.id === i
                     <option value="newest">Mới nhất</option>
                     <option value="oldest">Cũ nhất</option>
                     <option value="ship_by">Hạn giao gần nhất</option>
+                    <option value="urgent">Hỏa tốc trước, rồi hạn giao gần nhất</option>
                 </select>
             </label>
         </div>
@@ -871,6 +922,7 @@ const orderLabel = (id: string) => orderCode(orders.value.find((o) => o.id === i
                         <th v-if="columns.date" class="w-36 whitespace-nowrap px-3 py-3">Ngày tạo đơn</th>
                         <th v-if="columns.customer" class="px-3 py-3">Tên khách hàng</th>
                         <th v-if="columns.products" class="px-3 py-3">Sản phẩm</th>
+                        <th v-if="columns.shipping" class="w-44 px-3 py-3">Vận chuyển</th>
                         <th v-if="columns.status" class="w-40 whitespace-nowrap px-3 py-3">Trạng thái đơn hàng</th>
                         <th v-if="columns.payment" class="w-44 px-3 py-3">Thanh toán</th>
                         <th v-if="columns.deadline" class="w-36 px-3 py-3">Hạn giao</th>
@@ -929,6 +981,16 @@ const orderLabel = (id: string) => orderCode(orders.value.find((o) => o.id === i
                                 </div>
                                 <span v-else class="text-muted-foreground">—</span>
                             </td>
+                            <td v-if="columns.shipping" class="px-3 py-3 text-xs" data-testid="row-shipping">
+                                <template v-if="o.delivery_type || o.carrier">
+                                    <DeliveryBadge :type="o.delivery_type" :option="o.delivery_option" />
+                                    <div v-if="o.carrier && !compact" class="mt-1 flex items-center gap-1.5 whitespace-nowrap text-muted-foreground">
+                                        <img v-if="/^(spx|shopee express)/i.test(o.carrier)" src="/images/carriers/spx.webp" alt="" class="h-3 w-auto" />{{ o.carrier }}
+                                    </div>
+                                    <div v-if="o.ship_methods?.length && !compact" class="mt-0.5 text-muted-foreground" :title="shipMethodsHint(o.ship_methods)" data-testid="row-ship-methods">{{ shipMethodsLabel(o.ship_methods) }}</div>
+                                </template>
+                                <span v-else class="text-muted-foreground">—</span>
+                            </td>
                             <td v-if="columns.status" class="px-3 py-3"><Badge :tone="orderStatusBadge(o).tone" :title="orderStatusBadge(o).hint" class="max-w-48 truncate">{{ orderStatusBadge(o).label }}</Badge></td>
                             <td v-if="columns.payment" class="whitespace-nowrap px-3 py-3 text-xs">
                                 <span v-if="o.payment_status && o.status !== 'CANCELLED'" class="inline-flex items-center gap-1.5" :title="paymentStatus[o.payment_status]?.label">
@@ -941,7 +1003,7 @@ const orderLabel = (id: string) => orderCode(orders.value.find((o) => o.id === i
                             <td v-if="columns.deadline" class="whitespace-nowrap px-3 py-3 text-xs">
                                 <span v-if="o.flags.overdue" class="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 font-medium text-rose-600"><Clock class="size-3" />{{ deadlineLabel(o.ship_by_at) }}</span>
                                 <span v-else-if="o.flags.due_soon" class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700"><Clock class="size-3" />{{ deadlineLabel(o.ship_by_at) }}</span>
-                                <span v-else class="text-muted-foreground">{{ o.ship_by_at ? formatDateTime(o.ship_by_at) : '—' }}</span>
+                                <span v-else :class="o.delivery_type === 'express' && ['READY_TO_PACK', 'PACKED', 'PENDING_CONFIRMATION'].includes(o.status) ? 'font-medium text-rose-600' : 'text-muted-foreground'">{{ o.ship_by_at ? formatDateTime(o.ship_by_at) : '—' }}</span>
                                 <div v-if="o.deliver_on" :class="cn('text-foreground', compact ? 'inline ml-1.5' : 'mt-0.5')" data-testid="row-deliver-on">Hẹn {{ formatDate(o.deliver_on) }}</div>
                             </td>
                             <td v-if="columns.assignee" class="px-3 py-3 text-xs text-muted-foreground">{{ o.assignee?.name ?? '—' }}</td>

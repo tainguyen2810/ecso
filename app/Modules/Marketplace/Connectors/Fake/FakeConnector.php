@@ -205,6 +205,7 @@ class FakeConnector implements FetchesReturns, FetchesSettlement, MarketplaceCon
             buyerPhone: $data['buyer']['phone'] ?? null,
             shippingAddress: $data['buyer']['address'] ?? null,
             carrier: $data['carrier'] ?? null,
+            deliveryOption: $data['delivery_option'] ?? null,
             trackingNumber: $data['tracking_number'] ?? null,
             buyerNote: $data['note'] ?? null,
             cancelReason: $data['cancel_reason'] ?? null,

@@ -17,6 +17,7 @@ use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Http\Resources\OrderResource;
 use App\Modules\Orders\Http\Resources\ReturnResource;
 use App\Modules\Orders\Http\Resources\ShipmentResource;
+use App\Modules\Orders\Jobs\LearnShipMethodsJob;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
 use App\Modules\Orders\Models\OrderNote;
@@ -31,6 +32,7 @@ use App\Modules\Orders\Services\OrderQuery;
 use App\Modules\Orders\Services\OrderSync;
 use App\Modules\Orders\Services\ReturnService;
 use App\Modules\Orders\Services\ShipmentSync;
+use App\Modules\Orders\Support\DeliveryType;
 use App\Modules\Orders\Support\OrderTags;
 use App\Modules\Orders\Support\Tracking;
 use App\Modules\Sales\Http\Resources\PaymentResource;
@@ -45,6 +47,7 @@ use App\Shared\Support\ReportRange;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -57,17 +60,20 @@ class OrderController extends Controller
         $this->authorize('viewAny', Order::class);
         $filters = $this->filters($request);
 
+        $sort = $filters['sort'] ?? 'newest';
         $page = $orders->build($filters, $request->user()->id)
             ->with(['account', 'channel', 'customer', 'assignee', 'items.variant.product.images'])->withCount('items')
-            ->orderBy(match ($filters['sort'] ?? 'newest') {
-                'ship_by' => 'ship_by_at',
-                'oldest', 'newest' => 'placed_at',
+            // "Hỏa tốc trước": express orders first (the marketplace gives them a few hours), then soonest deadline.
+            ->when($sort === 'urgent', fn ($q) => $q->orderByRaw("delivery_type <=> 'express' DESC")->orderByRaw('ship_by_at IS NULL'))
+            ->orderBy(match ($sort) {
+                'ship_by', 'urgent' => 'ship_by_at',
                 default => 'placed_at',
-            }, ($filters['sort'] ?? 'newest') === 'newest' ? 'desc' : 'asc')
+            }, $sort === 'newest' ? 'desc' : 'asc')
             ->orderByDesc('id')
             ->paginate((int) ($filters['per_page'] ?? 30));
+        $this->learnShipMethods($page->getCollection());
 
-        return OrderResource::collection($page)->additional(['meta' => ['counts' => $orders->tabCounts($filters, $request->user()->id), 'has_imported' => Order::query()->whereNotNull('imported_from')->exists()]])->response();
+        return OrderResource::collection($page)->additional(['meta' => ['counts' => $orders->tabCounts($filters, $request->user()->id), 'delivery' => $orders->deliveryCounts($filters, $request->user()->id), 'has_imported' => Order::query()->whereNotNull('imported_from')->exists()]])->response();
     }
 
     /** "Orders to handle" strip above the order list. */
@@ -652,6 +658,25 @@ class OrderController extends Controller
     }
 
     /** @return array<string, mixed> */
+    /**
+     * Orders waiting for "Chuẩn bị hàng" whose Pickup / Drop off is not known yet for their shop and kiểu giao: ask the
+     * marketplace in the background, once per shop and kiểu giao (the next load of the list shows it).
+     *
+     * @param  iterable<Order>  $orders
+     */
+    private function learnShipMethods(iterable $orders): void
+    {
+        foreach ($orders as $order) {
+            if ($order->status !== OrderStatus::READY_TO_PACK || $order->isManual() || ! in_array($order->marketplace, MarketplaceShipping::marketplaces(), true)) {
+                continue;
+            }
+            MarketplaceShipping::methodsFor($order, $stale);
+            if ($stale && Cache::add("ship-methods:{$order->marketplace_account_id}:".($order->delivery_type ?? '_'), 1, now()->addHours(6))) {
+                LearnShipMethodsJob::dispatch($order->id);
+            }
+        }
+    }
+
     private function filters(Request $request): array
     {
         return $request->validate([
@@ -674,7 +699,9 @@ class OrderController extends Controller
             'assignee' => ['nullable', 'string'],
             'flags' => ['nullable', 'array'],
             'flags.*' => [Rule::in(['shortage', 'awaiting_purchase', 'unmapped', 'overdue', 'due_soon', 'warning', 'not_printed', 'payment_due', 'not_arranged', 'label_unprinted'])],
-            'sort' => ['nullable', Rule::in(['newest', 'oldest', 'ship_by'])],
+            'delivery' => ['nullable', Rule::in(array_keys(DeliveryType::LABELS))],
+            'carrier' => ['nullable', 'string', 'max:100'],
+            'sort' => ['nullable', Rule::in(['newest', 'oldest', 'ship_by', 'urgent'])],
             'per_page' => ['nullable', 'integer', 'min:10', 'max:100'],
         ]);
     }

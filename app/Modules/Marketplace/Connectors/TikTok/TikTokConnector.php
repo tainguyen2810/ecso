@@ -164,6 +164,7 @@ class TikTokConnector extends GatewayConnector
             cancelReason: filled($o['cancel_reason'] ?? null) ? (string) $o['cancel_reason'] : null,
             raw: ['status' => $status],
             buyerAccountId: filled($o['user_id'] ?? null) ? (string) $o['user_id'] : null,
+            deliveryOption: filled($o['delivery_option_name'] ?? null) ? (string) $o['delivery_option_name'] : null,
         );
     }
 
