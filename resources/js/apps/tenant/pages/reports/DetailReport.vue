@@ -43,7 +43,7 @@ const data = ref<any>(null);
 const error = ref<string | null>(null);
 const loading = ref(false);
 
-const completedBasis = computed(() => ['orders', 'sales-lines'].includes(report.value.key) && route.query.basis === 'completed');
+const completedBasis = computed(() => (['orders', 'sales-lines'].includes(report.value.key) && ['completed', 'awaiting'].includes(String(route.query.basis)) ? String(route.query.basis) : undefined));
 function params(): Record<string, string | undefined> {
     const r = report.value;
     return {
@@ -52,7 +52,8 @@ function params(): Record<string, string | undefined> {
         channel: r.channel ? channel.value || undefined : undefined,
         q: r.search ? q.value || undefined : undefined,
         // Opened from a day of the sales dashboard: the orders whose revenue was recognised that day.
-        basis: completedBasis.value ? 'completed' : undefined,
+        // From the amber note: delivered orders the marketplace has not completed yet.
+        basis: completedBasis.value,
         ...(r.period === 'range' ? range.value : {}),
         ...(r.period === 'date' ? { date: date.value } : {}),
     };
@@ -199,6 +200,7 @@ async function exportCsv() {
     <p v-if="report.note" class="mb-4 flex items-start gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
         <Info class="mt-0.5 size-3.5 shrink-0" />
         <span v-if="data?.basis === 'completed'" data-testid="report-basis-completed">Đơn đã ghi nhận doanh thu trong kỳ (đơn sàn khi sàn báo hoàn thành, kênh riêng khi giao xong), giống biểu đồ ở Báo cáo bán hàng.</span>
+        <span v-else-if="data?.basis === 'awaiting'" data-testid="report-basis-awaiting">Đơn sàn đã giao trong kỳ nhưng sàn chưa báo hoàn thành: chưa tính vào doanh thu, sẽ được tính khi sàn hoàn thành đơn.</span>
         <span v-else>{{ report.note }}</span>
     </p>
 

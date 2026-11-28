@@ -47,7 +47,16 @@ it('breaks sales down by product, customer and warehouse, with returns, payments
 
     $customers = $api->getJson('/api/v1/reports/customers')->assertOk()->json('data');
     expect($customers['summary'])->toMatchArray(['customers' => 2, 'new' => 2, 'returning' => 0, 'anonymous_orders' => 1])
-        ->and($customers['rows'][0]['customer']['name'])->toBe('Khách X');
+        ->and($customers['rows'][0]['customer']['name'])->toBe('Khách X')
+        ->and($customers['summary'])->toMatchArray(['returning_revenue' => 0, 'loyal' => 0]);
+    // Theo kênh / Theo khu vực: the same buyers grouped by sales channel and by province.
+    $byChannel = $api->getJson('/api/v1/reports/customers?by=channel')->assertOk()->json('data');
+    expect($byChannel['by'])->toBe('channel')
+        ->and($byChannel['rows'])->toHaveCount(1)
+        ->and($byChannel['rows'][0])->toMatchArray(['label' => SalesChannel::DEFAULT_NAME, 'customers' => 2, 'new' => 2, 'orders' => 3, 'anonymous_orders' => 1]);
+    $byRegion = $api->getJson('/api/v1/reports/customers?by=region')->assertOk()->json('data.rows');
+    expect(collect($byRegion)->sum('orders'))->toBe(3);
+    $api->getJson('/api/v1/reports/customers?by=nope')->assertUnprocessable();
 
     // One shirt comes back and goes back on the shelf.
     $itemId = $api->getJson("/api/v1/orders/{$order['id']}")->json('data.items.0.id');

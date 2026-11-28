@@ -238,9 +238,12 @@ class OrderReports
             ->leftJoin('marketplace_accounts as ma', 'ma.id', '=', 'o.marketplace_account_id')
             ->leftJoin('sales_channels as sc', 'sc.id', '=', 'o.sales_channel_id')
             ->where('o.tenant_id', $this->tenant());
-        $query = ($filters['basis'] ?? 'placed') === 'completed'
-            ? RevenuePolicy::recognized($query, 'o', $from, $to)
-            : $query->whereBetween('o.placed_at', [$from, $to])->whereNotIn('o.status', self::EXCLUDED);
+        $query = match ($filters['basis'] ?? 'placed') {
+            'completed' => RevenuePolicy::recognized($query, 'o', $from, $to),
+            // Delivered in the period but the marketplace has not completed them yet (the amber note on Báo cáo bán hàng).
+            'awaiting' => RevenuePolicy::awaitingCompletion($query, 'o', $from, $to),
+            default => $query->whereBetween('o.placed_at', [$from, $to])->whereNotIn('o.status', self::EXCLUDED),
+        };
 
         return $query
             ->when($filters['channel'] ?? null, fn (Builder $w, int $id) => $w->where('o.sales_channel_id', $id))

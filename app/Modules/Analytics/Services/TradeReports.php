@@ -316,7 +316,8 @@ class TradeReports
             ->selectRaw('c.ulid, c.code, c.name, g.name as group_name, f.first_at, f.last_at, f.lifetime_orders, COUNT(*) as orders, SUM(o.total) as revenue');
         // Summary over every buyer in the range; the table lists the top customerLimit() by revenue.
         $all = DB::query()->fromSub($grouped, 'g')
-            ->selectRaw('COUNT(*) as n, COALESCE(SUM(CASE WHEN g.first_at >= ? THEN 1 ELSE 0 END), 0) as new_customers, COALESCE(SUM(g.revenue), 0) as revenue', [$from])->first();
+            ->selectRaw('COUNT(*) as n, COALESCE(SUM(CASE WHEN g.first_at >= ? THEN 1 ELSE 0 END), 0) as new_customers, COALESCE(SUM(g.revenue), 0) as revenue, '
+                .'COALESCE(SUM(CASE WHEN g.first_at < ? THEN g.revenue ELSE 0 END), 0) as returning_revenue, COALESCE(SUM(CASE WHEN g.lifetime_orders >= 3 THEN 1 ELSE 0 END), 0) as loyal', [$from, $from])->first();
         $rows = (clone $grouped)->orderByDesc('revenue')->limit(self::customerLimit())->get()
             ->map(fn ($r) => [
                 'customer' => ['id' => $r->ulid, 'code' => $r->code, 'name' => $r->name, 'group' => $r->group_name],
@@ -348,6 +349,9 @@ class TradeReports
                 'new' => (int) $all->new_customers,
                 'returning' => (int) $all->n - (int) $all->new_customers,
                 'revenue' => round((float) $all->revenue, 2),
+                // Revenue from customers who had bought before the period, and customers with 3+ orders ever.
+                'returning_revenue' => round((float) $all->returning_revenue, 2),
+                'loyal' => (int) $all->loyal,
                 'anonymous_orders' => array_sum(array_column($days, 'anonymous_orders')),
             ],
             'rows' => $rows,
@@ -356,6 +360,45 @@ class TradeReports
             'total_rows' => (int) $all->n,
             'limit' => self::customerLimit(),
         ];
+    }
+
+    /**
+     * Buyers of the range per sales channel or per province ("Theo kênh", "Theo khu vực" of Khách mua hàng): how many
+     * customers bought there, how many were new, orders and revenue. Orders without a customer record still count as
+     * orders and revenue. The province is the order's delivery province, else the customer's.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function customersBy(CarbonImmutable $from, CarbonImmutable $to, string $by): array
+    {
+        $first = DB::table('orders')->where('tenant_id', $this->tenant())->whereNotNull('customer_id')->whereNotIn('status', self::EXCLUDED)
+            ->groupBy('customer_id')->selectRaw('customer_id, MIN(placed_at) as first_at');
+        $query = DB::table('orders as o')->where('o.tenant_id', $this->tenant())->whereBetween('o.placed_at', [$from, $to])->whereNotIn('o.status', self::EXCLUDED)
+            ->leftJoinSub($first, 'f', 'f.customer_id', '=', 'o.customer_id');
+        $metrics = 'COUNT(DISTINCT o.customer_id) as customers, COUNT(DISTINCT CASE WHEN f.first_at >= ? THEN o.customer_id END) as new_customers, '
+            .'COUNT(*) as orders, SUM(CASE WHEN o.customer_id IS NULL THEN 1 ELSE 0 END) as anonymous_orders, COALESCE(SUM(o.total), 0) as revenue';
+
+        $rows = $by === 'region'
+            ? $query->leftJoin('customers as c', 'c.id', '=', 'o.customer_id')
+                ->leftJoin('geo_provinces as p', 'p.code', '=', DB::raw('COALESCE(o.shipping_province_code, c.province_code)'))
+                ->groupBy('p.code', 'p.name')
+                ->selectRaw("COALESCE(p.name, 'Chưa rõ khu vực') as label, NULL as kind, {$metrics}", [$from])
+                ->orderByRaw('p.code IS NULL')->orderByDesc('revenue')->get()
+            : $query->leftJoin('marketplace_accounts as ma', 'ma.id', '=', 'o.marketplace_account_id')
+                ->leftJoin('sales_channels as sc', 'sc.id', '=', 'o.sales_channel_id')
+                ->groupBy('o.marketplace_account_id', 'o.sales_channel_id', 'ma.shop_name', 'ma.marketplace', 'sc.name', 'sc.type')
+                ->selectRaw("COALESCE(ma.shop_name, sc.name, 'Khác') as label, COALESCE(ma.marketplace, sc.type) as kind, {$metrics}", [$from])
+                ->orderByDesc('revenue')->get();
+
+        return $rows->map(fn ($r) => [
+            'label' => (string) $r->label,
+            'kind' => $r->kind,
+            'customers' => (int) $r->customers,
+            'new' => (int) $r->new_customers,
+            'orders' => (int) $r->orders,
+            'anonymous_orders' => (int) $r->anonymous_orders,
+            'revenue' => round((float) $r->revenue, 2),
+        ])->all();
     }
 
     /**

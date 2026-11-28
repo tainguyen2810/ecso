@@ -237,6 +237,17 @@ class BusinessReports
         $count = (int) $methods->sum('n');
         $closing = round($opening + $in - $out, 2);
 
+        // Money in and out per week of the period (week 1 starts on the first day), for "Thu chi theo tuần".
+        $day = ReportRange::day('paid_at', $from);
+        $weekly = (clone $period)->groupBy('w')
+            ->selectRaw("FLOOR(DATEDIFF({$day}, ?) / 7) as w, COALESCE(SUM(CASE WHEN amount >= 0 THEN amount ELSE 0 END), 0) as total_in, COALESCE(SUM(CASE WHEN amount < 0 THEN -amount ELSE 0 END), 0) as total_out", [$from->toDateString()])
+            ->get()->keyBy(fn ($r) => (int) $r->w);
+        $weeks = [];
+        for ($w = 0, $start = $from->startOfDay(); $start->lte($to); $w++, $start = $start->addDays(7)) {
+            $end = $start->addDays(6)->min($to->startOfDay());
+            $weeks[] = ['from' => $start->toDateString(), 'to' => $end->toDateString(), 'in' => round((float) ($weekly[$w]->total_in ?? 0), 2), 'out' => round((float) ($weekly[$w]->total_out ?? 0), 2)];
+        }
+
         // Only the newest rows are listed. Their balances start from the closing balance less what they add up to,
         // so each row shows the money in the fund right after it even when older rows are left out.
         $entries = (clone $period)->orderBy('paid_at')->offset(max(0, $count - $maxRows))->limit($maxRows)->get();
@@ -267,6 +278,7 @@ class BusinessReports
             'out' => round($out, 2),
             'closing' => $closing,
             'by_method' => $methods->map(fn ($m) => ['method' => $m->method, 'in' => round((float) $m->total_in, 2), 'out' => round((float) $m->total_out, 2)])->values()->all(),
+            'weeks' => $weeks,
             'count' => $count,
             'truncated' => $count > count($rows),
             'rows' => array_reverse($rows), // newest first

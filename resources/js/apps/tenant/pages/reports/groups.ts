@@ -144,7 +144,19 @@ export const reportGroups: Record<ReportGroupKey, { title: string; permission: s
         title: 'Báo cáo khách hàng',
         permission: 'reports.view',
         links: [
-            { title: 'Khách mua hàng', description: 'Ai mua nhiều nhất, khách mới hay khách quay lại.', icon: UserRound, permission: 'reports.view', to: { report: 'customers' }, ranged: true },
+            {
+                title: 'Khách mua hàng',
+                description: 'Ai mua nhiều nhất, khách mới hay khách quay lại.',
+                icon: UserRound,
+                permission: 'reports.view',
+                to: { report: 'customers', by: 'customer' },
+                ranged: true,
+                chips: [
+                    { label: 'Theo khách', by: 'customer' },
+                    { label: 'Theo kênh', by: 'channel' },
+                    { label: 'Theo khu vực', by: 'region' },
+                ],
+            },
             { title: 'Doanh thu, lợi nhuận theo khách', description: 'Mỗi khách mang lại bao nhiêu doanh thu và lãi gộp.', icon: Coins, permission: 'reports.view', to: { name: 'report-sales', query: { by: 'customer' } }, ranged: true },
             { title: 'Công nợ khách hàng', description: 'Khách còn nợ bao nhiêu.', icon: Landmark, permission: 'finance.view', to: { report: 'receivables' } },
         ],

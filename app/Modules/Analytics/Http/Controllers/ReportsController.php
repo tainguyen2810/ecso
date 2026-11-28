@@ -154,8 +154,14 @@ class ReportsController extends Controller
         $this->allow('reports.view');
         $this->exporting($request, 'customers');
         [$from, $to] = $this->range($request);
+        $by = $request->validate(['by' => ['nullable', Rule::in(['customer', 'channel', 'region'])]])['by'] ?? 'customer';
+        $data = $trade->customers($from, $to);
+        if ($by !== 'customer') {
+            // Same summary, the table grouped by sales channel or province instead of one row per customer.
+            $data = [...$data, 'rows' => $trade->customersBy($from, $to, $by), 'truncated' => false];
+        }
 
-        return response()->json(['data' => $trade->customers($from, $to)]);
+        return response()->json(['data' => [...$data, 'by' => $by]]);
     }
 
     public function stockOnHand(Request $request, StockReports $stock): JsonResponse
@@ -233,7 +239,7 @@ class ReportsController extends Controller
     /** @return array{q: string|null, channel: int|null, warehouse: int|null, basis: string} */
     private function orderFilters(Request $request): array
     {
-        $data = $request->validate(['q' => ['nullable', 'string', 'max:100'], 'channel' => ['nullable', 'string'], 'warehouse' => ['nullable', 'string'], 'basis' => ['nullable', Rule::in(['placed', 'completed'])]]);
+        $data = $request->validate(['q' => ['nullable', 'string', 'max:100'], 'channel' => ['nullable', 'string'], 'warehouse' => ['nullable', 'string'], 'basis' => ['nullable', Rule::in(['placed', 'completed', 'awaiting'])]]);
 
         return [
             // placed: orders placed in the period (default); completed: orders whose revenue is recognised in it, as
