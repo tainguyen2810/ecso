@@ -18,6 +18,9 @@ import { formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import type { Variant, Warehouse } from '@/shared/types';
+import { useSoftPage } from '@/shared/composables/useSoftPage';
+
+useSoftPage('Sản phẩm');
 
 type PriceList = 'retail' | 'wholesale';
 type Row = LabelItem & { id: string; image: string | null; retail: string | number | null; wholesale: string | number | null; onHand: number | null; error: string | null; warning: string | null };

@@ -12,6 +12,9 @@ import { formatMoney } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { photoFile, toPhotos, type Photo } from '@/shared/lib/photos';
 import { productBody, rows as toRows, type SuggestionRow } from './scan';
+import { useSoftPage } from '@/shared/composables/useSoftPage';
+
+useSoftPage('Sản phẩm');
 
 /**
  * Sản phẩm › Tạo từ ảnh: photos (front, box, label… of one or many products) are read by EzChat AI, which groups

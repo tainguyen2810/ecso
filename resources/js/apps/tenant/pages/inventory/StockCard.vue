@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { ArrowLeft, Boxes, History, Lock, PackageCheck, Warehouse } from 'lucide-vue-next';
+import { Boxes, History, Lock, PackageCheck, Warehouse } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import Badge from '@/shared/ui/Badge.vue';
@@ -15,6 +15,9 @@ import { api, ApiError } from '@/shared/lib/api';
 import { cn, formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { movementLabels, referenceLabels } from './labels';
 import type { Movement } from '@/shared/types';
+import { useSoftPage } from '@/shared/composables/useSoftPage';
+
+useSoftPage('Sản phẩm');
 
 interface CardBalance {
     warehouse: { id: string; code: string; name: string };
@@ -65,8 +68,7 @@ function delta(n: number): string {
 </script>
 
 <template>
-    <RouterLink to="/inventory" class="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft class="size-4" /> Tồn kho</RouterLink>
-    <PageHeader :title="variant ? `Thẻ kho · ${variant.sku}` : 'Thẻ kho'" :description="variant?.name" />
+    <PageHeader :back="{ to: '/inventory', label: 'Quản lý kho' }" :title="variant ? `Thẻ kho · ${variant.sku}` : 'Thẻ kho'" :description="variant?.name" />
 
     <ErrorState v-if="loadError && !variant" :message="loadError" @retry="load" />
     <template v-else>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, HandCoins, PackageCheck, Pencil, Plus, Trash2, Undo2, Wallet } from 'lucide-vue-next';
+import { HandCoins, PackageCheck, Pencil, Plus, Trash2, Undo2, Wallet } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import SupplierDialog from './SupplierDialog.vue';
 import SupplierPaymentDialog from './SupplierPaymentDialog.vue';
@@ -17,6 +17,9 @@ import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { owed, poStatus, supplierPaymentMethods } from './labels';
 import type { PurchaseOrderData, Supplier, SupplierPaymentData, SupplierReturnData } from '@/shared/types';
+import { useSoftPage } from '@/shared/composables/useSoftPage';
+
+useSoftPage('Sản phẩm');
 
 /** Still owed on an order once money paid on account is counted (server allocation), else what the order itself shows. */
 const left = (o: PurchaseOrderData) => (o.allocation ? o.allocation.open : owed(o));
@@ -60,8 +63,7 @@ async function remove() {
     <div v-if="loading && !supplier" class="space-y-4"><Skeleton class="h-10 w-80" /><Skeleton class="h-64" /></div>
     <ErrorState v-else-if="loadError" :message="loadError" @retry="load" />
     <template v-else-if="supplier">
-        <RouterLink to="/purchasing/suppliers" class="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft class="size-4" /> Nhà cung cấp</RouterLink>
-        <PageHeader :title="supplier.name" :description="[supplier.code, supplier.contact_name, supplier.phone, supplier.tax_code && 'MST ' + supplier.tax_code].filter(Boolean).join(' · ')">
+        <PageHeader :back="{ to: '/purchasing/suppliers', label: 'Nhà cung cấp' }" :title="supplier.name" :description="[supplier.code, supplier.contact_name, supplier.phone, supplier.tax_code && 'MST ' + supplier.tax_code].filter(Boolean).join(' · ')">
             <Badge v-if="!supplier.is_active" tone="muted" class="self-center">Ngừng giao dịch</Badge>
             <Button v-if="tenant.can('purchasing.manage') && supplier.is_active" @click="$router.push({ path: '/purchasing/new', query: { supplier: supplier.id } })"><Plus /> Tạo đơn nhập</Button>
             <Button v-if="tenant.can('purchasing.payment')" variant="outline" data-testid="supplier-pay" @click="payOpen = true"><Wallet /> Chi tiền</Button>

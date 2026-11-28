@@ -22,6 +22,9 @@ import { supplierPaymentMethods } from './labels';
 import { useSettingsStore } from '@/shared/stores/settings';
 import type { PurchaseOrderData, Supplier, Variant, Warehouse } from '@/shared/types';
 import DateInput from '@/shared/ui/DateInput.vue';
+import { useSoftPage } from '@/shared/composables/useSoftPage';
+
+useSoftPage('Sản phẩm');
 
 /**
  * "Tạo đơn nhập hàng" like Sapo: supplier card with debt, invoice details, lines, order discount (F6) and purchase
@@ -228,7 +231,7 @@ function onKey(e: KeyboardEvent) {
 </script>
 
 <template>
-    <PageHeader :title="editId ? 'Sửa đơn nhập' : orderMode ? 'Đơn đặt hàng nhập mới' : 'Phiếu nhập mới'" :description="orderMode ? 'Sản phẩm · Đặt hàng nhập' : 'Sản phẩm · Nhập hàng'">
+    <PageHeader :title="editId ? 'Sửa đơn nhập' : orderMode ? 'Đơn đặt hàng nhập mới' : 'Phiếu nhập mới'" :back="orderMode ? { to: '/purchasing/orders', label: 'Đặt hàng nhập' } : { to: '/purchasing', label: 'Nhập hàng' }" description="Tìm hoặc quét SKU, chọn nhà cung cấp và kho nhập, rồi lưu nháp hoặc nhập hàng ngay.">
         <RouterLink :to="backTo"><Button variant="outline"><ArrowLeft /> Thoát</Button></RouterLink>
     </PageHeader>
 

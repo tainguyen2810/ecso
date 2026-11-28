@@ -14,6 +14,9 @@ import { useToast } from '@/shared/composables/useToast';
 import { toPhotos, type Photo } from '@/shared/lib/photos';
 import type { Supplier, Variant, Warehouse } from '@/shared/types';
 import { buildDraft, priceRise, reviewLines, SCAN_DRAFT_KEY, skuFromLine, type ReviewLine, type ScanResult } from './scan';
+import { useSoftPage } from '@/shared/composables/useSoftPage';
+
+useSoftPage('Sản phẩm');
 
 /**
  * Nhập hàng › Chụp hoá đơn: photos of a supplier invoice are read by EzChat AI, each line is matched with a SKU

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, ImagePlus, Images, Plus, ScanBarcode, Sparkles, Tags, Trash2, X } from 'lucide-vue-next';
+import { ImagePlus, Images, Plus, ScanBarcode, Sparkles, Tags, Trash2, X } from 'lucide-vue-next';
 import MarketplaceImagePicker from './MarketplaceImagePicker.vue';
 import PageHeader from '../../PageHeader.vue';
 import Alert from '@/shared/ui/Alert.vue';
@@ -21,6 +21,9 @@ import { useIdempotencyKey } from '@/shared/composables/useIdempotencyKey';
 import SkuPicker from '../../components/SkuPicker.vue';
 import { useSettingsStore } from '@/shared/stores/settings';
 import type { Product, ProductType, Ref, Variant, Warehouse } from '@/shared/types';
+import { useSoftPage } from '@/shared/composables/useSoftPage';
+
+useSoftPage('Sản phẩm');
 
 interface VariantRow {
     id?: string;
@@ -425,13 +428,10 @@ async function removeImage(id: number) {
 </script>
 
 <template>
-    <RouterLink :to="productId ? `/products/${productId}` : '/products'" class="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft class="size-4" /> {{ productId ? 'Chi tiết sản phẩm' : 'Sản phẩm' }}
-    </RouterLink>
     <ErrorState v-if="loadError" :message="loadError" />
     <div v-else-if="loading" class="space-y-3"><Skeleton class="h-10 w-80" /><Skeleton class="h-72" /></div>
     <form v-else @submit.prevent="save()">
-        <PageHeader
+        <PageHeader :back="productId ? { to: `/products/${productId}`, label: 'Chi tiết sản phẩm' } : { to: '/products', label: 'Danh sách sản phẩm' }"
             :title="isNew ? (copyFrom ? 'Sao chép sản phẩm' : 'Thêm sản phẩm') : form.name || 'Sản phẩm'"
             :description="copyFrom ? 'Đã chép thông tin, biến thể và giá. Nhập SKU mới cho từng biến thể.' : isNew ? (isSub ? 'Dịch vụ bán theo kỳ: mỗi gói là một SKU có chu kỳ riêng, không có tồn kho.' : isNonStock ? 'Dịch vụ không có tồn kho, bán như sản phẩm thường.' : 'Mỗi biến thể là một SKU bán được, có tồn kho riêng.') : undefined"
         >

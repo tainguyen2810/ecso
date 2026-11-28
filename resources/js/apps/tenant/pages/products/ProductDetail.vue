@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, Copy, ImagePlus, MapPin, Package, Pencil, Tags, Trash2 } from 'lucide-vue-next';
+import { Copy, ImagePlus, MapPin, Package, Pencil, Tags, Trash2 } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Pagination from '../../components/Pagination.vue';
 import Tabs from '../../components/Tabs.vue';
@@ -22,6 +22,9 @@ import { cn, formatDateTime, formatMoney, formatNumber } from '@/shared/lib/util
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
 import type { Product, ProductPrices } from '@/shared/types';
+import { useSoftPage } from '@/shared/composables/useSoftPage';
+
+useSoftPage('Sản phẩm');
 
 interface StockRow {
     variant: { id: string; sku: string; name: string | null };
@@ -289,11 +292,10 @@ async function remove() {
 </script>
 
 <template>
-    <RouterLink to="/products" class="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft class="size-4" /> Sản phẩm</RouterLink>
     <ErrorState v-if="loadError" :message="loadError" />
     <div v-else-if="!product" class="space-y-3"><Skeleton class="h-10 w-80" /><Skeleton class="h-72" /></div>
     <template v-else>
-        <PageHeader :title="product.name" :description="typeHint">
+        <PageHeader :back="{ to: '/products', label: 'Danh sách sản phẩm' }" :title="product.name" :description="typeHint">
             <RouterLink v-if="product.type === 'subscription'" :to="{ path: '/subscriptions', query: { product: product.id } }"><Button variant="outline" data-testid="product-subscriptions">Xem thuê bao</Button></RouterLink>
             <Button v-if="canManage" variant="ghost" class="text-destructive" @click="remove"><Trash2 /> Xóa</Button>
             <RouterLink :to="{ path: '/products/labels', query: { products: product.id } }"><Button variant="outline" data-testid="print-labels"><Tags /> In tem</Button></RouterLink>

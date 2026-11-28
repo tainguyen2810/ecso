@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, PackageOpen, Trash2 } from 'lucide-vue-next';
+import { PackageOpen, Trash2 } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
 import LotSplitEditor from '../../components/LotSplitEditor.vue';
@@ -18,6 +18,9 @@ import { useTenantStore } from '@/shared/stores/tenant';
 import { adjustmentReasons, documentKinds, type DocumentKindKey } from './labels';
 import { blankLot, lotPayload, type LotDraft } from './lots';
 import type { Variant, Warehouse } from '@/shared/types';
+import { useSoftPage } from '@/shared/composables/useSoftPage';
+
+useSoftPage('Sản phẩm');
 
 interface Line {
     variant: Variant;
@@ -122,8 +125,7 @@ const hints: Record<DocumentKindKey, string> = {
 </script>
 
 <template>
-    <RouterLink :to="`/inventory/${kindKey}`" class="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft class="size-4" /> {{ kind.title }}</RouterLink>
-    <PageHeader :title="writeOff ? 'Phiếu xuất hủy' : kind.create" :description="writeOff ? 'Ghi giảm hàng hỏng, hết hạn hoặc thất lạc. Nhập số lượng hủy; tồn chỉ giảm khi phiếu được duyệt.' : hints[kindKey]" />
+    <PageHeader :back="{ to: `/inventory/${kindKey}`, label: kind.title }" :title="writeOff ? 'Phiếu xuất hủy' : kind.create" :description="writeOff ? 'Ghi giảm hàng hỏng, hết hạn hoặc thất lạc. Nhập số lượng hủy; tồn chỉ giảm khi phiếu được duyệt.' : hints[kindKey]" />
 
     <form class="grid gap-5 lg:grid-cols-3" @submit.prevent="submit">
         <Card class="lg:col-span-2" title="Hàng hóa" :description="kindKey === 'adjustments' ? 'Kiểm kê: nhập số đếm thực tế. Chênh lệch: nhập số tăng (+) hoặc giảm (−).' : 'Quét mã vạch hoặc tìm SKU để thêm dòng.'">

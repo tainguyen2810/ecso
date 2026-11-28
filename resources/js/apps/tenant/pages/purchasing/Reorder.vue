@@ -14,6 +14,9 @@ import { formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { draftFromRows, REORDER_DRAFT_KEY, type ReorderRow } from './reorder';
 import type { Warehouse } from '@/shared/types';
+import { useSoftPage } from '@/shared/composables/useSoftPage';
+
+useSoftPage('Sản phẩm');
 
 const router = useRouter();
 const route = useRoute();

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import { ArrowLeft, Check, History, PackageCheck, Send, Tags, X } from 'lucide-vue-next';
+import { Check, History, PackageCheck, Send, Tags, X } from 'lucide-vue-next';
 import PageHeader from '../../PageHeader.vue';
 import Alert from '@/shared/ui/Alert.vue';
 import Badge from '@/shared/ui/Badge.vue';
@@ -21,6 +21,9 @@ import { useToast } from '@/shared/composables/useToast';
 import { adjustmentReasons, documentKinds, documentStatus, type DocumentKindKey } from './labels';
 import type { InventoryDocument } from '@/shared/types';
 import { varianceReasons } from './stocktake';
+import { useSoftPage } from '@/shared/composables/useSoftPage';
+
+useSoftPage('Sản phẩm');
 
 const route = useRoute();
 const tenant = useTenantStore();
@@ -107,12 +110,11 @@ const steps = computed(() => {
 </script>
 
 <template>
-    <RouterLink :to="`/inventory/${kindKey}`" class="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft class="size-4" /> {{ kind.title }}</RouterLink>
 
     <ErrorState v-if="loadError" :message="loadError" @retry="load" />
     <div v-else-if="!doc" class="space-y-3"><Skeleton class="h-10 w-72" /><Skeleton class="h-64" /></div>
     <template v-else>
-        <PageHeader :title="`${kind.title} ${doc.number}`" :description="doc.note ?? undefined">
+        <PageHeader :back="{ to: `/inventory/${kindKey}`, label: kind.title }" :title="`${kind.title} ${doc.number}`" :description="doc.note ?? undefined">
             <Badge v-if="doc.status" :tone="documentStatus[doc.status]?.tone" class="px-3 py-1 text-sm" data-testid="document-status">{{ documentStatus[doc.status]?.label }}</Badge>
             <RouterLink v-if="doc.kind === 'receipt'" :to="{ path: '/products/labels', query: { lines: (doc.lines ?? []).map((l) => `${l.variant.id}:${l.quantity}`).join(',') } }">
                 <Button variant="outline" data-testid="print-receipt-labels"><Tags /> In tem hàng nhập</Button>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { ArrowLeft, Ban, Check, CircleCheck, Copy, History, PackageCheck, Pencil, Printer, Send, Tags, Undo2, Wallet } from 'lucide-vue-next';
+import { Ban, Check, CircleCheck, Copy, History, PackageCheck, Pencil, Printer, Send, Tags, Undo2, Wallet } from 'lucide-vue-next';
 import { useRoute, useRouter } from 'vue-router';
 import PageHeader from '../../PageHeader.vue';
 import SupplierPaymentDialog from './SupplierPaymentDialog.vue';
@@ -25,6 +25,9 @@ import { REORDER_DRAFT_KEY, type ReorderDraft } from './reorder';
 import { printPurchaseOrder } from './printOrder';
 import type { PurchaseOrderData } from '@/shared/types';
 import DateInput from '@/shared/ui/DateInput.vue';
+import { useSoftPage } from '@/shared/composables/useSoftPage';
+
+useSoftPage('Sản phẩm');
 
 const route = useRoute();
 const toast = useToast();
@@ -219,8 +222,7 @@ async function voidPayment(id: string) {
     <div v-if="loading && !po" class="space-y-4"><Skeleton class="h-10 w-80" /><Skeleton class="h-64" /></div>
     <ErrorState v-else-if="loadError" :message="loadError" @retry="load" />
     <template v-else-if="po">
-        <RouterLink to="/purchasing" class="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft class="size-4" /> Nhập hàng</RouterLink>
-        <PageHeader :title="po.number" :description="`${po.supplier?.name} → ${po.warehouse?.name}${po.expected_at ? ' · hẹn giao ' + formatDate(po.expected_at) : ''}`">
+        <PageHeader :back="{ to: '/purchasing', label: 'Nhập hàng' }" :title="po.number" :description="`${po.supplier?.name} → ${po.warehouse?.name}${po.expected_at ? ' · hẹn giao ' + formatDate(po.expected_at) : ''}`">
             <template #links>
                 <Badge :tone="tradeStatus(po.status).tone">{{ tradeStatus(po.status).label }}</Badge>
                 <Badge :tone="receiveStatus(po.status).tone">{{ receiveStatus(po.status).label }}</Badge>

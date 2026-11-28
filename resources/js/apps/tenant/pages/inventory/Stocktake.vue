@@ -19,6 +19,9 @@ import { useToast } from '@/shared/composables/useToast';
 import { useIdempotencyKey } from '@/shared/composables/useIdempotencyKey';
 import { applyScan, stocktakeLines, variance, varianceReasons, type CountRow, type LineNotes } from './stocktake';
 import type { InventoryDocument, Warehouse } from '@/shared/types';
+import { useSoftPage } from '@/shared/composables/useSoftPage';
+
+useSoftPage('Sản phẩm');
 
 /**
  * Phiếu kiểm hàng like Sapo: count by scanning (+1 per scan) or typing, save the sheet as often as needed while
