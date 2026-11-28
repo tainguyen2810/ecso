@@ -24,8 +24,8 @@ const auth = useAuthStore();
 const tenant = useTenantStore();
 const route = useRoute();
 const router = useRouter();
-/** Report and Kế toán, thuế pages use the whole width (Full HD first) so wide tables fit without sideways scrolling. */
-const wide = computed(() => ['reports', 'accounting'].includes(String(route.meta.nav)) || ['finance', 'report-cashbook'].includes(String(route.name)));
+/** Report, Kế toán thuế and Chấm công lương pages use the whole width (Full HD first) so wide tables fit without sideways scrolling. */
+const wide = computed(() => ['reports', 'accounting', 'staff'].includes(String(route.meta.nav)) || ['finance', 'report-cashbook'].includes(String(route.name)));
 const toast = useToast();
 
 const switcherOpen = ref(false);
