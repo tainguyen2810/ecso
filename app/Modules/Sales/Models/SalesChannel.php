@@ -13,6 +13,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * A sales channel run by the seller (shop counter, Facebook, Zalo, website...). Orders of these channels are
  * created and processed in ECSO, unlike marketplace orders which are owned by the marketplace.
+ *
+ * @property-read int|string|null $orders_30d  orders of the last 30 days, aggregate in the channel list
+ * @property-read float|string|null $revenue_30d  revenue of the last 30 days, aggregate in the channel list
  */
 class SalesChannel extends Model
 {
