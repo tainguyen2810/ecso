@@ -10,7 +10,7 @@ test('count a fund, then close the books and see a closed-day voucher refused', 
 
     // Count the cash drawer 10,000 short: a payment voucher is booked and the balance follows.
     await page.getByTestId('count-cash').click();
-    const balance = await page.getByTestId('fund-cash').locator('p.text-2xl').innerText();
+    const balance = await page.getByTestId('fund-cash').getByTestId('fund-balance').innerText();
     const system = Number(balance.replace(/\D/g, ''));
     await page.getByTestId('c-amount').fill(String(Math.max(system - 10000, 0)));
     await expect(page.getByTestId('c-diff')).toContainText('Thiếu');
