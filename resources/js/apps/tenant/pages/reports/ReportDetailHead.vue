@@ -49,9 +49,11 @@ function isCurrent(l: ReportLink): boolean {
     return !by || by === (route.query.by ?? 'day');
 }
 /** Only the pages of the report section (Sổ kho opens Quản lý kho, not a report). */
-const siblings = computed(() =>
-    reportGroups[group.value].links.filter((l) => tenant.can(l.permission) && ('report' in l.to || String(l.to.name).startsWith('report-'))).filter((l, i, all) => all.findIndex((x) => x.title === l.title) === i),
-);
+const siblings = computed(() => {
+    const links = reportGroups[group.value].links.filter((l) => tenant.can(l.permission) && ('report' in l.to || String(l.to.name).startsWith('report-'))).filter((l, i, all) => all.findIndex((x) => x.title === l.title) === i);
+    // A solo report (Báo cáo lãi lỗ) stands alone: no tab row on it, and it is left out of its siblings' tab row.
+    return links.some((l) => l.solo && isCurrent(l)) ? [] : links.filter((l) => !l.solo);
+});
 
 const quick: [Preset, string][] = [
     ['today', 'Hôm nay'],

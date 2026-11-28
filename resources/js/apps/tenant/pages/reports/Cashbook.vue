@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, provide, ref, watch } from 'vue';
+import { useElementWidth } from '@/shared/composables/useElementWidth';
 import { ArrowDownLeft, ArrowUpRight, ChevronLeft, ChevronRight, CircleHelp, Download, Info, Landmark, PiggyBank, Plus, Search, Smartphone, Wallet } from 'lucide-vue-next';
 import ReportDetailHead from './ReportDetailHead.vue';
 import ReportKpi from './ReportKpi.vue';
@@ -154,8 +155,10 @@ const days = computed(() => {
     }
     return out;
 });
-const CW = 900;
-const CH = 250;
+const chartBox = ref<HTMLElement | null>(null);
+const boxWidth = useElementWidth(chartBox, 900);
+const CW = computed(() => Math.max(320, boxWidth.value - 8));
+const CH = 220;
 const chart = computed(() => {
     const pts = days.value;
     if (pts.length < 2) return null;
@@ -165,13 +168,14 @@ const chart = computed(() => {
     const pad = (hi - lo) * 0.15 || Math.abs(hi) * 0.1 || 1;
     lo -= pad;
     hi += pad;
-    const x = (i: number) => (i / (pts.length - 1)) * CW;
+    const cw = CW.value;
+    const x = (i: number) => 4 + (i / (pts.length - 1)) * cw;
     const y = (v: number) => 10 + ((hi - v) / (hi - lo)) * CH;
     const line = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.balance).toFixed(1)}`).join(' ');
     const step = Math.max(1, Math.ceil(pts.length / 7));
     return {
         line,
-        area: `${line} L${CW},${CH + 10} L0,${CH + 10} Z`,
+        area: `${line} L${4 + cw},${CH + 10} L4,${CH + 10} Z`,
         ticks: pts.map((p, i) => ({ i, x: x(i), label: `${p.day.slice(8, 10)}/${p.day.slice(5, 7)}` })).filter((t) => t.i % step === 0),
         end: { x: x(pts.length - 1), y: y(pts[pts.length - 1]!.balance) },
     };
@@ -259,8 +263,8 @@ const money = (v: number) => formatNumber(Math.round(v));
                         <h3 class="text-[16px] font-semibold text-slate-900">Tồn quỹ theo ngày</h3>
                         <p class="mt-0.5 text-[13px] text-slate-500">{{ data.account ? data.account.name : 'Tổng tiền các quỹ' }} cuối mỗi ngày</p>
                     </header>
-                    <div v-if="chart" class="px-6 py-5">
-                        <svg :viewBox="`0 0 ${CW} ${CH + 40}`" class="h-auto w-full" role="img" aria-label="Tồn quỹ theo ngày">
+                    <div v-if="chart" ref="chartBox" class="px-6 py-5">
+                        <svg :viewBox="`0 0 ${CW + 8} ${CH + 40}`" :width="CW + 8" :height="CH + 40" class="block overflow-visible" role="img" aria-label="Tồn quỹ theo ngày">
                             <defs>
                                 <linearGradient id="cb-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#2563eb" stop-opacity="0.16" /><stop offset="1" stop-color="#2563eb" stop-opacity="0" /></linearGradient>
                             </defs>

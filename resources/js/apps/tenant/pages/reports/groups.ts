@@ -11,6 +11,8 @@ export interface ReportLink {
     permission: string;
     /** Route: a named page, or a detail report from catalog.ts (`report` + optional tab). */
     to: { name: string; query?: Record<string, string> } | { report: string; by?: string };
+    /** Shown only as a card on the group page, never in the tab row of its siblings (Báo cáo lãi lỗ is not Thu chi). */
+    solo?: boolean;
     /** Does the report take the period chosen on the group page? */
     ranged?: boolean;
     /** Tabs of the same report shown as chips under the description. */
@@ -133,7 +135,7 @@ export const reportGroups: Record<ReportGroupKey, { title: string; permission: s
         title: 'Báo cáo tài chính',
         permission: 'finance.view',
         links: [
-            { title: 'Báo cáo lãi lỗ', description: 'Doanh thu, chi phí và lợi nhuận của cửa hàng.', icon: TrendingUp, permission: 'finance.profit', to: { name: 'report-profit-loss' }, ranged: true },
+            { title: 'Báo cáo lãi lỗ', description: 'Doanh thu, chi phí và lợi nhuận của cửa hàng.', icon: TrendingUp, permission: 'finance.profit', to: { name: 'report-profit-loss' }, ranged: true, solo: true },
             { title: 'Sổ quỹ', description: 'Các khoản thu chi theo ngày, tồn quỹ đầu và cuối kỳ.', icon: Receipt, permission: 'finance.view', to: { name: 'report-cashbook' }, ranged: true },
             { title: 'Thu chi theo loại', description: 'Tiền vào, tiền ra theo loại phiếu, từng tháng.', icon: Receipt, permission: 'finance.view', to: { report: 'cash-by-type' }, ranged: true },
             { title: 'Công nợ khách hàng', description: 'Khách còn nợ bao nhiêu, nợ từ bao giờ.', icon: Users, permission: 'finance.view', to: { report: 'receivables' } },
