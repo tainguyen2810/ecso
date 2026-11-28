@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Search } from 'lucide-vue-next';
+import { ImageIcon, PlusCircle, Search } from 'lucide-vue-next';
 import Input from '@/shared/ui/Input.vue';
 import { api } from '@/shared/lib/api';
-import { formatNumber } from '@/shared/lib/utils';
+import { cn, formatNumber } from '@/shared/lib/utils';
 import type { Variant } from '@/shared/types';
 
 /**
@@ -11,8 +11,20 @@ import type { Variant } from '@/shared/types';
  * `inline`: the results are a list in the page flow, shown right away (for dialogs, where a floating dropdown is
  * clipped by the dialog's scroll area).
  */
-const props = defineProps<{ warehouse?: string; exclude?: string[]; placeholder?: string; stocked?: boolean; inline?: boolean; initialQuery?: string }>();
-const emit = defineEmits<{ pick: [variant: Variant] }>();
+/**
+ * `detailed`: rows like Sapo's order form (photo, full name, SKU + version, price, Tồn | Có thể bán) and, with
+ * `createLabel`, a first row that emits `create` (Thêm mới sản phẩm).
+ */
+const props = defineProps<{ warehouse?: string; exclude?: string[]; placeholder?: string; stocked?: boolean; inline?: boolean; initialQuery?: string; detailed?: boolean; createLabel?: string }>();
+const emit = defineEmits<{ pick: [variant: Variant]; create: [query: string] }>();
+
+function money(v: string | number | null | undefined) {
+    return v === null || v === undefined || v === '' ? '' : formatNumber(Math.round(Number(v)));
+}
+function create() {
+    emit('create', query.value);
+    open.value = false;
+}
 
 const query = ref(props.initialQuery ?? '');
 const results = ref<Variant[]>([]);
@@ -100,12 +112,46 @@ async function onKey(e: KeyboardEvent) {
             @keydown="onKey"
         />
         <div
-            v-if="inline ? results.length : open && results.length"
-            :class="inline ? 'mt-2 max-h-[45vh] overflow-y-auto rounded-md border bg-card py-1' : 'absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-md border bg-card py-1 shadow-lg'"
+            v-if="inline ? results.length : open && (results.length || createLabel)"
+            :class="inline ? 'mt-2 max-h-[45vh] overflow-y-auto rounded-md border bg-card py-1' : cn('absolute z-30 mt-1 w-full overflow-y-auto rounded-md border bg-card py-1 shadow-lg', detailed ? 'max-h-[420px] rounded-xl' : 'max-h-72')"
             data-testid="sku-picker-results"
         >
+            <template v-if="detailed">
+                <button v-if="createLabel" type="button" class="flex w-full items-center gap-2.5 border-b border-slate-100 px-4 py-3 text-left text-sm font-semibold text-blue-600 hover:bg-blue-50/60" data-testid="sku-picker-create" @mousedown.prevent="create">
+                    <PlusCircle class="size-5" /> {{ createLabel }}
+                </button>
+                <button
+                    v-for="(v, i) in results"
+                    :key="v.id"
+                    type="button"
+                    :class="cn('flex w-full items-center gap-3 px-4 py-2.5 text-left', i === active ? 'bg-blue-50/70' : 'hover:bg-slate-50')"
+                    data-testid="sku-picker-row"
+                    @mousedown.prevent="pick(v)"
+                    @mousemove="active = i"
+                >
+                    <span class="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                        <img v-if="v.image || v.product?.image" :src="v.image || v.product?.image || ''" alt="" class="size-full object-cover" loading="lazy" />
+                        <ImageIcon v-else class="size-5 text-slate-300" />
+                    </span>
+                    <span class="min-w-0 flex-1">
+                        <span class="block truncate text-[14px] text-slate-800" :title="v.product?.name">{{ v.product?.name ?? v.sku }}</span>
+                        <span class="mt-0.5 flex items-center gap-2 text-[13px]">
+                            <span class="text-slate-500">{{ v.sku }}</span>
+                            <span class="truncate text-blue-600">{{ v.name || 'Mặc định' }}</span>
+                        </span>
+                    </span>
+                    <span class="shrink-0 text-right">
+                        <span class="block text-[14px] font-semibold tabular-nums text-slate-900">{{ money(v.ref_price) }}</span>
+                        <span v-if="v.stock" class="mt-0.5 block text-[13px] tabular-nums text-slate-500" data-testid="sku-picker-stock">
+                            Tồn: <b :class="v.stock.on_hand > 0 ? 'font-medium text-blue-600' : 'font-medium text-rose-500'">{{ formatNumber(v.stock.on_hand) }}</b>
+                            <span class="text-slate-300"> | </span>Có thể bán: <b :class="v.stock.available > 0 ? 'font-medium text-blue-600' : 'font-medium text-rose-500'">{{ formatNumber(v.stock.available) }}</b>
+                        </span>
+                    </span>
+                </button>
+                <p v-if="searched && !results.length" class="px-4 py-4 text-center text-sm text-slate-500">Không tìm thấy sản phẩm khớp “{{ query }}”.</p>
+            </template>
             <button
-                v-for="(v, i) in results"
+                v-for="(v, i) in detailed ? [] : results"
                 :key="v.id"
                 type="button"
                 :class="['flex w-full items-center gap-3 px-3 py-2 text-left text-sm', i === active ? 'bg-muted' : 'hover:bg-muted/60']"

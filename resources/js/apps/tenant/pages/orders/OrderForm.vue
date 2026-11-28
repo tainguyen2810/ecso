@@ -687,6 +687,10 @@ watch(
 /** What the buyer still owes after the exchange credit and the payment typed in now. */
 const remaining = computed(() => Math.max(0, total.value - exchangeCredit.value - num(form.pay_amount)));
 
+/** "Thêm mới sản phẩm" in the product search: the product form in a new tab, so this order stays as it is. */
+function newProduct(q: string) {
+    window.open(`/products/new${q ? `?name=${encodeURIComponent(q)}` : ''}`, '_blank');
+}
 function focusSku() {
     document.querySelector<HTMLInputElement>('[data-shortcut="sku"] input')?.focus();
 }
@@ -1106,7 +1110,7 @@ async function saveDraft() {
                 </template>
                 <div class="flex flex-wrap gap-2 p-4">
                     <div class="flex min-w-64 flex-1">
-                        <SkuPicker class="min-w-0 flex-1 [&_input]:rounded-r-none" :warehouse="form.warehouse_id" :exclude="[]" placeholder="Tìm theo tên, mã SKU, hoặc quét mã barcode… (F3)" data-shortcut="sku" @pick="add" />
+                        <SkuPicker class="min-w-0 flex-1 [&_input]:rounded-r-none" :warehouse="form.warehouse_id" :exclude="[]" placeholder="Tìm theo tên, mã SKU, hoặc quét mã barcode… (F3)" detailed :create-label="tenant.can('products.manage') ? 'Thêm mới sản phẩm' : undefined" data-shortcut="sku" @pick="add" @create="newProduct" />
                         <button type="button" class="h-9 shrink-0 rounded-r-md border border-l-0 border-input bg-card px-3 text-sm hover:bg-muted" data-testid="quick-pick" @click="pickOpen = true">Chọn nhanh</button>
                     </div>
                     <Select v-model="priceTier" class="w-40" :options="[{ value: 'retail', label: 'Giá bán lẻ' }, { value: 'wholesale', label: 'Giá bán buôn' }]" aria-label="Chính sách giá" data-testid="price-tier" />

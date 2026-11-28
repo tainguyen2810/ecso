@@ -83,7 +83,7 @@ const brands = ref<Ref[]>([]);
 const knownTags = ref<string[]>([]);
 const warehouses = ref<Warehouse[]>([]);
 const images = ref<{ id: number; url: string }[]>([]);
-const form = reactive({ name: '', description: '', status: 'active', category_id: '', brand_id: '', unit: '', vat_rate: '', opening_warehouse_id: '' });
+const form = reactive({ name: typeof route.query.name === 'string' ? route.query.name.slice(0, 255) : '', description: '', status: 'active', category_id: '', brand_id: '', unit: '', vat_rate: '', opening_warehouse_id: '' });
 // Lots and expiry dates (lô / hạn sử dụng): receipts ask for lot + expiry, sales take the earliest expiry first.
 const lots = reactive({ track_lots: false, expiry_warn_days: '60', expiry_block_days: '0', shelf_life_months: '', require_mfg_date: false });
 const lotsWasOn = ref(false);
