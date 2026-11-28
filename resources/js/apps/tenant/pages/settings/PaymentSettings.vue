@@ -71,11 +71,11 @@ const field = 'h-11 w-full rounded-[10px] border border-slate-200 bg-white px-3.
                                 <img v-if="!broken.has(a.bank)" :src="bankLogo(a.bank)" :alt="bankName(a.bank)" class="max-h-8 max-w-14 object-contain" @error="broken.add(a.bank)" />
                                 <Landmark v-else class="size-5 text-slate-400" />
                             </span>
-                            <div class="min-w-0 flex-1">
+                            <div class="min-w-[10rem] flex-1">
                                 <p class="text-[15px] font-semibold text-slate-900">{{ bankName(a.bank) }}</p>
                                 <p class="truncate text-[14px] text-slate-500">{{ a.number || 'Số tài khoản' }} · {{ a.holder || 'Chủ tài khoản' }}</p>
                             </div>
-                            <span v-if="a.is_default" class="rounded-md bg-blue-100 px-2 py-0.5 text-[13px] font-medium text-blue-700">Mặc định · In VietQR</span>
+                            <span v-if="a.is_default" class="shrink-0 rounded-md bg-blue-100 px-2 py-0.5 text-[13px] font-medium text-blue-700">Mặc định · In VietQR</span>
                             <button v-else-if="canSave" type="button" class="text-[14px] font-medium text-blue-600 hover:underline" @click="setDefault(i)">Đặt mặc định</button>
                             <button v-if="canSave" type="button" class="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Xóa tài khoản" @click="removeAccount(i)"><Trash2 class="size-4" /></button>
                         </div>
