@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { RouteLocationRaw } from 'vue-router';
-import { ArrowDown, ArrowUp, ChartColumn, Repeat, Star, Users } from 'lucide-vue-next';
+import { ArrowDown, ArrowUp, ChartColumn, Globe, MessageCircle, Phone, Repeat, Star, Store, Users } from 'lucide-vue-next';
+import { channelTypes } from '../orders/labels';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api } from '@/shared/lib/api';
@@ -61,6 +62,41 @@ const newSource = computed(() => {
     return rows[0]?.label ?? null;
 });
 const oldestDebt = computed(() => Math.max(0, ...((data.value?.receivables?.rows ?? []) as any[]).map((r) => Number(r.age_days ?? 0))));
+/** "Khách theo kênh bán": real logos for the marketplaces and Zalo, a plain icon for the shop's own channels. */
+const marketLogos: Record<string, string> = { shopee: '/images/marketplaces/shopee.webp', tiktok: '/images/marketplaces/tiktok.webp', lazada: '/images/marketplaces/lazada.webp', tiki: '/images/marketplaces/tiki.webp', zalo: '/images/channels/zalo.webp' };
+const kindTones: Record<string, { bar: string; icon: string }> = {
+    shopee: { bar: 'bg-orange-500', icon: '' },
+    tiktok: { bar: 'bg-slate-900', icon: '' },
+    lazada: { bar: 'bg-indigo-500', icon: '' },
+    tiki: { bar: 'bg-sky-500', icon: '' },
+    zalo: { bar: 'bg-blue-500', icon: '' },
+    website: { bar: 'bg-violet-500', icon: 'bg-violet-50 text-violet-600' },
+    phone: { bar: 'bg-emerald-500', icon: 'bg-emerald-50 text-emerald-600' },
+};
+const kindIcons: Record<string, unknown> = { website: Globe, phone: Phone, facebook: MessageCircle };
+const byChannel = computed(() => {
+    const rows = ((data.value?.channels.rows ?? []) as any[]).filter((r) => Number(r.customers) > 0);
+    const total = rows.reduce((t, r) => t + Number(r.customers), 0);
+    return rows
+        .slice()
+        .sort((a, b) => Number(b.customers) - Number(a.customers))
+        .slice(0, 6)
+        .map((r, i) => {
+            const kind = String(r.kind ?? 'other');
+            return {
+                key: `${kind}-${r.label}-${i}`,
+                label: r.label === 'Khác' && channelTypes[kind] ? channelTypes[kind] : r.label,
+                name: kind,
+                logo: marketLogos[kind] ?? null,
+                icon: kindIcons[kind] ?? Store,
+                tone: kindTones[kind] ?? { bar: 'bg-blue-600', icon: 'bg-blue-50 text-blue-600' },
+                customers: Number(r.customers),
+                new: Number(r.new),
+                orders: Number(r.orders),
+                share: total ? (Number(r.customers) / total) * 100 : 0,
+            };
+        });
+});
 const deltaCustomers = computed(() => change(s.value.customers, prev.value?.customers));
 const deltaReturning = computed(() => change(s.value.returning, prev.value?.returning));
 const avatarTones = ['bg-blue-50 text-blue-600', 'bg-emerald-50 text-emerald-600', 'bg-violet-50 text-violet-600', 'bg-amber-50 text-amber-600', 'bg-sky-50 text-sky-600'];
@@ -90,9 +126,10 @@ defineExpose({ exportCsv });
     <div v-else-if="!data" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Skeleton v-for="i in 4" :key="i" class="h-36" /></div>
     <div v-else :class="loading && 'opacity-60'" data-testid="report-group-customers">
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <ReportKpi label="Khách mua hàng" tip="Khách có hồ sơ mua trong kỳ. Đơn khách lẻ và đơn sàn không có hồ sơ khách nên không đếm vào đây." :icon="Users" tone="blue" plain unit="khách" :value="s.customers">
+            <ReportKpi primary label="Khách mua hàng" tip="Khách có hồ sơ mua trong kỳ. Đơn khách lẻ và đơn sàn không có hồ sơ khách nên không đếm vào đây." :icon="Users" unit="khách" :value="s.customers">
                 <template v-if="deltaCustomers !== null" #chips>
-                    <ReportChip :tone="deltaCustomers >= 0 ? 'up' : 'down'"><component :is="deltaCustomers >= 0 ? ArrowUp : ArrowDown" class="size-3" />{{ pct(deltaCustomers) }}</ReportChip>
+                    <ReportChip tone="onblue"><component :is="deltaCustomers >= 0 ? ArrowUp : ArrowDown" class="size-3" />{{ pct(deltaCustomers) }}</ReportChip>
+                    <span class="text-blue-100">so với kỳ trước</span>
                 </template>
                 {{ formatNumber(knownOrders) }} đơn<template v-if="s.customers"> · {{ (knownOrders / s.customers).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) }} đơn/khách</template>
             </ReportKpi>
@@ -107,7 +144,7 @@ defineExpose({ exportCsv });
                 </template>
                 <template v-if="returningRevenue !== null">Mang về {{ pct(returningRevenue) }} doanh thu khách có hồ sơ</template>
             </ReportKpi>
-            <ReportKpi label="Doanh thu TB / khách" tip="Doanh thu thuần của khách có hồ sơ chia cho số khách mua trong kỳ." :icon="ChartColumn" tone="blue" plain :value="Math.round(perCustomer)">
+            <ReportKpi label="Doanh thu TB / khách" tip="Doanh thu thuần của khách có hồ sơ chia cho số khách mua trong kỳ." :icon="ChartColumn" tone="slate" plain :value="Math.round(perCustomer)">
                 <template v-if="profitPerCustomer !== null" #chips><ReportChip>Lãi gộp TB {{ formatNumber(Math.round(profitPerCustomer)) }} đ</ReportChip></template>
                 Theo doanh thu thuần
             </ReportKpi>
@@ -115,7 +152,7 @@ defineExpose({ exportCsv });
 
         <div class="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
             <div class="min-w-0">
-                <h2 class="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Danh sách báo cáo</h2>
+                <h2 class="mb-3 text-[12px] font-semibold uppercase tracking-wider text-slate-400">Danh sách báo cáo</h2>
                 <div class="space-y-4">
                     <ReportLinkCard
                         v-if="link('Khách mua hàng')"
@@ -123,8 +160,8 @@ defineExpose({ exportCsv });
                         :target="target"
                         :stats="[
                             { label: 'Khách mua', value: formatNumber(s.customers) },
-                            { label: 'Khách mới', value: formatNumber(s.new) },
-                            { label: 'Quay lại', value: formatNumber(s.returning) },
+                            { label: 'Khách mới', value: formatNumber(s.new), tone: 'violet' },
+                            { label: 'Quay lại', value: formatNumber(s.returning), tone: 'green' },
                             { label: 'Mua từ 3 lần', value: formatNumber(s.loyal) },
                         ]"
                     />
@@ -143,10 +180,29 @@ defineExpose({ exportCsv });
                             tone="amber"
                             :badge="data.receivables.totals.customers ? `${data.receivables.totals.customers} khách` : null"
                             badge-tone="amber"
-                            :stats="[{ label: 'Còn nợ', value: short(data.receivables.totals.due) }, ...(oldestDebt ? [{ label: 'Lâu nhất', value: `${oldestDebt} ngày` }] : [])]"
+                            :stats="[{ label: 'Còn nợ', value: short(data.receivables.totals.due), tone: 'amber' }, ...(oldestDebt ? [{ label: 'Lâu nhất', value: `${oldestDebt} ngày`, tone: (oldestDebt > 30 ? 'red' : 'amber') as 'red' | 'amber' }] : [])]"
                         />
                     </div>
                 </div>
+
+                <template v-if="byChannel.length">
+                    <h2 class="mb-3 mt-6 text-[12px] font-semibold uppercase tracking-wider text-slate-400">Khách theo kênh bán</h2>
+                    <div class="rounded-2xl border border-slate-200 bg-white px-6 py-2 shadow-sm" data-testid="customers-by-channel">
+                        <div v-for="c in byChannel" :key="c.key" class="border-b border-slate-100 py-4 last:border-0">
+                            <div class="flex items-center gap-3">
+                                <img v-if="c.logo" :src="c.logo" :alt="c.name" class="size-8 shrink-0 rounded-[9px] object-contain" />
+                                <span v-else :class="['grid size-8 shrink-0 place-items-center rounded-[9px]', c.tone.icon]"><component :is="c.icon" class="size-4" /></span>
+                                <span class="min-w-0 flex-1 truncate text-[15px] font-medium text-slate-800">{{ c.label }}</span>
+                                <span class="text-[15px] font-semibold tabular-nums text-slate-900">{{ formatNumber(c.customers) }} khách</span>
+                                <span class="w-12 text-right text-[13px] tabular-nums text-slate-500">{{ pct(c.share) }}</span>
+                            </div>
+                            <div class="mt-2.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                <div :class="['h-full rounded-full', c.tone.bar]" :style="{ width: `${Math.max(2, c.share)}%` }" />
+                            </div>
+                            <p v-if="c.new" class="mt-1.5 text-xs text-slate-500">{{ formatNumber(c.new) }} khách mới · {{ formatNumber(c.orders) }} đơn</p>
+                        </div>
+                    </div>
+                </template>
             </div>
 
             <aside class="space-y-4">

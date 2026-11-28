@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Sparkles } from 'lucide-vue-next';
-import PageHeader from '../../PageHeader.vue';
+import SettingsShell from './SettingsShell.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
 import Card from '@/shared/ui/Card.vue';
@@ -64,32 +64,33 @@ const remove = () =>
 </script>
 
 <template>
-    <PageHeader title="Cửa hàng mẫu" description="Một doanh nghiệp riêng có sẵn 60 ngày dữ liệu giả để bấm thử mọi tính năng. Không trộn với dữ liệu thật, không kết nối được tài khoản sàn hay dịch vụ thật." :back="{ to: '/settings', label: 'Cấu hình' }" />
+    <SettingsShell title="Cửa hàng mẫu" description="Một doanh nghiệp riêng có sẵn 60 ngày dữ liệu giả để bấm thử mọi tính năng. Không trộn với dữ liệu thật, không kết nối được tài khoản sàn hay dịch vụ thật.">
 
-    <Card class="max-w-2xl" data-testid="demo-store">
-        <div class="flex items-start gap-4 p-5">
-            <span class="grid size-11 shrink-0 place-items-center rounded-full bg-amber-50 text-amber-600"><Sparkles class="size-5" :stroke-width="1.75" /></span>
-            <div v-if="demo" class="min-w-0 flex-1">
-                <p class="font-semibold">{{ demo.name }} <Badge :tone="demo.demo_status === 'failed' ? 'danger' : demo.demo_status === 'preparing' ? 'warning' : 'success'" class="ml-1">{{ statusLabel }}</Badge></p>
-                <p class="mt-1 text-sm text-muted-foreground">Tự xóa ngày {{ formatDate(demo.demo_expires_at) }} (còn {{ demoDaysLeft(demo.demo_expires_at) }} ngày). Chuyển qua lại bằng ô chọn doanh nghiệp ở góc trên bên trái.</p>
-                <div class="mt-4 flex flex-wrap gap-2">
-                    <Button v-if="tenant.current?.id !== demo.id" :loading="busy" @click="open">Mở cửa hàng mẫu</Button>
-                    <Button variant="outline" @click="confirmOpen = true">Xóa cửa hàng mẫu</Button>
+        <Card class="max-w-2xl" data-testid="demo-store">
+            <div class="flex items-start gap-4 p-5">
+                <span class="grid size-11 shrink-0 place-items-center rounded-full bg-amber-50 text-amber-600"><Sparkles class="size-5" :stroke-width="1.75" /></span>
+                <div v-if="demo" class="min-w-0 flex-1">
+                    <p class="font-semibold">{{ demo.name }} <Badge :tone="demo.demo_status === 'failed' ? 'danger' : demo.demo_status === 'preparing' ? 'warning' : 'success'" class="ml-1">{{ statusLabel }}</Badge></p>
+                    <p class="mt-1 text-sm text-muted-foreground">Tự xóa ngày {{ formatDate(demo.demo_expires_at) }} (còn {{ demoDaysLeft(demo.demo_expires_at) }} ngày). Chuyển qua lại bằng ô chọn doanh nghiệp ở góc trên bên trái.</p>
+                    <div class="mt-4 flex flex-wrap gap-2">
+                        <Button v-if="tenant.current?.id !== demo.id" :loading="busy" @click="open">Mở cửa hàng mẫu</Button>
+                        <Button variant="outline" @click="confirmOpen = true">Xóa cửa hàng mẫu</Button>
+                    </div>
+                </div>
+                <div v-else class="min-w-0 flex-1">
+                    <p class="font-semibold">Bạn chưa có cửa hàng mẫu</p>
+                    <p class="mt-1 text-sm text-muted-foreground">Gồm sản phẩm, tồn kho, khách hàng, nhà cung cấp, đơn bán 60 ngày và sổ quỹ. Tự xóa sau 30 ngày.</p>
+                    <Button class="mt-4" :loading="busy" data-testid="demo-create" @click="create">Tạo cửa hàng mẫu</Button>
                 </div>
             </div>
-            <div v-else class="min-w-0 flex-1">
-                <p class="font-semibold">Bạn chưa có cửa hàng mẫu</p>
-                <p class="mt-1 text-sm text-muted-foreground">Gồm sản phẩm, tồn kho, khách hàng, nhà cung cấp, đơn bán 60 ngày và sổ quỹ. Tự xóa sau 30 ngày.</p>
-                <Button class="mt-4" :loading="busy" data-testid="demo-create" @click="create">Tạo cửa hàng mẫu</Button>
-            </div>
-        </div>
-    </Card>
+        </Card>
 
-    <Dialog v-model:open="confirmOpen" title="Xóa Cửa hàng mẫu?">
-        <p class="text-sm leading-relaxed text-slate-700">Toàn bộ dữ liệu giả bị xóa hẳn. Cửa hàng thật của bạn không bị ảnh hưởng.</p>
-        <template #footer>
-            <Button variant="outline" @click="confirmOpen = false">Giữ lại</Button>
-            <Button variant="destructive" :loading="busy" @click="remove">Xóa cửa hàng mẫu</Button>
-        </template>
-    </Dialog>
+        <Dialog v-model:open="confirmOpen" title="Xóa Cửa hàng mẫu?">
+            <p class="text-sm leading-relaxed text-slate-700">Toàn bộ dữ liệu giả bị xóa hẳn. Cửa hàng thật của bạn không bị ảnh hưởng.</p>
+            <template #footer>
+                <Button variant="outline" @click="confirmOpen = false">Giữ lại</Button>
+                <Button variant="destructive" :loading="busy" @click="remove">Xóa cửa hàng mẫu</Button>
+            </template>
+        </Dialog>
+    </SettingsShell>
 </template>

@@ -46,23 +46,23 @@ const figures: Record<string, string> = {
         :class="
             cn(
                 'relative overflow-hidden rounded-[14px] p-5',
-                primary ? 'bg-gradient-to-br from-blue-600 to-blue-500 text-white shadow-[0_8px_24px_-8px_rgba(37,99,235,0.55)]' : 'border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]',
+                primary ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-[0_8px_24px_-8px_rgba(37,99,235,0.55)]' : 'border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]',
             )
         "
     >
         <div class="flex items-start justify-between gap-3">
-            <p :class="cn('flex items-center gap-1 text-[13px]', primary ? 'text-blue-50' : 'text-slate-600')">
+            <p :class="cn('flex items-center gap-1 text-[14px]', primary ? 'text-blue-100' : 'text-slate-500')">
                 {{ label }}
                 <InfoTip v-if="tip" :title="tipTitle ?? label" :class="primary ? 'text-blue-100' : undefined">{{ tip }}</InfoTip>
             </p>
-            <span :class="cn('grid size-9 shrink-0 place-items-center rounded-[10px]', primary ? 'bg-white/20 text-white' : icons[tone])"><component :is="icon" class="size-[18px]" :stroke-width="1.9" /></span>
+            <span :class="cn('grid size-10 shrink-0 place-items-center rounded-[11px]', primary ? 'bg-white/15 text-white' : icons[tone])"><component :is="icon" class="size-5" :stroke-width="1.9" /></span>
         </div>
-        <p :class="cn('mt-2 whitespace-nowrap text-[28px] font-bold leading-none tabular-nums tracking-tight', primary ? 'text-white' : plain ? 'text-slate-900' : figures[tone])" data-testid="kpi-value">
+        <p :class="cn('-mt-1 whitespace-nowrap text-[28px] font-bold leading-none tabular-nums tracking-tight', primary ? 'text-white' : plain ? 'text-slate-900' : figures[tone])" data-testid="kpi-value">
             <template v-if="value === null">—</template>
-            <template v-else>{{ formatNumber(value) }}<span class="ml-1 text-base font-semibold opacity-70">{{ unit }}</span></template>
+            <template v-else>{{ formatNumber(value) }}<span :class="cn('ml-1 text-[16px] font-semibold', primary ? 'text-blue-200' : 'text-slate-400')">{{ unit }}</span></template>
         </p>
         <div v-if="$slots.chips" class="mt-3 flex flex-wrap items-center gap-1.5 text-xs"><slot name="chips" /></div>
-        <p v-if="$slots.default" :class="cn('relative z-10 mt-2.5 text-[13px]', primary ? 'text-blue-50' : 'text-slate-500')"><slot /></p>
+        <p v-if="$slots.default" :class="cn('relative z-10 mt-2.5 text-[13px]', primary ? 'text-blue-100' : 'text-slate-500')"><slot /></p>
         <slot name="decor" />
     </div>
 </template>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { AlertTriangle, Info } from 'lucide-vue-next';
+import { AlertTriangle, Hash, Info, ListOrdered } from 'lucide-vue-next';
 import SettingsPage from './SettingsPage.vue';
 import SettingsSection from './SettingsSection.vue';
 import Button from '@/shared/ui/Button.vue';
@@ -150,7 +150,7 @@ const field = (name: string) => error.value?.field(name);
         <ErrorState v-if="loadError" :message="loadError" @retry="load" />
         <div v-else-if="!data" class="space-y-3 py-6"><Skeleton class="h-32" /><Skeleton class="h-32" /></div>
         <template v-else>
-            <SettingsSection title="Kí hiệu và số" description="Mã đơn = kí hiệu + số chạy liên tục, giống Sapo (VD: SON50892). Mã đơn của sàn, Woo vẫn giữ, hiện dưới mã chính và tìm được trong danh sách đơn.">
+            <SettingsSection title="Kí hiệu và số" :icon="Hash" description="Mã đơn = kí hiệu + số chạy liên tục, giống Sapo (VD: SON50892). Mã đơn của sàn, Woo vẫn giữ, hiện dưới mã chính và tìm được trong danh sách đơn.">
                 <div class="grid gap-4 sm:grid-cols-2">
                     <FormField label="Kí hiệu" for="oc-prefix" hint="Chữ in hoa không dấu, tối đa 6 kí tự" :error="field('prefix')">
                         <Input id="oc-prefix" v-model="form.prefix" maxlength="6" class="font-mono uppercase" :disabled="!canEdit" data-testid="oc-prefix" />
@@ -185,7 +185,7 @@ const field = (name: string) => error.value?.field(name);
                 <p v-if="field('prefixes')" class="mt-2 text-xs text-destructive">{{ field('prefixes') }}</p>
             </SettingsSection>
 
-            <SettingsSection title="Cấp mã cho đơn đã có" description="Chỉ làm một lần. Từ lúc bấm, mọi đơn mới (tạo tay, sàn, Woo) đều tự nhận mã.">
+            <SettingsSection title="Cấp mã cho đơn đã có" :icon="ListOrdered" tone="green" description="Chỉ làm một lần. Từ lúc bấm, mọi đơn mới (tạo tay, sàn, Woo) đều tự nhận mã.">
                 <div v-if="data.enabled" data-testid="oc-started">
                     <p class="flex items-center gap-2 text-sm font-medium text-emerald-700"><Info class="size-4" /> Đang dùng mã đơn mới</p>
                     <p v-if="data.started" class="mt-1 text-sm text-muted-foreground">

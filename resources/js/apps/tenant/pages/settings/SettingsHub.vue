@@ -1,94 +1,81 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, type Component } from 'vue';
-import { ArrowRightLeft, Boxes, Hash, Cable, CreditCard, HandCoins, MessageSquareWarning, Percent, Printer, Receipt, RefreshCw, ScrollText, Search, SlidersHorizontal, Sparkles, Store, Users, UsersRound, Wallet, Warehouse } from 'lucide-vue-next';
-import PageHeader from '../../PageHeader.vue';
-import Input from '@/shared/ui/Input.vue';
-import Switch from '@/shared/ui/Switch.vue';
+import { computed, onMounted, ref } from 'vue';
+import { ArrowRight, Cable, ChevronRight, Clock, CreditCard, PanelsTopLeft, Search, Store, TriangleAlert } from 'lucide-vue-next';
 import { useToast } from '@/shared/composables/useToast';
 import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
 import { api } from '@/shared/lib/api';
+import { cn, formatDate } from '@/shared/lib/utils';
+import { useSettingsStore, type TenantSettingsData } from '@/shared/stores/settings';
 import { useTenantStore } from '@/shared/stores/tenant';
+import { auditLabels } from '../auditLabels';
+import { subscriptionStatus } from '../billing/labels';
+import { canOpen, settingsGroups as groups, toneClasses, type SettingsTile as Tile } from './catalog';
+import { useConnectedServices } from './connectionsSummary';
 
-/** "Cấu hình" like Sapo: every business setting in one place, grouped, each tile opening its own page. */
-interface Tile {
-    to: string;
-    icon: Component;
-    title: string;
-    description: string;
-    permission: string;
-}
-
+/**
+ * "Cấu hình" (mẫu 28/11, Tailwind): four cards on top (shop profile, plan, connections, menu), a warning line when a
+ * connection broke, then every setting grouped, each row showing how it is set now, and on the right the marketplaces
+ * and the latest changes from the activity log.
+ */
 const tenant = useTenantStore();
-const groups: { title: string; tiles: Tile[] }[] = [
-    {
-        title: 'Cửa hàng',
-        tiles: [
-            { to: '/settings/store', icon: Store, title: 'Thông tin cửa hàng', description: 'Tên, số điện thoại, địa chỉ, mã số thuế, logo in trên hóa đơn', permission: 'settings.manage' },
-            { to: '/inventory/warehouses', icon: Warehouse, title: 'Quản lý kho, chi nhánh', description: 'Thêm mới và quản lý kho, kho mặc định', permission: 'inventory.view' },
-            { to: '/members', icon: Users, title: 'Nhân viên và phân quyền', description: 'Tài khoản nhân viên, vai trò, lời mời', permission: 'members.view' },
-            { to: '/subscription', icon: CreditCard, title: 'Gói dịch vụ', description: 'Gói đang dùng, giới hạn và gia hạn', permission: 'billing.view' },
-            { to: '/settings/pricing', icon: Percent, title: 'Thuế và chính sách giá', description: 'Thuế bán, thuế nhập mặc định; giá bán mặc định; cho nhân viên sửa giá', permission: 'settings.manage' },
-            { to: '/settings/payments', icon: Wallet, title: 'Thanh toán', description: 'Tài khoản ngân hàng (VietQR trên hóa đơn), phương thức mặc định', permission: 'settings.manage' },
-            { to: '/settings/print', icon: Printer, title: 'Mẫu in', description: 'Khổ in mặc định, logo, mã VietQR, chữ ký, lời chào cuối phiếu', permission: 'settings.manage' },
-            { to: '/products/taxonomy', icon: Boxes, title: 'Danh mục và thương hiệu', description: 'Phân nhóm sản phẩm để lọc và báo cáo', permission: 'products.view' },
-        ],
-    },
-    {
-        title: 'Bán hàng',
-        tiles: [
-            { to: '/settings/order-codes', icon: Hash, title: 'Mã đơn hàng', description: 'Kí hiệu và số chạy liên tục của mã đơn (VD: SON50892), cấp mã cho đơn đã có', permission: 'settings.manage' },
-            { to: '/settings/sales', icon: SlidersHorizontal, title: 'Cấu hình bán hàng', description: 'Sửa thời gian bán, số liên in, bán tại quầy, lý do hủy và trả hàng', permission: 'settings.manage' },
-            { to: '/sales-channels', icon: Store, title: 'Kênh bán riêng', description: 'Quầy, cửa hàng, Facebook, Zalo, website', permission: 'orders.view' },
-            { to: '/settings/subscriptions', icon: RefreshCw, title: 'Thuê bao', description: 'Ngày nhắc khách gia hạn, gửi qua Zalo, báo nhân viên', permission: 'settings.manage' },
-            { to: '/settings/connections', icon: Cable, title: 'Kết nối dịch vụ', description: 'Vận chuyển, hóa đơn điện tử, Zalo của shop', permission: 'settings.manage' },
-            { to: '/settings/sales#reasons', icon: MessageSquareWarning, title: 'Lý do hủy, trả hàng', description: 'Danh sách lý do chọn khi hủy đơn hoặc nhận hàng trả', permission: 'settings.manage' },
-            { to: '/cash/types', icon: Receipt, title: 'Loại phiếu thu chi', description: 'Phân loại phiếu thu, phiếu chi', permission: 'finance.view' },
-            { to: '/customers/groups', icon: UsersRound, title: 'Nhóm khách hàng', description: 'Nhóm khách và chính sách giá theo nhóm', permission: 'customers.view' },
-        ],
-    },
-    {
-        title: 'Dữ liệu',
-        tiles: [
-            { to: '/settings/data-migration', icon: ArrowRightLeft, title: 'Chuyển dữ liệu', description: 'Chuyển sản phẩm, tồn kho, khách hàng, công nợ từ Sapo, KiotViet', permission: 'products.manage' },
-            { to: '/settings/demo-store', icon: Sparkles, title: 'Cửa hàng mẫu', description: 'Cửa hàng riêng có dữ liệu giả để bấm thử, không đụng dữ liệu thật', permission: 'settings.manage' },
-            { to: '/audit', icon: ScrollText, title: 'Nhật ký hoạt động', description: 'Ai làm gì, lúc nào trong doanh nghiệp', permission: 'audit.view' },
-            { to: '/reports/cashbook', icon: HandCoins, title: 'Sổ quỹ', description: 'Dòng tiền thu chi theo ngày', permission: 'finance.view' },
-        ],
-    },
-];
+const toast = useToast();
+const settingsStore = useSettingsStore();
+const settings = ref<TenantSettingsData | null>(null);
+const { services, load: loadServices } = useConnectedServices(tenant.can);
+
 // "Tìm cài đặt": matches titles and descriptions, without Vietnamese accents.
 const q = ref('');
-const plain = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+const plain = (x: string) => x.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
 const matches = (t: Tile) => !q.value.trim() || plain(`${t.title} ${t.description}`).includes(plain(q.value.trim()));
-const visible = computed(() => groups.map((g) => ({ ...g, tiles: g.tiles.filter((t) => tenant.can(t.permission) && matches(t)) })).filter((g) => g.tiles.length));
-
-/** Sàn thương mại điện tử: each marketplace on its own line with what is connected now. */
-const markets = [
-    { key: 'shopee', name: 'Shopee' },
-    { key: 'tiktok', name: 'TikTok Shop' },
-    { key: 'lazada', name: 'Lazada' },
-    { key: 'tiki', name: 'Tiki' },
-];
-const accounts = ref<{ marketplace: string; status: string }[]>([]);
-const canMarket = computed(() => tenant.can('marketplace.view'));
-onMounted(async () => {
-    if (!canMarket.value) return;
-    try {
-        accounts.value = (await api.get('/marketplace-accounts')).data.data;
-    } catch {
-        accounts.value = [];
-    }
-});
-const marketStatus = (key: string) => {
-    const mine = accounts.value.filter((a) => a.marketplace === key);
-    const ok = mine.filter((a) => a.status === 'connected').length;
-    const bad = mine.length - ok - mine.filter((a) => a.status === 'disconnected').length;
-    if (!mine.length) return { text: 'Chưa kết nối', tone: 'text-muted-foreground', connected: false };
-    if (bad > 0) return { text: `${ok} shop đang chạy · ${bad} shop cần xem lại`, tone: 'text-amber-600', connected: true };
-    return { text: ok ? `${ok} shop đang chạy` : 'Đã ngắt kết nối', tone: ok ? 'text-emerald-600' : 'text-muted-foreground', connected: ok > 0 };
+const groupInfo: Record<string, { description: string; icon: typeof Store }> = {
+    'Cửa hàng': { description: 'Thông tin in trên hóa đơn, kho, nhân viên và cách thu tiền', icon: Store },
+    'Bán hàng': { description: 'Quy tắc khi tạo đơn, bán tại quầy và chăm khách', icon: CreditCard },
+    'Dữ liệu': { description: 'Chuyển dữ liệu cũ, bấm thử và xem lại lịch sử', icon: PanelsTopLeft },
 };
-/** Basic or full menu (Đợt 2): saved for the whole business, the sidebar follows at once. */
-const toast = useToast();
+const visible = computed(() => groups.map((g) => ({ ...g, tiles: g.tiles.filter((t) => canOpen(t, tenant.can) && matches(t)) })).filter((g) => g.tiles.length));
+const searching = computed(() => !!q.value.trim());
+
+/* ---- Hồ sơ cửa hàng: the eight things a complete profile has ---- */
+const profile = computed(() => {
+    const s = settings.value;
+    if (!s) return null;
+    const items: [string, boolean][] = [
+        ['Tên cửa hàng', !!s.name],
+        ['Logo', !!s.logo_url],
+        ['Số điện thoại', !!s.store.phone],
+        ['Email', !!s.store.email],
+        ['Địa chỉ', !!(s.store.province_code || s.store.address)],
+        ['Mã số thuế', !!s.store.tax_code],
+        ['Lĩnh vực kinh doanh', !!s.store.business_type],
+        ['Website', !!s.store.website],
+    ];
+    const done = items.filter(([, ok]) => ok).length;
+    return { done, total: items.length, missing: items.filter(([, ok]) => !ok).map(([k]) => k) };
+});
+
+/* ---- Gói dịch vụ ---- */
+interface SubscriptionInfo {
+    plan: { key: string; name: string } | null;
+    status: string;
+    trial_ends_at: string | null;
+    current_period_end: string | null;
+    entitlements: Record<string, { enabled: boolean; limit: number | null }>;
+    usage: Record<string, number>;
+}
+const sub = ref<SubscriptionInfo | null>(null);
+const subEnd = computed(() => (sub.value?.status === 'trialing' ? sub.value.trial_ends_at : sub.value?.current_period_end) ?? null);
+const daysLeft = computed(() => (subEnd.value ? Math.max(0, Math.ceil((new Date(subEnd.value).getTime() - Date.now()) / 86_400_000)) : null));
+const users = computed(() => {
+    const limit = sub.value?.entitlements['limit.users']?.limit;
+    const used = sub.value?.usage['limit.users'];
+    return used !== undefined ? `${used}${limit ? `/${limit}` : ''} nhân viên` : null;
+});
+
+/* ---- Kết nối ---- */
+const running = computed(() => services.value.filter((s) => s.ok));
+const broken = computed(() => services.value.filter((s) => !s.ok));
+
+/* ---- Giao diện menu (Đợt 2): basic or full menu, saved for the whole business ---- */
 const advanced = ref(tenant.current?.advanced_menu !== false);
 const savingMenu = ref(false);
 async function setAdvanced(on: boolean) {
@@ -105,65 +92,267 @@ async function setAdvanced(on: boolean) {
         savingMenu.value = false;
     }
 }
-const showMenu = computed(() => tenant.can('settings.manage') && (!q.value.trim() || plain('giao dien menu tinh nang nang cao co ban an hien').includes(plain(q.value.trim()))));
-const showMarkets = computed(() => canMarket.value && (!q.value.trim() || plain('san thuong mai dien tu shopee tiktok lazada tiki ket noi san').includes(plain(q.value.trim()))));
+const canManage = computed(() => tenant.can('settings.manage'));
+
+/* ---- How each setting is set now, under its name ---- */
+function valueOf(t: Tile): { text: string; warn?: boolean } | null {
+    const s = settings.value;
+    switch (t.to) {
+        case '/settings/store':
+            return profile.value ? (profile.value.missing.includes('Mã số thuế') ? { text: 'Thiếu mã số thuế', warn: true } : { text: `${profile.value.done}/${profile.value.total} mục` }) : null;
+        case '/subscription':
+            return sub.value?.plan ? { text: sub.value.plan.name } : null;
+        case '/settings/pricing':
+            return s ? { text: `${s.tax.prices_include_tax ? 'Giá gồm thuế' : 'Giá chưa gồm thuế'} · ${s.pricing.sale_price === 'retail' ? 'Bán lẻ' : 'Bán buôn'}` } : null;
+        case '/settings/payments': {
+            if (!s) return null;
+            const ways = Object.values(s.payments.methods).filter(Boolean).length;
+            return s.payments.bank_accounts.length ? { text: `${s.payments.bank_accounts.length} tài khoản · ${ways} cách` } : { text: 'Chưa có tài khoản', warn: true };
+        }
+        case '/settings/print':
+            return s ? { text: `Khổ ${s.print.defaults.sale.toUpperCase()}${s.print.show_qr ? ' · có QR' : ''}` } : null;
+        case '/settings/order-codes':
+            return s ? { text: s.order_codes?.enabled ? `${s.order_codes.prefix} · đang chạy` : 'Chưa bật' } : null;
+        case '/settings/sales':
+            return s ? { text: `${s.sales.invoice_copies} liên${s.sales.pos_require_shift ? ' · bắt buộc mở ca' : ''}` } : null;
+        case '/settings/subscriptions': {
+            if (!s) return null;
+            const days = [...s.subscriptions.remind_days].sort((a, b) => b - a);
+            return { text: days.length ? `Nhắc trước ${days.join(', ')} ngày` : 'Không nhắc' };
+        }
+        case '/settings/connections': {
+            const own = services.value.filter((x) => !x.key.startsWith('market-'));
+            const bad = own.filter((x) => !x.ok).length;
+            return bad ? { text: `${bad} cần xem lại`, warn: true } : own.length ? { text: `${own.length} đang chạy` } : null;
+        }
+        case '/settings/sales#reasons':
+            return s ? { text: `${s.reasons.length} lý do` } : null;
+        default:
+            return null;
+    }
+}
+
+/* ---- Sàn thương mại điện tử ---- */
+const markets = [
+    { key: 'shopee', name: 'Shopee' },
+    { key: 'tiktok', name: 'TikTok Shop' },
+    { key: 'lazada', name: 'Lazada' },
+    { key: 'tiki', name: 'Tiki' },
+];
+const accounts = ref<{ marketplace: string; status: string }[]>([]);
+const canMarket = computed(() => tenant.can('marketplace.view'));
+const marketStatus = (key: string) => {
+    const mine = accounts.value.filter((a) => a.marketplace === key);
+    const ok = mine.filter((a) => a.status === 'connected').length;
+    const bad = mine.length - ok - mine.filter((a) => a.status === 'disconnected').length;
+    if (!mine.length) return { text: 'Chưa kết nối', tone: 'text-slate-500', dot: 'bg-slate-300', connected: false };
+    if (bad > 0) return { text: `${ok} shop đang chạy · ${bad} cần xem lại`, tone: 'text-amber-600', dot: 'bg-amber-500', connected: true };
+    return ok ? { text: `${ok} shop đang chạy`, tone: 'text-emerald-600', dot: 'bg-emerald-500', connected: true } : { text: 'Đã ngắt kết nối', tone: 'text-slate-500', dot: 'bg-slate-300', connected: false };
+};
+
+/* ---- Thay đổi gần đây (Nhật ký hoạt động) ---- */
+interface Log {
+    id: number;
+    action: string;
+    actor: { name: string } | null;
+    changes?: { section?: string } | null;
+    created_at: string;
+}
+// Settings sections in words, for "Sửa <trang>" in the recent changes.
+const sectionNames: Record<string, string> = {
+    store: 'Thông tin cửa hàng',
+    tax: 'Thuế',
+    pricing: 'Chính sách giá',
+    payments: 'Thanh toán',
+    sales: 'Cấu hình bán hàng',
+    reasons: 'Lý do hủy, trả',
+    print: 'Mẫu in',
+    shipping: 'Vận chuyển',
+    subscriptions: 'Thuê bao',
+    order_codes: 'Mã đơn hàng',
+    household_tax: 'Thuế hộ kinh doanh',
+};
+const logText = (l: Log) => (l.action === 'tenant.settings_updated' && l.changes?.section ? `Sửa ${sectionNames[l.changes.section] ?? 'cấu hình'}` : (auditLabels[l.action] ?? l.action));
+const logs = ref<Log[]>([]);
+const canAudit = computed(() => tenant.can('audit.view'));
+const initials = (name: string) =>
+    name
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(-2)
+        .map((w) => w[0]!.toUpperCase())
+        .join('');
+const avatarTones = ['bg-blue-50 text-blue-600', 'bg-emerald-50 text-emerald-600', 'bg-violet-50 text-violet-600', 'bg-amber-50 text-amber-600'];
+const avatarTone = (name: string) => avatarTones[[...name].reduce((a, c) => a + c.charCodeAt(0), 0) % avatarTones.length];
+function when(iso: string) {
+    const d = new Date(iso);
+    const today = new Date();
+    const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    if (d.toDateString() === today.toDateString()) return `${time} hôm nay`;
+    const y = new Date(today);
+    y.setDate(today.getDate() - 1);
+    if (d.toDateString() === y.toDateString()) return `${time} hôm qua`;
+    return formatDate(iso);
+}
+
+onMounted(() => {
+    if (canManage.value) settingsStore.load().then((s) => (settings.value = s), () => undefined);
+    if (tenant.can('billing.view')) api.get('/subscription').then(({ data }) => (sub.value = data.data), () => undefined);
+    if (canMarket.value) api.get('/marketplace-accounts').then(({ data }) => (accounts.value = data.data), () => (accounts.value = []));
+    if (canAudit.value) api.get('/audit-logs', { params: { action: 'tenant.', per_page: 4 } }).then(({ data }) => (logs.value = (data.data as Log[]).slice(0, 4)), () => undefined);
+    loadServices();
+});
+
+const card = 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]';
 </script>
 
 <template>
-    <PageHeader title="Cấu hình" description="Thiết lập một lần, dùng cho cả cửa hàng.">
-        <div class="relative w-72 max-w-full">
-            <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input v-model="q" class="pl-9" placeholder="Tìm cài đặt, ví dụ “mẫu in”" aria-label="Tìm cài đặt" data-testid="settings-search" />
+    <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div class="min-w-0">
+            <h1 class="text-[26px] font-bold leading-tight tracking-tight text-slate-900 sm:text-[30px]">Cấu hình</h1>
+            <p class="mt-1 text-[15px] text-slate-500">Thiết lập một lần, dùng cho cả cửa hàng. Mỗi mục hiện cách đang cài để xem nhanh.</p>
         </div>
-    </PageHeader>
-    <div class="space-y-5" data-testid="settings-hub">
-        <section v-if="showMenu" class="rounded-xl border bg-card p-5" data-testid="settings-interface">
-            <h2 class="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Giao diện</h2>
-            <Switch
-                :model-value="advanced"
-                label="Hiện tính năng nâng cao"
-                hint="Ca bán hàng, Đặt hàng nhập, Chuyển hàng, Điều chỉnh giá vốn, Đối soát tồn kho, Khách trùng, Loại phiếu. Tắt để menu gọn hơn: dữ liệu không mất, vẫn mở được bằng ô tìm kiếm (Ctrl K)."
-                :disabled="savingMenu"
-                data-testid="advanced-menu"
-                @update:model-value="setAdvanced"
-            />
-        </section>
-        <template v-for="(g, gi) in visible" :key="g.title">
-            <section class="rounded-xl border bg-card p-5">
-                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{{ g.title }}</h2>
-                <div class="grid gap-1 sm:grid-cols-2 xl:grid-cols-3">
-                    <RouterLink v-for="t in g.tiles" :key="t.to" :to="t.to" class="flex items-start gap-3 rounded-lg p-3 hover:bg-slate-50">
-                        <span class="grid size-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><component :is="t.icon" class="size-5" :stroke-width="1.75" /></span>
-                        <span>
-                            <span class="block font-medium">{{ t.title }}</span>
-                            <span class="block text-[13px] text-muted-foreground">{{ t.description }}</span>
+        <label class="flex h-11 w-full max-w-[380px] items-center gap-3 rounded-[12px] border border-slate-200 bg-white px-4 text-slate-400 focus-within:border-blue-300 focus-within:ring-2 focus-within:ring-blue-100">
+            <Search class="size-4 shrink-0" />
+            <input v-model="q" class="h-full min-w-0 flex-1 bg-transparent text-[15px] text-slate-900 outline-none placeholder:text-slate-400" placeholder="Tìm cài đặt, ví dụ “mẫu in”" aria-label="Tìm cài đặt" data-testid="settings-search" />
+        </label>
+    </div>
+
+    <div class="space-y-6" data-testid="settings-hub">
+        <!-- Four cards on top -->
+        <div v-if="!searching" class="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+            <RouterLink v-if="profile" to="/settings/store" :class="cn(card, 'block p-5 hover:border-blue-200')" data-testid="hub-profile">
+                <div class="flex items-start justify-between"><p class="text-[14px] text-slate-500">Hồ sơ cửa hàng</p><span :class="cn('grid size-10 place-items-center rounded-[11px]', toneClasses.blue)"><Store class="size-5" /></span></div>
+                <p class="-mt-2 text-[26px] font-bold text-slate-900">{{ profile.done }}<span class="text-lg font-semibold text-slate-400">/{{ profile.total }} mục</span></p>
+                <div class="mt-2.5 h-2 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-blue-600" :style="{ width: `${(profile.done / profile.total) * 100}%` }" /></div>
+                <p class="mt-2.5 truncate text-[13px] text-slate-500">
+                    <template v-if="profile.missing.length">Còn thiếu: <span class="font-medium text-blue-600">{{ profile.missing.slice(0, 2).join(', ') }}</span></template>
+                    <template v-else>Đủ thông tin in trên hóa đơn</template>
+                </p>
+            </RouterLink>
+            <RouterLink v-if="sub" to="/subscription" :class="cn(card, 'block p-5 hover:border-blue-200')" data-testid="hub-plan">
+                <div class="flex items-start justify-between"><p class="text-[14px] text-slate-500">Gói dịch vụ</p><span :class="cn('grid size-10 place-items-center rounded-[11px]', toneClasses.violet)"><CreditCard class="size-5" /></span></div>
+                <p class="-mt-2 truncate text-[26px] font-bold text-slate-900">{{ sub.plan?.name ?? 'Chưa chọn gói' }}</p>
+                <div class="mt-2.5 flex flex-wrap gap-1.5">
+                    <span v-if="daysLeft !== null" :class="cn('inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[12px] font-medium', daysLeft <= 7 ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700')"><Clock class="size-3" /> Còn {{ daysLeft }} ngày</span>
+                    <span v-else class="rounded-md bg-slate-100 px-2 py-0.5 text-[12px] font-medium text-slate-600">{{ subscriptionStatus[sub.status]?.label ?? sub.status }}</span>
+                    <span v-if="users" class="rounded-md bg-slate-100 px-2 py-0.5 text-[12px] font-medium text-slate-600">{{ users }}</span>
+                </div>
+                <p class="mt-2.5 text-[13px] text-slate-500">{{ subEnd ? `${sub.status === 'trialing' ? 'Dùng thử đến' : 'Gia hạn ngày'} ${formatDate(subEnd)}` : (subscriptionStatus[sub.status]?.label ?? '') }}</p>
+            </RouterLink>
+            <RouterLink v-if="canManage || canMarket" to="/settings/connections" :class="cn(card, 'block p-5 hover:border-blue-200')" data-testid="hub-connections">
+                <div class="flex items-start justify-between"><p class="text-[14px] text-slate-500">Kết nối đang chạy</p><span :class="cn('grid size-10 place-items-center rounded-[11px]', toneClasses.green)"><Cable class="size-5" /></span></div>
+                <div class="-mt-2 flex items-center gap-3">
+                    <p class="text-[26px] font-bold text-slate-900">{{ running.length }}</p>
+                    <div class="flex items-center gap-1.5">
+                        <span v-for="s in running.slice(0, 4)" :key="s.key" class="flex h-7 min-w-7 items-center justify-center rounded-lg bg-white px-1 ring-1 ring-slate-200" :title="s.name">
+                            <img v-if="s.logo" :src="s.logo" :alt="s.name" class="max-h-5 max-w-12 object-contain" />
+                            <Cable v-else class="size-3.5 text-slate-400" />
                         </span>
-                    </RouterLink>
-                </div>
-            </section>
-            <!-- After the shop settings: the marketplaces, one line each, with their state now. -->
-            <section v-if="gi === 0 && showMarkets" class="rounded-xl border bg-card p-5" data-testid="settings-marketplaces">
-                <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-                    <h2 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sàn thương mại điện tử</h2>
-                    <span class="text-xs text-muted-foreground">Mỗi sàn kết nối riêng, mỗi sàn có thể nhiều shop</span>
-                </div>
-                <div class="grid gap-3 md:grid-cols-2">
-                    <div v-for="m in markets" :key="m.key" class="flex items-center gap-3 rounded-xl border p-3.5">
-                        <MarketplaceLogo :marketplace="m.key" :name="m.name" size="lg" />
-                        <div class="min-w-0 flex-1">
-                            <p class="font-medium">{{ m.name }}</p>
-                            <p :class="['truncate text-sm', marketStatus(m.key).tone]">{{ marketStatus(m.key).text }}</p>
-                        </div>
-                        <RouterLink
-                            :to="{ path: '/marketplaces', query: { san: m.key } }"
-                            :class="['inline-flex h-9 shrink-0 items-center rounded-lg px-3.5 text-sm font-medium', marketStatus(m.key).connected ? 'border bg-card hover:bg-slate-50' : 'bg-primary text-primary-foreground hover:bg-primary/90']"
-                        >
-                            {{ marketStatus(m.key).connected ? 'Quản lý' : 'Kết nối' }}
-                        </RouterLink>
                     </div>
                 </div>
-            </section>
-        </template>
-        <p v-if="!visible.length && !showMarkets && !showMenu" class="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground">Không thấy cài đặt nào khớp “{{ q }}”.</p>
+                <div class="mt-2.5">
+                    <span v-if="broken.length" class="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[12px] font-medium text-amber-700"><TriangleAlert class="size-3" /> {{ broken.length }} cần xem lại</span>
+                    <span v-else class="inline-flex rounded-md bg-emerald-50 px-2 py-0.5 text-[12px] font-medium text-emerald-700">Không có lỗi</span>
+                </div>
+                <p class="mt-2.5 truncate text-[13px] text-slate-500">{{ broken[0] ? `${broken[0].name}: ${broken[0].error}` : 'Vận chuyển, hóa đơn điện tử, Zalo, sàn' }}</p>
+            </RouterLink>
+            <div v-if="canManage" :class="cn(card, 'p-5')" data-testid="settings-interface">
+                <div class="flex items-start justify-between"><p class="text-[14px] text-slate-500">Giao diện menu</p><span :class="cn('grid size-10 place-items-center rounded-[11px]', toneClasses.amber)"><PanelsTopLeft class="size-5" /></span></div>
+                <p class="-mt-2 text-[26px] font-bold text-slate-900">{{ advanced ? 'Đầy đủ' : 'Cơ bản' }}</p>
+                <label class="mt-2.5 flex cursor-pointer items-center gap-2.5" data-testid="advanced-menu">
+                    <button
+                        type="button"
+                        role="switch"
+                        :aria-checked="advanced"
+                        aria-label="Hiện tính năng nâng cao"
+                        :disabled="savingMenu"
+                        :class="cn('relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-60', advanced ? 'bg-blue-600' : 'bg-slate-200')"
+                        @click="setAdvanced(!advanced)"
+                    >
+                        <span :class="cn('absolute top-0.5 size-5 rounded-full bg-white shadow transition-all', advanced ? 'left-[22px]' : 'left-0.5')" />
+                    </button>
+                    <span class="text-[14px] text-slate-700">Hiện tính năng nâng cao</span>
+                </label>
+                <p class="mt-2.5 text-[13px] text-slate-500" title="Ca bán hàng, Đặt hàng nhập, Chuyển hàng, Điều chỉnh giá vốn, Đối soát tồn kho, Khách trùng, Loại phiếu. Vẫn mở được bằng ô tìm kiếm (Ctrl K).">Tắt để menu gọn, dữ liệu không mất</p>
+            </div>
+        </div>
+
+        <!-- A broken connection, first thing to fix -->
+        <RouterLink v-if="!searching && broken[0]" :to="broken[0].to" class="flex items-center gap-3 rounded-[12px] border border-amber-200 bg-amber-50 px-4 py-3 text-[14px] text-amber-800" data-testid="hub-alert">
+            <TriangleAlert class="size-[18px] shrink-0 text-amber-500" />
+            <span class="min-w-0"><b>{{ broken[0].name }}</b>: {{ broken[0].error }}<template v-if="broken.length > 1"> (và {{ broken.length - 1 }} kết nối khác)</template></span>
+            <span class="ml-auto inline-flex shrink-0 items-center gap-1 font-medium text-amber-700">Xem lại <ArrowRight class="size-4" /></span>
+        </RouterLink>
+
+        <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
+            <div class="space-y-6">
+                <section v-for="g in visible" :key="g.title" :class="card">
+                    <header class="flex items-center gap-3 border-b border-slate-100 px-5 py-4 sm:px-6">
+                        <span :class="cn('grid size-8 place-items-center rounded-lg', toneClasses[g.tone])"><component :is="groupInfo[g.title]?.icon ?? Store" class="size-4" /></span>
+                        <div>
+                            <h2 class="text-[16px] font-semibold text-slate-900">{{ g.title }}</h2>
+                            <p class="text-[13px] text-slate-500">{{ groupInfo[g.title]?.description }}</p>
+                        </div>
+                    </header>
+                    <div class="grid gap-x-2 p-2 sm:p-3 md:grid-cols-2">
+                        <RouterLink v-for="t in g.tiles" :key="t.to" :to="t.to" class="group flex min-w-0 items-center gap-3.5 rounded-[12px] px-3 py-3 hover:bg-slate-50">
+                            <span :class="cn('grid size-10 shrink-0 place-items-center rounded-[11px]', toneClasses[g.tone])"><component :is="t.icon" class="size-5" :stroke-width="1.9" /></span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block text-[15px] font-semibold text-slate-900 group-hover:text-blue-600">{{ t.title }}</span>
+                                <span class="block truncate text-[13px] text-slate-500">{{ t.description }}</span>
+                            </span>
+                            <span v-if="valueOf(t)" :class="cn('hidden shrink-0 text-right text-[13px] 2xl:block', valueOf(t)!.warn ? 'font-medium text-amber-600' : 'text-slate-500')">{{ valueOf(t)!.text }}</span>
+                            <ChevronRight class="size-4 shrink-0 text-slate-300 group-hover:text-blue-500" aria-hidden="true" />
+                        </RouterLink>
+                    </div>
+                </section>
+                <p v-if="!visible.length" :class="cn(card, 'p-8 text-center text-sm text-slate-500')">Không thấy cài đặt nào khớp “{{ q }}”.</p>
+            </div>
+
+            <div v-if="!searching && (canMarket || (canAudit && logs.length))" class="space-y-6">
+                <section v-if="canMarket" :class="card" data-testid="settings-marketplaces">
+                    <header class="border-b border-slate-100 px-5 py-4">
+                        <h2 class="text-[16px] font-semibold text-slate-900">Sàn thương mại điện tử</h2>
+                        <p class="text-[13px] text-slate-500">Mỗi sàn kết nối riêng, có thể nhiều shop</p>
+                    </header>
+                    <div class="divide-y divide-slate-100 px-5">
+                        <div v-for="m in markets" :key="m.key" class="flex items-center gap-3 py-3">
+                            <MarketplaceLogo :marketplace="m.key" :name="m.name" size="lg" />
+                            <div class="min-w-0 flex-1">
+                                <p class="text-[15px] font-semibold text-slate-900">{{ m.name }}</p>
+                                <p :class="cn('flex items-center gap-1.5 truncate text-[13px]', marketStatus(m.key).tone)"><span :class="cn('size-1.5 shrink-0 rounded-full', marketStatus(m.key).dot)" />{{ marketStatus(m.key).text }}</p>
+                            </div>
+                            <RouterLink
+                                :to="{ path: '/marketplaces', query: { san: m.key } }"
+                                :class="cn('shrink-0 rounded-[9px] px-3 py-1.5 text-[13px] font-medium', marketStatus(m.key).connected ? 'border border-slate-200 text-slate-700 hover:bg-slate-50' : 'bg-blue-50 text-blue-700 hover:bg-blue-100')"
+                            >
+                                {{ marketStatus(m.key).connected ? 'Quản lý' : 'Kết nối' }}
+                            </RouterLink>
+                        </div>
+                    </div>
+                </section>
+                <section v-if="canAudit && logs.length" :class="card" data-testid="settings-recent">
+                    <header class="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+                        <div>
+                            <h2 class="text-[16px] font-semibold text-slate-900">Thay đổi gần đây</h2>
+                            <p class="text-[13px] text-slate-500">Từ nhật ký hoạt động</p>
+                        </div>
+                        <RouterLink to="/audit" class="rounded-[9px] border border-slate-200 px-3 py-1.5 text-[13px] text-slate-700 hover:bg-slate-50">Xem tất cả</RouterLink>
+                    </header>
+                    <div class="divide-y divide-slate-100 px-5">
+                        <div v-for="l in logs" :key="l.id" class="flex gap-3 py-3">
+                            <span :class="cn('grid size-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold', avatarTone(l.actor?.name ?? 'Hệ thống'))">{{ initials(l.actor?.name ?? 'Hệ thống') }}</span>
+                            <div class="min-w-0">
+                                <p class="text-[14px] text-slate-700">
+                                    <span class="font-medium text-slate-900">{{ l.actor?.name ?? 'Hệ thống' }}</span> · {{ logText(l) }}
+                                </p>
+                                <p class="text-[12px] text-slate-400">{{ when(l.created_at) }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
     </div>
 </template>

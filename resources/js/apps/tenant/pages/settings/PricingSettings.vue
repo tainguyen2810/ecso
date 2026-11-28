@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { BadgePercent, Percent, Tags } from 'lucide-vue-next';
 import SettingsPage from './SettingsPage.vue';
 import SettingsSection from './SettingsSection.vue';
 import MarketplaceFeeTable from './MarketplaceFeeTable.vue';
@@ -38,9 +39,9 @@ async function save() {
 </script>
 
 <template>
-    <SettingsPage title="Thuế và chính sách giá" :saving="saving" :dirty="dirty" :can-save="tax.canSave.value" @save="save" @cancel="(tax.cancel(), pricing.cancel())">
+    <SettingsPage title="Thuế và chính sách giá" wide :saving="saving" :dirty="dirty" :can-save="tax.canSave.value" @save="save" @cancel="(tax.cancel(), pricing.cancel())">
         <template v-if="tax.form.value && pricing.form.value">
-            <SettingsSection title="Thuế mặc định" description="Gán sẵn cho sản phẩm mới và dòng đơn nhập mới. Hộ kinh doanh nộp thuế theo phương pháp trực tiếp nên chọn “Giá đã bao gồm thuế”.">
+            <SettingsSection title="Thuế mặc định" :icon="Percent" description="Gán sẵn cho sản phẩm mới và dòng đơn nhập mới. Hộ kinh doanh nộp thuế theo phương pháp trực tiếp nên chọn “Giá đã bao gồm thuế”.">
                 <div class="grid gap-4 sm:grid-cols-2">
                     <FormField label="Thuế bán hàng mặc định">
                         <Select :model-value="String(tax.form.value.sale_rate)" :options="rates" data-testid="tax-sale" @update:model-value="(v) => (tax.form.value!.sale_rate = Number(v))" />
@@ -54,7 +55,7 @@ async function save() {
                     <label class="flex items-center gap-2"><input v-model="tax.form.value.prices_include_tax" type="radio" :value="true" /> Giá đã bao gồm thuế</label>
                 </div>
             </SettingsSection>
-            <SettingsSection title="Thiết lập giá" description="Giá tự điền khi tạo đơn bán. Nhóm khách hàng có chính sách giá riêng thì dùng giá của nhóm.">
+            <SettingsSection title="Thiết lập giá" :icon="Tags" tone="green" description="Giá tự điền khi tạo đơn bán. Nhóm khách hàng có chính sách giá riêng thì dùng giá của nhóm.">
                 <FormField label="Giá bán hàng mặc định" class="sm:w-1/2">
                     <Select v-model="pricing.form.value.sale_price" :options="[{ value: 'retail', label: 'Giá bán lẻ' }, { value: 'wholesale', label: 'Giá bán buôn' }]" data-testid="pricing-sale" />
                 </FormField>
@@ -62,7 +63,7 @@ async function save() {
                     <Switch v-model="pricing.form.value.staff_edit_price" label="Cho nhân viên sửa giá và chiết khấu khi bán" hint="Tắt thì chỉ người có quyền “Sửa giá, chiết khấu khi bán” (chủ, quản trị, quản lý) được đổi giá; nhân viên bán theo giá bán lẻ hoặc bán buôn." data-testid="pricing-staff-edit" />
                 </div>
             </SettingsSection>
-            <SettingsSection title="Chính sách giá" description="Ba mức giá có sẵn trên mỗi phiên bản sản phẩm.">
+            <SettingsSection title="Chính sách giá" :icon="BadgePercent" tone="violet" description="Ba mức giá có sẵn trên mỗi phiên bản sản phẩm.">
                 <table class="w-full text-sm">
                     <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                         <tr><th class="px-3 py-2 font-medium">Tên</th><th class="px-3 py-2 font-medium">Mã</th><th class="px-3 py-2 font-medium">Loại giá</th><th class="px-3 py-2 font-medium">Mặc định</th></tr>
@@ -75,6 +76,6 @@ async function save() {
                 </table>
             </SettingsSection>
         </template>
+        <MarketplaceFeeTable />
     </SettingsPage>
-    <MarketplaceFeeTable />
 </template>

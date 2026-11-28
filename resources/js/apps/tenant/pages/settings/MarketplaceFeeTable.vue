@@ -83,7 +83,7 @@ const pctInput = 'h-8 w-[4.5rem] px-2 text-right tabular-nums';
 </script>
 
 <template>
-    <div class="mt-6 space-y-4" data-testid="fee-table">
+    <div class="space-y-4" data-testid="fee-table">
         <div v-for="a in alerts" :key="a.id" class="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50/70 px-4 py-3 text-sm">
             <AlertTriangle class="mt-0.5 size-4 shrink-0 text-amber-500" />
             <div>

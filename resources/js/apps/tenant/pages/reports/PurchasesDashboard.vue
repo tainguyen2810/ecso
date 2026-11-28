@@ -12,6 +12,7 @@ import ReportChip from './ReportChip.vue';
 import ReportAlert from './ReportAlert.vue';
 import ReportLinkCard from './ReportLinkCard.vue';
 import SideCard from './SideCard.vue';
+import PeriodBars from './PeriodBars.vue';
 import type { ReportLink } from './groups';
 import { change, initials, pct, previousRange, short, useDashboard } from './dashboard';
 import { downloadCsv, toCsv } from './range';
@@ -60,8 +61,13 @@ const perDay = computed(() => {
     }
     return out;
 });
-const dayMax = computed(() => Math.max(...perDay.value.map((d) => d.value), 0));
-const dm = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
+/** Decoration of the blue card: purchases per day as a soft area. */
+const spark = computed(() => {
+    const v = perDay.value.map((d) => d.value);
+    const max = Math.max(...v, 0);
+    if (v.length < 2 || max <= 0) return null;
+    return `M0,40 L${v.map((x, i) => `${(i / (v.length - 1)) * 100},${40 - (x / max) * 36}`).join(' L')} L100,40 Z`;
+});
 
 const topSuppliers = computed(() => {
     const debts = new Map(debtRows.value.map((r) => [r.supplier.id, r]));
@@ -103,23 +109,26 @@ defineExpose({ exportCsv });
     <div v-else-if="!data" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Skeleton v-for="i in 4" :key="i" class="h-36" /></div>
     <div v-else :class="loading && 'opacity-60'" data-testid="report-group-purchases">
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <ReportKpi label="Giá trị nhập kho" tip="Hàng nhập kho trong kỳ theo giá nhập, đã trừ hàng trả nhà cung cấp." :icon="Download" tone="blue" plain :value="totals.net">
+            <ReportKpi primary label="Giá trị nhập kho" tip="Hàng nhập kho trong kỳ theo giá nhập, đã trừ hàng trả nhà cung cấp." :icon="Download" :value="totals.net">
                 <template #chips>
-                    <ReportChip v-if="delta !== null" :tone="delta >= 0 ? 'up' : 'down'"><component :is="delta >= 0 ? ArrowUp : ArrowDown" class="size-3" />{{ pct(delta) }}</ReportChip>
-                    <ReportChip>{{ formatNumber(totals.receipts) }} phiếu nhập</ReportChip>
+                    <ReportChip v-if="delta !== null" tone="onblue"><component :is="delta >= 0 ? ArrowUp : ArrowDown" class="size-3" />{{ pct(delta) }}</ReportChip>
+                    <span v-if="delta !== null" class="text-blue-100">so với kỳ trước</span>
                 </template>
-                <template v-if="totals.returned">Đã trừ hàng trả NCC {{ formatMoney(totals.returned) }}</template>
-                <template v-else>{{ formatNumber(totals.quantity) }} sản phẩm nhập</template>
+                {{ formatNumber(totals.receipts) }} phiếu nhập · {{ formatNumber(totals.quantity) }} sản phẩm
+                <template #decor>
+                    <svg v-if="spark" viewBox="0 0 100 40" preserveAspectRatio="none" class="pointer-events-none absolute inset-x-0 bottom-0 h-12 w-full opacity-[0.12]" aria-hidden="true"><path :d="spark" fill="white" /></svg>
+                </template>
             </ReportKpi>
             <ReportKpi label="Đã trả nhà cung cấp" tip="Các khoản đã trả nhà cung cấp trong kỳ (phiếu chi trả NCC)." :icon="CreditCard" tone="green" :value="paid">
                 <template v-if="paidShare !== null" #chips><ReportChip>{{ pct(paidShare) }} giá trị nhập</ReportChip></template>
                 {{ byMethod || 'Chưa có khoản trả nào trong kỳ' }}
             </ReportKpi>
             <ReportKpi label="Còn phải trả NCC" tip="Tổng công nợ nhà cung cấp tính đến hôm nay (không theo kỳ đã chọn)." :icon="CircleDollarSign" tone="amber" :value="debt">
-                <template v-if="overdueRows.length" #chips><ReportChip tone="amber">{{ overdueRows.length }} NCC quá hạn</ReportChip></template>
+                <template v-if="overdueRows.length" #chips><ReportChip tone="red">{{ overdueRows.length }} NCC quá hạn</ReportChip></template>
                 {{ formatNumber(debtRows.length) }} nhà cung cấp còn công nợ
             </ReportKpi>
             <ReportKpi label="Hàng trả nhà cung cấp" tip="Giá trị hàng trả lại nhà cung cấp trong kỳ." :icon="ArrowLeftRight" tone="violet" plain :value="totals.returned">
+                <template v-if="totals.returned" #chips><ReportChip>Đã trừ khỏi giá trị nhập</ReportChip></template>
                 Trừ vào giá trị nhập kho
             </ReportKpi>
         </div>
@@ -133,7 +142,7 @@ defineExpose({ exportCsv });
         <div class="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
             <div class="min-w-0 space-y-6">
                 <section>
-                    <h2 class="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Nhập kho</h2>
+                    <h2 class="mb-3 text-[12px] font-semibold uppercase tracking-wider text-slate-400">Nhập kho</h2>
                     <ReportLinkCard
                         v-if="link('Báo cáo hàng nhập kho')"
                         :link="link('Báo cáo hàng nhập kho')!"
@@ -142,12 +151,12 @@ defineExpose({ exportCsv });
                             { label: 'Phiếu nhập', value: formatNumber(totals.receipts) },
                             { label: 'Số lượng', value: `${formatNumber(totals.quantity)} sp` },
                             { label: 'Giá trị', value: formatMoney(totals.value) },
-                            { label: 'Trả NCC', value: formatMoney(totals.returned) },
+                            { label: 'Trả NCC', value: formatMoney(totals.returned), tone: totals.returned ? 'violet' : undefined },
                         ]"
                     />
                 </section>
                 <section>
-                    <h2 class="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Thanh toán & công nợ</h2>
+                    <h2 class="mb-3 text-[12px] font-semibold uppercase tracking-wider text-slate-400">Thanh toán và công nợ</h2>
                     <div class="grid gap-4 lg:grid-cols-2">
                         <ReportLinkCard
                             v-if="link('Báo cáo thanh toán nhập hàng')"
@@ -155,7 +164,7 @@ defineExpose({ exportCsv });
                             :target="target"
                             tone="green"
                             :stats="[
-                                { label: 'Đã trả', value: short(paid) },
+                                { label: 'Đã trả', value: short(paid), tone: paid ? 'green' : undefined },
                                 { label: 'Số phiếu', value: formatNumber(data.methods.totals.entries) },
                             ]"
                         />
@@ -166,8 +175,9 @@ defineExpose({ exportCsv });
                             tone="amber"
                             :badge="overdueRows.length ? `${overdueRows.length} quá hạn` : null"
                             :stats="[
-                                { label: 'Còn phải trả', value: short(debt) },
+                                { label: 'Còn phải trả', value: short(debt), tone: debt ? 'amber' : undefined },
                                 { label: 'NCC', value: formatNumber(debtRows.length) },
+                                ...(overdueRows.length ? [{ label: 'Quá hạn', value: formatNumber(overdueRows.length), tone: 'red' as const }] : []),
                             ]"
                         />
                     </div>
@@ -175,29 +185,20 @@ defineExpose({ exportCsv });
             </div>
 
             <aside class="space-y-4">
-                <SideCard title="Nhập hàng theo ngày" description="Giá trị nhập kho, đã trừ trả NCC">
-                    <div class="px-5 pb-4 pt-4">
-                        <div class="flex h-28 items-end gap-[2px]">
-                            <div v-for="d in perDay" :key="d.day" class="flex h-full min-w-0 flex-1 items-end" :title="`${dm(d.day)}: ${formatMoney(d.value)}`">
-                                <div :class="d.value ? 'w-full rounded-t-[3px] bg-blue-500' : 'h-[2px] w-full rounded bg-slate-100'" :style="d.value ? { height: `${Math.max(4, (d.value / (dayMax || 1)) * 100)}%` } : undefined" />
-                            </div>
-                        </div>
-                        <div v-if="perDay.length" class="mt-2 flex justify-between text-[11px] text-slate-400">
-                            <span>{{ dm(perDay[0]!.day) }}</span><span v-if="perDay.length > 2">{{ dm(perDay[Math.floor(perDay.length / 2)]!.day) }}</span><span>{{ dm(perDay[perDay.length - 1]!.day) }}</span>
-                        </div>
-                    </div>
+                <SideCard :title="perDay.length > 10 ? 'Nhập hàng theo tuần' : 'Nhập hàng theo ngày'" description="Giá trị nhập kho, đã trừ trả NCC">
+                    <PeriodBars :days="perDay" />
                 </SideCard>
                 <SideCard title="Top nhà cung cấp" description="Theo giá trị nhập trong kỳ">
                     <ul v-if="topSuppliers.length" class="divide-y divide-slate-100 px-5">
                         <li v-for="(s, i) in topSuppliers" :key="s.label" class="flex items-center gap-3 py-3">
-                            <span :class="['grid size-9 shrink-0 place-items-center rounded-[10px] text-xs font-bold', avatarTones[i % avatarTones.length]]">{{ initials(s.label) }}</span>
+                            <span :class="['grid size-9 shrink-0 place-items-center rounded-[10px] text-xs font-semibold', avatarTones[i % avatarTones.length]]">{{ initials(s.label) }}</span>
                             <div class="min-w-0 flex-1">
-                                <p class="truncate text-sm font-medium text-slate-800">{{ s.label }}</p>
+                                <p class="truncate text-[14px] font-medium text-slate-800">{{ s.label }}</p>
                                 <p class="text-xs text-slate-500">{{ formatNumber(s.receipts) }} phiếu · {{ formatNumber(s.quantity) }} sp</p>
                             </div>
                             <div class="text-right">
                                 <p class="text-sm font-semibold tabular-nums text-slate-900">{{ formatNumber(s.net) }}</p>
-                                <p v-if="s.debt !== null" class="text-xs tabular-nums text-slate-500">{{ s.debt > 0 ? `còn nợ ${formatNumber(s.debt)}` : 'đã thanh toán đủ' }}</p>
+                                <p v-if="s.debt !== null" class="text-xs tabular-nums text-slate-500">{{ s.debt > 0 ? `còn nợ ${short(s.debt)}` : 'đã trả đủ' }}</p>
                             </div>
                         </li>
                     </ul>

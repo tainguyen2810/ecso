@@ -60,6 +60,7 @@ const overCount = computed(() => Number(data.value?.over.totals.skus ?? 0));
 const expiringLots = computed(() => Number(data.value?.expiry.totals.expired.lots ?? 0) + Number(data.value?.expiry.totals.d30.lots ?? 0));
 const moved = computed(() => ((data.value?.ledger.rows ?? []) as any[]).filter((r) => Number(r.in) || Number(r.out)).length);
 const reorder = computed(() => ((data.value?.low.rows ?? []) as any[]).slice().sort((a, b) => Number(b.shortfall) - Number(a.shortfall)).slice(0, 5));
+const barTones = ['bg-blue-600', 'bg-violet-500', 'bg-emerald-500', 'bg-amber-500'];
 const avatarTones = ['bg-blue-50 text-blue-600', 'bg-red-50 text-red-500', 'bg-violet-50 text-violet-600', 'bg-emerald-50 text-emerald-600', 'bg-amber-50 text-amber-600'];
 
 function exportCsv() {
@@ -94,10 +95,10 @@ defineExpose({ exportCsv });
     <div v-else-if="!data" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Skeleton v-for="i in 4" :key="i" class="h-36" /></div>
     <div v-else :class="loading && 'opacity-60'" data-testid="report-group-stock">
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <ReportKpi label="Giá trị tồn kho" :tip="`Tồn kho cuối ngày ${range.to.split('-').reverse().join('/')} của mọi kho, theo giá vốn.`" :icon="Layers" tone="blue" plain :value="value">
+            <ReportKpi primary label="Giá trị tồn kho" :tip="`Tồn kho cuối ngày ${range.to.split('-').reverse().join('/')} của mọi kho, theo giá vốn.`" :icon="Layers" :value="value">
                 <template #chips>
-                    <ReportChip v-if="delta !== null" :tone="delta >= 0 ? 'up' : 'down'"><component :is="delta >= 0 ? ArrowUp : ArrowDown" class="size-3" />{{ pct(delta) }}</ReportChip>
-                    <ReportChip>{{ warehouses.length }} kho</ReportChip>
+                    <ReportChip v-if="delta !== null" tone="onblue"><component :is="delta >= 0 ? ArrowUp : ArrowDown" class="size-3" />{{ pct(delta) }}</ReportChip>
+                    <span class="text-blue-100">{{ warehouses.length }} kho</span>
                 </template>
                 {{ formatNumber(data.onHand.totals.quantity) }} sản phẩm · {{ formatNumber(data.onHand.totals.skus) }} SKU
             </ReportKpi>
@@ -106,11 +107,11 @@ defineExpose({ exportCsv });
                 Đang về từ đơn nhập: {{ formatNumber(detail.incoming) }} sp
             </ReportKpi>
             <ReportKpi label="Dưới định mức" tip="SKU có thể bán đã chạm tồn an toàn đặt ở sản phẩm." :icon="TrendingDown" :tone="lowCount ? 'red' : 'slate'" unit="SKU" :value="lowCount">
-                <template v-if="lowCount" #chips><ReportChip tone="amber">{{ outCount ? `${outCount} SKU hết hàng` : 'Cần nhập ngay' }}</ReportChip></template>
+                <template v-if="lowCount" #chips><ReportChip tone="red">{{ outCount ? `${outCount} SKU hết hàng` : 'Cần nhập ngay' }}</ReportChip></template>
                 {{ lowCount ? 'Có gợi ý số lượng nhập' : 'Chưa có SKU nào chạm tồn an toàn' }}
             </ReportKpi>
             <ReportKpi label="Vượt định mức" tip="SKU tồn nhiều hơn tồn tối đa đặt ở sản phẩm." :icon="TrendingUp" :tone="overCount ? 'amber' : 'slate'" unit="SKU" :value="overCount">
-                <template v-if="overCount" #chips><ReportChip>Vốn chôn {{ short(data.over.totals.excess_value) }}</ReportChip></template>
+                <template v-if="overCount" #chips><ReportChip tone="amber">Vốn chôn {{ short(data.over.totals.excess_value) }}</ReportChip></template>
                 {{ overCount ? 'Nên đẩy bán hoặc giảm nhập' : 'Không có SKU nào vượt tồn tối đa' }}
             </ReportKpi>
         </div>
@@ -124,16 +125,16 @@ defineExpose({ exportCsv });
         <div class="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
             <div class="min-w-0 space-y-6">
                 <section>
-                    <h2 class="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Tồn kho</h2>
+                    <h2 class="mb-3 text-[12px] font-semibold uppercase tracking-wider text-slate-400">Tồn kho</h2>
                     <div class="grid gap-4 lg:grid-cols-2">
                         <ReportLinkCard v-if="link('Báo cáo tồn kho')" :link="link('Báo cáo tồn kho')!" :target="target" :stats="[{ label: 'Giá trị', value: short(value) }, { label: 'SKU', value: formatNumber(data.onHand.totals.skus) }]" />
-                        <ReportLinkCard v-if="link('Báo cáo tồn kho chi tiết')" :link="link('Báo cáo tồn kho chi tiết')!" :target="target" :stats="[{ label: 'Có thể bán', value: formatNumber(detail.available) }, { label: 'Đang về', value: formatNumber(detail.incoming) }]" />
+                        <ReportLinkCard v-if="link('Báo cáo tồn kho chi tiết')" :link="link('Báo cáo tồn kho chi tiết')!" :target="target" :stats="[{ label: 'Có thể bán', value: formatNumber(detail.available), tone: 'green' }, { label: 'Đang về', value: formatNumber(detail.incoming) }]" />
                         <ReportLinkCard v-if="link('Xuất nhập tồn')" :link="link('Xuất nhập tồn')!" :target="target" tone="violet" :stats="[{ label: 'Nhập', value: formatNumber(data.ledger.totals.in) }, { label: 'Xuất', value: formatNumber(data.ledger.totals.out) }]" />
                         <ReportLinkCard v-if="link('Sổ kho')" :link="link('Sổ kho')!" :target="target" tone="slate" :stats="[{ label: 'SKU có biến động', value: formatNumber(moved) }]" />
                     </div>
                 </section>
                 <section>
-                    <h2 class="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Cảnh báo & kiểm kê</h2>
+                    <h2 class="mb-3 text-[12px] font-semibold uppercase tracking-wider text-slate-400">Cảnh báo & kiểm kê</h2>
                     <div class="grid gap-4 lg:grid-cols-2">
                         <ReportLinkCard v-if="link('Tồn kho dưới định mức')" :link="link('Tồn kho dưới định mức')!" :target="target" tone="red" :badge="lowCount ? String(lowCount) : null" />
                         <ReportLinkCard v-if="link('Tồn kho vượt định mức')" :link="link('Tồn kho vượt định mức')!" :target="target" tone="amber" :badge="overCount ? String(overCount) : null" badge-tone="amber" />
@@ -168,15 +169,19 @@ defineExpose({ exportCsv });
                 </SideCard>
                 <SideCard title="Tồn theo kho" description="Giá trị tồn cuối kỳ">
                     <ul v-if="warehouses.length" class="divide-y divide-slate-100 px-5">
-                        <li v-for="(w, i) in warehouses" :key="w.id" class="flex items-center gap-3 py-3">
-                            <span :class="['grid size-9 shrink-0 place-items-center rounded-[10px] text-xs font-bold', i === 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600']">{{ initials(w.name) }}</span>
-                            <div class="min-w-0 flex-1">
-                                <p class="truncate text-sm font-medium text-slate-800">{{ w.name }}</p>
-                                <p class="text-xs text-slate-500">{{ formatNumber(w.quantity) }} sp</p>
+                        <li v-for="(w, i) in warehouses" :key="w.id" class="py-3.5">
+                            <div class="flex items-center gap-3">
+                                <div class="min-w-0 flex-1">
+                                    <p class="truncate text-[14px] font-medium text-slate-800">{{ w.name }}</p>
+                                    <p class="text-xs text-slate-500">{{ formatNumber(w.quantity) }} sp</p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-[14px] font-semibold tabular-nums text-slate-900">{{ formatNumber(w.value) }}</p>
+                                    <p class="text-xs tabular-nums text-slate-500">{{ value ? Math.round((Number(w.value) / value) * 100) : 0 }}%</p>
+                                </div>
                             </div>
-                            <div class="text-right">
-                                <p class="text-sm font-semibold tabular-nums text-slate-900">{{ formatNumber(w.value) }}</p>
-                                <p class="text-xs tabular-nums text-slate-500">{{ value ? Math.round((Number(w.value) / value) * 100) : 0 }}%</p>
+                            <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                <div :class="['h-full rounded-full', barTones[i % barTones.length]]" :style="{ width: `${value ? Math.max(0, Math.min(100, (Number(w.value) / value) * 100)) : 0}%` }" />
                             </div>
                         </li>
                     </ul>

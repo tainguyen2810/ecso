@@ -9,6 +9,7 @@ import ErrorState from '@/shared/ui/ErrorState.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { formatDateTime } from '@/shared/lib/utils';
+import { auditLabels } from './auditLabels';
 
 interface Log {
     id: number;
@@ -26,17 +27,7 @@ const loading = ref(true);
 const loadingMore = ref(false);
 const error = ref<string | null>(null);
 
-const labels: Record<string, string> = {
-    'tenant.created': 'Tạo doanh nghiệp',
-    'tenant.updated': 'Cập nhật cài đặt',
-    'member.joined': 'Tham gia doanh nghiệp',
-    'member.role_changed': 'Đổi vai trò',
-    'member.status_changed': 'Đổi trạng thái nhân viên',
-    'member.removed': 'Xóa nhân viên',
-    'invitation.created': 'Gửi lời mời',
-    'invitation.revoked': 'Thu hồi lời mời',
-    'invitation.accepted': 'Chấp nhận lời mời',
-};
+const labels = auditLabels;
 
 async function load(more = false) {
     more ? (loadingMore.value = true) : (loading.value = true);

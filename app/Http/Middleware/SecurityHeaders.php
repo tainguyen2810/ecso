@@ -70,7 +70,8 @@ class SecurityHeaders
                 "script-src 'self' 'wasm-unsafe-eval'",
                 // Tailwind/Vue inline style bindings.
                 "style-src 'self' 'unsafe-inline'",
-                "img-src 'self' data: blob:",
+                // VietQR: the transfer QR (img.vietqr.io) and bank logos (api.vietqr.io) on invoices and in Cấu hình.
+                "img-src 'self' data: blob: https://img.vietqr.io https://api.vietqr.io",
                 "font-src 'self' data:",
                 "connect-src 'self'",
                 // Tin nhắn frames EzChat's inbox; any other frame stays blocked.
