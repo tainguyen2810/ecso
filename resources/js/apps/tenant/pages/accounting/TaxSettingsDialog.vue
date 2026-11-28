@@ -72,55 +72,59 @@ async function save() {
 </script>
 
 <template>
-    <Dialog v-model:open="open" title="Thiết lập thuế" description="Hộ kinh doanh nộp thuế theo tỷ lệ % trên doanh thu. Tỷ lệ mặc định theo Thông tư 40/2021, sửa được khi quy định thay đổi." size="lg">
-        <div class="space-y-5 text-sm">
+    <Dialog v-model:open="open" title="Thiết lập thuế" description="Hộ kinh doanh nộp thuế theo tỷ lệ % trên doanh thu. Tỷ lệ mặc định theo Thông tư 40/2021, sửa được khi quy định thay đổi." size="xl">
+        <div class="space-y-5 text-[14px]">
             <div class="grid gap-4 sm:grid-cols-2">
                 <label class="block">
-                    <span class="mb-1 block font-medium">Người nộp thuế (chủ hộ)</span>
+                    <span class="mb-1.5 block font-medium text-slate-700">Người nộp thuế (chủ hộ)</span>
                     <Input v-model="form.taxpayer_name" placeholder="VD: Nguyễn Văn A" />
                 </label>
                 <label class="block">
-                    <span class="mb-1 block font-medium">Kỳ khai thuế</span>
+                    <span class="mb-1.5 block font-medium text-slate-700">Kỳ khai thuế</span>
                     <Select v-model="form.period" :options="[{ value: 'quarter', label: 'Theo quý' }, { value: 'month', label: 'Theo tháng' }]" />
                 </label>
                 <label class="block">
-                    <span class="mb-1 block font-medium">Ngưỡng doanh thu năm không phải nộp thuế (đ)</span>
+                    <span class="mb-1.5 block font-medium text-slate-700">Ngưỡng doanh thu năm không phải nộp thuế (đ)</span>
                     <Input v-model="threshold" inputmode="numeric" />
-                    <span class="mt-1 block text-xs text-muted-foreground">Dùng để báo trước khi doanh thu năm sắp chạm ngưỡng. Kiểm tra mức hiện hành với cơ quan thuế.</span>
+                    <span class="mt-1 block text-[12px] text-slate-500">Dùng để báo trước khi doanh thu năm sắp chạm ngưỡng. Kiểm tra mức hiện hành với cơ quan thuế.</span>
                 </label>
                 <label class="block">
-                    <span class="mb-1 block font-medium">Nhóm ngành mặc định</span>
+                    <span class="mb-1.5 block font-medium text-slate-700">Nhóm ngành mặc định</span>
                     <Select v-model="form.default_group" :options="groupOptions" />
-                    <span class="mt-1 block text-xs text-muted-foreground">Áp cho sản phẩm không thuộc danh mục nào được chọn nhóm riêng bên dưới.</span>
+                    <span class="mt-1 block text-[12px] text-slate-500">Áp cho sản phẩm không thuộc danh mục nào được chọn nhóm riêng bên dưới.</span>
                 </label>
             </div>
-            <Switch v-model="form.include_shipping" label="Tính phí giao hàng thu của khách vào doanh thu" hint="Bật nếu tiền ship khách trả là doanh thu của cửa hàng (cửa hàng tự giao hoặc tự trả phí cho hãng)." />
-
-            <div>
-                <div class="mb-2 font-medium">Tỷ lệ thuế theo nhóm ngành (%)</div>
-                <div class="overflow-x-auto rounded-lg border">
-                    <table class="w-full text-sm">
-                        <thead class="bg-muted/50 text-left text-xs text-muted-foreground"><tr><th class="px-3 py-2">Nhóm ngành</th><th class="w-24 px-3 py-2">GTGT</th><th class="w-24 px-3 py-2">TNCN</th></tr></thead>
-                        <tbody>
-                            <tr v-for="g in groupOptions" :key="g.value" class="border-t">
-                                <td class="px-3 py-2">{{ g.label }}</td>
-                                <td class="px-3 py-2"><input v-model.number="form.rates[g.value as Group].vat" type="number" step="0.1" min="0" max="20" class="h-8 w-20 rounded border bg-card px-2 text-right" :aria-label="`GTGT ${g.label}`" /></td>
-                                <td class="px-3 py-2"><input v-model.number="form.rates[g.value as Group].pit" type="number" step="0.1" min="0" max="20" class="h-8 w-20 rounded border bg-card px-2 text-right" :aria-label="`TNCN ${g.label}`" /></td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+            <div class="rounded-[12px] border border-slate-200 p-4">
+                <Switch v-model="form.include_shipping" label="Tính phí giao hàng thu của khách vào doanh thu" hint="Bật nếu tiền ship khách trả là doanh thu của cửa hàng (cửa hàng tự giao hoặc tự trả phí cho hãng)." />
             </div>
 
-            <div v-if="categories.length">
-                <div class="mb-2 font-medium">Nhóm ngành theo danh mục sản phẩm</div>
-                <div class="max-h-60 space-y-2 overflow-y-auto rounded-lg border p-3">
-                    <div v-for="c in categories" :key="c.id" class="flex items-center gap-3">
-                        <span class="min-w-0 flex-1 truncate">{{ c.parent ? `${c.parent.name} › ${c.name}` : c.name }}</span>
-                        <Select :model-value="categoryGroup(c.id)" class="w-56" :options="[{ value: '', label: 'Theo nhóm mặc định' }, ...groupOptions]" @update:model-value="(v: unknown) => setCategoryGroup(c.id, v)" />
+            <div class="grid gap-5" :class="categories.length ? 'lg:grid-cols-2' : ''">
+                <div>
+                    <div class="mb-2 font-semibold text-slate-900">Tỷ lệ thuế theo nhóm ngành</div>
+                    <div class="overflow-hidden rounded-[12px] border border-slate-200">
+                        <table class="w-full text-[14px]">
+                            <thead class="bg-slate-50 text-left text-[12px] font-semibold uppercase tracking-wide text-slate-500"><tr><th class="px-3 py-2.5">Nhóm ngành</th><th class="w-24 px-3 py-2.5">GTGT %</th><th class="w-24 px-3 py-2.5">TNCN %</th></tr></thead>
+                            <tbody>
+                                <tr v-for="g in groupOptions" :key="g.value" class="border-t border-slate-100">
+                                    <td class="px-3 py-2.5">{{ g.label }}</td>
+                                    <td class="px-3 py-2.5"><input v-model.number="form.rates[g.value as Group].vat" type="number" step="0.1" min="0" max="20" class="h-9 w-20 rounded-[9px] border border-slate-200 bg-white px-2 text-right tabular-nums" :aria-label="`GTGT ${g.label}`" /></td>
+                                    <td class="px-3 py-2.5"><input v-model.number="form.rates[g.value as Group].pit" type="number" step="0.1" min="0" max="20" class="h-9 w-20 rounded-[9px] border border-slate-200 bg-white px-2 text-right tabular-nums" :aria-label="`TNCN ${g.label}`" /></td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
-                <p class="mt-1 text-xs text-muted-foreground">Danh mục con theo danh mục cha nếu không chọn riêng. VD: danh mục "Dịch vụ lắp đặt" chọn nhóm Dịch vụ.</p>
+
+                <div v-if="categories.length">
+                    <div class="mb-2 font-semibold text-slate-900">Nhóm ngành theo danh mục sản phẩm</div>
+                    <div class="max-h-72 space-y-2 overflow-y-auto rounded-[12px] border border-slate-200 p-3">
+                        <div v-for="c in categories" :key="c.id" class="flex items-center gap-3">
+                            <span class="min-w-0 flex-1 truncate">{{ c.parent ? `${c.parent.name} › ${c.name}` : c.name }}</span>
+                            <Select :model-value="categoryGroup(c.id)" class="w-52 shrink-0" :options="[{ value: '', label: 'Theo nhóm mặc định' }, ...groupOptions]" @update:model-value="(v: unknown) => setCategoryGroup(c.id, v)" />
+                        </div>
+                    </div>
+                    <p class="mt-1.5 text-[12px] text-slate-500">Danh mục con theo danh mục cha nếu không chọn riêng. VD: danh mục "Dịch vụ lắp đặt" chọn nhóm Dịch vụ.</p>
+                </div>
             </div>
             <p v-if="errors?.message" class="text-rose-700">{{ errors.message }}</p>
         </div>

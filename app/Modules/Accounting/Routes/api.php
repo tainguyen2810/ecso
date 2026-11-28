@@ -8,5 +8,6 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->prefix('accounting')-
     Route::get('settings', [AccountingController::class, 'settings']);
     Route::put('settings', [AccountingController::class, 'saveSettings']);
     Route::get('declaration', [AccountingController::class, 'declaration'])->middleware('throttle:30,1,accounting.declaration');
+    Route::get('books-summary', [AccountingController::class, 'booksSummary'])->middleware('throttle:30,1,accounting.books-summary');
     Route::get('books/{book}', [AccountingController::class, 'book'])->middleware('throttle:30,1,accounting.books');
 });

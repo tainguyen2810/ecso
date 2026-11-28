@@ -65,6 +65,12 @@ it('keeps tax settings and computes the declaration by industry group, leaving m
     expect((float) $o['revenue'])->toBe(2500000.0 + $marketRevenue)->and((float) $o['self'])->toBe(2500000.0)
         ->and($o['current']['period'])->toBe('2026-Q4')->and($o['todo']['declare']['period'])->toBe('2026-Q3')
         ->and(collect($o['channels'])->pluck('kind')->unique()->sort()->values()->all())->toBe(['market', 'self']);
+    // Each channel says what it is, for its logo; each quarter so far has its tax and deadline.
+    expect(collect($o['channels'])->firstWhere('kind', 'market')['mark'])->toBe($shop->marketplace)
+        ->and(collect($o['channels'])->firstWhere('kind', 'self')['mark'])->toBe('pos')
+        ->and(collect($o['periods'])->pluck('period')->all())->toBe(['2026-Q1', '2026-Q2', '2026-Q3', '2026-Q4'])
+        ->and((float) $o['periods'][2]['self'])->toBe(500000.0)->and((float) $o['periods'][3]['tax'])->toBe((float) $d['tax'])
+        ->and($o['periods'][3]['deadline'])->toBe('2027-01-31');
 });
 
 it('lists the revenue book by day and channel, with returns, and the tax book by period', function () {
@@ -92,6 +98,12 @@ it('lists the revenue book by day and channel, with returns, and the tax book by
     $api->getJson('/api/v1/accounting/books/s2?month=2026-11')->assertOk()->assertJsonPath('data.code', 'S2-HKD');
     $api->getJson('/api/v1/accounting/books/s3?month=2026-11')->assertOk()->assertJsonPath('data.totals.amount', 0);
     $api->getJson('/api/v1/accounting/books/s9')->assertNotFound();
+
+    // One line per book for the cards above it.
+    $sum = $api->getJson('/api/v1/accounting/books-summary?month=2026-11')->assertOk()->json('data');
+    expect((float) $sum['s1']['self'])->toBe(450000.0)->and($sum['s2'])->toHaveKeys(['items', 'closing_value'])
+        ->and($sum['s3']['vouchers'])->toBe(0)->and((float) $sum['s4']['tax'])->toBe((float) $s4['totals']['tax'])->and($sum['s4']['periods'])->toBe(4)
+        ->and($s1['rows'][0]['mark'])->toBe('pos');
 });
 
 it('keeps tax pages to members who see finance, and settings to managers', function () {

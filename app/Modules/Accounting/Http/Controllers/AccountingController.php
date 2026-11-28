@@ -28,6 +28,14 @@ class AccountingController extends Controller
         return response()->json(['data' => $books->overview($year)]);
     }
 
+    public function booksSummary(Request $request, Books $books): JsonResponse
+    {
+        abort_unless($this->context->can('finance.view'), 403);
+        $month = $request->validate(['month' => ['nullable', 'date_format:Y-m']])['month'] ?? ReportRange::now()->format('Y-m');
+
+        return response()->json(['data' => $books->summary($month)]);
+    }
+
     public function book(Request $request, string $book, Books $books, BookExporter $exporter): JsonResponse|StreamedResponse
     {
         abort_unless($this->context->can('finance.view'), 403);

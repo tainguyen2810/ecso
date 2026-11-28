@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { periodLabel, shiftPeriod, thresholdProgress } from './accounting';
+import { daysUntil, periodLabel, shiftPeriod, short, thresholdProgress } from './accounting';
 
 describe('periods', () => {
     it('moves across years for quarters and months', () => {
@@ -19,5 +19,16 @@ describe('thresholdProgress', () => {
         expect(thresholdProgress(250, 1000)).toEqual({ pct: 25, left: 750 });
         expect(thresholdProgress(1500, 1000)).toEqual({ pct: 100, left: 0 });
         expect(thresholdProgress(10, 0)).toEqual({ pct: 100, left: 0 });
+    });
+});
+
+describe('daysUntil and short', () => {
+    it('counts whole days to a deadline', () => {
+        expect(daysUntil('2027-01-31', new Date(2026, 10, 28, 15))).toBe(64);
+        expect(daysUntil('2026-11-27', new Date(2026, 10, 28))).toBe(-1);
+    });
+    it('writes money briefly', () => {
+        expect(short(71240000)).toBe('71,2 tr');
+        expect(short(1250000000)).toBe('1,3 tỷ');
     });
 });

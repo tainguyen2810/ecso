@@ -79,7 +79,8 @@ it('imports XML and zip invoices once, checks them and lists them by what is lef
     $list = $api->getJson('/api/v1/purchase-invoices?month=2026-11')->assertOk();
     $list->assertJsonPath('meta.counts.all', 3)->assertJsonPath('meta.counts.review', 2)->assertJsonPath('meta.counts.open', 3);
     // Only the valid invoice's VAT counts as input VAT.
-    expect((float) $list->json('meta.summary.vat'))->toBe(480000.0);
+    expect((float) $list->json('meta.summary.vat'))->toBe(480000.0)->and($list->json('meta.summary.deductible'))->toBe(1)
+        ->and($list->json('meta.summary.suppliers'))->toBe(2)->and((float) $list->json('meta.summary.open_total'))->toBe((float) PurchaseInvoice::withoutGlobalScopes()->sum('total'));
     $api->getJson('/api/v1/purchase-invoices?tab=review')->assertJsonCount(2, 'data');
     $api->getJson('/api/v1/purchase-invoices?month=2026-10')->assertJsonPath('meta.counts.all', 0);
 

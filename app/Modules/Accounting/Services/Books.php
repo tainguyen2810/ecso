@@ -40,13 +40,28 @@ class Books
         $channels = [];
         foreach ($entries as $e) {
             $key = str_starts_with($e['channel'], 'return:') ? substr($e['channel'], 7) : $e['channel'];
-            $channels[$key] ??= ['label' => str_replace('Khách trả hàng · ', '', $e['label']), 'kind' => $e['kind'], 'revenue' => 0.0, 'tax' => 0.0];
+            $channels[$key] ??= ['label' => str_replace('Khách trả hàng · ', '', $e['label']), 'kind' => $e['kind'], 'mark' => $e['mark'], 'revenue' => 0.0, 'tax' => 0.0];
             $r = $tax->rates($e['group']);
             $channels[$key]['revenue'] += $e['amount'];
             $channels[$key]['tax'] += $e['amount'] * ($r['vat'] + $r['pit']) / 100;
         }
         $channels = array_values(array_map(fn ($c) => [...$c, 'revenue' => round($c['revenue']), 'tax' => round(max(0, $c['tax']))], $channels));
         usort($channels, fn ($a, $b) => [$a['kind'], -$a['revenue']] <=> [$b['kind'], -$b['revenue']]);
+
+        // Each tax period of the year so far, from the same entries (S4 in short).
+        $byPeriod = [];
+        foreach ($entries as $e) {
+            $byPeriod[$tax->periodOf(CarbonImmutable::parse($e['day'], $zone))][] = $e;
+        }
+        $periods = [];
+        foreach ($year > $now->year ? [] : $tax->periodsOf($year) as $p) {
+            [$pFrom, , $pLabel] = HouseholdTax::bounds($p);
+            if ($pFrom->greaterThan($now)) {
+                break;
+            }
+            $ps = $this->figures->summarize($byPeriod[$p] ?? []);
+            $periods[] = ['period' => $p, 'label' => $pLabel, 'self' => $ps['self'], 'market' => $ps['market'], 'vat' => $ps['vat'], 'pit' => $ps['pit'], 'tax' => $ps['tax'], 'deadline' => HouseholdTax::deadline($p)->toDateString()];
+        }
 
         // Rough forecast: the day the year's revenue reaches the threshold at the pace so far.
         $days = max(1, (int) $start->diffInDays($end) + 1);
@@ -67,12 +82,14 @@ class Books
             'threshold' => $tax->threshold(),
             'reach_on' => $reach,
             'channels' => $channels,
+            'periods' => $periods,
             'self' => $sum['self'], 'market' => $sum['market'], 'tax' => $sum['tax'], 'withheld' => $sum['withheld'],
             'current' => [...$this->declaration($period, false), 'taxpayer' => $this->taxpayer()],
             'todo' => [
                 'declare' => ['period' => $previous, 'label' => HouseholdTax::bounds($previous)[2], 'deadline' => HouseholdTax::deadline($previous)->toDateString()],
                 'invoices_review' => PurchaseInvoice::query()->where('status', 'open')->whereRaw('JSON_LENGTH(issues) > 0')->count(),
                 'invoices_open' => PurchaseInvoice::query()->where('status', 'open')->count(),
+                'invoices_open_vat' => (float) PurchaseInvoice::query()->where('status', 'open')->sum('vat_amount'),
             ],
         ];
     }
@@ -123,6 +140,31 @@ class Books
         };
     }
 
+    /**
+     * One line per book for the month (S4: its year), for the cards above the book. S2 only with inventory.view.
+     *
+     * @return array<string, array<string, mixed>|null>
+     */
+    public function summary(string $month): array
+    {
+        [$from, $to] = HouseholdTax::bounds($month);
+        $s1 = $this->s1($from, $to)['totals'];
+        $s3 = $this->s3($from, $to);
+        $s4 = $this->s4((int) $from->year);
+        $s2 = null;
+        if ($this->context->can('inventory.view')) {
+            $ledger = $this->s2($from, $to);
+            $s2 = ['items' => count($ledger['rows']), 'closing_value' => $ledger['totals']['closing_value'], 'truncated' => $ledger['truncated']];
+        }
+
+        return [
+            's1' => ['self' => $s1['self'], 'market' => $s1['market'], 'total' => $s1['self'] + $s1['market'], 'withheld' => $s1['withheld']],
+            's2' => $s2,
+            's3' => ['amount' => $s3['totals']['amount'], 'vouchers' => count($s3['rows'])],
+            's4' => ['tax' => $s4['totals']['tax'], 'periods' => count($s4['rows']), 'year' => (int) $from->year],
+        ];
+    }
+
     /** @return array<string, mixed> */
     private function s1(CarbonImmutable $from, CarbonImmutable $to): array
     {
@@ -132,7 +174,7 @@ class Books
         foreach ($this->figures->entries($from, $to) as $e) {
             $key = $e['day'].'|'.$e['channel'];
             $r = $tax->rates($e['group']);
-            $rows[$key] ??= ['day' => $e['day'], 'label' => $e['label'], 'kind' => $e['kind'], 'orders' => [], 'self' => 0.0, 'market' => 0.0, 'withheld' => 0.0];
+            $rows[$key] ??= ['day' => $e['day'], 'label' => $e['label'], 'kind' => $e['kind'], 'mark' => $e['mark'], 'orders' => [], 'self' => 0.0, 'market' => 0.0, 'withheld' => 0.0];
             $rows[$key][$e['kind']] += $e['amount'];
             if ($e['kind'] === 'market') {
                 $rows[$key]['withheld'] += $e['amount'] * ($r['vat'] + $r['pit']) / 100;
