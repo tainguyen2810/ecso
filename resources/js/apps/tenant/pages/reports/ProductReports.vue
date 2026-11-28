@@ -109,7 +109,7 @@ function exportCsv() {
 </script>
 
 <template>
-    <div class="mx-auto max-w-[1440px] pt-2">
+    <div class="pt-2">
         <ReportDetailHead
             title="Bán chạy, bán chậm"
             description="Sản phẩm bán chạy trong kỳ và hàng tồn lâu không bán được."

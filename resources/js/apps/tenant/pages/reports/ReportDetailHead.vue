@@ -117,12 +117,12 @@ function custom() {
                 </button>
             </div>
         </div>
-        <nav v-if="siblings.length > 1" class="mt-5 flex gap-2 overflow-x-auto pb-1" aria-label="Báo cáo cùng nhóm" data-testid="report-siblings">
+        <nav v-if="siblings.length > 1" class="mt-5 flex flex-wrap gap-1.5" aria-label="Báo cáo cùng nhóm" data-testid="report-siblings">
             <RouterLink
                 v-for="l in siblings"
                 :key="l.title"
                 :to="target(l)"
-                :class="cn('shrink-0 whitespace-nowrap rounded-[10px] px-3.5 py-2 text-[14px]', isCurrent(l) ? 'bg-blue-600 font-medium text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-700')"
+                :class="cn('shrink-0 whitespace-nowrap rounded-[10px] px-3 py-2 text-[13px]', isCurrent(l) ? 'bg-blue-600 font-medium text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-700')"
             >
                 {{ l.title }}
             </RouterLink>

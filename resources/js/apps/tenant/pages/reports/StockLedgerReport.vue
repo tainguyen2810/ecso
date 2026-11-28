@@ -112,7 +112,7 @@ const pageList = computed<(number | '…')[]>(() => {
 </script>
 
 <template>
-    <div class="mx-auto max-w-[1440px] pt-2">
+    <div class="pt-2">
         <ReportDetailHead
             title="Xuất nhập tồn"
             description="Tồn đầu kỳ, nhập, xuất và tồn cuối kỳ của từng sản phẩm, lấy trực tiếp từ sổ kho."

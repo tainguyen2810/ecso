@@ -160,7 +160,7 @@ const card = 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2
 </script>
 
 <template>
-    <div class="mx-auto max-w-[1440px] pt-2">
+    <div class="pt-2">
         <ReportDetailHead
             title="Báo cáo lãi lỗ"
             description="Doanh thu, chi phí và lợi nhuận của kỳ đang xem, đặt cạnh kỳ trước có cùng số ngày."

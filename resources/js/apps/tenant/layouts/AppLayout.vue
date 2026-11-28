@@ -24,6 +24,8 @@ const auth = useAuthStore();
 const tenant = useTenantStore();
 const route = useRoute();
 const router = useRouter();
+/** Report pages use the whole width (Full HD first) so wide tables fit without sideways scrolling. */
+const wide = computed(() => route.meta.nav === 'reports' || ['finance', 'report-cashbook'].includes(String(route.name)));
 const toast = useToast();
 
 const switcherOpen = ref(false);
@@ -441,7 +443,7 @@ useGoShortcuts(
             <GlobalSearch v-model:open="searchOpen" />
             <ConnectChannelDialog v-model:open="connectOpen" :counts="shopCounts" @connected="loadShopCounts" />
             <!-- Full-bleed pages (Tin nhắn): no padding, the page fills the space under the top bar. -->
-            <main :class="route.meta.flush ? 'flex min-h-0 w-full flex-1 flex-col pb-16 lg:pb-0' : 'mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 pb-28 sm:px-6 lg:px-8 lg:pb-6'">
+            <main :class="route.meta.flush ? 'flex min-h-0 w-full flex-1 flex-col pb-16 lg:pb-0' : cn('mx-auto w-full flex-1 px-4 py-6 pb-28 sm:px-6 lg:px-8 lg:pb-6', !wide && 'max-w-[1600px]')">
                 <RouterView :key="tenant.current?.id" />
             </main>
             <MobileNav @switch-tenant="switchTenant" @logout="logout" />

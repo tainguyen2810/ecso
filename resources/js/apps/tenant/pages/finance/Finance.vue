@@ -110,7 +110,7 @@ function exportCsv() {
 </script>
 
 <template>
-    <div class="mx-auto max-w-[1440px] pt-2">
+    <div class="pt-2">
         <div class="mb-5">
             <div class="flex flex-wrap items-end justify-between gap-4">
                 <div class="min-w-0">
