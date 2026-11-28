@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Modules\Cashbook\Http\Resources\CashAccountResource;
 use App\Modules\Cashbook\Http\Resources\VoucherRowResource;
 use App\Modules\Cashbook\Models\CashAccount;
+use App\Modules\Cashbook\Models\CashCount;
 use App\Modules\Cashbook\Models\CashTransfer;
 use App\Modules\Cashbook\Models\CashVoucher;
+use App\Modules\Cashbook\Models\CodReconciliation;
 use App\Modules\Cashbook\Services\CashAccountService;
 use App\Modules\Cashbook\Services\CashFlows;
 use App\Modules\Cashbook\Services\VoucherLedger;
@@ -28,9 +30,21 @@ class CashAccountController extends Controller
         $at = $request->validate(['at' => ['nullable', 'date_format:Y-m-d']])['at'] ?? null;
         $accounts = $service->all();
         CashAccountResource::$balances = $flows->balances($at ? ReportRange::date($at)->endOfDay() : null);
+        // Last cash count of each fund: shown on its card ("Kiểm quỹ lần cuối").
+        CashAccountResource::$counts = CashCount::query()->whereIn('id', CashCount::query()->selectRaw('MAX(id)')->groupBy('cash_account_id'))
+            ->get(['cash_account_id', 'counted_at', 'difference'])->keyBy('cash_account_id')->all();
+        $canSee = (bool) $request->user()?->can('balances', CashAccount::class);
+        $active = $accounts->where('is_active', true)->pluck('id')->all();
+        $total = $canSee ? (float) collect(CashAccountResource::$balances)->only($active)->sum() : null;
+        // Change since the end of last month, for the "+… tháng này" chip (only when looking at today).
+        $monthStart = ReportRange::now()->startOfMonth();
+        $change = $canSee && ! $at ? round($total - (float) collect($flows->balances($monthStart->subSecond()))->only($active)->sum(), 2) : null;
+        $lastCod = CodReconciliation::query()->whereNull('voided_at')->latest('remitted_at')->value('remitted_at');
 
         return CashAccountResource::collection($accounts)->additional(['meta' => [
-            'total' => $request->user()?->can('balances', CashAccount::class) ? (float) collect(CashAccountResource::$balances)->only($accounts->where('is_active', true)->pluck('id')->all())->sum() : null,
+            'total' => $total,
+            'month_change' => $change,
+            'last_cod_reconciliation' => $lastCod?->toIso8601String(),
             'closed_until' => PeriodLock::current()?->closed_until->toDateString(),
         ]]);
     }

@@ -60,6 +60,8 @@ export interface Fund {
     note: string | null;
     is_active: boolean;
     balance: number | null;
+    /** Last cash count (kiểm quỹ); difference is null for members without finance.balances. */
+    last_count?: { at: string; difference: number | null } | null;
 }
 
 export const fundKinds: Record<FundKind, string> = { cash: 'Tiền mặt', bank: 'Ngân hàng', ewallet: 'Ví điện tử', cod: 'COD chờ đối soát', other: 'Khác' };

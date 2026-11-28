@@ -3,6 +3,7 @@
 namespace App\Modules\Cashbook\Http\Resources;
 
 use App\Modules\Cashbook\Models\CashAccount;
+use App\Modules\Cashbook\Models\CashCount;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -16,6 +17,9 @@ class CashAccountResource extends JsonResource
 {
     /** @var array<int, string> account id => balance, set by the controller before rendering */
     public static array $balances = [];
+
+    /** @var array<int, CashCount> account id => its last cash count, set by the fund list */
+    public static array $counts = [];
 
     public function toArray(Request $request): array
     {
@@ -36,6 +40,10 @@ class CashAccountResource extends JsonResource
             'opening_at' => $this->opening_at?->toIso8601String(),
             'note' => $this->note,
             'is_active' => $this->is_active,
+            'last_count' => isset(self::$counts[$this->id]) ? [
+                'at' => self::$counts[$this->id]->counted_at->toIso8601String(),
+                'difference' => $balances ? (float) self::$counts[$this->id]->difference : null,
+            ] : null,
             'balance' => ! $balances ? null : (isset(self::$balances[$this->id]) ? (float) self::$balances[$this->id] : (float) $this->opening_balance),
         ];
     }
