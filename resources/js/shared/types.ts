@@ -103,6 +103,8 @@ export interface Variant {
     product?: Ref & { image?: string | null; unit?: string | null; track_lots?: boolean; shelf_life_months?: number | null; require_mfg_date?: boolean; expiry_warn_days?: number | null; type?: ProductType };
     /** Thuê bao: the months this SKU sells. */
     period_months?: number | null;
+    /** The variant's own picture, when the API loaded it. */
+    image?: string | null;
     stock?: StockFigures;
 }
 
