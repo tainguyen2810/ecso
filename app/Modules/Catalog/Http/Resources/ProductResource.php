@@ -37,6 +37,8 @@ class ProductResource extends JsonResource
                 'on_hand' => (int) $this->on_hand,
                 'reserved' => (int) $this->reserved,
                 'available' => (int) $this->on_hand - (int) $this->reserved,
+                // Summed safety stock of the SKUs: "Sắp hết" when available is at or below it.
+                'safety' => (int) $this->getAttribute('safety'),
             ]),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),

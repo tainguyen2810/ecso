@@ -14,13 +14,13 @@ use App\Modules\Purchasing\Models\PurchaseOrder;
 use App\Modules\Purchasing\Models\Supplier;
 use App\Modules\Purchasing\Models\SupplierPayment;
 use App\Modules\Purchasing\Services\PurchaseInvoiceService;
+use App\Modules\Purchasing\Services\PurchaseOrderSummary;
 use App\Modules\Purchasing\Services\PurchaseService;
 use App\Modules\Purchasing\Services\SupplierAllocation;
 use App\Modules\Purchasing\Services\SupplierPaymentService;
 use App\Shared\Support\ReportRange;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -35,7 +35,7 @@ class PurchaseOrderController extends Controller
 
     private const DETAIL = ['supplier', 'warehouse', 'creator', 'lines.variant.product', 'receipts.lines', 'receipts.creator', 'payments.creator', 'returns.creator'];
 
-    public function index(Request $request): AnonymousResourceCollection
+    public function index(Request $request, SupplierAllocation $allocations): JsonResponse
     {
         $this->authorize('viewAny', PurchaseOrder::class);
         $filters = $request->validate([
@@ -78,7 +78,28 @@ class PurchaseOrderController extends Controller
                 ->orWhereHas('lines.variant', fn ($v) => $v->where('sku', 'like', "%{$q}%")));
         }
 
-        return PurchaseOrderResource::collection($query->paginate((int) ($filters['per_page'] ?? 20)));
+        $page = $query->paginate((int) ($filters['per_page'] ?? 20));
+        // What is still owed and when it falls due, per order on this page (money paid on account counted).
+        $supplierIds = $page->getCollection()->pluck('supplier_id')->unique()->map(fn ($id) => (int) $id)->values()->all();
+        $byOrder = [];
+        foreach ($allocations->forSuppliers($supplierIds) as $supplier) {
+            $byOrder += $supplier['orders']; // keyed by order id
+        }
+        PurchaseOrderResource::$allocation = $byOrder;
+        try {
+            return PurchaseOrderResource::collection($page)->response();
+        } finally {
+            PurchaseOrderResource::$allocation = null;
+        }
+    }
+
+    /** Figures and tab counts above "Đặt hàng nhập" (mode=ordering) or "Nhập hàng" (mode=receiving). */
+    public function summary(Request $request, PurchaseOrderSummary $summary): JsonResponse
+    {
+        $this->authorize('viewAny', PurchaseOrder::class);
+        $mode = $request->validate(['mode' => ['nullable', Rule::in(['ordering', 'receiving'])]])['mode'] ?? 'receiving';
+
+        return response()->json(['data' => $mode === 'ordering' ? $summary->ordering() : $summary->receiving()]);
     }
 
     public function show(PurchaseOrder $purchaseOrder, SupplierAllocation $allocations): JsonResponse

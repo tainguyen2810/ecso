@@ -110,6 +110,8 @@ export interface StockFigures {
     on_hand: number;
     reserved: number;
     available: number;
+    /** Summed safety stock (product list only). */
+    safety?: number;
 }
 
 /** standard | combo hold stock; service (sold once) and subscription (sold per period) hold none. */
@@ -205,6 +207,8 @@ export interface StockSummary {
     inventory_value: string;
     out_of_stock: number;
     low_stock: number;
+    /** SKUs with something available to sell (all warehouses). */
+    in_stock?: number;
 }
 
 export interface Movement {
@@ -269,6 +273,12 @@ export interface InventoryDocument {
     lines?: DocumentLine[];
     total_quantity?: number | null;
     total_value?: string | null;
+    /** Stocktake list: what balancing found short (negative) and over. */
+    short_qty?: number;
+    surplus_qty?: number;
+    /** Transfer list: quantity sent and, once received, what arrived. */
+    total_qty?: number;
+    received_qty?: number;
 }
 
 export interface OrderSummary {
@@ -917,6 +927,8 @@ export interface Supplier {
     paid?: string;
     debt?: string;
     overdue?: string;
+    /** Earliest due date of what is still owed. */
+    next_due?: string;
     created_at: string | null;
 }
 

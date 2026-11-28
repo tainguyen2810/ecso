@@ -54,6 +54,11 @@ class ReconciliationController extends Controller
 
         return response()->json(['data' => [
             'checked_at' => now()->toIso8601String(),
+            // What the check covered: stock lines per SKU and warehouse.
+            'scope' => [
+                'skus' => (int) DB::table('stock_balances')->where('tenant_id', $tenant)->distinct()->count('product_variant_id'),
+                'warehouses' => (int) DB::table('stock_balances')->where('tenant_id', $tenant)->distinct()->count('warehouse_id'),
+            ],
             'ledger' => $ledger,
             'shortages' => $short->map(fn ($r) => [
                 'order' => ['id' => $r->order_id, 'number' => $r->code ?? $r->external_order_id, 'marketplace' => $r->marketplace],

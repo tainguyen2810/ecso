@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Route;
 // idempotent: a repeated POST with the same Idempotency-Key replays the first answer (no second document).
 Route::middleware(['auth:sanctum', 'verified', 'tenant', 'idempotent'])->group(function () {
     Route::get('suppliers/export', [SupplierController::class, 'export'])->middleware('throttle:10,1,purchasing.suppliers.export');
+    Route::get('suppliers/summary', [SupplierController::class, 'summary']);
     Route::apiResource('suppliers', SupplierController::class);
     Route::post('suppliers/{supplier}/payments', [SupplierPaymentController::class, 'store'])->middleware('idempotent');
     Route::post('suppliers/{supplier}/refunds', [SupplierPaymentController::class, 'refund'])->middleware('idempotent');
@@ -27,6 +28,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant', 'idempotent'])->group(f
 
     Route::post('purchase-orders/import/sapo', [SapoPurchaseImportController::class, 'import'])->middleware('throttle:30,1,purchasing.orders.import-sapo');
     Route::get('purchase-orders/reorder', [ReorderController::class, 'index']);
+    Route::get('purchase-orders/summary', [PurchaseOrderController::class, 'summary']);
     Route::apiResource('purchase-orders', PurchaseOrderController::class)->except('destroy');
     Route::patch('purchase-orders/{purchaseOrder}/due-date', [PurchaseOrderController::class, 'dueDate']);
     Route::post('purchase-orders/{purchaseOrder}/receive', [PurchaseOrderController::class, 'receive']);

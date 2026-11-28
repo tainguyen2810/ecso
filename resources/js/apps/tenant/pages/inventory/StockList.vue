@@ -1,21 +1,24 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, provide, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { ArrowLeftRight, Boxes, ClipboardCheck, ImageIcon, List, PackagePlus, Plus, Printer, Search, Warehouse as WarehouseIcon } from 'lucide-vue-next';
-import PageHeader from '../../PageHeader.vue';
-import HeaderLink from '../../components/HeaderLink.vue';
-import Pagination from '../../components/Pagination.vue';
+import { ArrowLeftRight, Boxes, ChartColumn, ClipboardCheck, ImageIcon, Lightbulb, List, PackagePlus, Plus, Printer, ShoppingBag, SlidersHorizontal, Warehouse as WarehouseIcon } from 'lucide-vue-next';
 import StockOverview from '../../components/StockOverview.vue';
-import Tabs from '../../components/Tabs.vue';
+import ProductsHead from '../products/ui/ProductsHead.vue';
+import HeadLink from '../products/ui/HeadLink.vue';
+import HeadButton from '../products/ui/HeadButton.vue';
+import Pills from '../products/ui/Pills.vue';
+import SearchField from '../products/ui/SearchField.vue';
+import NumberPager from '../products/ui/NumberPager.vue';
+import StatusChip from '../products/ui/StatusChip.vue';
+import SideCard from '../reports/SideCard.vue';
+import { card, th, thead } from '../products/ui/ui';
 import Button from '@/shared/ui/Button.vue';
-import Card from '@/shared/ui/Card.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
-import Input from '@/shared/ui/Input.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
-import { cn, formatMoney, formatNumber } from '@/shared/lib/utils';
+import { cn, formatDate, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useTenantStore } from '@/shared/stores/tenant';
 import { useToast } from '@/shared/composables/useToast';
 import type { Ref as Named, StockRow, StockSummary, Warehouse } from '@/shared/types';
@@ -31,7 +34,8 @@ const categories = ref<Named[]>([]);
 const brands = ref<Named[]>([]);
 const rows = ref<StockRow[]>([]);
 const summary = ref<StockSummary | null>(null);
-const meta = ref({ current_page: 1, last_page: 1, total: 0 });
+const meta = ref({ current_page: 1, last_page: 1, total: 0, per_page: 50 });
+provide('soft-cards', true);
 const loading = ref(true);
 const loadError = ref<string | null>(null);
 const route = useRoute();
@@ -40,16 +44,40 @@ const filters = reactive({ warehouse: '', q: '', state: initialState, category: 
 /** Wholesale prices are often unused: the column only shows when a row on this page has one. */
 const showWholesale = computed(() => rows.value.some((r) => Number(r.wholesale_price ?? 0) > 0));
 
+const activeWarehouses = computed(() => warehouses.value.filter((w) => w.status === 'active'));
 const warehouseOptions = computed(() => [
-    { value: '', label: 'Kho: Tất cả' },
-    ...warehouses.value.filter((w) => w.status === 'active').map((w) => ({ value: w.id, label: `${w.code} · ${w.name}` })),
+    { value: '', label: 'Tất cả kho' },
+    ...activeWarehouses.value.map((w) => ({ value: w.id, label: w.on_hand !== undefined ? `${w.name} (${formatNumber(w.on_hand)})` : w.name })),
 ]);
-const tabs = computed(() => [
-    { value: 'all', label: 'Tất cả phiên bản', count: summary.value?.skus ?? null },
+const stateOptions = computed(() => [
+    { value: 'all', label: 'Tất cả' },
     { value: 'in', label: 'Còn hàng' },
-    { value: 'low', label: 'Sắp hết hàng', count: summary.value?.low_stock ?? null },
-    { value: 'out', label: 'Hết hàng', count: summary.value?.out_of_stock ?? null },
+    { value: 'low', label: summary.value ? `Sắp hết (${formatNumber(summary.value.low_stock)})` : 'Sắp hết' },
+    { value: 'out', label: summary.value ? `Hết hàng (${formatNumber(summary.value.out_of_stock)})` : 'Hết hàng' },
 ]);
+
+/** Right column: stock per warehouse, SKUs to reorder (at or below safety stock), latest stock documents. */
+const lowStock = ref<{ variant_id: string; sku: string; name: string; warehouse: string; available: number; safety_stock: number }[]>([]);
+const lowTotal = ref(0);
+type RecentDoc = { kind: 'receipts' | 'adjustments' | 'transfers'; id: string; number: string; created_at: string; lines_count?: number; text: string };
+const recent = ref<RecentDoc[]>([]);
+async function loadSide() {
+    const [low, ...docs] = await Promise.all([
+        api.get('/inventory/low-stock').catch(() => null),
+        ...(['receipts', 'adjustments', 'transfers'] as const).map((k) => api.get(`/inventory/${k}`).then((r) => ({ k, rows: r.data.data })).catch(() => ({ k, rows: [] }))),
+    ]);
+    lowStock.value = low?.data.data ?? [];
+    lowTotal.value = low?.data.meta?.total ?? lowStock.value.length;
+    type Doc = { id: string; number: string; created_at: string; lines_count?: number; warehouse?: { name: string } | null; from_warehouse?: { name: string } | null; to_warehouse?: { name: string } | null; reason?: string | null };
+    const label = (k: RecentDoc['kind'], d: Doc) =>
+        k === 'transfers' ? `${d.from_warehouse?.name ?? ''} → ${d.to_warehouse?.name ?? ''}` : `${k === 'receipts' ? 'Nhập kho' : 'Điều chỉnh'} · ${d.warehouse?.name ?? ''}`;
+    recent.value = (docs as { k: RecentDoc['kind']; rows: Doc[] }[])
+        .flatMap(({ k, rows }) => rows.slice(0, 3).map((d) => ({ kind: k, id: d.id, number: d.number, created_at: d.created_at, lines_count: d.lines_count, text: label(k, d) })))
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))
+        .slice(0, 4);
+}
+const docIcon = { receipts: [PackagePlus, 'bg-emerald-50 text-emerald-600'], adjustments: [SlidersHorizontal, 'bg-amber-50 text-amber-600'], transfers: [ArrowLeftRight, 'bg-blue-50 text-blue-600'] } as const;
+const level = (row: StockRow) => Math.min(100, Math.round((Math.max(row.available, 0) / Math.max(row.safety_stock * 3, 10)) * 100));
 
 async function load() {
     loading.value = true;
@@ -80,7 +108,7 @@ onMounted(async () => {
     warehouses.value = w.data.data;
     categories.value = c?.data.data ?? [];
     brands.value = b?.data.data ?? [];
-    await load();
+    await Promise.all([load(), loadSide()]);
 });
 
 let timer: ReturnType<typeof setTimeout> | undefined;
@@ -115,100 +143,167 @@ const isLow = (row: StockRow) => row.available > 0 && row.available <= row.safet
 </script>
 
 <template>
-    <PageHeader title="Quản lý kho">
+    <ProductsHead title="Quản lý kho" description="Tồn từng phiên bản theo kho: đang có, đang giữ cho đơn, có thể bán và tồn an toàn.">
         <template #links>
-            <HeaderLink :icon="Printer" to="/products/labels">In tem mã</HeaderLink>
-            <HeaderLink :icon="PackagePlus" to="/inventory/receipts" data-testid="receipts-link">Nhập kho</HeaderLink>
-            <HeaderLink :icon="ClipboardCheck" to="/inventory/adjustments">Điều chỉnh tồn</HeaderLink>
-            <HeaderLink :icon="ArrowLeftRight" to="/inventory/transfers">Chuyển hàng</HeaderLink>
-            <HeaderLink :icon="WarehouseIcon" to="/inventory/warehouses">Danh sách kho</HeaderLink>
-            <HeaderLink v-if="tenant.can('products.view')" :icon="List" to="/products">Xem danh sách sản phẩm</HeaderLink>
+            <HeadLink :icon="WarehouseIcon" to="/inventory/warehouses">Danh sách kho</HeadLink>
+            <HeadLink :icon="PackagePlus" to="/inventory/receipts" data-testid="receipts-link">Phiếu nhập kho</HeadLink>
+            <HeadLink :icon="Printer" to="/products/labels">In tem mã vạch</HeadLink>
+            <HeadLink v-if="tenant.can('products.view')" :icon="List" to="/products">Danh sách sản phẩm</HeadLink>
+            <HeadLink v-if="tenant.can('reports.view')" :icon="ChartColumn" to="/reports/group/stock">Báo cáo kho</HeadLink>
         </template>
-        <RouterLink v-if="tenant.can('purchasing.manage')" to="/purchasing/new"><Button data-testid="new-purchase"><Plus /> Nhập hàng</Button></RouterLink>
-        <RouterLink v-else-if="tenant.can('inventory.receive')" to="/inventory/receipts/new"><Button data-testid="new-receipt"><Plus /> Nhập kho</Button></RouterLink>
-    </PageHeader>
+        <HeadButton :icon="ClipboardCheck" to="/inventory/adjustments">Điều chỉnh tồn</HeadButton>
+        <HeadButton :icon="ArrowLeftRight" to="/inventory/transfers">Chuyển hàng</HeadButton>
+        <HeadButton v-if="tenant.can('purchasing.manage')" :icon="Plus" to="/purchasing/new" primary data-testid="new-purchase">Nhập hàng</HeadButton>
+        <HeadButton v-else-if="tenant.can('inventory.receive')" :icon="Plus" to="/inventory/receipts/new" primary data-testid="new-receipt">Nhập kho</HeadButton>
+    </ProductsHead>
 
     <StockOverview :summary="summary" :active="filters.state" @select="(s) => (filters.state = s)" />
 
-    <Card>
-        <div class="border-b px-3"><Tabs v-model="filters.state" :tabs="tabs" variant="underline" data-testid="stock-tabs" /></div>
-        <div class="flex flex-wrap items-center gap-3 border-b px-4 py-3">
-            <div class="relative w-full sm:min-w-64 sm:flex-1">
-                <Search class="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                <Input v-model="filters.q" data-testid="stock-search" placeholder="Tìm theo tên, SKU, mã vạch" class="pl-8" />
+    <div class="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_360px]">
+        <section :class="cn(card, 'min-w-0 overflow-hidden')">
+            <div class="flex flex-wrap items-center gap-3 border-b border-slate-100 px-5 py-3.5">
+                <Pills v-if="activeWarehouses.length > 1 && activeWarehouses.length <= 4" v-model="filters.warehouse" :options="warehouseOptions" label="Kho" data-testid="stock-warehouse" />
+                <Select v-else v-model="filters.warehouse" :options="warehouseOptions" class="w-full sm:w-56" data-testid="stock-warehouse" aria-label="Kho" />
+                <Pills v-model="filters.state" :options="stateOptions" label="Tình trạng tồn" class="xl:ml-auto" data-testid="stock-tabs" />
             </div>
-            <Select v-model="filters.warehouse" :options="warehouseOptions" class="w-full sm:w-48" data-testid="stock-warehouse" aria-label="Kho" />
-            <Select v-if="categories.length" v-model="filters.category" class="w-full sm:w-44" aria-label="Danh mục" :options="[{ value: '', label: 'Danh mục' }, ...categories.map((c) => ({ value: c.id, label: c.name }))]" />
-            <Select v-if="brands.length" v-model="filters.brand" class="w-full sm:w-44" aria-label="Thương hiệu" :options="[{ value: '', label: 'Thương hiệu' }, ...brands.map((b) => ({ value: b.id, label: b.name }))]" />
-        </div>
+            <div class="flex flex-wrap items-center gap-3 border-b border-slate-100 px-5 py-3">
+                <SearchField v-model="filters.q" placeholder="Tìm theo tên, SKU, mã vạch" data-testid="stock-search" />
+                <Select v-if="categories.length" v-model="filters.category" class="w-full sm:w-44" aria-label="Danh mục" :options="[{ value: '', label: 'Danh mục' }, ...categories.map((c) => ({ value: c.id, label: c.name }))]" />
+                <Select v-if="brands.length" v-model="filters.brand" class="w-full sm:w-44" aria-label="Thương hiệu" :options="[{ value: '', label: 'Thương hiệu' }, ...brands.map((b) => ({ value: b.id, label: b.name }))]" />
+            </div>
 
-        <div v-if="loading && !rows.length" class="space-y-3 p-4"><Skeleton v-for="i in 6" :key="i" class="h-12" /></div>
-        <ErrorState v-else-if="loadError" :message="loadError" @retry="load" />
-        <EmptyState
-            v-else-if="!rows.length"
-            :icon="Boxes"
-            :title="filters.q || filters.state !== 'all' || filters.category || filters.brand ? 'Không có phiên bản phù hợp' : 'Chưa có sản phẩm'"
-            description="Tạo sản phẩm hoặc nhập từ Excel, sau đó nhập hàng để bắt đầu theo dõi tồn."
-        >
-            <RouterLink to="/products"><Button variant="outline">Đi tới Danh sách sản phẩm</Button></RouterLink>
-        </EmptyState>
-        <div v-else class="overflow-x-auto" :class="loading && 'opacity-60'">
-            <table class="w-full text-sm" data-testid="stock-table">
-                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                    <tr>
-                        <th class="w-14 py-2.5 pl-4 font-medium">Ảnh</th>
-                        <th class="px-4 py-2.5 font-medium">Tên phiên bản sản phẩm</th>
-                        <th class="px-4 py-2.5 text-right font-medium" title="Tồn kho trừ số đang giữ cho đơn">Có thể bán</th>
-                        <th class="px-4 py-2.5 text-right font-medium">Tồn kho</th>
-                        <th class="px-4 py-2.5 text-right font-medium" :title="filters.warehouse ? 'Bấm để sửa' : 'Chọn một kho để sửa'">Tồn an toàn</th>
-                        <th class="px-4 py-2.5 text-right font-medium">Giá bán lẻ</th>
-                        <th v-if="canCost" class="px-4 py-2.5 text-right font-medium">Giá vốn</th>
-                        <th v-if="showWholesale" class="px-4 py-2.5 text-right font-medium">Giá bán buôn</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y">
-                    <tr v-for="row in rows" :key="row.variant.id" class="hover:bg-muted/30">
-                        <td class="py-2.5 pl-4">
-                            <img v-if="row.product.image" :src="row.product.image" alt="" class="size-10 rounded border object-cover" />
-                            <span v-else class="flex size-10 items-center justify-center rounded border bg-muted/50 text-muted-foreground"><ImageIcon class="size-4" /></span>
-                        </td>
-                        <td class="px-4 py-2.5">
-                            <RouterLink :to="`/inventory/sku/${row.variant.id}`" class="font-medium text-primary hover:underline">
-                                {{ row.product.name }}<template v-if="row.variant.name"> ({{ row.variant.name }})</template>
-                            </RouterLink>
-                            <p class="font-mono text-xs text-muted-foreground">{{ row.variant.sku }}</p>
-                        </td>
-                        <td
-                            :class="cn('px-4 py-2.5 text-right font-semibold tabular-nums', row.available <= 0 ? 'text-destructive' : isLow(row) && 'text-amber-600')"
-                            :title="row.reserved ? `${formatNumber(row.reserved)} đang giữ cho đơn` : undefined"
-                        >
-                            {{ formatNumber(row.available) }}
-                            <span v-if="row.available <= 0" class="mt-0.5 block text-[11px] font-medium text-rose-600">Hết hàng</span>
-                            <span v-else-if="isLow(row)" class="mt-0.5 block text-[11px] font-medium text-amber-600">Sắp hết</span>
-                            <span v-else-if="row.reserved" class="mt-0.5 block text-[11px] font-normal text-muted-foreground">giữ {{ formatNumber(row.reserved) }}</span>
-                        </td>
-                        <td class="px-4 py-2.5 text-right tabular-nums">{{ formatNumber(row.on_hand) }}</td>
-                        <td class="px-4 py-2.5 text-right tabular-nums">
-                            <input
-                                v-if="editing === row.variant.id"
-                                v-model="safetyValue"
-                                type="number"
-                                min="0"
-                                class="h-7 w-20 rounded border border-input bg-card px-2 text-right text-sm"
-                                autofocus
-                                @keydown.enter="saveSafety(row)"
-                                @keydown.esc="editing = null"
-                                @blur="saveSafety(row)"
-                            />
-                            <button v-else :class="cn('rounded px-1.5 py-0.5 text-muted-foreground', canConfigure && filters.warehouse && 'hover:bg-muted')" @click="startEdit(row)">{{ row.safety_stock || '—' }}</button>
-                        </td>
-                        <td class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(row.ref_price ?? 0) }}</td>
-                        <td v-if="canCost" class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(row.cost_price) }}</td>
-                        <td v-if="showWholesale" class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(row.wholesale_price ?? 0) }}</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-        <Pagination :page="meta.current_page" :last-page="meta.last_page" :total="meta.total" @go="(p) => ((filters.page = p), load())" />
-    </Card>
+            <div v-if="loading && !rows.length" class="space-y-3 p-5"><Skeleton v-for="i in 6" :key="i" class="h-12" /></div>
+            <ErrorState v-else-if="loadError" :message="loadError" @retry="load" />
+            <EmptyState
+                v-else-if="!rows.length"
+                :icon="Boxes"
+                :title="filters.q || filters.state !== 'all' || filters.category || filters.brand ? 'Không có phiên bản phù hợp' : 'Chưa có sản phẩm'"
+                description="Tạo sản phẩm hoặc nhập từ Excel, sau đó nhập hàng để bắt đầu theo dõi tồn."
+            >
+                <RouterLink to="/products"><Button variant="outline">Đi tới Danh sách sản phẩm</Button></RouterLink>
+            </EmptyState>
+            <div v-else class="overflow-x-auto" :class="loading && 'opacity-60'">
+                <table class="w-full min-w-[960px]" data-testid="stock-table">
+                    <thead :class="thead">
+                        <tr>
+                            <th :class="th">Phiên bản sản phẩm</th>
+                            <th :class="cn(th, 'text-right')">Tồn kho</th>
+                            <th :class="cn(th, 'text-right')">Đang giữ</th>
+                            <th :class="th" title="Tồn kho trừ số đang giữ cho đơn">Có thể bán</th>
+                            <th :class="cn(th, 'text-right')" :title="filters.warehouse ? 'Bấm để sửa' : 'Chọn một kho để sửa'">Tồn an toàn</th>
+                            <th :class="cn(th, 'text-right')">Giá bán lẻ</th>
+                            <th v-if="canCost" :class="cn(th, 'text-right')">Giá vốn</th>
+                            <th v-if="showWholesale" :class="cn(th, 'text-right')">Giá bán buôn</th>
+                            <th :class="th">Tình trạng</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="row in rows" :key="row.variant.id" class="border-t border-slate-100 hover:bg-slate-50/70">
+                            <td class="px-4 py-3">
+                                <div class="flex items-center gap-3">
+                                    <img v-if="row.product.image" :src="row.product.image" alt="" class="size-10 shrink-0 rounded-[10px] border border-slate-200 object-cover" />
+                                    <span v-else class="grid size-10 shrink-0 place-items-center rounded-[10px] border border-dashed border-slate-300 bg-slate-50 text-slate-400"><ImageIcon class="size-4" /></span>
+                                    <div class="min-w-0">
+                                        <RouterLink :to="`/inventory/sku/${row.variant.id}`" class="text-[14px] font-medium text-slate-800 hover:text-blue-700 hover:underline">
+                                            {{ row.product.name }}<template v-if="row.variant.name"> – {{ row.variant.name }}</template>
+                                        </RouterLink>
+                                        <p class="font-mono text-[12px] text-slate-500">{{ row.variant.sku }}</p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-4 py-3 text-right text-[14px] tabular-nums">{{ formatNumber(row.on_hand) }}</td>
+                            <td class="px-4 py-3 text-right text-[14px] tabular-nums text-slate-500">{{ row.reserved ? formatNumber(row.reserved) : '—' }}</td>
+                            <td class="w-[170px] px-4 py-3">
+                                <div class="flex items-center gap-3">
+                                    <b :class="cn('w-10 text-right text-[15px] tabular-nums', row.available <= 0 ? 'text-red-600' : isLow(row) ? 'text-amber-600' : 'text-slate-900')">{{ formatNumber(row.available) }}</b>
+                                    <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                                        <div :class="cn('h-full rounded-full', row.available <= 0 ? 'bg-red-500' : isLow(row) ? 'bg-amber-500' : 'bg-emerald-500')" :style="{ width: `${level(row)}%` }" />
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-4 py-3 text-right">
+                                <input
+                                    v-if="editing === row.variant.id"
+                                    v-model="safetyValue"
+                                    type="number"
+                                    min="0"
+                                    class="h-8 w-20 rounded-[8px] border border-blue-400 bg-white px-2 text-right text-[13px] outline-none ring-2 ring-blue-100"
+                                    autofocus
+                                    @keydown.enter="saveSafety(row)"
+                                    @keydown.esc="editing = null"
+                                    @blur="saveSafety(row)"
+                                />
+                                <button
+                                    v-else
+                                    type="button"
+                                    :class="cn('inline-flex min-w-12 items-center justify-end gap-1.5 rounded-[8px] px-2.5 py-1 text-[13px] tabular-nums text-slate-700', canConfigure && filters.warehouse && 'border border-dashed border-slate-300 hover:border-blue-400')"
+                                    @click="startEdit(row)"
+                                >
+                                    {{ row.safety_stock || '—' }}
+                                </button>
+                            </td>
+                            <td class="whitespace-nowrap px-4 py-3 text-right text-[14px] tabular-nums">{{ formatMoney(row.ref_price ?? 0) }}</td>
+                            <td v-if="canCost" class="whitespace-nowrap px-4 py-3 text-right text-[14px] tabular-nums text-slate-600">{{ formatMoney(row.cost_price) }}</td>
+                            <td v-if="showWholesale" class="whitespace-nowrap px-4 py-3 text-right text-[14px] tabular-nums text-slate-600">{{ formatMoney(row.wholesale_price ?? 0) }}</td>
+                            <td class="whitespace-nowrap px-4 py-3">
+                                <StatusChip v-if="row.available <= 0" tone="red">Hết hàng</StatusChip>
+                                <StatusChip v-else-if="isLow(row)" tone="amber">Sắp hết</StatusChip>
+                                <StatusChip v-else tone="green">Còn hàng</StatusChip>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <NumberPager :page="meta.current_page" :last-page="meta.last_page" :total="meta.total" :per-page="meta.per_page ?? 50" :count="rows.length" unit="phiên bản" @go="(p) => ((filters.page = p), load())" />
+        </section>
+
+        <aside class="grid content-start gap-5 md:grid-cols-2 2xl:grid-cols-1">
+            <SideCard title="Theo kho" :description="`${activeWarehouses.length} kho đang dùng`">
+                <ul class="divide-y divide-slate-100">
+                    <li v-for="w in activeWarehouses" :key="w.id">
+                        <button type="button" :class="cn('flex w-full items-center gap-3 px-5 py-3 text-left hover:bg-slate-50', filters.warehouse === w.id && 'bg-blue-50/60')" @click="filters.warehouse = filters.warehouse === w.id ? '' : w.id">
+                            <span :class="cn('grid size-9 shrink-0 place-items-center rounded-[10px]', w.purpose === 'defective' ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600')"><WarehouseIcon class="size-4" /></span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block truncate text-[14px] font-medium text-slate-800">{{ w.name }}</span>
+                                <span class="block text-[12px] text-slate-500">{{ [w.is_default ? 'Mặc định' : null, w.purpose === 'defective' ? 'Hàng lỗi' : null, w.code].filter(Boolean).join(' · ') }}</span>
+                            </span>
+                            <span class="text-right">
+                                <span v-if="canCost && w.stock_value != null" class="block text-[14px] font-semibold tabular-nums">{{ formatNumber(Number(w.stock_value)) }}</span>
+                                <span class="block text-[12px] text-slate-500">{{ formatNumber(w.on_hand ?? 0) }} sp</span>
+                            </span>
+                        </button>
+                    </li>
+                </ul>
+            </SideCard>
+            <SideCard v-if="lowStock.length" title="Nên nhập thêm" description="Có thể bán không quá tồn an toàn">
+                <ul class="divide-y divide-slate-100 py-1">
+                    <li v-for="l in lowStock.slice(0, 5)" :key="l.variant_id + l.warehouse" class="flex items-center gap-3 px-5 py-2.5">
+                        <span class="grid size-9 shrink-0 place-items-center rounded-[10px] bg-amber-50 text-amber-600"><Lightbulb class="size-4" /></span>
+                        <RouterLink :to="`/inventory/sku/${l.variant_id}`" class="min-w-0 flex-1">
+                            <span class="block truncate text-[13px] font-medium text-slate-800 hover:text-blue-700">{{ l.name }}</span>
+                            <span class="block text-[12px] text-slate-500">Còn {{ formatNumber(l.available) }} · an toàn {{ formatNumber(l.safety_stock) }} · {{ l.warehouse }}</span>
+                        </RouterLink>
+                        <StatusChip :tone="l.available <= 0 ? 'red' : 'amber'">Thiếu {{ formatNumber(Math.max(1, l.safety_stock - l.available)) }}</StatusChip>
+                    </li>
+                </ul>
+                <div v-if="tenant.can('purchasing.view')" class="border-t border-slate-100 px-5 py-3">
+                    <RouterLink to="/purchasing/reorder" class="flex h-10 items-center justify-center gap-2 rounded-[10px] bg-blue-600 text-[14px] font-medium text-white hover:bg-blue-700"><ShoppingBag class="size-4" /> Mở Gợi ý nhập hàng ({{ formatNumber(lowTotal) }})</RouterLink>
+                </div>
+            </SideCard>
+            <SideCard v-if="recent.length" title="Chứng từ kho gần đây" description="Nhập kho, điều chỉnh, chuyển hàng">
+                <ul class="divide-y divide-slate-100 text-[13px]">
+                    <li v-for="d in recent" :key="d.kind + d.id">
+                        <RouterLink :to="`/inventory/${d.kind}/${d.id}`" class="flex items-center gap-3 px-5 py-2.5 hover:bg-slate-50">
+                            <span :class="cn('grid size-8 shrink-0 place-items-center rounded-[9px]', docIcon[d.kind][1])"><component :is="docIcon[d.kind][0]" class="size-4" /></span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block font-mono font-semibold text-slate-800">{{ d.number }}</span>
+                                <span class="block truncate text-slate-500">{{ d.text }}<template v-if="d.lines_count"> · {{ d.lines_count }} SKU</template></span>
+                            </span>
+                            <span class="whitespace-nowrap text-slate-500">{{ formatDate(d.created_at) }}</span>
+                        </RouterLink>
+                    </li>
+                </ul>
+            </SideCard>
+        </aside>
+    </div>
 </template>

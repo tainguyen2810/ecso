@@ -34,6 +34,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant', 'idempotent'])->group(f
         Route::get('receipts/{receipt}', [ReceiptController::class, 'show']);
 
         Route::get('adjustments', [AdjustmentController::class, 'index']);
+        Route::get('adjustments/summary', [AdjustmentController::class, 'summary']);
         Route::post('adjustments', [AdjustmentController::class, 'store']);
         Route::get('adjustments/{adjustment}', [AdjustmentController::class, 'show']);
         Route::put('adjustments/{adjustment}', [AdjustmentController::class, 'update']);
@@ -43,10 +44,12 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant', 'idempotent'])->group(f
         Route::post('adjustments/{adjustment}/cancel', [AdjustmentController::class, 'cancel']);
 
         Route::get('cost-adjustments', [CostAdjustmentController::class, 'index']);
+        Route::get('cost-adjustments/summary', [CostAdjustmentController::class, 'summary']);
         Route::post('cost-adjustments', [CostAdjustmentController::class, 'store']);
         Route::get('cost-adjustments/{costAdjustment}', [CostAdjustmentController::class, 'show']);
 
         Route::get('transfers', [TransferController::class, 'index']);
+        Route::get('transfers/summary', [TransferController::class, 'summary']);
         Route::post('transfers', [TransferController::class, 'store']);
         Route::get('transfers/{transfer}', [TransferController::class, 'show']);
         Route::post('transfers/{transfer}/dispatch', [TransferController::class, 'dispatchTransfer']);

@@ -42,7 +42,8 @@ async function load() {
         loading.value = false;
     }
 }
-onMounted(load);
+// "Trả tiền" on the supplier list opens the payment dialog straight away.
+onMounted(() => load().then(() => (payOpen.value = route.query.pay === '1' && !!supplier.value)));
 
 async function remove() {
     try {

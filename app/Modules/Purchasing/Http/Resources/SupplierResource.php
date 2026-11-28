@@ -28,6 +28,7 @@ class SupplierResource extends JsonResource
             'paid' => $this->when(isset($this->paid), fn () => bcadd((string) $this->paid, '0', 2)),
             'debt' => $this->when(isset($this->debt), fn () => bcadd((string) $this->debt, '0', 2)),
             'overdue' => $this->when(isset($this->overdue), fn () => bcadd((string) $this->overdue, '0', 2)),
+            'next_due' => $this->when($this->getAttribute('next_due') !== null, fn () => $this->getAttribute('next_due')),
             'created_at' => $this->created_at?->toIso8601String(),
         ];
     }

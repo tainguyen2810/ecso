@@ -8,6 +8,7 @@ use App\Modules\Inventory\Http\Controllers\Concerns\ResolvesLines;
 use App\Modules\Inventory\Http\Resources\DocumentResource;
 use App\Modules\Inventory\Models\InventoryAdjustment;
 use App\Modules\Inventory\Services\InventoryDocumentService;
+use App\Modules\Inventory\Services\StocktakeSummary;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -33,6 +34,9 @@ class AdjustmentController extends Controller
 
         return DocumentResource::collection(
             InventoryAdjustment::query()->with(['warehouse', 'creator:id,name', 'decider:id,name'])->withCount('lines')
+                // Shortage and surplus once balanced (Kiểm hàng list).
+                ->withSum(['lines as short_qty' => fn ($l) => $l->where('applied_delta', '<', 0)], 'applied_delta')
+                ->withSum(['lines as surplus_qty' => fn ($l) => $l->where('applied_delta', '>', 0)], 'applied_delta')
                 ->when($filters['status'] ?? null, fn ($q, $s) => $q->where('status', $s))
                 // Drafts are someone's counting in progress: listed only where asked for (the stocktake list).
                 ->when(! isset($filters['status']) && ! isset($filters['reason']), fn ($q) => $q->where('status', '!=', InventoryAdjustment::DRAFT))
@@ -41,6 +45,14 @@ class AdjustmentController extends Controller
                 ->when($filters['q'] ?? null, fn ($q, $t) => $q->where(fn ($w) => $w->where('number', 'like', "%{$t}%")->orWhere('note', 'like', "%{$t}%")))
                 ->orderByDesc('id')->paginate(20)
         );
+    }
+
+    /** Figures above "Kiểm hàng" (mẫu 28/11). */
+    public function summary(StocktakeSummary $summary): JsonResponse
+    {
+        $this->authorize('viewAny', InventoryAdjustment::class);
+
+        return response()->json(['data' => $summary->get()]);
     }
 
     public function store(Request $request): JsonResponse
