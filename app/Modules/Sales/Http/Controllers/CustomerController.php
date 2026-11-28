@@ -362,7 +362,9 @@ class CustomerController extends Controller
             ->when($filters['segment'] ?? null, fn ($q, $segment) => self::segment($q, $segment))
             ->when($filters['type'] ?? null, fn ($q, $v) => $q->where('customers.type', $v))
             ->when($filters['birth_month'] ?? null, fn ($q, $m) => $q->whereMonth('customers.birthday', (int) $m))
-            ->when($filters['tag'] ?? null, fn ($q, $t) => $q->whereJsonContains('customers.tags', $t))
+            // Tags are stored with \u escapes; MariaDB's JSON_CONTAINS compares the raw text, so match both spellings.
+            ->when($filters['tag'] ?? null, fn ($q, $t) => $q->where(fn ($w) => $w->whereJsonContains('customers.tags', $t)
+                ->orWhereRaw('json_contains(customers.tags, ?)', [json_encode($t)])))
             // Dates are days on the shop's clock; timestamps are UTC (ReportRange converts the bounds).
             ->when($filters['created_from'] ?? null, fn ($q, $d) => $q->where('customers.created_at', '>=', ReportRange::date($d)))
             ->when($filters['created_to'] ?? null, fn ($q, $d) => $q->where('customers.created_at', '<', ReportRange::date($d)->addDay()))

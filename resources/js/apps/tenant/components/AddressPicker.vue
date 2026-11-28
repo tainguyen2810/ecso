@@ -110,7 +110,7 @@ const labelClass = soft ? 'block text-[13.5px] font-medium text-slate-700' : 'te
 </script>
 
 <template>
-    <div class="space-y-3" data-testid="address-picker">
+    <div :class="soft ? 'space-y-4' : 'space-y-3'" data-testid="address-picker">
         <div v-if="legacy && !model.ward_code" class="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900" data-testid="address-legacy">
             <p class="flex items-center gap-1.5 font-medium"><AlertTriangle class="size-3.5" /> Địa chỉ chưa chuẩn hóa, chưa đẩy được qua hãng vận chuyển</p>
             <p class="mt-1 text-amber-800">"{{ legacy }}"</p>
@@ -132,7 +132,7 @@ const labelClass = soft ? 'block text-[13.5px] font-medium text-slate-700' : 'te
             <p v-if="quickMiss" class="text-xs text-amber-700">Chưa nhận ra đủ tỉnh/phường, chọn tiếp bên dưới.</p>
         </div>
 
-        <div :class="cn('grid gap-3', columns === 2 && 'sm:grid-cols-2')">
+        <div :class="cn('grid', soft ? 'gap-4' : 'gap-3', columns === 2 && 'sm:grid-cols-2')">
             <div class="space-y-1.5">
                 <label :for="`${idPrefix}-province`" :class="labelClass">Tỉnh / Thành phố{{ mark }}</label>
                 <Combobox

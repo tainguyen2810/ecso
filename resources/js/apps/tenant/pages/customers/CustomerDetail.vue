@@ -719,9 +719,9 @@ const topMax = computed(() => Math.max(1, ...(customer.value?.summary?.top_produ
         <DebtReceiptDialog v-model:open="receiptDialog" :customer-id="customer.id" :debt="Number(customer.debt ?? 0)" @saved="debtChanged" />
         <Dialog v-model:open="pickOpen" title="Gộp khách khác vào khách này" :description="`Tìm thẻ khách trùng để gộp vào ${customer.name} (${customer.code}). Thẻ được tìm sẽ bị gộp và xóa khỏi danh sách.`">
             <Input v-model="pickQuery" placeholder="Tên, mã khách, email, số điện thoại…" data-testid="merge-search" />
-            <ul v-if="pickResults.length" class="mt-2 divide-y rounded-md border text-sm">
+            <ul v-if="pickResults.length" class="mt-3 divide-y divide-slate-100 overflow-hidden rounded-[12px] border border-slate-200 text-[14px]">
                 <li v-for="c in pickResults" :key="c.id">
-                    <button type="button" class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-muted" @click="pickForMerge(c)">
+                    <button type="button" class="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left hover:bg-slate-50" @click="pickForMerge(c)">
                         <span><span class="font-medium">{{ c.name }}</span> <span class="font-mono text-xs text-muted-foreground">{{ c.code }}</span><span class="block text-xs text-muted-foreground">{{ [c.phone, c.email].filter(Boolean).join(' · ') }}</span></span>
                         <span class="text-xs text-muted-foreground">{{ formatNumber(c.orders_count) }} đơn</span>
                     </button>
@@ -731,10 +731,10 @@ const topMax = computed(() => Math.max(1, ...(customer.value?.summary?.top_produ
         <MergeDialog v-model:open="mergeOpen" :keep-id="customer.id" :source-id="mergeSource" @merged="merged" />
         <DebtEntryDialog v-model:open="entryDialog" :customer-id="customer.id" :kind="entryKind" @saved="debtChanged" />
         <Dialog v-model:open="addressDialog" :title="editingAddress ? 'Sửa địa chỉ giao hàng' : 'Thêm địa chỉ giao hàng'" description="Số điện thoại và địa chỉ được mã hóa khi lưu.">
-            <form id="address-form" class="grid gap-3 sm:grid-cols-2" @submit.prevent="saveAddress">
+            <form id="address-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="saveAddress">
                 <FormField label="Tên gợi nhớ" for="a-label"><Input id="a-label" v-model="addressForm.label" placeholder="Nhà riêng, Công ty…" /></FormField>
                 <FormField label="Người nhận" for="a-recipient"><Input id="a-recipient" v-model="addressForm.recipient" /></FormField>
-                <FormField label="Số điện thoại nhận" for="a-phone" class="sm:col-span-2" :error="addressError?.field('phone')"><Input id="a-phone" v-model="addressForm.phone" inputmode="tel" /></FormField>
+                <FormField label="Số điện thoại nhận" for="a-phone" class="sm:col-span-2" :error="addressError?.field('phone')"><Input id="a-phone" v-model="addressForm.phone" inputmode="tel" :invalid="!!addressError?.field('phone')" /></FormField>
                 <div class="sm:col-span-2">
                     <AddressPicker
                         v-model="addressParts"
