@@ -477,7 +477,7 @@ async function removeImage(id: number) {
                             <Select id="p-vat" v-model="form.vat_rate" :options="VAT_RATES" />
                         </FormField>
                         <FormField label="Tags" for="p-tags" class="sm:col-span-2" :error="error?.field('tags')">
-                            <div class="flex min-h-9 flex-wrap items-center gap-1.5 rounded-md border border-input bg-card px-2 py-1 shadow-xs focus-within:ring-2 focus-within:ring-ring">
+                            <div class="flex min-h-11 flex-wrap items-center gap-1.5 rounded-[10px] border border-slate-200 bg-white px-3 py-1.5 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100">
                                 <span v-for="(t, i) in tags" :key="t" class="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs">
                                     {{ t }}
                                     <button type="button" class="text-muted-foreground hover:text-foreground" :aria-label="`Bỏ tag ${t}`" @click="tags.splice(i, 1)"><X class="size-3" /></button>
@@ -486,7 +486,7 @@ async function removeImage(id: number) {
                                     id="p-tags"
                                     v-model="tagInput"
                                     list="tag-suggestions"
-                                    class="h-7 min-w-32 flex-1 bg-transparent text-sm outline-none"
+                                    class="h-7 min-w-32 flex-1 bg-transparent text-[15px] outline-none placeholder:text-slate-400"
                                     placeholder="Gõ tag rồi nhấn Enter"
                                     data-testid="product-tags"
                                     @keydown.enter.prevent="addTag()"
@@ -497,7 +497,7 @@ async function removeImage(id: number) {
                             </div>
                         </FormField>
                         <FormField label="Mô tả" for="p-desc" class="sm:col-span-2">
-                            <textarea id="p-desc" v-model="form.description" rows="3" class="w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                            <textarea id="p-desc" v-model="form.description" rows="3" class="w-full rounded-[10px] border border-slate-200 bg-white px-3.5 py-2.5 text-[15px] leading-6 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100" />
                         </FormField>
                     </div>
                 </Card>
@@ -525,7 +525,7 @@ async function removeImage(id: number) {
                                     <p v-if="error?.field(`components.${i}.variant_id`)" class="text-xs text-destructive">{{ error.field(`components.${i}.variant_id`) }}</p>
                                 </td>
                                 <td class="px-3 py-2 text-right">
-                                    <input v-model.number="c.quantity" type="number" min="1" max="10000" :disabled="!canManage" :data-testid="`component-qty-${i}`" aria-label="Số lượng mỗi combo" class="h-8 w-20 rounded-md border border-input bg-card px-2 text-right tabular-nums" />
+                                    <input v-model.number="c.quantity" type="number" min="1" max="10000" :disabled="!canManage" :data-testid="`component-qty-${i}`" aria-label="Số lượng mỗi combo" class="h-8 w-20 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right tabular-nums" />
                                 </td>
                                 <td v-if="canCost" class="px-3 py-2 text-right tabular-nums text-muted-foreground">{{ c.variant.cost_price ? formatMoney(Number(c.variant.cost_price) * c.quantity) : '—' }}</td>
                                 <td class="px-2 text-right">
@@ -596,13 +596,13 @@ async function removeImage(id: number) {
                                             maxlength="64"
                                             :disabled="!canManage"
                                             :data-testid="`sku-${i}`"
-                                            :class="cn('h-8 w-36 rounded-md border border-input bg-card px-2 font-mono text-xs uppercase', (fieldError(i, 'sku') || v.skuTaken || duplicateSkus.has(v.sku.trim().toLowerCase())) && 'border-destructive')"
+                                            :class="cn('h-8 w-36 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 font-mono text-xs uppercase', (fieldError(i, 'sku') || v.skuTaken || duplicateSkus.has(v.sku.trim().toLowerCase())) && 'border-destructive')"
                                             @input="checkSku(v)"
                                         />
                                         <p v-if="fieldError(i, 'sku') || v.skuTaken" class="mt-1 max-w-36 text-xs text-destructive">{{ fieldError(i, 'sku') ?? v.skuTaken }}</p>
                                         <p v-else-if="duplicateSkus.has(v.sku.trim().toLowerCase())" class="mt-1 text-xs text-destructive">Trùng SKU</p>
                                     </td>
-                                    <td class="px-3 py-2"><input v-model="v.name" :disabled="!canManage" :placeholder="isSub ? '12 tháng' : ''" class="h-8 w-32 rounded-md border border-input bg-card px-2" /></td>
+                                    <td class="px-3 py-2"><input v-model="v.name" :disabled="!canManage" :placeholder="isSub ? '12 tháng' : ''" class="h-8 w-32 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2" /></td>
                                     <td v-if="isSub" class="px-3 py-2">
                                         <input
                                             v-model="v.period_months"
@@ -613,36 +613,36 @@ async function removeImage(id: number) {
                                             :disabled="!canManage"
                                             aria-label="Chu kỳ (tháng)"
                                             :data-testid="`period-${i}`"
-                                            :class="cn('h-8 w-20 rounded-md border border-input bg-card px-2 text-right tabular-nums', fieldError(i, 'period_months') && 'border-destructive')"
+                                            :class="cn('h-8 w-20 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right tabular-nums', fieldError(i, 'period_months') && 'border-destructive')"
                                             @change="planSkus()"
                                         />
                                         <p v-if="fieldError(i, 'period_months')" class="mt-1 max-w-36 text-xs text-destructive">{{ fieldError(i, 'period_months') }}</p>
                                     </td>
                                     <td v-if="!isNonStock" class="px-3 py-2">
                                         <div class="flex items-center gap-1">
-                                            <input v-model="v.barcode" :disabled="!canManage" maxlength="64" :data-testid="`barcode-${i}`" :class="cn('h-8 w-32 rounded-md border border-input bg-card px-2 font-mono text-xs', fieldError(i, 'barcode') && 'border-destructive')" />
+                                            <input v-model="v.barcode" :disabled="!canManage" maxlength="64" :data-testid="`barcode-${i}`" :class="cn('h-8 w-32 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 font-mono text-xs', fieldError(i, 'barcode') && 'border-destructive')" />
                                             <Button v-if="canManage && !v.barcode" variant="ghost" size="icon" class="size-8" title="Tạo mã vạch EAN-13 nội bộ" :data-testid="`barcode-gen-${i}`" @click="suggestBarcode(v)"><ScanBarcode class="text-muted-foreground" /></Button>
                                         </div>
                                         <p v-if="fieldError(i, 'barcode')" class="mt-1 max-w-36 text-xs text-destructive">{{ fieldError(i, 'barcode') }}</p>
                                     </td>
-                                    <td v-if="!isNonStock" class="px-3 py-2"><input v-model="v.location" maxlength="50" :disabled="!canManage" placeholder="VD: A1-02" aria-label="Vị trí kệ" :data-testid="`location-${i}`" class="h-8 w-20 rounded-md border border-input bg-card px-2 font-mono text-xs" /></td>
-                                    <td class="px-3 py-2 text-right"><input v-model="v.ref_price" type="number" min="0" :disabled="!canManage" aria-label="Giá bán lẻ" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
-                                    <td class="px-3 py-2 text-right"><input v-model="v.wholesale_price" type="number" min="0" :disabled="!canManage" aria-label="Giá bán buôn" :data-testid="`wholesale-${i}`" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
+                                    <td v-if="!isNonStock" class="px-3 py-2"><input v-model="v.location" maxlength="50" :disabled="!canManage" placeholder="VD: A1-02" aria-label="Vị trí kệ" :data-testid="`location-${i}`" class="h-8 w-20 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 font-mono text-xs" /></td>
+                                    <td class="px-3 py-2 text-right"><input v-model="v.ref_price" type="number" min="0" :disabled="!canManage" aria-label="Giá bán lẻ" class="h-8 w-24 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right tabular-nums" /></td>
+                                    <td class="px-3 py-2 text-right"><input v-model="v.wholesale_price" type="number" min="0" :disabled="!canManage" aria-label="Giá bán buôn" :data-testid="`wholesale-${i}`" class="h-8 w-24 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right tabular-nums" /></td>
                                     <td v-if="isSub" class="px-3 py-2 text-right text-xs tabular-nums text-muted-foreground" :data-testid="`per-month-${i}`">{{ Number(v.ref_price) > 0 && Number(v.period_months) > 0 ? formatMoney(Math.round(Number(v.ref_price) / Number(v.period_months))) : '—' }}</td>
-                                    <td v-if="!isNonStock" class="px-3 py-2 text-right"><input v-model="v.weight_gram" type="number" min="0" :disabled="!canManage" class="h-8 w-16 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
+                                    <td v-if="!isNonStock" class="px-3 py-2 text-right"><input v-model="v.weight_gram" type="number" min="0" :disabled="!canManage" class="h-8 w-16 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right tabular-nums" /></td>
                                     <td v-if="!isNonStock" class="px-3 py-2">
                                         <div class="flex items-center gap-0.5 text-xs text-muted-foreground" :data-testid="`size-${i}`">
-                                            <input v-model="v.length_mm" type="number" min="0" :disabled="!canManage" aria-label="Dài (mm)" placeholder="D" class="h-8 w-14 rounded-md border border-input bg-card px-1.5 text-right tabular-nums" />×
-                                            <input v-model="v.width_mm" type="number" min="0" :disabled="!canManage" aria-label="Rộng (mm)" placeholder="R" class="h-8 w-14 rounded-md border border-input bg-card px-1.5 text-right tabular-nums" />×
-                                            <input v-model="v.height_mm" type="number" min="0" :disabled="!canManage" aria-label="Cao (mm)" placeholder="C" class="h-8 w-14 rounded-md border border-input bg-card px-1.5 text-right tabular-nums" />
+                                            <input v-model="v.length_mm" type="number" min="0" :disabled="!canManage" aria-label="Dài (mm)" placeholder="D" class="h-8 w-14 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-1.5 text-right tabular-nums" />×
+                                            <input v-model="v.width_mm" type="number" min="0" :disabled="!canManage" aria-label="Rộng (mm)" placeholder="R" class="h-8 w-14 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-1.5 text-right tabular-nums" />×
+                                            <input v-model="v.height_mm" type="number" min="0" :disabled="!canManage" aria-label="Cao (mm)" placeholder="C" class="h-8 w-14 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-1.5 text-right tabular-nums" />
                                         </div>
                                     </td>
                                     <td v-if="canSuppliers && !isNonStock" class="px-3 py-2">
-                                        <select v-model="v.supplier_id" :disabled="!canManage" aria-label="Nhà cung cấp" :data-testid="`supplier-${i}`" class="h-8 w-36 rounded-md border border-input bg-card px-1 text-xs">
+                                        <select v-model="v.supplier_id" :disabled="!canManage" aria-label="Nhà cung cấp" :data-testid="`supplier-${i}`" class="h-8 w-36 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-1 text-xs">
                                             <option value="">— Chưa chọn —</option>
                                             <option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.name }}</option>
                                         </select>
-                                        <input v-if="v.supplier_id" v-model="v.supplier_sku" maxlength="64" :disabled="!canManage" placeholder="Mã hàng của NCC" aria-label="Mã hàng của NCC" class="mt-1 h-8 w-36 rounded-md border border-input bg-card px-2 font-mono text-xs" />
+                                        <input v-if="v.supplier_id" v-model="v.supplier_sku" maxlength="64" :disabled="!canManage" placeholder="Mã hàng của NCC" aria-label="Mã hàng của NCC" class="mt-1 h-8 w-36 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 font-mono text-xs" />
                                     </td>
                                     <td v-if="!isNew && canCost" class="px-4 py-2 text-right tabular-nums text-muted-foreground">
                                         {{ v.cost_price ? formatMoney(v.cost_price) : '—' }}
@@ -692,24 +692,24 @@ async function removeImage(id: number) {
                             </thead>
                             <tbody class="divide-y">
                                 <tr v-for="{ v, i } in packRows" :key="v.id ?? `pack-${i}`" class="align-top">
-                                    <td class="px-3 py-2"><input v-model="v.name" :disabled="!canManage" placeholder="Thùng 24 chai" :data-testid="`pack-name-${i}`" class="h-8 w-32 rounded-md border border-input bg-card px-2" /></td>
+                                    <td class="px-3 py-2"><input v-model="v.name" :disabled="!canManage" placeholder="Thùng 24 chai" :data-testid="`pack-name-${i}`" class="h-8 w-32 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2" /></td>
                                     <td class="px-3 py-2">
                                         <div class="flex items-center gap-1 text-xs">
-                                            <input v-model.number="v.conversion!.quantity" type="number" min="2" :disabled="!canManage" aria-label="Số đơn vị gốc" :data-testid="`pack-qty-${i}`" class="h-8 w-16 rounded-md border border-input bg-card px-2 text-right tabular-nums" />
+                                            <input v-model.number="v.conversion!.quantity" type="number" min="2" :disabled="!canManage" aria-label="Số đơn vị gốc" :data-testid="`pack-qty-${i}`" class="h-8 w-16 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right tabular-nums" />
                                             <span>×</span>
-                                            <select v-model="v.conversion!.base_sku" :disabled="!canManage" aria-label="SKU đơn vị gốc" class="h-8 rounded-md border border-input bg-card px-1 font-mono text-xs">
+                                            <select v-model="v.conversion!.base_sku" :disabled="!canManage" aria-label="SKU đơn vị gốc" class="h-8 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-1 font-mono text-xs">
                                                 <option v-for="b in baseOptions" :key="b" :value="b">{{ b }}</option>
                                             </select>
                                         </div>
                                         <p v-if="fieldError(i, 'conversion.base_sku') || fieldError(i, 'conversion.quantity')" class="mt-1 max-w-48 text-xs text-destructive">{{ fieldError(i, 'conversion.base_sku') ?? fieldError(i, 'conversion.quantity') }}</p>
                                     </td>
                                     <td class="px-3 py-2">
-                                        <input v-model="v.sku" required maxlength="64" :disabled="!canManage" :data-testid="`pack-sku-${i}`" :class="cn('h-8 w-36 rounded-md border border-input bg-card px-2 font-mono text-xs uppercase', (fieldError(i, 'sku') || v.skuTaken) && 'border-destructive')" @input="checkSku(v)" />
+                                        <input v-model="v.sku" required maxlength="64" :disabled="!canManage" :data-testid="`pack-sku-${i}`" :class="cn('h-8 w-36 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 font-mono text-xs uppercase', (fieldError(i, 'sku') || v.skuTaken) && 'border-destructive')" @input="checkSku(v)" />
                                         <p v-if="fieldError(i, 'sku') || v.skuTaken" class="mt-1 max-w-36 text-xs text-destructive">{{ fieldError(i, 'sku') ?? v.skuTaken }}</p>
                                     </td>
-                                    <td class="px-3 py-2"><input v-model="v.barcode" maxlength="64" :disabled="!canManage" class="h-8 w-32 rounded-md border border-input bg-card px-2 font-mono text-xs" /></td>
-                                    <td class="px-3 py-2 text-right"><input v-model="v.ref_price" type="number" min="0" :disabled="!canManage" aria-label="Giá bán lẻ đơn vị quy đổi" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
-                                    <td class="px-3 py-2 text-right"><input v-model="v.wholesale_price" type="number" min="0" :disabled="!canManage" aria-label="Giá bán buôn đơn vị quy đổi" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right tabular-nums" /></td>
+                                    <td class="px-3 py-2"><input v-model="v.barcode" maxlength="64" :disabled="!canManage" class="h-8 w-32 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 font-mono text-xs" /></td>
+                                    <td class="px-3 py-2 text-right"><input v-model="v.ref_price" type="number" min="0" :disabled="!canManage" aria-label="Giá bán lẻ đơn vị quy đổi" class="h-8 w-24 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right tabular-nums" /></td>
+                                    <td class="px-3 py-2 text-right"><input v-model="v.wholesale_price" type="number" min="0" :disabled="!canManage" aria-label="Giá bán buôn đơn vị quy đổi" class="h-8 w-24 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right tabular-nums" /></td>
                                     <td class="px-2 py-2 text-right">
                                         <Button v-if="canManage" variant="ghost" size="icon" class="size-8" title="Xóa đơn vị quy đổi" @click="variants.splice(i, 1)"><Trash2 class="text-muted-foreground" /></Button>
                                     </td>
@@ -768,11 +768,11 @@ async function removeImage(id: number) {
                                 <tr v-for="(v, i) in variants" v-show="!v.conversion" :key="`opening-${i}`">
                                     <td class="px-4 py-2"><span class="font-mono text-xs">{{ v.sku || '(chưa có SKU)' }}</span><span v-if="v.name" class="text-muted-foreground"> · {{ v.name }}</span></td>
                                     <td class="px-4 py-2 text-right">
-                                        <input v-model="v.opening_qty" type="number" min="0" :data-testid="`opening-qty-${i}`" aria-label="Số lượng tồn ban đầu" class="h-8 w-24 rounded-md border border-input bg-card px-2 text-right tabular-nums" />
+                                        <input v-model="v.opening_qty" type="number" min="0" :data-testid="`opening-qty-${i}`" aria-label="Số lượng tồn ban đầu" class="h-8 w-24 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right tabular-nums" />
                                         <p v-if="fieldError(i, 'opening_qty')" class="mt-1 text-xs text-destructive">{{ fieldError(i, 'opening_qty') }}</p>
                                     </td>
                                     <td class="px-4 py-2 text-right">
-                                        <input v-model="v.opening_cost" type="number" min="0" :data-testid="`opening-cost-${i}`" aria-label="Giá vốn ban đầu" :class="cn('h-8 w-28 rounded-md border border-input bg-card px-2 text-right tabular-nums', noCost(v) && 'border-amber-300 bg-amber-50/60')" placeholder="0 ₫" />
+                                        <input v-model="v.opening_cost" type="number" min="0" :data-testid="`opening-cost-${i}`" aria-label="Giá vốn ban đầu" :class="cn('h-8 w-28 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right tabular-nums', noCost(v) && 'border-amber-300 bg-amber-50/60')" placeholder="0 ₫" />
                                     </td>
                                 </tr>
                             </tbody>

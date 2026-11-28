@@ -120,7 +120,7 @@ async function createOrder() {
                         <td class="px-4 py-2.5 text-right tabular-nums">{{ r.daily.toLocaleString('vi-VN') }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums" :class="r.available <= r.safety_stock && 'font-medium text-destructive'">{{ formatNumber(r.available) }}<span v-if="r.safety_stock" class="text-xs text-muted-foreground"> / an toàn {{ r.safety_stock }}</span></td>
                         <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{{ r.on_order ? formatNumber(r.on_order) : '—' }}</td>
-                        <td class="px-4 py-2.5 text-right"><input v-model.number="qty[r.variant.id]" type="number" min="1" class="h-8 w-20 rounded-md border border-input bg-card px-2 text-right font-medium tabular-nums" /></td>
+                        <td class="px-4 py-2.5 text-right"><input v-model.number="qty[r.variant.id]" type="number" min="1" class="h-8 w-20 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right font-medium tabular-nums" /></td>
                         <td class="px-4 py-2.5 text-muted-foreground">{{ r.supplier?.name ?? '—' }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney(r.unit_cost) }}</td>
                     </tr>

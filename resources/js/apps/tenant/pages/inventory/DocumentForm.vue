@@ -162,7 +162,7 @@ const hints: Record<DocumentKindKey, string> = {
                                 <p v-if="l.variant.stock?.reserved" class="text-xs">khả dụng {{ formatNumber(l.variant.stock.available) }}</p>
                             </td>
                             <td v-if="kindKey === 'adjustments'" class="px-4 py-2.5">
-                                <select v-model="l.mode" class="h-8 rounded-md border border-input bg-card px-2 text-sm">
+                                <select v-model="l.mode" class="h-8 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-sm">
                                     <option value="count">Số đếm thực tế</option>
                                     <option value="delta">Chênh lệch ±</option>
                                 </select>
@@ -174,12 +174,12 @@ const hints: Record<DocumentKindKey, string> = {
                                     :min="kindKey === 'adjustments' && l.mode === 'delta' ? undefined : kindKey === 'adjustments' ? 0 : 1"
                                     required
                                     :data-testid="`qty-${i}`"
-                                    :class="cn('h-8 w-24 rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums', lineError(i, 'quantity') && 'border-destructive')"
+                                    :class="cn('h-8 w-24 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right text-sm tabular-nums', lineError(i, 'quantity') && 'border-destructive')"
                                 />
                                 <p v-if="lineError(i, 'quantity')" class="text-xs text-destructive">{{ lineError(i, 'quantity') }}</p>
                             </td>
                             <td v-if="withCost" class="px-4 py-2.5 text-right">
-                                <input v-model="l.unit_cost" type="number" min="0" step="any" required :data-testid="`cost-${i}`" class="h-8 w-32 rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" />
+                                <input v-model="l.unit_cost" type="number" min="0" step="any" required :data-testid="`cost-${i}`" class="h-8 w-32 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right text-sm tabular-nums" />
                             </td>
                             <td v-if="withCost" class="px-4 py-2.5 text-right tabular-nums">{{ formatMoney((Number(l.quantity) || 0) * (Number(l.unit_cost) || 0)) }}</td>
                             <td v-if="kindKey === 'adjustments'" class="px-4 py-2.5 text-right tabular-nums">
@@ -219,7 +219,7 @@ const hints: Record<DocumentKindKey, string> = {
                         <Select id="doc-reason" v-model="form.reason" :options="Object.entries(adjustmentReasons).map(([value, label]) => ({ value, label }))" />
                     </FormField>
                     <FormField label="Ghi chú" for="doc-note">
-                        <textarea id="doc-note" v-model="form.note" rows="3" maxlength="1000" class="w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                        <textarea id="doc-note" v-model="form.note" rows="3" maxlength="1000" class="w-full rounded-[10px] border border-slate-200 bg-white px-3.5 py-2.5 text-[15px] leading-6 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100" />
                     </FormField>
 
                     <div class="space-y-1 rounded-md bg-muted/50 p-3 text-sm">

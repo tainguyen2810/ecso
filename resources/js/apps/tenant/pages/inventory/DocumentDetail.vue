@@ -233,7 +233,7 @@ const steps = computed(() => {
                         <p class="font-mono text-xs font-medium">{{ l.variant.sku }}</p>
                         <p class="truncate text-xs text-muted-foreground">{{ l.variant.name }} · đã xuất {{ formatNumber(l.quantity) }}</p>
                     </div>
-                    <input v-model.number="received[l.line_id!]" type="number" min="0" :max="l.quantity" :data-testid="`received-${l.variant.sku}`" aria-label="Thực nhận" class="h-8 w-20 rounded-md border border-input bg-card px-2 text-right tabular-nums" />
+                    <input v-model.number="received[l.line_id!]" type="number" min="0" :max="l.quantity" :data-testid="`received-${l.variant.sku}`" aria-label="Thực nhận" class="h-8 w-20 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right tabular-nums" />
                 </div>
             </div>
             <Alert v-if="receiveShort" tone="amber" data-testid="receive-short">Thiếu {{ formatNumber(receiveShort) }} so với số đã xuất. EzChat Bán hàng vẫn nhận đủ vào kho rồi tạo phiếu thất lạc chờ duyệt để trừ phần thiếu.</Alert>

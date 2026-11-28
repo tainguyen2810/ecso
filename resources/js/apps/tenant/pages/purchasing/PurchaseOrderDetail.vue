@@ -373,8 +373,8 @@ async function voidPayment(id: string) {
                         <tr>
                             <td class="py-2"><span class="font-mono text-xs">{{ l.variant?.sku }}</span><span v-if="l.variant?.product?.track_lots" class="ml-1.5 rounded-full bg-sky-50 px-2 text-[11px] font-medium text-sky-700">Theo lô</span><p v-if="receiveError?.field(`lines.${i}.quantity`)" class="text-xs text-destructive">{{ receiveError.field(`lines.${i}.quantity`) }}</p></td>
                             <td class="py-2 text-right tabular-nums text-muted-foreground">{{ formatNumber(l.remaining) }}</td>
-                            <td class="py-2 text-right"><input v-model="receiveQty[l.variant!.id]" type="number" min="0" :max="l.remaining" :disabled="!l.remaining" class="h-8 w-20 rounded-md border border-input bg-card px-2 text-right tabular-nums" :data-testid="`rcv-qty-${i}`" /></td>
-                            <td v-if="tenant.can('purchasing.manage')" class="py-2 text-right"><input v-model="receiveCost[l.variant!.id]" type="number" min="0" :disabled="!l.remaining" class="h-8 w-28 rounded-md border border-input bg-card px-2 text-right tabular-nums" :data-testid="`rcv-cost-${i}`" /></td>
+                            <td class="py-2 text-right"><input v-model="receiveQty[l.variant!.id]" type="number" min="0" :max="l.remaining" :disabled="!l.remaining" class="h-8 w-20 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right tabular-nums" :data-testid="`rcv-qty-${i}`" /></td>
+                            <td v-if="tenant.can('purchasing.manage')" class="py-2 text-right"><input v-model="receiveCost[l.variant!.id]" type="number" min="0" :disabled="!l.remaining" class="h-8 w-28 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right tabular-nums" :data-testid="`rcv-cost-${i}`" /></td>
                         </tr>
                         <tr v-if="receiveLots[l.variant!.id] && Number(receiveQty[l.variant!.id]) > 0" class="!border-t-0">
                             <td :colspan="tenant.can('purchasing.manage') ? 4 : 3" class="pb-3">
@@ -402,7 +402,7 @@ async function voidPayment(id: string) {
                         <tr v-for="(l, i) in returnable" :key="l.variant?.id">
                             <td class="py-2"><span class="font-mono text-xs">{{ l.variant?.sku }}</span><p v-if="returnError?.field(`lines.${i}.quantity`)" class="text-xs text-destructive">{{ returnError.field(`lines.${i}.quantity`) }}</p></td>
                             <td class="py-2 text-right tabular-nums text-muted-foreground">{{ formatNumber(l.received_qty - l.returned_qty) }}</td>
-                            <td class="py-2 text-right"><input v-model="returnQty[l.variant!.id]" type="number" min="0" :max="l.received_qty - l.returned_qty" class="h-8 w-20 rounded-md border border-input bg-card px-2 text-right tabular-nums" :data-testid="`ret-qty-${i}`" /></td>
+                            <td class="py-2 text-right"><input v-model="returnQty[l.variant!.id]" type="number" min="0" :max="l.received_qty - l.returned_qty" class="h-8 w-20 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right tabular-nums" :data-testid="`ret-qty-${i}`" /></td>
                         </tr>
                     </tbody>
                 </table>

@@ -257,7 +257,7 @@ function toggle(id: string) {
                         </td>
                         <td class="py-2 text-right tabular-nums">{{ formatMoney(r.variant.cost_price ?? 0) }}</td>
                         <td class="py-2 text-right">
-                            <input v-model="r.new_cost" type="number" min="0" required :data-testid="`new-cost-${i}`" aria-label="Giá vốn mới" :class="cn('h-8 w-32 rounded-md border border-input bg-card px-2 text-right tabular-nums', error?.field(`lines.${i}.new_cost`) && 'border-destructive')" />
+                            <input v-model="r.new_cost" type="number" min="0" required :data-testid="`new-cost-${i}`" aria-label="Giá vốn mới" :class="cn('h-8 w-32 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right tabular-nums', error?.field(`lines.${i}.new_cost`) && 'border-destructive')" />
                         </td>
                         <td :class="cn('py-2 text-right tabular-nums', diff(r) < 0 && 'text-destructive', diff(r) > 0 && 'text-success')">{{ diff(r) > 0 ? '+' : '' }}{{ formatMoney(diff(r)) }}</td>
                         <td class="text-right"><Button variant="ghost" size="icon" class="size-8" title="Bỏ dòng" @click="rows.splice(i, 1)"><Trash2 class="text-muted-foreground" /></Button></td>

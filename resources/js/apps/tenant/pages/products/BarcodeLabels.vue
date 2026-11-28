@@ -256,7 +256,7 @@ const fields: { key: 'showName' | 'showPrice' | 'priceCurrency' | 'priceUnit'; l
                             </td>
                             <td class="px-4 py-2 text-right tabular-nums">{{ r.onHand === null ? '—' : formatNumber(r.onHand) }}</td>
                             <td class="px-4 py-2 text-right">
-                                <input v-model.number="r.quantity" type="number" min="0" max="1000" :disabled="!!r.error" :data-testid="`label-qty-${i}`" class="h-8 w-20 rounded-md border border-input bg-card px-2 text-right tabular-nums" />
+                                <input v-model.number="r.quantity" type="number" min="0" max="1000" :disabled="!!r.error" :data-testid="`label-qty-${i}`" class="h-8 w-20 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right tabular-nums" />
                             </td>
                             <td class="px-4 py-2 text-right tabular-nums">{{ formatNumber(r.price) }}</td>
                             <td class="px-2 text-right">

@@ -274,15 +274,15 @@ function onKey(e: KeyboardEvent) {
                         </td>
                         <td class="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{{ l.stock === null ? '—' : formatNumber(l.stock) }}</td>
                         <td class="px-3 py-2.5 text-right">
-                            <input v-model="l.quantity" type="number" min="1" class="h-9 w-16 rounded-lg border border-input bg-card px-2 text-right text-sm font-medium tabular-nums" :data-testid="`po-qty-${i}`" />
+                            <input v-model="l.quantity" type="number" min="1" class="h-9 w-16 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right text-sm font-medium tabular-nums" :data-testid="`po-qty-${i}`" />
                             <p v-if="lineError(i, 'quantity')" class="text-xs text-destructive">{{ lineError(i, 'quantity') }}</p>
                         </td>
                         <td class="px-3 py-2.5 text-right">
-                            <input v-model="l.unit_cost" type="number" min="0" class="h-9 w-24 rounded-lg border border-input bg-card px-2 text-right text-sm tabular-nums" :data-testid="`po-cost-${i}`" />
+                            <input v-model="l.unit_cost" type="number" min="0" class="h-9 w-24 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right text-sm tabular-nums" :data-testid="`po-cost-${i}`" />
                             <p v-if="lineError(i, 'unit_cost')" class="text-xs text-destructive">{{ lineError(i, 'unit_cost') }}</p>
                         </td>
                         <td class="px-3 py-2.5 text-right">
-                            <select v-model="l.tax_rate" class="h-8 rounded-md border border-input bg-card px-1 text-sm" :data-testid="`po-vat-${i}`" aria-label="Thuế GTGT">
+                            <select v-model="l.tax_rate" class="h-8 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-1 text-sm" :data-testid="`po-vat-${i}`" aria-label="Thuế GTGT">
                                 <option v-for="o in vatOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
                             </select>
                         </td>
@@ -300,7 +300,7 @@ function onKey(e: KeyboardEvent) {
             <Card :caps="false" title="Ghi chú và tuỳ chọn">
                 <div class="p-5">
             <div class="space-y-3 text-sm">
-                <FormField label="Ghi chú đơn" for="po-note"><textarea id="po-note" v-model="form.note" rows="3" class="w-full rounded-md border border-input bg-card px-3 py-2 text-sm" /></FormField>
+                <FormField label="Ghi chú đơn" for="po-note"><textarea id="po-note" v-model="form.note" rows="3" class="w-full rounded-[10px] border border-slate-200 bg-white px-3.5 py-2.5 text-[15px] leading-6 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100" /></FormField>
                 <FormField label="Tags" for="po-tags"><Input id="po-tags" v-model="form.tags" placeholder="Cách nhau bằng dấu phẩy" /></FormField>
                 <div class="grid gap-3 sm:grid-cols-2">
                     <FormField label="VAT mặc định cho dòng mới" for="po-default-vat"><Select id="po-default-vat" v-model="defaultVat" :options="vatOptions" /></FormField>
@@ -361,9 +361,9 @@ function onKey(e: KeyboardEvent) {
                 <dt class="text-muted-foreground">Thuế GTGT</dt>
                 <dd class="text-right tabular-nums" data-testid="po-tax">{{ formatMoney(costs.tax) }}</dd>
                 <dt class="text-muted-foreground"><label for="po-discount">Chiết khấu đơn (F6)</label></dt>
-                <dd><input id="po-discount" v-model="form.discount" type="number" min="0" class="h-8 w-full rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" data-testid="po-discount" /></dd>
+                <dd><input id="po-discount" v-model="form.discount" type="number" min="0" class="h-10 w-full rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right text-sm tabular-nums" data-testid="po-discount" /></dd>
                 <dt class="text-muted-foreground"><label for="po-extra">Chi phí nhập hàng (F7)</label></dt>
-                <dd><input id="po-extra" v-model="form.extra_cost" type="number" min="0" class="h-8 w-full rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" data-testid="po-extra-cost" /></dd>
+                <dd><input id="po-extra" v-model="form.extra_cost" type="number" min="0" class="h-10 w-full rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right text-sm tabular-nums" data-testid="po-extra-cost" /></dd>
                 <p v-if="error?.field('discount')" class="col-span-2 text-xs text-destructive">{{ error.field('discount') }}</p>
                 <div class="col-span-2 border-t" />
                 <dt class="font-semibold">Tiền cần trả NCC</dt>
@@ -372,11 +372,11 @@ function onKey(e: KeyboardEvent) {
                     <div class="col-span-2 border-t" />
                     <dt class="font-medium">
                         Thanh toán cho NCC
-                        <select v-model="form.pay_method" class="mt-1 block h-8 rounded-md border border-input bg-card px-1 text-sm font-normal" aria-label="Hình thức thanh toán" data-testid="po-pay-method">
+                        <select v-model="form.pay_method" class="mt-1 block h-10 rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-[14px] font-normal" aria-label="Hình thức thanh toán" data-testid="po-pay-method">
                             <option v-for="(label, value) in supplierPaymentMethods" :key="value" :value="value">{{ label }}</option>
                         </select>
                     </dt>
-                    <dd><input v-model="form.pay_amount" type="number" min="0" class="h-8 w-full rounded-md border border-input bg-card px-2 text-right text-sm tabular-nums" aria-label="Số tiền trả NCC" data-testid="po-pay-amount" /></dd>
+                    <dd><input v-model="form.pay_amount" type="number" min="0" class="h-10 w-full rounded-[8px] border border-slate-200 bg-white focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-100 px-2 text-right text-sm tabular-nums" aria-label="Số tiền trả NCC" data-testid="po-pay-amount" /></dd>
                     <p v-if="error?.field('amount')" class="col-span-2 text-xs text-destructive">{{ error.field('amount') }}</p>
                     <div class="col-span-2 border-t" />
                     <dt class="font-semibold">Còn phải trả</dt>
