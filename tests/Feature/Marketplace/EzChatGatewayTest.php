@@ -614,6 +614,61 @@ it('sets aside a Shopee order already prepared in Shopee\'s seller page instead 
         ->and($order->refresh()->status)->toBe(OrderStatus::PACKED);
 });
 
+it('holds back a Shopee order Shopee is still checking: own label, not in Cần chuẩn bị hàng, no Chuẩn bị hàng until released', function () {
+    // Asked without request_order_status_pending, Shopee would still say READY_TO_SHIP.
+    $status = 'READY_TO_SHIP';
+    shopeeShipFake([
+        'GET /api/v2/order/get_order_detail' => function (Request $r) use (&$status) {
+            $asked = ($r['query']['request_order_status_pending'] ?? null) === 'true';
+
+            return Http::response(['data' => ['data' => ['response' => ['order_list' => [[
+                'order_sn' => '2611SHIP1', 'order_status' => $asked ? $status : 'READY_TO_SHIP', 'create_time' => 1763500000,
+                'update_time' => 1763500000 + ($status === 'READY_TO_SHIP' ? 120 : 0), 'ship_by_date' => 1763600000, 'currency' => 'VND', 'total_amount' => 9000,
+                'shipping_carrier' => 'SPX Express', 'checkout_shipping_carrier' => 'Nhanh', 'pending_terms' => $status === 'PENDING' ? ['SYSTEM_PENDING'] : [],
+                'item_list' => [['item_id' => 11, 'item_name' => 'Cáp Micro USB', 'model_id' => 0, 'model_quantity_purchased' => 1, 'model_original_price' => 9000, 'model_discounted_price' => 9000]],
+            ]]]]]]);
+        },
+        'GET /api/v2/logistics/get_shipping_parameter' => fn () => Http::response(['error' => ['code' => 'MARKETPLACE_ERROR', 'message' => '/api/v2/logistics/get_shipping_parameter: Shipping parameters can only be obtained when package is ready to be shipped', 'details' => ['auth' => false]]], 424),
+    ]);
+    $account = gatewayShop($this->tenant, 'shopee');
+    $status = 'PENDING';
+    TenantContext::run($this->tenant, fn () => app(OrderSync::class)->syncOne($account, '2611SHIP1', 'webhook'));
+    $order = Order::withoutGlobalScopes()->where('external_order_id', '2611SHIP1')->sole();
+    expect($order->status)->toBe(OrderStatus::READY_TO_PACK)->and($order->raw_status)->toBe('PENDING')->and($order->underMarketplaceReview())->toBeTrue()
+        ->and($order->raw['pending_terms'])->toBe(['SYSTEM_PENDING'])
+        ->and(collect(ezCalls())->where('key', 'GET /api/v2/logistics/get_tracking_number'))->toHaveCount(0);
+    $api = actingInTenant($this->owner, $this->tenant);
+
+    $api->getJson('/api/v1/orders?tab=to_pack')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.marketplace_review', true)->assertJsonPath('data.0.ship_methods', null);
+    $api->getJson('/api/v1/orders?flags[]=not_arranged')->assertOk()->assertJsonCount(0, 'data');
+    $api->getJson("/api/v1/orders/{$order->ulid}")->assertOk()->assertJsonPath('data.actions.pack.allowed', false);
+    $data = $api->postJson('/api/v1/orders/ship-options', ['ids' => [$order->ulid]])->assertOk()->json('data');
+    expect($data['groups'])->toBe([])->and($data['skipped'][0]['message'])->toContain('Shopee đang kiểm tra')
+        ->and(collect(ezCalls())->where('key', 'GET /api/v2/logistics/get_shipping_parameter'))->toHaveCount(0);
+    $choice = ['method' => 'pickup', 'address_id' => '8', 'slot_id' => 'slot-8'];
+    $api->postJson('/api/v1/orders/bulk', ['ids' => [$order->ulid], 'action' => 'pack', 'shipping' => [$account->ulid => $choice]])->assertOk()
+        ->assertJsonPath('data.0.ok', false)->assertJsonPath('data.0.message', fn ($m) => str_contains($m, 'Shopee đang kiểm tra'));
+    expect(collect(ezCalls())->where('key', 'POST /api/v2/logistics/ship_order'))->toHaveCount(0);
+
+    // Shopee is done: the next read moves it into Cần chuẩn bị hàng.
+    $status = 'READY_TO_SHIP';
+    TenantContext::run($this->tenant, fn () => app(OrderSync::class)->syncOne($account, '2611SHIP1', 'schedule'));
+    expect($order->refresh()->underMarketplaceReview())->toBeFalse()->and($order->status)->toBe(OrderStatus::READY_TO_PACK);
+    $api->getJson('/api/v1/orders?flags[]=not_arranged')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.marketplace_review', false);
+});
+
+it('says Shopee\'s "not ready to be shipped" refusal in Vietnamese', function () {
+    shopeeShipFake([
+        'GET /api/v2/logistics/get_shipping_parameter' => fn () => Http::response(['error' => ['code' => 'MARKETPLACE_ERROR', 'message' => '/api/v2/logistics/get_shipping_parameter: Shipping parameters can only be obtained when package is ready to be shipped', 'details' => ['auth' => false]]], 424),
+    ]);
+    $account = gatewayShop($this->tenant, 'shopee');
+    TenantContext::run($this->tenant, fn () => app(OrderSync::class)->syncOne($account, '2611SHIP1', 'webhook'));
+    $order = Order::withoutGlobalScopes()->where('external_order_id', '2611SHIP1')->sole();
+
+    actingInTenant($this->owner, $this->tenant)->postJson('/api/v1/orders/ship-options', ['ids' => [$order->ulid]])->assertOk()
+        ->assertJsonPath('data.groups.0.error', fn ($m) => str_starts_with($m, 'Shopee chưa cho chuẩn bị hàng đơn này'));
+});
+
 it('ships a TikTok Hoả tốc package as a pickup without a slot when TikTok offers none', function () {
     fakeEzChat([
         'GET /order/202309/orders' => ['data' => ['data' => ['orders' => [[

@@ -336,6 +336,8 @@ export interface OrderSummary {
     flags: { shortage: boolean; awaiting_purchase?: boolean; unmapped: boolean; overdue: boolean; due_soon: boolean; printed: boolean };
     /** Shopee / TikTok Shop: "Chuẩn bị hàng" and the marketplace label are done from here. */
     marketplace_shipping?: boolean;
+    /** Shopee "Chờ - Đang được kiểm tra bởi Shopee": waits to be packed, "Chuẩn bị hàng" is not possible yet. */
+    marketplace_review?: boolean;
     ship_arrangement?: { method: 'pickup' | 'dropoff'; slot: string | null; address: string | null; at: string } | null;
     /** Before "Chuẩn bị hàng": ways the marketplace offers for this kiểu giao ('pickup', 'dropoff'). */
     ship_methods?: string[] | null;

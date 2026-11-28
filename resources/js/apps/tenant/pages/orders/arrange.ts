@@ -7,6 +7,8 @@ export interface ArrangeOrder {
     status: string;
     source: 'marketplace';
     marketplace_shipping: true;
+    /** Never true here: orders Shopee is still checking are not offered for "Chuẩn bị hàng". */
+    marketplace_review?: false;
     ship_by_at: string | null;
     /** Kiểu giao: 'express' = Hỏa tốc (these come first). */
     delivery_type?: string | null;

@@ -66,6 +66,10 @@ class OrderActions
             throw ValidationException::withMessages(['action' => 'Đơn đang ở trạng thái không cho phép thao tác này.']);
         }
 
+        if ($action === 'pack' && $order->underMarketplaceReview()) {
+            throw ValidationException::withMessages(['action' => Order::REVIEW_MESSAGE]);
+        }
+
         $account = $order->account;
         if ($action === 'handover' && $order->marketplace === WooCommerceConnector::MARKETPLACE) {
             Tracking::assertUnique($order, Tracking::normalize($params['tracking_number'] ?? null)); // before anything moves
@@ -98,7 +102,7 @@ class OrderActions
         try {
             $connector->performOrderAction($account, $order->external_order_id, $action, $params);
         } catch (ConnectorException $e) {
-            throw ValidationException::withMessages(['action' => $e->getMessage()]);
+            throw ValidationException::withMessages(['action' => MarketplaceShipping::message($e)]);
         }
         if ($choice !== null) {
             app(MarketplaceShipping::class)->arranged($order, $choice);

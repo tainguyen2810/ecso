@@ -30,7 +30,7 @@ class LearnShipMethodsJob implements ShouldQueue
     {
         $order = Order::query()->withoutGlobalScopes()->find($this->orderId);
         $tenant = $order ? Tenant::query()->find($order->tenant_id) : null;
-        if (! $order || ! $tenant || $order->status !== OrderStatus::READY_TO_PACK) {
+        if (! $order || ! $tenant || $order->status !== OrderStatus::READY_TO_PACK || $order->underMarketplaceReview()) {
             return;
         }
         TenantContext::run($tenant, function () use ($shipping) {

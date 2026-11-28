@@ -424,7 +424,10 @@ const fmtDay = (d: string | null | undefined) => (d ? d.split('-').reverse().joi
         </section>
 
         <div class="mb-5 space-y-3 empty:hidden">
-            <div v-if="order.marketplace_shipping && order.status === 'READY_TO_PACK' && tenant.can('orders.update')" class="flex flex-wrap items-center gap-3 rounded-lg border border-blue-200 bg-card px-4 py-3 shadow-xs" data-testid="next-step">
+            <Alert v-if="order.marketplace_review" :icon="Clock" tone="slate" data-testid="marketplace-review">
+                <span class="font-medium">Shopee đang kiểm tra đơn này.</span> Chưa chuẩn bị hàng được. Khi Shopee kiểm tra xong, đơn tự chuyển sang Chờ đóng gói và hiện nút Chuẩn bị hàng.
+            </Alert>
+            <div v-else-if="order.marketplace_shipping && order.status === 'READY_TO_PACK' && tenant.can('orders.update')" class="flex flex-wrap items-center gap-3 rounded-lg border border-blue-200 bg-card px-4 py-3 shadow-xs" data-testid="next-step">
                 <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-600"><PackageCheck class="size-5" /></span>
                 <div class="min-w-0 flex-1">
                     <p class="font-semibold">Bước tiếp theo: Chuẩn bị hàng</p>

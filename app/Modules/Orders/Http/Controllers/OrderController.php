@@ -232,7 +232,8 @@ class OrderController extends Controller
             'actions' => $order->isManual()
                 ? collect(ManualOrderService::ACTIONS)->map(fn ($def) => ['allowed' => in_array($order->status, $def[0], true), 'capability' => Capability::SUPPORTED])
                 : collect(OrderActions::ALLOWED_FROM)->map(fn ($from, $action) => [
-                    'allowed' => in_array($order->status, $from, true),
+                    // Shopee still checking the order: "Chuẩn bị hàng" waits until it is released.
+                    'allowed' => in_array($order->status, $from, true) && ! ($action === 'pack' && $order->underMarketplaceReview()),
                     'capability' => $capabilities[Capability::ORDER_ACTIONS[$action]] ?? Capability::UNKNOWN,
                 ]),
             'editable' => $order->isManual() && in_array($order->status, ManualOrderService::EDITABLE, true),
@@ -667,7 +668,7 @@ class OrderController extends Controller
     private function learnShipMethods(iterable $orders): void
     {
         foreach ($orders as $order) {
-            if ($order->status !== OrderStatus::READY_TO_PACK || $order->isManual() || ! in_array($order->marketplace, MarketplaceShipping::marketplaces(), true)) {
+            if ($order->status !== OrderStatus::READY_TO_PACK || $order->isManual() || $order->underMarketplaceReview() || ! in_array($order->marketplace, MarketplaceShipping::marketplaces(), true)) {
                 continue;
             }
             MarketplaceShipping::methodsFor($order, $stale);

@@ -23,7 +23,7 @@ import { api, ApiError, downloadFile } from '@/shared/lib/api';
 import { cn, formatDate, formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
-import { actionLabel, actionLabels, deadlineLabel, deliveryTypes, marketplaceNames, orderFlags, orderStatus, orderStatusBadge, orderTabs, paymentMethods, paymentStatus } from './labels';
+import { actionLabel, actionLabels, deadlineLabel, deliveryTypes, marketplaceNames, orderFlags, orderStatus, orderStatusBadge, orderTabs, paymentMethods, paymentStatus, reviewHint } from './labels';
 import PrintDialog from './PrintDialog.vue';
 import ShipDialog from './ShipDialog.vue';
 import ArrangeByProduct from './ArrangeByProduct.vue';
@@ -456,7 +456,7 @@ const selectedOrders = computed<(OrderSummary | ArrangeOrder)[]>(() =>
 );
 const selectedDue = computed(() => selectedOrders.value.filter((o): o is OrderSummary => o.source === 'manual' && Number((o as OrderSummary).balance_due ?? 0) > 0));
 // Shopee / TikTok: "Chuẩn bị hàng" (the marketplace books its carrier) and the marketplace's own label.
-const selectedToArrange = computed(() => selectedOrders.value.filter((o) => o.marketplace_shipping && o.status === 'READY_TO_PACK'));
+const selectedToArrange = computed(() => selectedOrders.value.filter((o) => o.marketplace_shipping && o.status === 'READY_TO_PACK' && !o.marketplace_review));
 const selectedLabels = computed(() => selectedOrders.value.filter((o) => o.marketplace_shipping && ['PACKED', 'HANDED_OVER', 'IN_TRANSIT', 'FAILED_DELIVERY'].includes(o.status)));
 const shipIds = ref<string[]>([]);
 const shipOpen = ref(false);
@@ -578,6 +578,8 @@ const nextAction: Record<string, string> = { PENDING_CONFIRMATION: 'confirm', RE
 const rowAction = (o: OrderSummary) => {
     // Shopee / TikTok after "Chuẩn bị hàng": the carrier comes to the parcel, what is left here is its label (once).
     if (o.marketplace_shipping && o.status === 'PACKED') return tenant.can('orders.print') && !o.label_print_count ? 'label' : null;
+    // Shopee is still checking it: nothing to do until Shopee releases it (the order updates by itself).
+    if (o.marketplace_review) return null;
     return tenant.can('orders.update') ? (nextAction[o.status] ?? null) : null;
 };
 /** No step left here: a muted, same-size placeholder that says where the order is (Mẫu A). */
@@ -587,6 +589,7 @@ const doneLabels: Record<string, string> = {
 };
 const rowDone = (o: OrderSummary) => {
     if (o.marketplace_shipping && o.status === 'PACKED' && o.label_print_count) return 'Đã in phiếu';
+    if (o.marketplace_review) return 'Shopee kiểm tra';
     return doneLabels[o.status] ?? null;
 };
 // A printed marketplace label can still be printed again from its placeholder.
@@ -1017,7 +1020,7 @@ const orderLabel = (id: string) => orderCode(orders.value.find((o) => o.id === i
                                     v-else-if="rowDone(o)"
                                     type="button"
                                     :disabled="!canReprint(o)"
-                                    :title="canReprint(o) ? `Đã in ${o.label_print_count} lần, bấm để in lại` : undefined"
+                                    :title="canReprint(o) ? `Đã in ${o.label_print_count} lần, bấm để in lại` : o.marketplace_review ? reviewHint : undefined"
                                     class="inline-flex h-8 w-[120px] items-center justify-center rounded-md border border-dashed border-slate-300 bg-white text-xs whitespace-nowrap text-muted-foreground enabled:hover:border-slate-400 enabled:hover:text-foreground disabled:cursor-default"
                                     :data-testid="`row-done-${o.id}`"
                                     @click="canReprint(o) && openLabels([o.id])"

@@ -4,6 +4,7 @@ namespace App\Modules\Orders\Models;
 
 use App\Modules\Identity\Models\User;
 use App\Modules\Inventory\Models\Warehouse;
+use App\Modules\Marketplace\Connectors\Shopee\ShopeeConnector;
 use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Sales\Models\Customer;
@@ -132,6 +133,18 @@ class Order extends Model
     public function isManual(): bool
     {
         return $this->marketplace === self::SOURCE_MANUAL;
+    }
+
+    /** Shown to the seller where "Chuẩn bị hàng" is refused for an order under review. */
+    public const REVIEW_MESSAGE = 'Shopee đang kiểm tra đơn này, chưa chuẩn bị hàng được. Khi Shopee kiểm tra xong, đơn tự chuyển sang Chờ đóng gói.';
+
+    /**
+     * Shopee "Chờ - Đang được kiểm tra bởi Shopee": the order waits to be packed but Shopee has not released it yet,
+     * so "Chuẩn bị hàng" is not possible. It moves on by itself when Shopee is done (the next sync reads READY_TO_SHIP).
+     */
+    public function underMarketplaceReview(): bool
+    {
+        return $this->marketplace === ShopeeConnector::MARKETPLACE && $this->raw_status === ShopeeConnector::REVIEW_STATUS;
     }
 
     /** Orders whose buyer is the seller's own customer (manual sales, own website): full contact is kept and shown. */
