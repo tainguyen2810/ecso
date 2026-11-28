@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { Banknote, Download, Info, Package, ShoppingCart, TrendingUp } from 'lucide-vue-next';
-import PageHeader from '../../PageHeader.vue';
-import RangePicker from './RangePicker.vue';
-import ReportsNav from './ReportsNav.vue';
-import Button from '@/shared/ui/Button.vue';
-import Card from '@/shared/ui/Card.vue';
-import KpiCard from '@/shared/ui/KpiCard.vue';
+import { Banknote, Info, Package, Receipt, ShoppingCart, TrendingUp, Warehouse } from 'lucide-vue-next';
+import ReportDetailHead from './ReportDetailHead.vue';
+import ReportKpi from './ReportKpi.vue';
+import ReportChip from './ReportChip.vue';
+import SideCard from './SideCard.vue';
+import ChannelMark from './ChannelMark.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { cn, formatMoney, formatNumber } from '@/shared/lib/utils';
+
+/**
+ * Doanh thu theo ngày / kênh / nhân viên / khách / kho (mẫu Tailwind 28/11): one row per entry with its figures and a
+ * bar split into giá vốn, phí sàn and lãi; the share of revenue in a donut beside it.
+ */
 import { channelTypes, marketplaceNames } from '../orders/labels';
 import { downloadCsv, toCsv } from './range';
 import { useReportQuery } from './useReportQuery';
@@ -99,118 +103,235 @@ function exportCsv() {
         ),
     );
 }
+
+const TITLES: Record<By, string> = {
+    day: 'Doanh thu theo ngày',
+    channel: 'Doanh thu theo kênh bán',
+    staff: 'Doanh thu theo nhân viên',
+    customer: 'Doanh thu, lợi nhuận theo khách',
+    warehouse: 'Doanh thu theo kho xuất',
+};
+const profitOf = (r: Row) => (showFees.value ? (r.profit_after_fees ?? 0) : (r.gross_profit ?? 0));
+const marginOf = (r: Row) => (showFees.value ? r.margin_after_fees : r.margin);
+/** Bar of a row: its length is the revenue against the biggest row, split into cost, fees and what is left. */
+function bar(r: Row) {
+    const rev = Math.max(0, r.revenue);
+    const cogs = canProfit.value ? Math.min(rev, r.cogs ?? 0) : 0;
+    const fees = showFees.value ? Math.min(rev - cogs, r.fees ?? 0) : 0;
+    const pct = (v: number) => (rev > 0 ? (v / rev) * 100 : 0);
+    return { width: (rev / maxRevenue.value) * 100, cogs: pct(cogs), fees: pct(fees), rest: canProfit.value ? Math.max(0, 100 - pct(cogs) - pct(fees)) : 100 };
+}
+function sub(r: Row): string {
+    return [kindLabel(r.kind), r.orders ? `${formatNumber(r.orders)} đơn` : 'Chưa có đơn', r.units ? `${formatNumber(r.units)} SP` : null].filter(Boolean).join(' · ');
+}
+function initials(name: string): string {
+    const w = name.trim().split(/\s+/).filter(Boolean);
+    return ((w.length > 1 ? w[w.length - 2]![0]! + w[w.length - 1]![0]! : (w[0] ?? '?').slice(0, 2)) || '?').toUpperCase();
+}
+const weekday = (iso: string) => ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][new Date(`${iso}T00:00:00`).getDay()];
+
+/** Donut of revenue: the five biggest entries, the rest together. */
+const COLORS = ['#f97316', '#0f172a', '#2563eb', '#8b5cf6', '#10b981', '#cbd5e1'];
+const share = computed(() => {
+    const rows = [...(data.value?.rows ?? [])].filter((r) => r.revenue > 0).sort((a, b) => b.revenue - a.revenue);
+    const top = rows.slice(0, 5).map((r) => ({ label: label(r), value: r.revenue }));
+    const rest = rows.slice(5).reduce((s, r) => s + r.revenue, 0);
+    const items = rest > 0 ? [...top, { label: 'Khác', value: rest }] : top;
+    const total = items.reduce((s, i) => s + i.value, 0) || 1;
+    let offset = 0;
+    return items.map((i, n) => {
+        const pct = (i.value / total) * 100;
+        const seg = { ...i, pct, offset, color: COLORS[n]! };
+        offset += pct;
+        return seg;
+    });
+});
+const shortMoney = (v: number) => (v >= 1e9 ? `${(v / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} tỷ` : v >= 1e6 ? `${(v / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} tr` : formatNumber(Math.round(v)));
+const best = computed(() => (data.value && data.value.rows.length > 1 ? [...data.value.rows].filter((r) => r.orders).sort((a, b) => profitOf(b) - profitOf(a))[0] : undefined));
+const thing = computed(() => ({ day: 'Ngày', channel: 'Kênh', staff: 'Nhân viên', customer: 'Khách', warehouse: 'Kho' })[by.value]);
 </script>
 
 <template>
-    <PageHeader title="Bán hàng & lợi nhuận" description="Doanh thu đã ghi nhận, giá vốn và lợi nhuận gộp trên mọi kênh bán: sàn và kênh riêng.">
-        <RangePicker :from="range.from" :to="range.to" @update:from="(v) => (range = { ...range, from: v })" @update:to="(v) => (range = { ...range, to: v })" />
-    </PageHeader>
-    <ReportsNav />
+    <div class="mx-auto max-w-[1440px] pt-2">
+        <ReportDetailHead
+            :title="TITLES[by]"
+            description="Doanh thu đã ghi nhận, giá vốn, phí sàn và lãi. Cùng một khung cho theo ngày, kênh, nhân viên, khách hàng và kho."
+            :from="range.from"
+            :to="range.to"
+            :can-export="Boolean(data?.rows.length)"
+            @update:range="(r) => (range = r)"
+            @export="exportCsv"
+        />
 
-    <ErrorState v-if="error" :message="error" @retry="load" />
-    <div v-else-if="!data" class="grid gap-4 md:grid-cols-4"><Skeleton v-for="i in 4" :key="i" class="h-24" /></div>
-    <template v-else>
-        <div class="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="sales-kpis">
-            <KpiCard label="Đơn hàng" :icon="ShoppingCart" :value="formatNumber(data.totals.orders)">{{ formatNumber(data.totals.units) }} sản phẩm</KpiCard>
-            <KpiCard label="Doanh thu (gồm phí giao)" :icon="Banknote" tone="blue" :value="formatMoney(data.totals.revenue)">Tiền hàng {{ formatMoney(data.totals.goods) }}</KpiCard>
-            <template v-if="canProfit">
-                <KpiCard label="Giá vốn" :icon="Package" :value="formatMoney(data.totals.cogs ?? 0)" />
-                <KpiCard label="Lợi nhuận gộp" :icon="TrendingUp" :tone="(data.totals.gross_profit ?? 0) < 0 ? 'red' : 'green'" :value="formatMoney(data.totals.gross_profit ?? 0)">Biên {{ data.totals.margin ?? '—' }}%</KpiCard>
-            </template>
-        </div>
-        <p class="mb-4 flex items-start gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground" data-testid="sales-basis">
-            <Info class="mt-0.5 size-3.5 shrink-0" />
-            <span>
-                Tính các đơn đã ghi nhận doanh thu trong kỳ, giống trang Tài chính: đơn sàn khi sàn báo hoàn thành, đơn kênh riêng khi giao xong, bán tại quầy khi bán.
-                <template v-if="data.awaiting.orders">{{ formatNumber(data.awaiting.orders) }} đơn sàn đã giao nhưng sàn chưa hoàn thành ({{ formatMoney(data.awaiting.goods) }} tiền hàng) chưa được tính.</template>
-            </span>
-        </p>
-        <p v-if="showFees" class="mb-4 flex items-start gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground" data-testid="channel-fees-note">
-            <Info class="mt-0.5 size-3.5 shrink-0" />
-            <span>Lãi sau phí sàn = lợi nhuận gộp − phí sàn + phí giao khách trả, giống "Lợi nhuận đóng góp" ở trang Tài chính của từng shop. Phí sàn lấy theo đối soát của sàn; đơn chưa đối soát thì ước tính theo bảng phí của shop. Kênh bán riêng không có phí sàn.</span>
-        </p>
-        <p v-if="data.totals.missing_cost_lines || data.excluded.orders" class="mb-4 flex items-start gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-            <Info class="mt-0.5 size-3.5 shrink-0" />
-            <span>
-                <template v-if="data.totals.missing_cost_lines">{{ formatNumber(data.totals.missing_cost_lines) }} dòng hàng chưa có giá vốn (đơn chưa xuất kho hoặc SKU sàn chưa ghép), lợi nhuận của các đơn này đang tính bằng tiền hàng. </template>
-                <template v-if="data.excluded.orders">Không tính {{ formatNumber(data.excluded.orders) }} đơn hủy/hoàn ({{ formatMoney(data.excluded.revenue) }}).</template>
-            </span>
-        </p>
+        <ErrorState v-if="error" :message="error" @retry="load" />
+        <div v-else-if="!data" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Skeleton v-for="i in 4" :key="i" class="h-[132px] rounded-[14px]" /></div>
+        <template v-else>
+            <div class="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="sales-kpis">
+                <ReportKpi label="Doanh thu" tip="Gồm phí giao khách trả, các đơn đã ghi nhận doanh thu trong kỳ." :icon="Banknote" primary :value="Math.round(data.totals.revenue)">
+                    <template #chips><ReportChip tone="onblue">Tiền hàng {{ formatNumber(Math.round(data.totals.goods)) }} đ</ReportChip></template>
+                    {{ formatNumber(data.totals.orders) }} đơn · {{ formatNumber(data.totals.units) }} sản phẩm
+                </ReportKpi>
+                <ReportKpi v-if="canProfit" label="Giá vốn" :icon="Package" tone="slate" :value="Math.round(data.totals.cogs ?? 0)">
+                    <template v-if="data.totals.revenue" #chips><ReportChip>{{ Math.round(((data.totals.cogs ?? 0) / data.totals.revenue) * 100) }}% doanh thu</ReportChip></template>
+                    Theo giá vốn lúc xuất kho
+                </ReportKpi>
+                <ReportKpi v-else label="Đơn hàng" :icon="ShoppingCart" tone="violet" :value="data.totals.orders" unit="đơn">{{ formatNumber(data.totals.units) }} sản phẩm</ReportKpi>
+                <ReportKpi v-if="showFees" label="Phí sàn" :icon="Receipt" tone="amber" :value="Math.round(data.totals.fees ?? 0)">Theo đối soát, đơn chưa đối soát thì ước tính</ReportKpi>
+                <ReportKpi v-else label="Đơn hàng" :icon="ShoppingCart" tone="violet" :value="data.totals.orders" unit="đơn">
+                    Trung bình {{ formatNumber(data.totals.orders ? Math.round(data.totals.revenue / data.totals.orders) : 0) }} đ/đơn
+                </ReportKpi>
+                <ReportKpi
+                    v-if="canProfit"
+                    :label="showFees ? 'Lãi sau phí sàn' : 'Lợi nhuận gộp'"
+                    :icon="TrendingUp"
+                    :tone="profitOf(data.totals) < 0 ? 'red' : 'green'"
+                    :value="Math.round(profitOf(data.totals))"
+                >
+                    <template v-if="marginOf(data.totals) != null" #chips><ReportChip :tone="profitOf(data.totals) < 0 ? 'down' : 'up'">Biên {{ marginOf(data.totals) }}%</ReportChip></template>
+                    <template v-if="best">{{ thing }} lãi nhất: {{ label(best) }}</template>
+                </ReportKpi>
+            </div>
 
-        <Card>
-            <div class="flex flex-wrap items-center gap-2 border-b p-3">
-                <div class="flex overflow-hidden rounded-md border text-sm" role="tablist">
-                    <button v-for="(l, k) in TABS" :key="k" type="button" :class="cn('border-r px-3 py-1.5 last:border-r-0', by === k ? 'bg-primary text-primary-foreground' : 'hover:bg-muted')" :data-testid="`sales-by-${k}`" @click="by = k">{{ l }}</button>
+            <div :class="cn('grid gap-5', by !== 'day' && 'xl:grid-cols-[minmax(0,1fr)_340px]')">
+                <div class="min-w-0 overflow-hidden rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+                    <div class="flex flex-wrap items-center gap-3 border-b border-slate-100 px-5 py-4">
+                        <div class="flex flex-wrap gap-1 rounded-[12px] bg-slate-100 p-1 text-[14px]" role="tablist">
+                            <button
+                                v-for="(l, k) in TABS"
+                                :key="k"
+                                type="button"
+                                role="tab"
+                                :aria-selected="by === k"
+                                :class="cn('rounded-[9px] px-3.5 py-1.5', by === k ? 'bg-white font-semibold text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900')"
+                                :data-testid="`sales-by-${k}`"
+                                @click="by = k"
+                            >
+                                {{ l }}
+                            </button>
+                        </div>
+                        <div v-if="canProfit" class="ml-auto flex items-center gap-4 text-[13px] text-slate-500">
+                            <span class="flex items-center gap-1.5"><i class="size-2.5 rounded-full bg-slate-300" /> Giá vốn</span>
+                            <span v-if="showFees" class="flex items-center gap-1.5"><i class="size-2.5 rounded-full bg-amber-400" /> Phí sàn</span>
+                            <span class="flex items-center gap-1.5"><i class="size-2.5 rounded-full bg-blue-600" /> Lãi</span>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto" :class="loading && 'opacity-60'">
+                        <table class="w-full text-[14px]" data-testid="sales-table">
+                            <tbody class="divide-y divide-slate-100">
+                                <tr v-for="r in data.rows" :key="r.label + r.kind" :class="!r.orders && 'opacity-60'">
+                                    <td class="px-5 py-4">
+                                        <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
+                                            <div class="flex min-w-[180px] flex-1 items-center gap-3">
+                                                <ChannelMark v-if="by === 'channel'" :kind="r.kind" :name="r.label" size="lg" />
+                                                <span v-else-if="by === 'day'" class="grid size-10 shrink-0 place-items-center rounded-[10px] bg-slate-100 text-center leading-none text-slate-600">
+                                                    <span><b class="block text-[14px]">{{ r.label.slice(8, 10) }}</b><span class="text-[10px] uppercase">{{ weekday(r.label) }}</span></span>
+                                                </span>
+                                                <span v-else-if="by === 'warehouse'" class="grid size-10 shrink-0 place-items-center rounded-[10px] bg-blue-50 text-blue-600"><Warehouse class="size-5" /></span>
+                                                <span v-else class="grid size-10 shrink-0 place-items-center rounded-full bg-slate-100 text-[12px] font-semibold text-slate-500">{{ initials(r.label) }}</span>
+                                                <div class="min-w-0">
+                                                    <p class="truncate font-semibold text-slate-900">{{ label(r) }}</p>
+                                                    <p class="text-[13px] text-slate-500">{{ sub(r) }}</p>
+                                                </div>
+                                            </div>
+                                            <dl class="flex flex-wrap gap-x-4 gap-y-1 text-right tabular-nums [&>div]:w-[6.5rem]">
+                                                <div><dt class="text-[12px] text-slate-400">Doanh thu</dt><dd class="font-semibold text-slate-900">{{ r.revenue ? formatNumber(Math.round(r.revenue)) : '—' }}</dd></div>
+                                                <div v-if="canProfit"><dt class="text-[12px] text-slate-400">Giá vốn</dt><dd class="text-slate-600">{{ r.cogs ? formatNumber(Math.round(r.cogs)) : '—' }}</dd></div>
+                                                <div v-if="showFees" data-testid="channel-fees">
+                                                    <dt class="text-[12px] text-slate-400">Phí sàn</dt>
+                                                    <dd class="text-amber-600">{{ r.fees ? formatNumber(Math.round(r.fees)) : '—' }}</dd>
+                                                    <dd v-if="r.fees_unknown_orders" class="text-[11px] text-amber-600">{{ formatNumber(r.fees_unknown_orders) }} đơn chưa có bảng phí</dd>
+                                                    <dd v-else-if="r.fees && r.fees_confirmed_orders !== undefined && r.fees_confirmed_orders < r.orders" class="text-[11px] text-slate-400">có phần ước tính</dd>
+                                                </div>
+                                                <div v-if="canProfit" class="!w-32">
+                                                    <dt class="text-[12px] text-slate-400">{{ showFees ? 'Lãi sau phí' : 'Lãi gộp' }}</dt>
+                                                    <dd :class="cn('font-semibold', profitOf(r) < 0 ? 'text-red-600' : 'text-emerald-600')">
+                                                        {{ r.orders ? formatNumber(Math.round(profitOf(r))) : '—' }}<span v-if="marginOf(r) != null" class="ml-1 text-[12px] font-normal text-slate-400">{{ marginOf(r) }}%</span>
+                                                    </dd>
+                                                </div>
+                                            </dl>
+                                        </div>
+                                        <div v-if="r.revenue > 0" class="mt-3 flex h-2 overflow-hidden rounded-full" :style="{ width: `${Math.max(2, bar(r).width)}%` }">
+                                            <span class="h-full bg-slate-300" :style="{ width: `${bar(r).cogs}%` }" />
+                                            <span class="h-full bg-amber-400" :style="{ width: `${bar(r).fees}%` }" />
+                                            <span :class="cn('h-full', profitOf(r) < 0 ? 'bg-red-400' : 'bg-blue-600')" :style="{ width: `${bar(r).rest}%` }" />
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tfoot class="border-t border-slate-200 bg-slate-50">
+                                <tr>
+                                    <td class="px-5 py-4">
+                                        <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 font-semibold tabular-nums text-slate-900">
+                                            <span>Tổng {{ formatNumber(data.totals.orders) }} đơn · {{ formatNumber(data.totals.units) }} SP</span>
+                                            <span class="flex flex-wrap gap-x-4 text-right [&>span]:w-[6.5rem] [&>span:last-child]:w-32">
+                                                <span>{{ formatNumber(Math.round(data.totals.revenue)) }}</span>
+                                                <span v-if="canProfit" class="font-normal text-slate-600">{{ formatNumber(Math.round(data.totals.cogs ?? 0)) }}</span>
+                                                <span v-if="showFees" class="text-amber-600">{{ formatNumber(Math.round(data.totals.fees ?? 0)) }}</span>
+                                                <span v-if="canProfit" :class="profitOf(data.totals) < 0 ? 'text-red-600' : 'text-emerald-600'">{{ formatNumber(Math.round(profitOf(data.totals))) }}</span>
+                                            </span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
                 </div>
-                <Button variant="outline" size="sm" class="ml-auto" @click="exportCsv"><Download /> Xuất CSV</Button>
-            </div>
-            <div class="overflow-x-auto" :class="loading && 'opacity-60'">
-                <table class="w-full text-sm" data-testid="sales-table">
-                    <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                        <tr>
-                            <th class="px-4 py-2.5 font-medium">{{ firstColumn }}</th>
-                            <th class="px-4 py-2.5 text-right font-medium">Đơn</th>
-                            <th class="px-4 py-2.5 text-right font-medium">SL</th>
-                            <th class="w-1/4 px-4 py-2.5 font-medium">Doanh thu</th>
-                            <template v-if="canProfit">
-                                <th class="px-4 py-2.5 text-right font-medium">Giá vốn</th>
-                                <th class="px-4 py-2.5 text-right font-medium">Lợi nhuận gộp</th>
-                                <th class="px-4 py-2.5 text-right font-medium">Biên</th>
-                            </template>
-                            <template v-if="showFees">
-                                <th class="px-4 py-2.5 text-right font-medium">Phí sàn</th>
-                                <th class="px-4 py-2.5 text-right font-medium">Lãi sau phí sàn</th>
-                                <th class="px-4 py-2.5 text-right font-medium">Biên sau phí</th>
-                            </template>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y">
-                        <tr v-for="r in data.rows" :key="r.label + r.kind" :class="!r.orders && 'text-muted-foreground'">
-                            <td class="whitespace-nowrap px-4 py-2">{{ label(r) }}<span v-if="kindLabel(r.kind)" class="ml-1.5 text-xs text-muted-foreground">{{ kindLabel(r.kind) }}</span></td>
-                            <td class="px-4 py-2 whitespace-nowrap text-right tabular-nums">{{ r.orders ? formatNumber(r.orders) : '—' }}</td>
-                            <td class="px-4 py-2 whitespace-nowrap text-right tabular-nums">{{ r.units ? formatNumber(r.units) : '—' }}</td>
-                            <td class="px-4 py-2">
-                                <div class="flex items-center gap-2">
-                                    <div class="h-2 flex-1 rounded-full bg-muted"><div class="h-2 rounded-full bg-primary" :style="{ width: `${(r.revenue / maxRevenue) * 100}%` }" /></div>
-                                    <span class="w-28 whitespace-nowrap text-right tabular-nums">{{ r.revenue ? formatMoney(r.revenue) : '—' }}</span>
+
+                <div v-if="by !== 'day'" class="space-y-5">
+                    <SideCard v-if="share.length" title="Tỉ trọng doanh thu" :description="`Theo ${thing.toLowerCase()} trong kỳ`">
+                        <div class="px-5 py-5">
+                            <div class="relative mx-auto size-44">
+                                <svg viewBox="0 0 42 42" class="size-full -rotate-90" role="img" aria-label="Tỉ trọng doanh thu">
+                                    <circle cx="21" cy="21" r="15.9155" fill="none" stroke="#f1f5f9" stroke-width="5" />
+                                    <circle
+                                        v-for="s in share"
+                                        :key="s.label"
+                                        cx="21"
+                                        cy="21"
+                                        r="15.9155"
+                                        fill="none"
+                                        :stroke="s.color"
+                                        stroke-width="5"
+                                        :stroke-dasharray="`${Math.max(0, s.pct - 0.6)} ${100 - Math.max(0, s.pct - 0.6)}`"
+                                        :stroke-dashoffset="-s.offset"
+                                    />
+                                </svg>
+                                <div class="absolute inset-0 grid place-items-center text-center">
+                                    <div><p class="text-[24px] font-bold leading-none text-slate-900">{{ shortMoney(data.totals.revenue) }}</p><p class="mt-1 text-[12px] text-slate-500">doanh thu</p></div>
                                 </div>
-                            </td>
-                            <template v-if="canProfit">
-                                <td class="px-4 py-2 whitespace-nowrap text-right tabular-nums">{{ r.cogs ? formatMoney(r.cogs) : '—' }}</td>
-                                <td class="px-4 py-2 whitespace-nowrap text-right tabular-nums" :class="(r.gross_profit ?? 0) < 0 && 'text-destructive'">{{ r.orders ? formatMoney(r.gross_profit ?? 0) : '—' }}</td>
-                                <td class="px-4 py-2 whitespace-nowrap text-right tabular-nums">{{ r.margin == null ? '—' : `${r.margin}%` }}</td>
-                            </template>
-                            <template v-if="showFees">
-                                <td class="px-4 py-2 whitespace-nowrap text-right tabular-nums" data-testid="channel-fees">
-                                    {{ r.fees ? formatMoney(r.fees) : '—' }}
-                                    <span v-if="r.fees_unknown_orders" class="block whitespace-normal text-xs text-amber-600">{{ formatNumber(r.fees_unknown_orders) }} đơn chưa có bảng phí</span>
-                                    <span v-else-if="r.fees && r.fees_confirmed_orders !== undefined && r.fees_confirmed_orders < r.orders" class="block whitespace-normal text-xs text-muted-foreground">có phần ước tính</span>
-                                </td>
-                                <td class="px-4 py-2 whitespace-nowrap text-right font-medium tabular-nums" :class="(r.profit_after_fees ?? 0) < 0 && 'text-destructive'">{{ r.orders ? formatMoney(r.profit_after_fees ?? 0) : '—' }}</td>
-                                <td class="px-4 py-2 whitespace-nowrap text-right tabular-nums">{{ r.margin_after_fees == null ? '—' : `${r.margin_after_fees}%` }}</td>
-                            </template>
-                        </tr>
-                    </tbody>
-                    <tfoot class="border-t bg-muted/30 font-medium">
-                        <tr>
-                            <td class="px-4 py-2.5">Tổng</td>
-                            <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ formatNumber(data.totals.orders) }}</td>
-                            <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ formatNumber(data.totals.units) }}</td>
-                            <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ formatMoney(data.totals.revenue) }}</td>
-                            <template v-if="canProfit">
-                                <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ formatMoney(data.totals.cogs ?? 0) }}</td>
-                                <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ formatMoney(data.totals.gross_profit ?? 0) }}</td>
-                                <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ data.totals.margin == null ? '—' : `${data.totals.margin}%` }}</td>
-                            </template>
-                            <template v-if="showFees">
-                                <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ formatMoney(data.totals.fees ?? 0) }}</td>
-                                <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ formatMoney(data.totals.profit_after_fees ?? 0) }}</td>
-                                <td class="px-4 py-2.5 whitespace-nowrap text-right tabular-nums">{{ data.totals.margin_after_fees == null ? '—' : `${data.totals.margin_after_fees}%` }}</td>
-                            </template>
-                        </tr>
-                    </tfoot>
-                </table>
+                            </div>
+                            <ul class="mt-5 space-y-2.5 text-[14px]">
+                                <li v-for="s in share" :key="s.label" class="flex items-center gap-2.5">
+                                    <i class="size-2.5 shrink-0 rounded-full" :style="{ background: s.color }" />
+                                    <span class="min-w-0 flex-1 truncate text-slate-700">{{ s.label }}</span>
+                                    <b class="tabular-nums text-slate-900">{{ Math.round(s.pct) }}%</b>
+                                </li>
+                            </ul>
+                        </div>
+                    </SideCard>
+                </div>
             </div>
-        </Card>
-    </template>
+
+            <div class="mt-5 space-y-2 text-[13px] text-slate-500">
+                <p class="flex items-start gap-2" data-testid="sales-basis">
+                    <Info class="mt-0.5 size-4 shrink-0 text-slate-400" />
+                    <span>
+                        Tính các đơn đã ghi nhận doanh thu trong kỳ, giống trang Tài chính: đơn sàn khi sàn báo hoàn thành, đơn kênh riêng khi giao xong, bán tại quầy khi bán.
+                        <template v-if="data.awaiting.orders"><span class="text-amber-700">{{ formatNumber(data.awaiting.orders) }} đơn sàn đã giao nhưng sàn chưa hoàn thành ({{ formatMoney(data.awaiting.goods) }} tiền hàng) chưa được tính.</span></template>
+                    </span>
+                </p>
+                <p v-if="showFees" class="flex items-start gap-2" data-testid="channel-fees-note">
+                    <Info class="mt-0.5 size-4 shrink-0 text-slate-400" />
+                    <span>Lãi sau phí sàn = lợi nhuận gộp − phí sàn + phí giao khách trả, giống "Lợi nhuận đóng góp" ở trang Tài chính của từng shop. Phí sàn lấy theo đối soát của sàn; đơn chưa đối soát thì ước tính theo bảng phí của shop. Kênh bán riêng không có phí sàn.</span>
+                </p>
+                <p v-if="data.totals.missing_cost_lines || data.excluded.orders" class="flex items-start gap-2">
+                    <Info class="mt-0.5 size-4 shrink-0 text-slate-400" />
+                    <span>
+                        <template v-if="data.totals.missing_cost_lines">{{ formatNumber(data.totals.missing_cost_lines) }} dòng hàng chưa có giá vốn (đơn chưa xuất kho hoặc SKU sàn chưa ghép), lợi nhuận của các đơn này đang tính bằng tiền hàng. </template>
+                        <template v-if="data.excluded.orders">Không tính {{ formatNumber(data.excluded.orders) }} đơn hủy/hoàn ({{ formatMoney(data.excluded.revenue) }}).</template>
+                    </span>
+                </p>
+            </div>
+        </template>
+    </div>
 </template>

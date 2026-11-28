@@ -164,7 +164,8 @@ export const reportGroups: Record<ReportGroupKey, { title: string; permission: s
 };
 
 /** Which group a page or detail report belongs to (for its back link). */
-export function groupOf(routeName: string, report?: string): ReportGroupKey {
+export function groupOf(routeName: string, report?: string, by?: string): ReportGroupKey {
+    if (routeName === 'report-sales' && by === 'customer') return 'customers';
     if (report) {
         const hit = (Object.keys(reportGroups) as ReportGroupKey[]).find((g) => reportGroups[g].links.some((l) => 'report' in l.to && l.to.report === report));
         if (hit) return hit;

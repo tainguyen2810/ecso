@@ -16,11 +16,13 @@ withDefaults(
         /** Colour of the icon square and, unless `plain`, of the figure. */
         tone?: 'blue' | 'green' | 'amber' | 'red' | 'violet' | 'slate';
         value: number | null;
+        /** Figure already written out (e.g. "3 lô"), shown instead of `value`. */
+        text?: string;
         unit?: string;
         primary?: boolean;
         plain?: boolean;
     }>(),
-    { tone: 'slate', unit: 'đ', primary: false, plain: false, tip: undefined, tipTitle: undefined },
+    { tone: 'slate', unit: 'đ', primary: false, plain: false, tip: undefined, tipTitle: undefined, text: undefined },
 );
 
 const icons: Record<string, string> = {
@@ -58,7 +60,8 @@ const figures: Record<string, string> = {
             <span :class="cn('grid size-10 shrink-0 place-items-center rounded-[11px]', primary ? 'bg-white/15 text-white' : icons[tone])"><component :is="icon" class="size-5" :stroke-width="1.9" /></span>
         </div>
         <p :class="cn('-mt-1 whitespace-nowrap text-[28px] font-bold leading-none tabular-nums tracking-tight', primary ? 'text-white' : plain ? 'text-slate-900' : figures[tone])" data-testid="kpi-value">
-            <template v-if="value === null">—</template>
+            <template v-if="text !== undefined">{{ text }}</template>
+            <template v-else-if="value === null">—</template>
             <template v-else>{{ formatNumber(value) }}<span :class="cn('ml-1 text-[16px] font-semibold', primary ? 'text-blue-200' : 'text-slate-400')">{{ unit }}</span></template>
         </p>
         <div v-if="$slots.chips" class="mt-3 flex flex-wrap items-center gap-1.5 text-xs"><slot name="chips" /></div>
