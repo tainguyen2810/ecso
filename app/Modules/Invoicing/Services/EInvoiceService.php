@@ -9,6 +9,7 @@ use App\Modules\Invoicing\Models\EInvoiceAccount;
 use App\Modules\Invoicing\Providers\EInvoiceException;
 use App\Modules\Invoicing\Providers\EInvoiceResult;
 use App\Modules\Invoicing\Providers\ProviderRegistry;
+use App\Modules\Invoicing\Providers\ProvidesPdf;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Sales\Models\Customer;
@@ -225,9 +226,23 @@ class EInvoiceService
             $this->audit->record('einvoice.issued', $invoice->order, ['reference' => $invoice->reference_code, 'number' => $invoice->invoice_number]);
         } elseif ($result->state === EInvoiceResult::FAILED) {
             $invoice->forceFill(['status' => EInvoice::FAILED, 'message' => $result->message ?? 'Nhà cung cấp từ chối hóa đơn.'])->save();
+        } elseif ($result->message !== null && $result->message !== $invoice->message) {
+            // Still waiting (MISA: draft not signed yet): say what the shop has to do.
+            $invoice->forceFill(['message' => $result->message])->save();
         }
 
         return $invoice;
+    }
+
+    /** The issued invoice's PDF from a provider that has no public link (Viettel, VNPT, MISA). */
+    public function pdf(EInvoice $invoice): string
+    {
+        $provider = $this->providers->has($invoice->provider) ? $this->providers->get($invoice->provider) : null;
+        if ($invoice->status !== EInvoice::ISSUED || ! $provider instanceof ProvidesPdf) {
+            throw ValidationException::withMessages(['einvoice' => 'Hóa đơn này chưa có file PDF.']);
+        }
+
+        return $this->callProvider(fn () => $provider->pdf($invoice->account, $invoice), 'einvoice');
     }
 
     /** "Tự xuất": called (queued) when an own-channel order is fully paid or completed. Never throws. */
@@ -259,6 +274,8 @@ class EInvoiceService
             'invoice_number' => $invoice->invoice_number,
             'issued_at' => $invoice->issued_at?->toIso8601String(),
             'pdf_url' => $invoice->pdf_url,
+            // No public link: the page downloads it from einvoices/{id}/pdf.
+            'pdf_download' => $invoice->status === EInvoice::ISSUED && $invoice->pdf_url === null && in_array($invoice->provider, ['viettel', 'vnpt', 'misa'], true),
             'buyer' => $invoice->buyer,
             'total' => $invoice->total,
             'message' => $invoice->message,

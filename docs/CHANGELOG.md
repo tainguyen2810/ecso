@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Hóa đơn điện tử: Viettel, VNPT, MISA và bán gói hóa đơn (2026-11-28)
+- Kết nối dịch vụ → Hóa đơn điện tử thêm **Viettel S-Invoice** (tên đăng nhập, mật khẩu API, mẫu số, ký hiệu), **VNPT Invoice** (trang hóa đơn riêng của shop, tài khoản dịch vụ và quản trị, gọi SOAP) và **MISA meInvoice** (tài khoản meInvoice; tạo hóa đơn nháp, shop ký phát hành trên meInvoice rồi bấm Kiểm tra lại; cần `EINVOICE_MISA_APP_ID`, chưa có thì hiện "sắp có"). Logo thật của hãng, hộp kết nối có hướng dẫn "Lấy thông tin ở đâu?". Ba hãng này không có link PDF công khai: nút Xem PDF tải qua `GET /einvoices/{id}/pdf`.
+- **Mua gói hóa đơn**: shop chọn gói, ký số từ xa, nhập thông tin đơn vị; chuyển khoản theo mã đơn (HDDT…), chưa chuyển thì tự hủy được. Thẻ tiến trình: Đã thanh toán → Tạo tài khoản → Shop ký tờ khai 01 (nút Ký tờ khai) → Thuế chấp nhận → Tự kết nối. "Dùng nhà cung cấp khác? Gửi yêu cầu" ghi lại nhà cung cấp shop muốn.
+- Quản trị → **Bán hóa đơn**: số đơn, doanh thu tháng, đơn đứng quá 2 ngày; mở đơn để ghi nhận tiền, chuyển bước kèm lời nhắn và link ký, dán tài khoản API để kết nối hộ shop, hoặc hủy; thêm, sửa, ngừng bán gói.
+- Hóa đơn bán hàng (mẫu bắt đầu bằng 2) không tính thuế GTGT trên dòng; số tiền bằng chữ cho VNPT.
+
 ### Phân loại sản phẩm hiện rõ trong đơn (2026-11-27)
 - Phân loại của sàn ("128GB", "Đen / M") hiện thành nhãn riêng "Phân loại: …" dưới tên sản phẩm ở danh sách đơn, xem nhanh, chi tiết đơn, trang Đóng gói và hộp Chọn theo sản phẩm. Trước đây phân loại nối sau tên dài nên bị cắt mất. Dòng tóm tắt sản phẩm (Đóng gói, Tổng quan) đưa phân loại lên trước: "[128GB] USB …". Số lượng lớn hơn 1 in đậm.
 - SKU nội bộ không có tên phân loại (một SKU cho cả sản phẩm sàn) mà đơn có phân loại khác nhau: phiếu nhặt hàng, chữ in thêm trên phiếu sàn và Chọn theo sản phẩm tách riêng từng phân loại thay vì gộp chung.

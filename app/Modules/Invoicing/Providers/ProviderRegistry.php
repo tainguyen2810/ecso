@@ -3,7 +3,10 @@
 namespace App\Modules\Invoicing\Providers;
 
 use App\Modules\Invoicing\Providers\Fake\FakeEInvoiceProvider;
+use App\Modules\Invoicing\Providers\Misa\MisaProvider;
 use App\Modules\Invoicing\Providers\SePay\SePayProvider;
+use App\Modules\Invoicing\Providers\Viettel\ViettelProvider;
+use App\Modules\Invoicing\Providers\Vnpt\VnptProvider;
 use InvalidArgumentException;
 
 /** The e-invoice providers ECSO can talk to. */
@@ -11,6 +14,9 @@ class ProviderRegistry
 {
     /** @var array<string, class-string<EInvoiceProvider>> */
     private const PROVIDERS = [
+        ViettelProvider::KEY => ViettelProvider::class,
+        VnptProvider::KEY => VnptProvider::class,
+        MisaProvider::KEY => MisaProvider::class,
         SePayProvider::KEY => SePayProvider::class,
         FakeEInvoiceProvider::KEY => FakeEInvoiceProvider::class,
     ];
@@ -18,18 +24,23 @@ class ProviderRegistry
     /**
      * Shown on the page but not connectable yet, and why.
      *
-     * @var array<string, array{label: string, note: string}>
+     * @return array<string, array{label: string, note: string}>
      */
-    public const UPCOMING = [
-        'misa' => ['label' => 'MISA meInvoice', 'note' => 'Chờ MISA gửi tài liệu API chi tiết (trang công khai chưa có các lệnh gọi).'],
-        'viettel' => ['label' => 'Viettel S-Invoice', 'note' => 'Viettel gửi tài liệu tích hợp sau khi ký hợp đồng dịch vụ.'],
-        'vnpt' => ['label' => 'VNPT Invoice', 'note' => 'VNPT gửi tài liệu tích hợp sau khi ký hợp đồng dịch vụ.'],
-    ];
+    public function upcoming(): array
+    {
+        return MisaProvider::configured() ? [] : [
+            MisaProvider::KEY => ['label' => 'MISA meInvoice', 'note' => 'Đang chờ MISA cấp mã ứng dụng (AppID) cho EzChat Bán hàng.'],
+        ];
+    }
 
     /** @return array<int, string> */
     public function keys(): array
     {
-        return array_filter(array_keys(self::PROVIDERS), fn ($k) => $k !== FakeEInvoiceProvider::KEY || config('einvoice.fake_enabled'));
+        return array_values(array_filter(array_keys(self::PROVIDERS), fn ($k) => match ($k) {
+            FakeEInvoiceProvider::KEY => (bool) config('einvoice.fake_enabled'),
+            MisaProvider::KEY => MisaProvider::configured(),
+            default => true,
+        }));
     }
 
     public function has(string $key): bool

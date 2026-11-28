@@ -2,6 +2,7 @@
 
 use App\Modules\Admin\Http\Controllers\AdminBillingController;
 use App\Modules\Admin\Http\Controllers\AdminDashboardController;
+use App\Modules\Admin\Http\Controllers\AdminEInvoiceController;
 use App\Modules\Admin\Http\Controllers\AdminMonitoringController;
 use App\Modules\Admin\Http\Controllers\AdminPlanController;
 use App\Modules\Admin\Http\Controllers\AdminTenantController;
@@ -29,4 +30,12 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'super-admin'])->group(funct
     Route::post('plans/reorder', [AdminPlanController::class, 'reorder']);
     Route::put('plans/{plan}', [AdminPlanController::class, 'update']);
     Route::delete('plans/{plan}', [AdminPlanController::class, 'destroy']);
+    Route::get('einvoice', [AdminEInvoiceController::class, 'index']);
+    Route::post('einvoice/packages', [AdminEInvoiceController::class, 'storePackage']);
+    Route::put('einvoice/packages/{package}', [AdminEInvoiceController::class, 'updatePackage']);
+    Route::delete('einvoice/packages/{package}', [AdminEInvoiceController::class, 'destroyPackage']);
+    Route::post('einvoice/orders/{order}/payment', [AdminEInvoiceController::class, 'confirmPayment'])->middleware('throttle:30,1,admin.einvoice.payment');
+    Route::post('einvoice/orders/{order}/advance', [AdminEInvoiceController::class, 'advance']);
+    Route::post('einvoice/orders/{order}/connect', [AdminEInvoiceController::class, 'connect'])->middleware('throttle:10,1,admin.einvoice.connect');
+    Route::post('einvoice/orders/{order}/cancel', [AdminEInvoiceController::class, 'cancel']);
 });

@@ -16,7 +16,7 @@ export interface ConnectedService {
 }
 
 const carrierLogos: Record<string, string> = { ghn: 'carriers/ghn.webp', viettelpost: 'carriers/viettelpost.webp', jt: 'carriers/jt.webp', ghtk: 'carriers/ghtk.webp', spx: 'carriers/spx.webp' };
-export const einvoiceLogos: Record<string, string> = { misa: 'einvoice/misa.svg' };
+export const einvoiceLogos: Record<string, string> = { viettel: 'einvoice/viettel.png', vnpt: 'einvoice/vnpt.png', misa: 'einvoice/misa.svg', sepay: 'einvoice/sepay.svg' };
 const marketLogos: Record<string, string> = { shopee: 'marketplaces/shopee.webp', tiktok: 'marketplaces/tiktok.webp', lazada: 'marketplaces/lazada.webp', tiki: 'marketplaces/tiki.webp' };
 const marketNames: Record<string, string> = { shopee: 'Shopee', tiktok: 'TikTok Shop', lazada: 'Lazada', tiki: 'Tiki' };
 
