@@ -82,7 +82,10 @@ it('keeps a cashbook of customer payments, refunds and supplier payments', funct
     $book = actingInTenant($owner, $tenant)->getJson('/api/v1/reports/cashbook')->assertOk()->json('data');
     expect($book)->toMatchArray(['opening' => 0, 'in' => 100000, 'out' => 70000, 'closing' => 30000])
         ->and($book['rows'])->toHaveCount(3)
-        ->and($book['rows'][0]['type'])->toBe('supplier');
+        ->and($book['rows'][0]['type'])->toBe('supplier')
+        // "Thu chi theo tuần" of Báo cáo tài chính: the same money split per week of the period.
+        ->and(array_sum(array_column($book['weeks'], 'in')))->toEqual(100000)
+        ->and(array_sum(array_column($book['weeks'], 'out')))->toEqual(70000);
 
     $cash = actingInTenant($owner, $tenant)->getJson('/api/v1/reports/cashbook?method=cash')->assertOk()->json('data');
     expect($cash['closing'])->toEqual(80000);

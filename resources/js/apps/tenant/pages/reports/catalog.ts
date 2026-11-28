@@ -55,6 +55,7 @@ const isoDay = (iso: string) => {
     const [y, m, d] = iso.slice(0, 10).split('-');
     return `${d}/${m}/${y}`;
 };
+const sumRows = (d: any, key: string) => (d.rows ?? []).reduce((t: number, r: any) => t + Number(r[key] ?? 0), 0);
 const negative = (key: string) => (r: any) => (r[key] < 0 ? 'danger' : undefined);
 
 export const reports: Record<string, DetailReport> = {
@@ -333,15 +334,26 @@ export const reports: Record<string, DetailReport> = {
         endpoint: '/reports/customers',
         permission: 'reports.view',
         period: 'range',
+        tabs: { customer: 'Theo khách', channel: 'Theo kênh', region: 'Theo khu vực' },
         empty: 'Chưa có khách hàng có hồ sơ mua trong kỳ.',
-        note: 'Khách mới là khách có đơn đầu tiên trong kỳ. Đơn khách lẻ và đơn sàn không có hồ sơ khách nên chỉ được đếm số đơn.',
+        note: 'Khách mới là khách có đơn đầu tiên trong kỳ. Đơn khách lẻ và đơn sàn không có hồ sơ khách nên chỉ được đếm số đơn. Theo khu vực lấy tỉnh giao hàng của đơn, không có thì lấy tỉnh của khách.',
         kpis: (d) => [
             { label: 'Khách mua hàng', value: d.summary.customers, type: 'number' },
             { label: 'Khách mới', value: d.summary.new, type: 'number' },
             { label: 'Khách quay lại', value: d.summary.returning, type: 'number' },
             { label: 'Đơn khách lẻ / sàn', value: d.summary.anonymous_orders, type: 'number' },
         ],
-        columns: () => [
+        columns: (_d, by) =>
+            by === 'channel' || by === 'region'
+                ? [
+                      { key: 'label', label: by === 'channel' ? 'Kênh bán' : 'Khu vực' },
+                      { key: 'customers', label: 'Khách mua', type: 'number' },
+                      { key: 'new', label: 'Khách mới', type: 'number' },
+                      { key: 'orders', label: 'Đơn', type: 'number', total: (d) => sumRows(d, 'orders') },
+                      { key: 'anonymous_orders', label: 'Đơn khách lẻ / sàn', type: 'number', total: (d) => sumRows(d, 'anonymous_orders') },
+                      { key: 'revenue', label: 'Doanh thu', type: 'money', total: (d) => sumRows(d, 'revenue') },
+                  ]
+                : [
             { key: 'customer', label: 'Khách hàng', value: (r) => r.customer.name, sub: (r) => [r.customer.code, r.customer.group].filter(Boolean).join(' · '), link: (r) => `/customers/${r.customer.id}` },
             { key: 'is_new', label: 'Loại', value: (r) => (r.is_new ? 'Khách mới' : 'Quay lại'), tone: (r) => (r.is_new ? 'success' : undefined) },
             { key: 'orders', label: 'Đơn trong kỳ', type: 'number' },

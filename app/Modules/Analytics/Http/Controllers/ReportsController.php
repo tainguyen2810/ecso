@@ -154,8 +154,14 @@ class ReportsController extends Controller
         $this->allow('reports.view');
         $this->exporting($request, 'customers');
         [$from, $to] = $this->range($request);
+        $by = $request->validate(['by' => ['nullable', Rule::in(['customer', 'channel', 'region'])]])['by'] ?? 'customer';
+        $data = $trade->customers($from, $to);
+        if ($by !== 'customer') {
+            // Same summary, the table grouped by sales channel or province instead of one row per customer.
+            $data = [...$data, 'rows' => $trade->customersBy($from, $to, $by), 'truncated' => false];
+        }
 
-        return response()->json(['data' => $trade->customers($from, $to)]);
+        return response()->json(['data' => [...$data, 'by' => $by]]);
     }
 
     public function stockOnHand(Request $request, StockReports $stock): JsonResponse

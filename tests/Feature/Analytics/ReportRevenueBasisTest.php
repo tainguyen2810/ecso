@@ -33,6 +33,11 @@ it('counts sales the way Tài chính does: marketplace orders at completion, del
         ->and($overview['shipping'])->toEqual($pl['shipping']['current']);
     expect($api->getJson('/api/v1/reports/orders?basis=completed')->assertOk()->json('data.totals.orders'))->toBe(1)
         ->and($api->getJson('/api/v1/reports/orders')->json('data.totals.orders'))->toBe(3);
+    // "Xem N đơn" of the amber note opens exactly the delivered orders the marketplace has not completed.
+    $awaiting = $api->getJson('/api/v1/reports/orders?basis=awaiting')->assertOk()->json('data');
+    expect($awaiting['basis'])->toBe('awaiting')
+        ->and($awaiting['totals']['orders'])->toBe($sales['awaiting']['orders'])
+        ->and($awaiting['rows'][0]['id'])->toBe($delivered->ulid);
 
     $products = $api->getJson('/api/v1/reports/product-sales')->assertOk()->json('data');
     expect($products['basis'])->toBe('completed')

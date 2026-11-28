@@ -12,7 +12,7 @@ import { presetRange, type Preset } from './range';
  * Frame of the five report menus (mẫu 28/11): breadcrumb, title, quick periods, date range, "Xuất báo cáo" and the
  * five menus as tabs. The period lives in the URL (?from=&to=), so switching tab keeps it.
  */
-const props = defineProps<{ group: ReportGroupKey; description: string; from: string; to: string; exporting?: boolean; canExport?: boolean }>();
+const props = defineProps<{ group: ReportGroupKey; description: string; from: string; to: string; exporting?: boolean }>();
 const emit = defineEmits<{ 'update:range': [range: { from: string; to: string }]; export: [] }>();
 
 const route = useRoute();
@@ -63,7 +63,6 @@ function custom() {
                     <DateRangeInput :from="from" :to="to" aria-label="Khoảng ngày" data-testid="report-range" @update:from="(v) => emit('update:range', { from: v, to })" @update:to="(v) => emit('update:range', { from, to: v })" />
                 </div>
                 <button
-                    v-if="canExport !== false"
                     type="button"
                     class="inline-flex h-9 items-center gap-2 rounded-[10px] bg-blue-600 px-4 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-60"
                     :disabled="exporting"
