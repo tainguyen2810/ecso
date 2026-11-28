@@ -24,7 +24,7 @@ class TaxFigures
     public function __construct(private readonly TenantContext $context) {}
 
     /**
-     * @return array<int, array{day: string, kind: string, channel: string, label: string, group: string, amount: float, orders: array<int, string>}>
+     * @return array<int, array{day: string, kind: string, channel: string, label: string, mark: string, group: string, amount: float, orders: array<int, string>}>
      */
     public function entries(CarbonImmutable $from, CarbonImmutable $to): array
     {
@@ -34,6 +34,8 @@ class TaxFigures
         $market = ProfitFigures::isMarketplaceSql('o');
         $day = ReportRange::day(RevenuePolicy::dateSql('o'), $to);
         $label = "COALESCE(ma.shop_name, sc.name, CASE WHEN o.marketplace = 'manual' THEN 'Đơn tự tạo' ELSE o.marketplace END)";
+        // What the channel is (shopee, tiktok, website, pos…), for its logo or icon.
+        $mark = 'COALESCE(ma.marketplace, sc.type, o.marketplace)';
 
         $sales = RevenuePolicy::recognized(DB::table('orders as o')->where('o.tenant_id', $this->tenant()), 'o', $from, $to)
             ->join('order_items as i', 'i.order_id', '=', 'o.id')
@@ -41,22 +43,22 @@ class TaxFigures
             ->leftJoin('products as p', 'p.id', '=', 'v.product_id')
             ->leftJoin('sales_channels as sc', 'sc.id', '=', 'o.sales_channel_id')
             ->leftJoin('marketplace_accounts as ma', 'ma.id', '=', 'o.marketplace_account_id')
-            ->groupBy('o.id', 'o.external_order_id', 'o.code', 'o.delivered_at', 'o.completed_at', 'o.marketplace', 'o.marketplace_account_id', 'o.sales_channel_id', 'p.category_id', 'ma.shop_name', 'sc.name')
-            ->selectRaw("o.id, COALESCE(o.code, o.external_order_id) as number, {$day} as day, ({$market}) as is_market, CONCAT(o.marketplace, ':', COALESCE(o.marketplace_account_id, o.sales_channel_id, 0)) as channel, {$label} as label, p.category_id, "
+            ->groupBy('o.id', 'o.external_order_id', 'o.code', 'o.delivered_at', 'o.completed_at', 'o.marketplace', 'o.marketplace_account_id', 'o.sales_channel_id', 'p.category_id', 'ma.shop_name', 'sc.name', 'ma.marketplace', 'sc.type')
+            ->selectRaw("o.id, COALESCE(o.code, o.external_order_id) as number, {$day} as day, ({$market}) as is_market, CONCAT(o.marketplace, ':', COALESCE(o.marketplace_account_id, o.sales_channel_id, 0)) as channel, {$label} as label, {$mark} as mark, p.category_id, "
                 ."SUM((i.unit_price * i.quantity - i.discount) * ({$share})) as amount")
             ->get();
 
         $out = [];
-        $add = function (string $day, bool $isMarket, string $channel, string $label, string $group, float $amount, ?string $number) use (&$out) {
+        $add = function (string $day, bool $isMarket, string $channel, string $label, string $mark, string $group, float $amount, ?string $number) use (&$out) {
             $key = "{$day}|{$channel}|{$group}";
-            $out[$key] ??= ['day' => $day, 'kind' => $isMarket ? 'market' : 'self', 'channel' => $channel, 'label' => $label, 'group' => $group, 'amount' => 0.0, 'orders' => []];
+            $out[$key] ??= ['day' => $day, 'kind' => $isMarket ? 'market' : 'self', 'channel' => $channel, 'label' => $label, 'mark' => $mark, 'group' => $group, 'amount' => 0.0, 'orders' => []];
             $out[$key]['amount'] += $amount;
             if ($number !== null && ! in_array($number, $out[$key]['orders'], true)) {
                 $out[$key]['orders'][] = $number;
             }
         };
         foreach ($sales as $r) {
-            $add((string) $r->day, (bool) $r->is_market, (string) $r->channel, (string) $r->label, $groupOf($r->category_id ? (int) $r->category_id : null), (float) $r->amount, (string) $r->number);
+            $add((string) $r->day, (bool) $r->is_market, (string) $r->channel, (string) $r->label, (string) $r->mark, $groupOf($r->category_id ? (int) $r->category_id : null), (float) $r->amount, (string) $r->number);
         }
 
         if ($tax->includeShipping()) {
@@ -64,10 +66,10 @@ class TaxFigures
                 ->leftJoin('sales_channels as sc', 'sc.id', '=', 'o.sales_channel_id')
                 ->leftJoin('marketplace_accounts as ma', 'ma.id', '=', 'o.marketplace_account_id')
                 ->where('o.shipping_fee', '>', 0)
-                ->selectRaw("COALESCE(o.code, o.external_order_id) as number, {$day} as day, ({$market}) as is_market, CONCAT(o.marketplace, ':', COALESCE(o.marketplace_account_id, o.sales_channel_id, 0)) as channel, {$label} as label, o.shipping_fee as amount")
+                ->selectRaw("COALESCE(o.code, o.external_order_id) as number, {$day} as day, ({$market}) as is_market, CONCAT(o.marketplace, ':', COALESCE(o.marketplace_account_id, o.sales_channel_id, 0)) as channel, {$label} as label, {$mark} as mark, o.shipping_fee as amount")
                 ->get();
             foreach ($ship as $r) {
-                $add((string) $r->day, (bool) $r->is_market, (string) $r->channel, (string) $r->label, $tax->defaultGroup(), (float) $r->amount, (string) $r->number);
+                $add((string) $r->day, (bool) $r->is_market, (string) $r->channel, (string) $r->label, (string) $r->mark, $tax->defaultGroup(), (float) $r->amount, (string) $r->number);
             }
         }
 
@@ -82,13 +84,13 @@ class TaxFigures
             ->leftJoin('sales_channels as sc', 'sc.id', '=', 'ro.sales_channel_id')
             ->leftJoin('marketplace_accounts as ma', 'ma.id', '=', 'ro.marketplace_account_id')
             ->where('r.tenant_id', $this->tenant())->whereIn('r.status', ReturnValues::COUNTED)->whereBetween('r.created_at', [$from, $to])
-            ->groupBy('r.id', 'r.created_at', 'ro.external_order_id', 'ro.code', 'ro.marketplace', 'ro.marketplace_account_id', 'ro.sales_channel_id', 'p.category_id', 'ma.shop_name', 'sc.name')
+            ->groupBy('r.id', 'r.created_at', 'ro.external_order_id', 'ro.code', 'ro.marketplace', 'ro.marketplace_account_id', 'ro.sales_channel_id', 'p.category_id', 'ma.shop_name', 'sc.name', 'ma.marketplace', 'sc.type')
             ->selectRaw("COALESCE(ro.code, ro.external_order_id) as number, {$rday} as day, (".ProfitFigures::isMarketplaceSql('ro').") as is_market, CONCAT(ro.marketplace, ':', COALESCE(ro.marketplace_account_id, ro.sales_channel_id, 0)) as channel, "
-                .str_replace('o.marketplace', 'ro.marketplace', $label).' as label, p.category_id, '
+                .str_replace('o.marketplace', 'ro.marketplace', $label).' as label, '.str_replace('o.marketplace', 'ro.marketplace', $mark).' as mark, p.category_id, '
                 ."SUM(CASE WHEN ri.quantity > 0 THEN rl.quantity * (ri.unit_price * ri.quantity - ri.discount) / ri.quantity * ({$rshare}) ELSE 0 END) as amount")
             ->get();
         foreach ($returns as $r) {
-            $add((string) $r->day, (bool) $r->is_market, 'return:'.$r->channel, 'Khách trả hàng · '.$r->label, $groupOf($r->category_id ? (int) $r->category_id : null), -(float) $r->amount, (string) $r->number);
+            $add((string) $r->day, (bool) $r->is_market, 'return:'.$r->channel, 'Khách trả hàng · '.$r->label, (string) $r->mark, $groupOf($r->category_id ? (int) $r->category_id : null), -(float) $r->amount, (string) $r->number);
         }
 
         $rows = array_values($out);

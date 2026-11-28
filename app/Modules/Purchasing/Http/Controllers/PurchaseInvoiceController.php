@@ -58,7 +58,10 @@ class PurchaseInvoiceController extends Controller
                 'summary' => [
                     'invoices' => (clone $kept)->count(),
                     'total' => (string) (clone $kept)->sum('total'),
-                    'vat' => (string) $deductible->sum('vat_amount'),
+                    'vat' => (string) (clone $deductible)->sum('vat_amount'),
+                    'deductible' => (clone $deductible)->count(),
+                    'suppliers' => (clone $kept)->distinct()->count('seller_tax_code'),
+                    'open_total' => (string) (clone $base)->where('status', 'open')->sum('total'),
                 ],
             ],
         ]);
