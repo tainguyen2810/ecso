@@ -30,6 +30,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $deleted_on_channel_at
  * @property Carbon|null $packing_slip_printed_at
  * @property array{method: string, slot: string|null, address: string|null, at: string}|null $ship_arrangement
+ * @property Carbon|null $arranged_at
  * @property int $label_print_count
  * @property Carbon|null $label_printed_at
  * @property Carbon|null $deliver_on
@@ -109,6 +110,7 @@ class Order extends Model
             'deleted_on_channel_at' => 'datetime',
             'packing_slip_printed_at' => 'datetime',
             'ship_arrangement' => 'array',
+            'arranged_at' => 'datetime',
             'label_print_count' => 'integer',
             'label_printed_at' => 'datetime',
             'raw' => 'array',
@@ -145,6 +147,21 @@ class Order extends Model
     public function underMarketplaceReview(): bool
     {
         return $this->marketplace === ShopeeConnector::MARKETPLACE && $this->raw_status === ShopeeConnector::REVIEW_STATUS;
+    }
+
+    /**
+     * Minutes an order stays out of "Cần chuẩn bị hàng" after "Chuẩn bị hàng" went through while the marketplace still
+     * reports it waiting (Shopee books the carrier in the background). Past that, it shows again: it really is stuck.
+     */
+    public const ARRANGING_MINUTES = 30;
+
+    public const ARRANGING_MESSAGE = 'Đơn vừa chuẩn bị hàng, sàn đang xử lý. Trạng thái tự cập nhật sau ít giây.';
+
+    /** "Chuẩn bị hàng" went through moments ago and the marketplace has not moved the order on yet. */
+    public function arranging(): bool
+    {
+        return $this->status === OrderStatus::READY_TO_PACK && $this->arranged_at !== null
+            && $this->arranged_at->gt(now()->subMinutes(self::ARRANGING_MINUTES));
     }
 
     /** Orders whose buyer is the seller's own customer (manual sales, own website): full contact is kept and shown. */

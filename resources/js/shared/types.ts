@@ -338,6 +338,8 @@ export interface OrderSummary {
     marketplace_shipping?: boolean;
     /** Shopee "Chờ - Đang được kiểm tra bởi Shopee": waits to be packed, "Chuẩn bị hàng" is not possible yet. */
     marketplace_review?: boolean;
+    /** "Chuẩn bị hàng" went through moments ago; the marketplace moves the order on in a few seconds. */
+    arranging?: boolean;
     ship_arrangement?: { method: 'pickup' | 'dropoff'; slot: string | null; address: string | null; at: string } | null;
     /** Before "Chuẩn bị hàng": ways the marketplace offers for this kiểu giao ('pickup', 'dropoff'). */
     ship_methods?: string[] | null;

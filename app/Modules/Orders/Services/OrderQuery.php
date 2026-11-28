@@ -124,7 +124,9 @@ class OrderQuery
                 // Shopee / TikTok orders: "Chuẩn bị hàng" not done yet; arranged but the marketplace label never printed.
                 // Orders Shopee is still checking cannot be prepared yet (Order::underMarketplaceReview): left out.
                 'not_arranged' => $query->whereIn('marketplace', MarketplaceShipping::marketplaces())->where('status', OrderStatus::READY_TO_PACK)
-                    ->where(fn (Builder $q) => $q->where('marketplace', '!=', ShopeeConnector::MARKETPLACE)->orWhereNull('raw_status')->orWhere('raw_status', '!=', ShopeeConnector::REVIEW_STATUS)),
+                    ->where(fn (Builder $q) => $q->where('marketplace', '!=', ShopeeConnector::MARKETPLACE)->orWhereNull('raw_status')->orWhere('raw_status', '!=', ShopeeConnector::REVIEW_STATUS))
+                    // Just prepared: the marketplace moves it on in a few seconds, it is no longer waiting for anyone.
+                    ->where(fn (Builder $q) => $q->whereNull('arranged_at')->orWhere('arranged_at', '<=', now()->subMinutes(Order::ARRANGING_MINUTES))),
                 'label_unprinted' => $query->whereIn('marketplace', MarketplaceShipping::marketplaces())->whereIn('status', MarketplaceShipping::LABEL_FROM)->where('label_print_count', 0),
                 // Orders taken from the previous software are settled there (what is owed came as opening debt).
                 'payment_due' => $query->where('marketplace', Order::SOURCE_MANUAL)->whereNull('imported_from')->where('status', '!=', OrderStatus::CANCELLED)

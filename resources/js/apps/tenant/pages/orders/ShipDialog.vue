@@ -154,7 +154,7 @@ const title = computed(() => (results.value ? `Đã chuẩn bị ${okIds.value.l
                     <CircleX v-else class="mt-0.5 size-4 shrink-0 text-rose-600" />
                 </li>
             </ul>
-            <LabelPrint v-if="okIds.length && printAfter && tenant.can('orders.print')" :ids="okIds" auto />
+            <LabelPrint v-if="okIds.length && printAfter && tenant.can('orders.print')" :ids="okIds" auto @printed="emit('done')" />
             <p v-if="results.some((r) => !r.ok)" class="text-xs text-muted-foreground">Đơn lỗi vẫn ở bước Chờ đóng gói.</p>
         </div>
 
