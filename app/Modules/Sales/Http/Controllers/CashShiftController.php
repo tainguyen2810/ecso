@@ -11,6 +11,7 @@ use App\Modules\Sales\Http\Resources\CashShiftResource;
 use App\Modules\Sales\Models\CashShift;
 use App\Modules\Sales\Models\CashShiftMovement;
 use App\Modules\Sales\Services\CashShiftService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -19,7 +20,7 @@ use Illuminate\Validation\ValidationException;
 
 class CashShiftController extends Controller
 {
-    public function index(Request $request): AnonymousResourceCollection
+    public function index(Request $request, CashShiftService $shifts): AnonymousResourceCollection
     {
         $this->authorize('viewAny', CashShift::class);
         $data = $request->validate([
@@ -28,20 +29,70 @@ class CashShiftController extends Controller
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'q' => ['nullable', 'string', 'max:100'],
+            // "Có chênh lệch": closed shifts whose counted cash did not match.
+            'mismatch' => ['nullable', 'boolean'],
         ]);
 
-        $query = CashShift::query()->with(['user', 'warehouse', 'closer'])->latest('opened_at')->latest('id');
+        $scope = CashShift::query();
         if (! $request->user()->can('viewAll', CashShift::class)) {
-            $query->where('user_id', $request->user()->id);
-        } elseif ($data['cashier'] ?? null) {
+            $scope->where('user_id', $request->user()->id);
+        }
+        $query = (clone $scope)->with(['user', 'warehouse', 'closer'])->latest('opened_at')->latest('id');
+        if (($data['cashier'] ?? null) && $request->user()->can('viewAll', CashShift::class)) {
             $query->whereIn('user_id', User::query()->where('ulid', $data['cashier'])->select('id'));
         }
         $query->when($data['status'] ?? null, fn ($q, $s) => $q->where('status', $s))
+            ->when($request->boolean('mismatch'), fn ($q) => $q->whereNotNull('difference')->where('difference', '!=', 0))
+            ->when($data['q'] ?? null, function ($q, string $term) {
+                $like = '%'.str_replace(['%', '_'], ['\%', '\_'], $term).'%';
+                $q->where(fn ($w) => $w->where('number', 'like', $like)->orWhereIn('user_id', User::query()->where('name', 'like', $like)->select('id')));
+            })
             ->when($data['from'] ?? null, fn ($q, $d) => $q->where('opened_at', '>=', $d))
             ->when($data['to'] ?? null, fn ($q, $d) => $q->where('opened_at', '<', now()->parse($d)->addDay()->startOfDay()));
 
         return CashShiftResource::collection($query->paginate($data['per_page'] ?? 20)->withQueryString())
-            ->additional(['meta' => ['can_view_all' => $request->user()->can('viewAll', CashShift::class)]]);
+            ->additional(['meta' => ['can_view_all' => $request->user()->can('viewAll', CashShift::class), 'summary' => $this->summary($scope, $shifts)]]);
+    }
+
+    /**
+     * Figures over the page's shifts this month (mẫu 6): money taken and by method, open shifts, cash differences in
+     * total and per cashier, average per closed shift; plus the open shift with its money by method.
+     *
+     * @param  Builder<CashShift>  $scope
+     * @return array<string, mixed>
+     */
+    private function summary($scope, CashShiftService $shifts): array
+    {
+        $month = (clone $scope)->with('user')->where('opened_at', '>=', now()->startOfMonth())->get();
+        $totals = $month->mapWithKeys(fn (CashShift $s) => [$s->id => $shifts->totals($s)]);
+        $closed = $month->where('status', CashShift::CLOSED);
+        $diffs = $closed->filter(fn (CashShift $s) => $s->difference !== null && (float) $s->difference != 0);
+        $method = fn (string $m) => round($totals->sum(fn ($t) => (float) ($t['by_method'][$m] ?? 0)));
+        $open = (clone $scope)->with(['user', 'warehouse'])->where('status', CashShift::OPEN)->latest('opened_at')->first();
+
+        return [
+            'month' => [
+                'collected' => round($totals->sum(fn ($t) => (float) $t['collected'])),
+                'cash' => $method('cash'),
+                'transfer' => $method('bank_transfer'),
+                'shifts' => $month->count(),
+                'orders' => (int) $totals->sum('orders'),
+                'difference' => round($closed->sum(fn (CashShift $s) => (float) ($s->difference ?? 0))),
+                'mismatched' => $diffs->count(),
+                'short' => round(-$diffs->filter(fn ($s) => (float) $s->difference < 0)->sum(fn ($s) => (float) $s->difference)),
+                'over' => round($diffs->filter(fn ($s) => (float) $s->difference > 0)->sum(fn ($s) => (float) $s->difference)),
+                'average' => $closed->count() ? round($closed->sum(fn ($s) => (float) $totals[$s->id]['collected']) / $closed->count()) : 0,
+                'average_orders' => $closed->count() ? round($closed->sum(fn ($s) => $totals[$s->id]['orders']) / $closed->count(), 1) : 0,
+            ],
+            'open_count' => (clone $scope)->where('status', CashShift::OPEN)->count(),
+            'open' => $open ? (new CashShiftResource($open))->resolve() : null,
+            'by_cashier' => $closed->groupBy('user_id')->map(fn ($rows) => [
+                'name' => $rows->first()->user?->name,
+                'shifts' => $rows->count(),
+                'difference' => round($rows->sum(fn ($s) => (float) ($s->difference ?? 0))),
+            ])->sortBy('difference')->values()->take(6)->all(),
+        ];
     }
 
     /**

@@ -85,7 +85,7 @@ test('order detail: progress, buyer summary, copy into a new order with shortcut
 test('returns: goods not received yet', async ({ page }) => {
     await login(page, 'owner@demo.test');
     await page.goto('/returns');
-    await page.getByRole('button', { name: 'Chưa nhận hàng' }).click();
+    await page.getByRole('tab', { name: /Đang hoàn về/ }).click();
     await expect(page.locator('.animate-pulse')).toHaveCount(0);
     await shot(page, '07-returns-not-received');
 });

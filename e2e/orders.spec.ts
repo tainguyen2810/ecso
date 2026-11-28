@@ -45,7 +45,7 @@ test('orders: tabs, filters, bulk actions and packing slips', async ({ page }) =
     await expect(page.getByTestId('order-table')).toBeVisible();
     await shot(page, '04-orders');
 
-    await page.getByTestId('order-tabs').getByRole('button', { name: /Chờ đóng gói/ }).click();
+    await page.getByTestId('order-tabs').getByRole('tab', { name: /Chờ đóng gói/ }).click();
     await expect(page.getByTestId('order-table').locator('tbody tr').first()).toContainText('Chờ đóng gói');
     await page.getByTestId('flag-overdue').click();
     await shot(page, '05-orders-filtered');

@@ -7,6 +7,7 @@ use App\Modules\Marketplace\Connectors\Fake\FakeMarketplace;
 use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
+use App\Modules\Tenancy\Support\TenantContext;
 
 beforeEach(function () {
     // Midday UTC is the same calendar day in the tenant's timezone, so date filters built from now() match.
@@ -40,6 +41,27 @@ it('lists orders with tab counts and filters', function () {
     $api->getJson('/api/v1/orders?q=QUAN-001')->assertJsonCount(2, 'data');
     $api->getJson('/api/v1/orders?sku='.$this->shirt->ulid)->assertJsonCount(1, 'data');
     $api->getJson('/api/v1/orders?flags[]=overdue')->assertJsonCount(0, 'data');
+});
+
+it('filters by several shops at once and counts orders per shop', function () {
+    // A second account on the same marketplace (the plan allows one shop through the connect flow).
+    $second = TenantContext::run($this->tenant, function () {
+        $copy = $this->shop->replicate(['ulid']);
+        $copy->fill(['shop_name' => 'Shop thứ hai', 'external_shop_id' => 'fake-2'])->save();
+
+        return $copy->refresh();
+    });
+    fakeOrder($this->shop, [[$this->shirt, 1]]);
+    fakeOrder($this->shop, [[$this->pants, 1]]);
+    Order::withoutGlobalScopes()->whereKey(fakeOrder($this->shop, [[$this->pants, 1]])->id)->update(['marketplace_account_id' => $second->id]);
+
+    $api = actingInTenant($this->owner, $this->tenant);
+    $api->getJson('/api/v1/orders?accounts[]='.$second->ulid)->assertOk()->assertJsonCount(1, 'data')
+        // Counts per shop ignore the shop pick itself, so the picker shows every shop's number.
+        ->assertJsonPath('meta.sources.accounts.'.$this->shop->ulid, 2)
+        ->assertJsonPath('meta.sources.accounts.'.$second->ulid, 1);
+    $api->getJson('/api/v1/orders?accounts[]='.$second->ulid.'&accounts[]='.$this->shop->ulid)->assertJsonCount(3, 'data');
+    $api->getJson('/api/v1/orders?channels[]=01UNKNOWN')->assertJsonCount(0, 'data');
 });
 
 it('shows an order with items, reservations, history and available actions', function () {
@@ -138,7 +160,13 @@ it('records a customer return and restocks only what is inspected as sellable', 
         ->assertOk()->assertJsonPath('data.status', 'inspected');
 
     expect(balanceOf(defaultWarehouse($this->tenant), $this->shirt)->on_hand)->toBe(18);
-    $api->getJson('/api/v1/returns')->assertOk()->assertJsonCount(1, 'data');
+    $api->getJson('/api/v1/returns')->assertOk()->assertJsonCount(1, 'data')
+        // Khách trả hàng figures: 1 of 2 units back can be sold again, the reason and the product over 30 days.
+        ->assertJsonPath('meta.summary.counts.inspected', 1)
+        ->assertJsonPath('meta.summary.resellable_pct', 50)
+        ->assertJsonPath('meta.summary.reasons.0.label', 'Sai size')
+        ->assertJsonPath('meta.summary.products.0.quantity', 2)
+        ->assertJsonPath('meta.current_page', 1);
     // The damaged unit stays on the books in the defective-goods warehouse, which never sells.
     $defective = Warehouse::withoutGlobalScopes()->where('tenant_id', $this->tenant->id)->where('purpose', Warehouse::PURPOSE_DEFECTIVE)->sole();
     expect(balanceOf($defective, $this->shirt)->on_hand)->toBe(1)

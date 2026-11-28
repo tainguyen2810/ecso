@@ -44,6 +44,13 @@ class OrderQuery
         if ($channel = $filters['channel'] ?? null) {
             $query->where('sales_channel_id', SalesChannel::query()->where('ulid', $channel)->value('id') ?? 0);
         }
+        $accounts = array_values(array_filter((array) ($filters['accounts'] ?? [])));
+        $channels = array_values(array_filter((array) ($filters['channels'] ?? [])));
+        if ($accounts || $channels) {
+            $accountIds = $accounts ? MarketplaceAccount::query()->whereIn('ulid', $accounts)->pluck('id')->all() : [];
+            $channelIds = $channels ? SalesChannel::query()->whereIn('ulid', $channels)->pluck('id')->all() : [];
+            $query->where(fn (Builder $w) => $w->whereIn('marketplace_account_id', $accountIds ?: [0])->orWhereIn('sales_channel_id', $channelIds ?: [0]));
+        }
         if ($warehouse = $filters['warehouse'] ?? null) {
             $query->where('warehouse_id', Warehouse::query()->where('ulid', $warehouse)->value('id') ?? 0);
         }
@@ -96,7 +103,10 @@ class OrderQuery
             $query->whereHas('items', fn ($i) => $i->where('product_variant_id', $variantId));
         }
         if ($tag = $filters['tag'] ?? null) {
-            $query->whereJsonContains('tags', $tag);
+            // MariaDB's JSON_CONTAINS misses accented tags stored as \u escapes ("Kh\u00e1ch VIP"); JSON_SEARCH decodes them.
+            in_array($query->getModel()->getConnection()->getDriverName(), ['mysql', 'mariadb'], true)
+                ? $query->whereRaw("JSON_SEARCH(tags, 'one', ?) IS NOT NULL", [addcslashes($tag, '%_\\')])
+                : $query->whereJsonContains('tags', $tag);
         }
         if ($from = $filters['deliver_from'] ?? null) {
             $query->whereDate('deliver_on', '>=', $from);
@@ -173,6 +183,33 @@ class OrderQuery
         }
 
         return $counts;
+    }
+
+    /**
+     * "Kênh bán" picker: orders per shop and per own sales channel under the current filters (tab included, the
+     * channel filters themselves left out so every row keeps its count).
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{accounts: array<string, int>, channels: array<string, int>}
+     */
+    public function sourceCounts(array $filters, ?int $userId): array
+    {
+        $rows = $this->build([...$filters, 'accounts' => null, 'channels' => null, 'account' => null, 'channel' => null, 'marketplace' => null, 'source' => null], $userId)->toBase()
+            ->selectRaw('marketplace_account_id, sales_channel_id, count(*) as c')->groupBy('marketplace_account_id', 'sales_channel_id')->get();
+        $accounts = MarketplaceAccount::query()->whereIn('id', $rows->pluck('marketplace_account_id')->filter())->pluck('ulid', 'id');
+        $channels = SalesChannel::query()->whereIn('id', $rows->pluck('sales_channel_id')->filter())->pluck('ulid', 'id');
+        $out = ['accounts' => [], 'channels' => []];
+        foreach ($rows as $r) {
+            if ($r->marketplace_account_id && isset($accounts[$r->marketplace_account_id])) {
+                $key = $accounts[$r->marketplace_account_id];
+                $out['accounts'][$key] = ($out['accounts'][$key] ?? 0) + (int) $r->c;
+            } elseif ($r->sales_channel_id && isset($channels[$r->sales_channel_id])) {
+                $key = $channels[$r->sales_channel_id];
+                $out['channels'][$key] = ($out['channels'][$key] ?? 0) + (int) $r->c;
+            }
+        }
+
+        return $out;
     }
 
     /**

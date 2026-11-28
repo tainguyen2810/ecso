@@ -13,6 +13,7 @@ test.describe.configure({ mode: 'serial' });
 test('orders list mixes marketplace and own-channel orders, with payment status', async ({ page }) => {
     await login(page, 'owner@demo.test');
     await page.goto('/orders');
+    await page.getByTestId('channel-picker').click();
     await page.getByTestId('channel-manual').click();
     await expect(page.getByTestId('order-table')).toContainText('SO-0000');
     await expect(page.getByTestId('order-table')).toContainText('Thanh toán một phần');

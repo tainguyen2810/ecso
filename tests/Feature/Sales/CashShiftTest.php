@@ -57,6 +57,14 @@ it('counts the drawer of a shift: float, cash sales, refunds, cash in and out', 
         ->assertJsonPath('data.difference', '-10000.00')
         ->assertJsonPath('data.kept_in_drawer', '70000.00');
 
+    // Ca bán hàng figures: the month's shortage per cashier, and "Có chênh lệch" finds the shift.
+    $list = actingInTenant($cashier, $tenant)->getJson('/api/v1/pos/shifts?mismatch=1')->assertOk()->assertJsonCount(1, 'data');
+    expect($list->json('meta.summary.month.mismatched'))->toBe(1)
+        ->and((float) $list->json('meta.summary.month.short'))->toEqual(10000)
+        ->and((float) $list->json('meta.summary.month.transfer'))->toEqual(150000)
+        ->and((float) $list->json('meta.summary.by_cashier.0.difference'))->toEqual(-10000)
+        ->and($list->json('meta.summary.open'))->toBeNull();
+
     // The shortage is booked in the cash fund as a "Chênh lệch kiểm quỹ" payment, so the fund matches the drawer.
     $diff = collect(actingInTenant($owner, $tenant)->getJson('/api/v1/cash-vouchers?q=CA-000001')->assertOk()->json('data'))->firstWhere('source', 'voucher');
     expect($diff)->not->toBeNull()

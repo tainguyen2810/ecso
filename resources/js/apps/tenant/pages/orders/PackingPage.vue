@@ -7,6 +7,7 @@ import {
     nextTick,
     onBeforeUnmount,
     onMounted,
+    provide,
     reactive,
     ref,
     watch,
@@ -19,12 +20,15 @@ import {
     CircleCheck,
     ScanBarcode,
     Settings2,
+    History,
     Volume2,
     VolumeX,
+    X,
 } from "lucide-vue-next";
 import MarketplaceLogo from "@/shared/ui/MarketplaceLogo.vue";
 import type { OrderSummary } from "@/shared/types";
-import PageHeader from "../../PageHeader.vue";
+import ProductsHead from "../products/ui/ProductsHead.vue";
+import { th, thead } from "../products/ui/ui";
 import Badge from "@/shared/ui/Badge.vue";
 import Button from "@/shared/ui/Button.vue";
 import Card from "@/shared/ui/Card.vue";
@@ -150,6 +154,13 @@ async function pick(o: OrderSummary) {
 }
 const settingsOpen = ref(false);
 
+provide("soft-cards", true);
+/** "Nhật ký quét" of the open order (mẫu 4): every code scanned, right or wrong, newest first. */
+const scanLog = ref<{ code: string; text: string; ok: boolean; at: string }[]>([]);
+function logScan(c: string, text: string, ok: boolean) {
+    scanLog.value = [{ code: c, text, ok, at: new Date().toLocaleTimeString("vi-VN", { hour12: false }) }, ...scanLog.value].slice(0, 30);
+}
+
 function say(tone: "ok" | "error" | "info", text: string) {
     flash.value = { tone, text };
     if (settings.sound && tone !== "info") beep(tone === "ok");
@@ -160,6 +171,7 @@ function open(o: PackOrder) {
     counts.value = {};
     history.value = [];
     lastLine.value = null;
+    scanLog.value = [];
     say("ok", `Đã mở đơn ${orderCode(o)}: quét từng sản phẩm.`);
 }
 
@@ -223,6 +235,7 @@ async function submit() {
     const result = matchScan(order.value.lines, counts.value, c);
     if (result.kind === "ok") {
         count(result.line.id);
+        logScan(c, [result.line.name, result.line.variant_name].filter(Boolean).join(" · "), true);
         const p = packProgress(order.value.lines, counts.value);
         say(
             "ok",
@@ -238,6 +251,7 @@ async function submit() {
             `Thừa: ${result.line.sku ?? result.line.name} đã đủ ${result.line.quantity}. Bỏ món này ra, không tính.`,
         );
         logError(c, "extra");
+        logScan(c, `Thừa: ${result.line.name} đã đủ`, false);
         return;
     }
     // Not an item of this order: maybe the packer scanned another order's code.
@@ -253,6 +267,7 @@ async function submit() {
         `Sai hàng: mã ${c} không có trong đơn ${orderCode(order.value)}. Không tính.`,
     );
     logError(c, "wrong");
+    logScan(c, "Không thuộc đơn này", false);
 }
 
 async function tryFinish() {
@@ -409,20 +424,18 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 </script>
 
 <template>
-    <PageHeader
-        title="Quét đóng gói"
-        description='Quét mã đơn, rồi quét từng sản phẩm. Đúng nghe "tít", sai nghe "bíp bíp".'
-    >
+    <ProductsHead section="Đơn hàng" title="Đóng gói" description='Quét mã đơn, rồi quét từng sản phẩm. Đúng nghe "tít", sai nghe "bíp bíp". Đủ hàng là đơn chuyển sang Chờ bàn giao.'>
         <Button
             v-if="tenant.can('orders.print')"
             variant="outline"
+            class="h-11 rounded-[12px] bg-white px-4 text-[15px]"
             :loading="busy === 'pick'"
             data-testid="pack-picklist"
             @click="printPickList"
             ><ClipboardList /> In phiếu nhặt hàng</Button
         >
         <div class="relative">
-            <Button variant="outline" size="icon" aria-label="Tùy chọn đóng gói" title="Tùy chọn" data-testid="pack-settings" @click="settingsOpen = !settingsOpen"><Settings2 /></Button>
+            <Button variant="outline" class="h-11 rounded-[12px] bg-white px-4 text-[15px]" aria-label="Tùy chọn đóng gói" title="Tùy chọn" data-testid="pack-settings" @click="settingsOpen = !settingsOpen"><Settings2 /> Cài đặt quét</Button>
             <template v-if="settingsOpen">
                 <div class="fixed inset-0 z-30" @click="(settingsOpen = false), focus()" />
                 <div class="absolute right-0 top-full z-40 mt-1 w-80 rounded-xl border bg-card px-4 py-2 shadow-lg">
@@ -432,12 +445,11 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
                 </div>
             </template>
         </div>
-    </PageHeader>
+    </ProductsHead>
 
     <form class="relative mb-2" @submit.prevent="submit">
-        <ScanBarcode
-            class="pointer-events-none absolute left-5 top-1/2 size-6 -translate-y-1/2 text-primary"
-        />
+        <span class="pointer-events-none absolute left-4 top-1/2 grid size-11 -translate-y-1/2 place-items-center rounded-[12px] bg-blue-600 text-white"><ScanBarcode class="size-6" /></span>
+        <span v-if="order" class="pointer-events-none absolute bottom-2.5 left-[76px] text-[12px] text-slate-500">Đang mở đơn {{ orderCode(order) }} · quét sản phẩm tiếp theo</span>
         <input
             ref="input"
             v-model="code"
@@ -446,7 +458,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
             spellcheck="false"
             aria-label="Mã quét"
             data-testid="pack-scan"
-            class="h-16 w-full rounded-2xl border-2 border-blue-300 bg-card pl-14 pr-28 text-xl sm:pr-48 shadow-[0_0_0_4px_rgba(37,99,235,0.08)] outline-none focus:border-primary"
+            :class="cn('h-[76px] w-full rounded-[16px] border-2 border-blue-300 bg-card pl-[76px] pr-28 text-xl shadow-[0_0_0_4px_rgba(37,99,235,0.08)] outline-none focus:border-primary sm:pr-48', order && 'pb-4')"
             @blur="focus"
         />
         <CameraScanButton
@@ -487,7 +499,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
     </p>
     <div v-else class="mb-4" />
 
-    <div class="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+    <div class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+        <div class="min-w-0 space-y-6">
         <Card class="overflow-hidden p-0">
             <template v-if="order">
                 <div
@@ -522,6 +535,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
                         >Ghi chú:
                         <b class="text-foreground">{{ order.note }}</b></span
                     >
+                </div>
+                <div :class="cn(thead, 'flex items-center gap-4 border-b border-slate-100 px-5 [&>span]:px-0')">
+                    <span :class="cn(th, 'flex-1')">Sản phẩm</span><span :class="cn(th, 'w-20 text-right')">Đã quét</span><span :class="cn(th, 'hidden w-40 sm:block')" />
                 </div>
                 <button
                     v-for="l in order.lines"
@@ -643,6 +659,18 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
                 </p>
             </div>
         </Card>
+        <Card v-if="order && scanLog.length" title="Nhật ký quét" description="Đơn đang mở" data-testid="pack-log">
+            <template #actions><span class="grid size-10 place-items-center rounded-[11px] bg-slate-100 text-slate-500"><History class="size-5" /></span></template>
+            <ul class="divide-y divide-slate-100">
+                <li v-for="(e, i) in scanLog" :key="i" class="flex items-center gap-3 px-5 py-2.5 text-[13px]">
+                    <span :class="cn('grid size-6 shrink-0 place-items-center rounded-full', e.ok ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600')"><Check v-if="e.ok" class="size-3.5" /><X v-else class="size-3.5" /></span>
+                    <span class="font-mono text-slate-600">{{ e.code }}</span>
+                    <span :class="cn('min-w-0 flex-1 truncate', e.ok ? 'text-slate-800' : 'text-red-600')">{{ e.text }}</span>
+                    <span class="tabular-nums text-slate-400">{{ e.at }}</span>
+                </li>
+            </ul>
+        </Card>
+        </div>
 
         <div class="space-y-4">
             <Card class="grid grid-cols-3 divide-x overflow-hidden p-0 text-center" data-testid="pack-stats">
