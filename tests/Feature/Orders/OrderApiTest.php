@@ -7,6 +7,7 @@ use App\Modules\Marketplace\Connectors\Fake\FakeMarketplace;
 use App\Modules\Marketplace\Models\ListingVariant;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
+use App\Modules\Tenancy\Support\TenantContext;
 
 beforeEach(function () {
     // Midday UTC is the same calendar day in the tenant's timezone, so date filters built from now() match.
@@ -44,7 +45,7 @@ it('lists orders with tab counts and filters', function () {
 
 it('filters by several shops at once and counts orders per shop', function () {
     // A second account on the same marketplace (the plan allows one shop through the connect flow).
-    $second = \App\Modules\Tenancy\Support\TenantContext::run($this->tenant, function () {
+    $second = TenantContext::run($this->tenant, function () {
         $copy = $this->shop->replicate(['ulid']);
         $copy->fill(['shop_name' => 'Shop thứ hai', 'external_shop_id' => 'fake-2'])->save();
 

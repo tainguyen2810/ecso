@@ -11,6 +11,7 @@ use App\Modules\Sales\Http\Resources\CashShiftResource;
 use App\Modules\Sales\Models\CashShift;
 use App\Modules\Sales\Models\CashShiftMovement;
 use App\Modules\Sales\Services\CashShiftService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -58,7 +59,7 @@ class CashShiftController extends Controller
      * Figures over the page's shifts this month (mẫu 6): money taken and by method, open shifts, cash differences in
      * total and per cashier, average per closed shift; plus the open shift with its money by method.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<CashShift>  $scope
+     * @param  Builder<CashShift>  $scope
      * @return array<string, mixed>
      */
     private function summary($scope, CashShiftService $shifts): array
