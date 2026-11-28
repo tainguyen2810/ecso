@@ -98,8 +98,9 @@ it('creates the order with our code, follows webhooks, prints labels and cancels
         && str_starts_with($r['ORDER_NOTE'], 'Không cho xem hàng') && $r['LIST_ITEM'][0]['PRODUCT_WEIGHT'] === 300);
 
     $at = fn (int $minutes) => now('Asia/Ho_Chi_Minh')->addMinutes($minutes)->format('d/m/Y H:i:s');
-    ($this->hook)(['ORDER_NUMBER' => '1727390123456', 'ORDER_REFERENCE' => $shipment->client_code, 'ORDER_STATUS' => 105, 'ORDER_STATUSDATE' => $at(1), 'STATUS_NAME' => 'Bưu tá đã nhận hàng', 'PRODUCT_WEIGHT' => 650, 'MONEY_TOTAL' => 23000]);
-    ($this->hook)(['ORDER_NUMBER' => '1727390123456', 'ORDER_STATUS' => 105, 'ORDER_STATUSDATE' => $at(1)]); // repeated: counted once
+    $picked = $at(1); // one timestamp for both calls: two $at(1) a second apart would be two different events
+    ($this->hook)(['ORDER_NUMBER' => '1727390123456', 'ORDER_REFERENCE' => $shipment->client_code, 'ORDER_STATUS' => 105, 'ORDER_STATUSDATE' => $picked, 'STATUS_NAME' => 'Bưu tá đã nhận hàng', 'PRODUCT_WEIGHT' => 650, 'MONEY_TOTAL' => 23000]);
+    ($this->hook)(['ORDER_NUMBER' => '1727390123456', 'ORDER_STATUS' => 105, 'ORDER_STATUSDATE' => $picked]); // repeated: counted once
     expect(Order::withoutGlobalScopes()->where('ulid', $id)->value('status'))->toBe(OrderStatus::HANDED_OVER);
     $shipment->refresh();
     expect($shipment->status)->toBe('picked_up')->and($shipment->weight_g)->toBe(650)->and($shipment->fee_actual)->toBe('23000.00')
