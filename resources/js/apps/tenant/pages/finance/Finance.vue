@@ -3,6 +3,7 @@ import { computed, onMounted, provide, ref, watch } from 'vue';
 import { ArrowRight, Banknote, ChevronRight, Clock, CircleX, Download, Info, Landmark, Package, Percent, PiggyBank, Receipt, TrendingUp, Undo2, Wallet } from 'lucide-vue-next';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import ChannelMark from '../reports/ChannelMark.vue';
+import { channelName } from '../reports/channels';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
@@ -300,7 +301,12 @@ function exportCsv() {
                         <tbody class="divide-y divide-slate-100 text-slate-700">
                             <tr v-for="s in data.by_shop" :key="s.id" class="cursor-pointer hover:bg-slate-50/70" :title="`Xem riêng ${s.shop}`" @click="shop = s.id">
                                 <td class="px-6 py-3.5">
-                                    <span class="flex items-center gap-3 whitespace-nowrap font-medium text-slate-900"><ChannelMark :kind="s.marketplace" :name="s.shop" /> {{ s.shop }}<ChevronRight class="size-4 text-slate-300" /></span>
+                                    <span class="flex items-center gap-3 whitespace-nowrap"
+                                        ><ChannelMark :kind="s.marketplace" :name="channelName(s.marketplace)" />
+                                        <span
+                                            ><span class="block font-medium text-slate-900">{{ s.shop }}</span><span v-if="channelName(s.marketplace) !== s.shop" class="block text-[12px] text-slate-500">{{ channelName(s.marketplace) }}</span></span
+                                        ><ChevronRight class="size-4 text-slate-300"
+                                    /></span>
                                 </td>
                                 <td class="whitespace-nowrap px-3 py-3.5 text-right tabular-nums">{{ formatNumber(s.ordered_orders) }}<span v-if="s.cancelled_orders" class="text-red-500"> / {{ formatNumber(s.cancelled_orders) }}</span></td>
                                 <td class="whitespace-nowrap px-3 py-3.5 text-right font-semibold tabular-nums text-slate-900">{{ money(s.net_revenue) }}</td>

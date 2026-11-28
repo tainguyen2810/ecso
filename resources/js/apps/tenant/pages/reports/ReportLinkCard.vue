@@ -1,25 +1,36 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { ArrowRight } from 'lucide-vue-next';
 import type { RouteLocationRaw } from 'vue-router';
 import { cn } from '@/shared/lib/utils';
 import type { ReportLink } from './groups';
 
+/** One figure of a card: `value` may carry its unit ("53,5 tr", "86 ngày"); the unit is shown small and grey. */
+export type ReportStat = { label: string; value: string; unit?: string; hint?: string | null; tone?: 'green' | 'amber' | 'red' | 'violet' };
+
 /**
  * One report of a menu as a card (mẫu 28/11): icon, title, description and arrow to open it, a grey strip with its
- * figures for the period, and its tabs as chips. `badge` flags something to look at (e.g. "2 quá hạn").
+ * figures for the period (mẫu 28/11 b: each figure in its own equal column, unit small, one hint line), and its tabs as chips. `badge` flags something to look at (e.g. "2 quá hạn").
  */
 const props = withDefaults(
     defineProps<{
         link: ReportLink;
         target: (l: ReportLink, by?: string) => RouteLocationRaw;
         tone?: 'blue' | 'green' | 'amber' | 'red' | 'violet' | 'slate' | 'rose';
-        stats?: { label: string; value: string; tone?: 'green' | 'amber' | 'red' | 'violet' }[];
+        stats?: ReportStat[];
         badge?: string | null;
         badgeTone?: 'red' | 'amber';
     }>(),
     { tone: 'blue', stats: () => [], badge: null, badgeTone: 'red' },
 );
 const statTones: Record<string, string> = { green: 'text-emerald-600', amber: 'text-amber-600', red: 'text-red-600', violet: 'text-violet-600' };
+/** "53.474.198 đ" → ["53.474.198", "đ"]; "12,4%" → ["12,4", "%"]. */
+function split(s: ReportStat): [string, string] {
+    if (s.unit !== undefined) return [s.value, s.unit];
+    const m = /^([−+-]?[\d.,]+)\s*(\D.*)?$/.exec(s.value.trim());
+    return m ? [m[1]!, (m[2] ?? '').trim()] : [s.value, ''];
+}
+const cells = computed(() => props.stats.map((s) => ({ ...s, parts: split(s) })));
 const icons: Record<string, string> = {
     blue: 'bg-blue-50 text-blue-600',
     green: 'bg-emerald-50 text-emerald-600',
@@ -44,10 +55,18 @@ const icons: Record<string, string> = {
             </div>
             <RouterLink :to="target(link)" class="grid size-8 shrink-0 place-items-center rounded-[9px] border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-blue-600" aria-hidden="true" tabindex="-1"><ArrowRight class="size-4" /></RouterLink>
         </div>
-        <dl v-if="stats.length" class="mt-4 flex flex-wrap gap-x-8 gap-y-2 rounded-[12px] bg-slate-50 px-4 py-3">
-            <div v-for="s in stats" :key="s.label">
-                <dt class="text-[12px] text-slate-500">{{ s.label }}</dt>
-                <dd :class="cn('mt-0.5 text-[20px] font-bold tabular-nums', s.tone ? statTones[s.tone] : 'text-slate-900')">{{ s.value }}</dd>
+        <dl
+            v-if="cells.length"
+            class="mt-4 grid grid-cols-2 gap-y-1 rounded-[12px] bg-slate-50 py-1 sm:grid-cols-[repeat(var(--n),minmax(0,1fr))] sm:divide-x sm:divide-slate-200/70"
+            :style="{ '--n': cells.length }"
+            data-testid="report-card-stats"
+        >
+            <div v-for="s in cells" :key="s.label" class="min-w-0 px-4 py-3">
+                <dt class="truncate text-[13px] text-slate-500">{{ s.label }}</dt>
+                <dd :class="cn('mt-1 truncate whitespace-nowrap text-[20px] font-bold leading-7 tracking-tight tabular-nums', s.tone ? statTones[s.tone] : 'text-slate-900')">
+                    {{ s.parts[0] }}<span v-if="s.parts[1]" class="ml-1 text-[13px] font-medium text-slate-400">{{ s.parts[1] }}</span>
+                </dd>
+                <dd v-if="s.hint" class="mt-0.5 truncate text-[12px] text-slate-500" :title="s.hint">{{ s.hint }}</dd>
             </div>
         </dl>
         <div v-if="link.chips" class="mt-auto flex flex-wrap gap-2 pt-4">
