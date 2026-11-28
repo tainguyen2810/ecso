@@ -88,13 +88,14 @@ class MarketplaceShipping
                     $connector === null => 'Đơn này không chuẩn bị hàng qua sàn được.',
                     $order->status !== OrderStatus::READY_TO_PACK => 'Đơn không ở bước Chờ đóng gói.',
                     $order->underMarketplaceReview() => Order::REVIEW_MESSAGE,
+                    $order->arranging() => Order::ARRANGING_MESSAGE,
                     default => null,
                 };
                 if ($reason !== null) {
                     $skipped[] = ['id' => $order->ulid, 'external_order_id' => $order->external_order_id, 'code' => $order->code, 'message' => $reason];
                 }
             }
-            $ready = $list->filter(fn (Order $o) => $connector !== null && $o->status === OrderStatus::READY_TO_PACK && ! $o->underMarketplaceReview())->values();
+            $ready = $list->filter(fn (Order $o) => $connector !== null && $o->status === OrderStatus::READY_TO_PACK && ! $o->underMarketplaceReview() && ! $o->arranging())->values();
             if ($ready->isEmpty()) {
                 continue;
             }
@@ -264,7 +265,7 @@ class MarketplaceShipping
             'slot' => $choice['method'] === 'pickup' ? $choice['slot_label'] : null,
             'address' => $choice['method'] === 'pickup' ? $choice['address_label'] : null,
             'at' => now()->toIso8601String(),
-        ]])->save();
+        ], 'arranged_at' => now()])->save();
         $account = $order->account;
         $last = ['method' => $choice['method'], 'address_id' => $choice['address_id']];
         if ($account !== null && ($account->settings['ship_choice'] ?? null) !== $last) {

@@ -20,6 +20,7 @@ use App\Modules\Marketplace\Models\MarketplaceListing;
 use App\Modules\Marketplace\Models\WebhookEvent;
 use App\Modules\Marketplace\Services\AccountService;
 use App\Modules\Orders\Domain\OrderStatus;
+use App\Modules\Orders\Jobs\ResyncArrangedOrderJob;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
 use App\Modules\Orders\Services\OrderSync;
@@ -467,6 +468,66 @@ it('prints the label of an order just prepared even before ECSO read its new sta
 
     $labels = $api->postJson('/api/v1/orders/shipping-labels', ['ids' => [$order->ulid]])->assertOk()->json('data');
     expect($labels['failed'])->toBe([])->and($labels['files'])->toHaveCount(1)->and($order->refresh()->status)->toBe(OrderStatus::PACKED);
+});
+
+it('takes a just-prepared Shopee order out of Cần chuẩn bị hàng while Shopee still reports it waiting, then catches up', function () {
+    $state = 'READY_TO_SHIP';
+    $detail = function () use (&$state) {
+        return Http::response(['data' => ['data' => ['response' => ['order_list' => [[
+            'order_sn' => '2611SHIP1', 'order_status' => $state, 'create_time' => 1763500000, 'update_time' => 1763500000 + ($state === 'PROCESSED' ? 60 : 0),
+            'ship_by_date' => 1763600000, 'currency' => 'VND', 'total_amount' => 120000, 'shipping_carrier' => 'SPX Express',
+            'recipient_address' => ['name' => 'L***n', 'full_address' => 'TP. HCM'],
+            'item_list' => [['item_id' => 11, 'item_name' => 'Áo thun', 'model_id' => 0, 'model_quantity_purchased' => 1, 'model_original_price' => 120000, 'model_discounted_price' => 120000]],
+        ]]]]]]);
+    };
+    // Shopee books the carrier in the background: right after ship_order it still answers READY_TO_SHIP.
+    shopeeShipFake(['GET /api/v2/order/get_order_detail' => function () use (&$detail) {
+        return $detail();
+    }]);
+    $account = gatewayShop($this->tenant, 'shopee');
+    TenantContext::run($this->tenant, fn () => app(OrderSync::class)->syncOne($account, '2611SHIP1', 'webhook'));
+    $order = Order::withoutGlobalScopes()->where('external_order_id', '2611SHIP1')->sole();
+    $api = actingInTenant($this->owner, $this->tenant);
+    $choice = ['method' => 'pickup', 'address_id' => '8', 'slot_id' => 'slot-8', 'slot_label' => 'Thứ 5', 'address_label' => '12 Lê Lợi'];
+
+    $api->postJson('/api/v1/orders/bulk', ['ids' => [$order->ulid], 'action' => 'pack', 'shipping' => [$account->ulid => $choice]])->assertOk()->assertJsonPath('data.0.ok', true);
+    expect($order->refresh()->status)->toBe(OrderStatus::READY_TO_PACK)->and($order->arranged_at)->not->toBeNull();
+
+    // Not waiting for anyone any more: out of the quick filter and the banner, shown as being processed, not prepared twice.
+    $api->getJson('/api/v1/orders?flags[]=not_arranged')->assertOk()->assertJsonCount(0, 'data');
+    $api->getJson('/api/v1/orders/to-arrange')->assertOk()->assertJsonPath('data.count', 0);
+    $api->getJson('/api/v1/orders')->assertOk()->assertJsonPath('data.0.arranging', true);
+    $api->postJson('/api/v1/orders/ship-options', ['ids' => [$order->ulid]])->assertOk()->assertJsonPath('data.groups', [])
+        ->assertJsonPath('data.skipped.0.message', Order::ARRANGING_MESSAGE);
+    $api->postJson('/api/v1/orders/bulk', ['ids' => [$order->ulid], 'action' => 'pack', 'shipping' => [$account->ulid => $choice]])->assertOk()
+        ->assertJsonPath('data.0.ok', false)->assertJsonPath('data.0.message', Order::ARRANGING_MESSAGE);
+    expect(collect(ezCalls())->where('key', 'POST /api/v2/logistics/ship_order'))->toHaveCount(1);
+
+    // The read again in the background picks up Shopee's new status without a webhook.
+    $state = 'PROCESSED';
+    (new ResyncArrangedOrderJob($order->id))->handle(app(OrderSync::class));
+    expect($order->refresh()->status)->toBe(OrderStatus::PACKED);
+    $api->getJson('/api/v1/orders')->assertOk()->assertJsonPath('data.0.arranging', false);
+});
+
+it('shows a prepared order again when Shopee still has it waiting long after', function () {
+    shopeeShipFake(['GET /api/v2/order/get_order_detail' => ['data' => ['data' => ['response' => ['order_list' => [[
+        'order_sn' => '2611SHIP1', 'order_status' => 'READY_TO_SHIP', 'create_time' => 1763500000, 'update_time' => 1763500000,
+        'ship_by_date' => 1763600000, 'currency' => 'VND', 'total_amount' => 120000, 'shipping_carrier' => 'SPX Express',
+        'recipient_address' => ['name' => 'L***n', 'full_address' => 'TP. HCM'],
+        'item_list' => [['item_id' => 11, 'item_name' => 'Áo thun', 'model_id' => 0, 'model_quantity_purchased' => 1, 'model_original_price' => 120000, 'model_discounted_price' => 120000]],
+    ]]]]]]]);
+    $account = gatewayShop($this->tenant, 'shopee');
+    TenantContext::run($this->tenant, fn () => app(OrderSync::class)->syncOne($account, '2611SHIP1', 'webhook'));
+    $order = Order::withoutGlobalScopes()->where('external_order_id', '2611SHIP1')->sole();
+    $api = actingInTenant($this->owner, $this->tenant);
+    $choice = ['method' => 'dropoff', 'address_id' => null, 'slot_id' => null, 'slot_label' => null, 'address_label' => null];
+    $api->postJson('/api/v1/orders/bulk', ['ids' => [$order->ulid], 'action' => 'pack', 'shipping' => [$account->ulid => $choice]])->assertOk();
+    $api->getJson('/api/v1/orders/to-arrange')->assertJsonPath('data.count', 0);
+
+    $this->travel(Order::ARRANGING_MINUTES + 1)->minutes();
+    $api->getJson('/api/v1/orders/to-arrange')->assertJsonPath('data.count', 1);
+    $api->getJson('/api/v1/orders')->assertJsonPath('data.0.arranging', false);
 });
 
 it('reads a Shopee order again when its label is refused: handed to the carrier, the status catches up', function () {

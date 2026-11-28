@@ -91,6 +91,8 @@ class OrderResource extends JsonResource
             'marketplace_review' => $this->underMarketplaceReview(),
             'ship_methods' => $this->status === OrderStatus::READY_TO_PACK && ! $this->underMarketplaceReview() && ! $this->isManual() && in_array($this->marketplace, MarketplaceShipping::marketplaces(), true)
                 ? MarketplaceShipping::methodsFor($this->resource) : null,
+            // "Chuẩn bị hàng" went through, the marketplace has not moved the order on yet (a few seconds on Shopee).
+            'arranging' => $this->arranging(),
             'label_print_count' => (int) ($this->label_print_count ?? 0),
             'label_printed_at' => $this->label_printed_at?->toIso8601String(),
             'deliver_on' => $this->deliver_on?->toDateString(),

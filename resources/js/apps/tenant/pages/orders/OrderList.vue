@@ -237,6 +237,7 @@ async function load() {
             selected.value = new Set(pick);
         }
         pendingArrangeSelect = null;
+        scheduleSettle();
     } catch (e) {
         if (seq === loadSeq) loadError.value = (e as ApiError).message;
     } finally {
@@ -259,6 +260,37 @@ function refresh() {
     pipeline.value?.load();
     return load();
 }
+
+/**
+ * Right after "Chuẩn bị hàng" Shopee still reports the order waiting for a few seconds (it books the carrier in the
+ * background), and ECSO reads it again in the background too. The list then reloads by itself a few times so the
+ * order leaves "Chờ đóng gói", the tab counts and the banner without F5.
+ */
+const SETTLE_DELAYS = [6, 15, 30, 60, 120];
+let settleTimer: ReturnType<typeof setTimeout> | undefined;
+let settleStep = 0;
+/** Rounds still owed after "Chuẩn bị hàng" from this page, even when the prepared orders are filtered out of view. */
+let settleForced = false;
+function scheduleSettle() {
+    clearTimeout(settleTimer);
+    const waiting = settleForced || orders.value.some((o) => o.arranging);
+    if (!waiting || settleStep >= SETTLE_DELAYS.length) {
+        settleStep = 0;
+        settleForced = false;
+        return;
+    }
+    settleTimer = setTimeout(() => {
+        settleStep++;
+        // Nobody is waiting for the arranged orders any more once none is in view: one last round is enough.
+        if (settleForced && settleStep >= 3 && !orders.value.some((o) => o.arranging)) settleForced = false;
+        refresh();
+    }, SETTLE_DELAYS[settleStep]! * 1000);
+}
+function settleAfterArrange() {
+    settleStep = 0;
+    settleForced = true;
+}
+onBeforeUnmount(() => clearTimeout(settleTimer));
 
 onMounted(async () => {
     load();
@@ -456,7 +488,7 @@ const selectedOrders = computed<(OrderSummary | ArrangeOrder)[]>(() =>
 );
 const selectedDue = computed(() => selectedOrders.value.filter((o): o is OrderSummary => o.source === 'manual' && Number((o as OrderSummary).balance_due ?? 0) > 0));
 // Shopee / TikTok: "Chuẩn bị hàng" (the marketplace books its carrier) and the marketplace's own label.
-const selectedToArrange = computed(() => selectedOrders.value.filter((o) => o.marketplace_shipping && o.status === 'READY_TO_PACK' && !o.marketplace_review));
+const selectedToArrange = computed(() => selectedOrders.value.filter((o) => o.marketplace_shipping && o.status === 'READY_TO_PACK' && !o.marketplace_review && !(o as OrderSummary).arranging));
 const selectedLabels = computed(() => selectedOrders.value.filter((o) => o.marketplace_shipping && ['PACKED', 'HANDED_OVER', 'IN_TRANSIT', 'FAILED_DELIVERY'].includes(o.status)));
 const shipIds = ref<string[]>([]);
 const shipOpen = ref(false);
@@ -476,6 +508,7 @@ function openLabels(ids: string[]) {
 }
 async function afterShip() {
     selected.value = new Set();
+    settleAfterArrange();
     await refresh();
 }
 /** "Đóng gói" on the bar: orders of other channels go on as before, Shopee / TikTok ones open "Chuẩn bị hàng". */
@@ -580,6 +613,8 @@ const rowAction = (o: OrderSummary) => {
     if (o.marketplace_shipping && o.status === 'PACKED') return tenant.can('orders.print') && !o.label_print_count ? 'label' : null;
     // Shopee is still checking it: nothing to do until Shopee releases it (the order updates by itself).
     if (o.marketplace_review) return null;
+    // Just prepared: the marketplace moves it on in a few seconds (the list reloads by itself).
+    if (o.arranging) return null;
     return tenant.can('orders.update') ? (nextAction[o.status] ?? null) : null;
 };
 /** No step left here: a muted, same-size placeholder that says where the order is (Mẫu A). */
@@ -590,6 +625,7 @@ const doneLabels: Record<string, string> = {
 const rowDone = (o: OrderSummary) => {
     if (o.marketplace_shipping && o.status === 'PACKED' && o.label_print_count) return 'Đã in phiếu';
     if (o.marketplace_review) return 'Shopee kiểm tra';
+    if (o.arranging) return 'Sàn đang xử lý';
     return doneLabels[o.status] ?? null;
 };
 // A printed marketplace label can still be printed again from its placeholder.

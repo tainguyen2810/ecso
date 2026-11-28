@@ -11,6 +11,7 @@ use App\Modules\Marketplace\Connectors\WooCommerce\WooCommerceConnector;
 use App\Modules\Marketplace\Exceptions\ConnectorException;
 use App\Modules\Marketplace\Exceptions\UnsupportedCapability;
 use App\Modules\Orders\Domain\OrderStatus;
+use App\Modules\Orders\Jobs\ResyncArrangedOrderJob;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderNote;
 use App\Modules\Orders\Support\Tracking;
@@ -69,6 +70,9 @@ class OrderActions
         if ($action === 'pack' && $order->underMarketplaceReview()) {
             throw ValidationException::withMessages(['action' => Order::REVIEW_MESSAGE]);
         }
+        if ($action === 'pack' && $order->arranging()) {
+            throw ValidationException::withMessages(['action' => Order::ARRANGING_MESSAGE]);
+        }
 
         $account = $order->account;
         if ($action === 'handover' && $order->marketplace === WooCommerceConnector::MARKETPLACE) {
@@ -110,6 +114,11 @@ class OrderActions
 
         $result = $this->sync->syncOne($account, $order->external_order_id, 'user', null, Auth::id());
         $order = $result['order'] ?? $order;
+        if ($choice !== null && $order->status === OrderStatus::READY_TO_PACK) {
+            // Shopee books the carrier in the background and still answers READY_TO_SHIP: read the order again shortly
+            // so its status catches up even if no webhook comes.
+            ResyncArrangedOrderJob::dispatch($order->id)->delay(now()->addSeconds(ResyncArrangedOrderJob::DELAYS[0]));
+        }
         $this->keepShipping($order, $action, $params);
         $this->audit->record("order.{$action}", $order, ['order' => $order->external_order_id]);
 
