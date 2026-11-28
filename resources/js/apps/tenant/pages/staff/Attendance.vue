@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, provide, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { AlarmClock, CalendarCheck, Clock, Download, Info, LogIn, LogOut, MapPin, Search, TriangleAlert, UserCheck, UserPen } from 'lucide-vue-next';
 import Button from '@/shared/ui/Button.vue';
@@ -23,6 +23,8 @@ import { attendanceSummary, cellClass, cellText, monthLabel, thisMonth, WEEKDAYS
  * Nhân viên › Chấm công: one row per member, one cell per day. Hours come from the counter's cash shifts and the
  * phone's Vào ca / Tan ca; a manager clicks a cell to set it by hand. A member sees only their own row.
  */
+// Fields, buttons and dialogs in the Tailwind style (soft-cards, like Cấu hình).
+provide('soft-cards', true);
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
@@ -292,29 +294,29 @@ function exportCsv() {
         </section>
     </template>
     <Dialog :open="!!editing" :title="editing ? (editing.pick ? 'Chấm công hộ' : `Ngày ${editing.day}/${month.slice(5)} · ${editing.row.name}`) : ''" size="md" @update:open="(v: boolean) => !v && (editing = null)">
-        <div v-if="editing" class="space-y-4 text-sm">
-            <div v-if="editing.pick" class="grid grid-cols-[minmax(0,1fr)_7rem] gap-3">
-                <label class="block"><span class="mb-1 block font-medium">Nhân viên</span>
+        <div v-if="editing" class="space-y-4">
+            <div v-if="editing.pick" class="grid grid-cols-[minmax(0,1fr)_8rem] gap-4">
+                <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Nhân viên</span>
                     <Select :model-value="editing.row.id" :options="(data?.members ?? []).map((m) => ({ value: m.id, label: m.name }))" data-testid="for-member" @update:model-value="pickMember(String($event))" />
                 </label>
-                <label class="block"><span class="mb-1 block font-medium">Ngày</span>
+                <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Ngày</span>
                     <Select :model-value="String(editing.day)" :options="dayNumbers.filter((d) => data?.today === null || d <= (data?.today ?? 31)).map((d) => ({ value: String(d), label: `${d}/${month.slice(5)}` }))" @update:model-value="pickDay(Number($event))" />
                 </label>
             </div>
-            <dl v-if="editing.cell" class="space-y-1.5 rounded-lg bg-muted/40 p-3">
-                <div class="flex justify-between"><dt class="text-muted-foreground">Ca xếp</dt><dd>{{ editing.row.shift }}</dd></div>
-                <div class="flex justify-between"><dt class="text-muted-foreground">Vào · ra</dt><dd :class="editing.cell.late > 0 && 'text-amber-700'">{{ editing.cell.in ?? '—' }} – {{ editing.cell.out ?? '—' }}<template v-if="editing.cell.late"> (muộn {{ editing.cell.late }} phút)</template></dd></div>
-                <div class="flex justify-between"><dt class="text-muted-foreground">Nguồn</dt><dd class="flex items-center gap-1">{{ sourceLabel[editing.cell.source] }}<template v-if="editing.cell.shifts.length"> · {{ editing.cell.shifts.join(', ') }}</template><MapPin v-if="editing.cell.located" class="size-3.5 text-emerald-600" /></dd></div>
+            <dl v-if="editing.cell" class="space-y-2 rounded-[12px] bg-slate-50 px-4 py-3">
+                <div class="flex justify-between"><dt class="text-slate-500">Ca xếp</dt><dd>{{ editing.row.shift }}</dd></div>
+                <div class="flex justify-between"><dt class="text-slate-500">Vào · ra</dt><dd :class="editing.cell.late > 0 && 'text-amber-700'">{{ editing.cell.in ?? '—' }} – {{ editing.cell.out ?? '—' }}<template v-if="editing.cell.late"> (muộn {{ editing.cell.late }} phút)</template></dd></div>
+                <div class="flex justify-between"><dt class="text-slate-500">Nguồn</dt><dd class="flex items-center gap-1">{{ sourceLabel[editing.cell.source] }}<template v-if="editing.cell.shifts.length"> · {{ editing.cell.shifts.join(', ') }}</template><MapPin v-if="editing.cell.located" class="size-3.5 text-emerald-600" /></dd></div>
             </dl>
-            <label class="block"><span class="mb-1 block font-medium">Ngày này</span>
+            <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Ngày này</span>
                 <Select v-model="form.status" :options="[{ value: 'work', label: 'Đi làm' }, { value: 'leave', label: 'Nghỉ có phép (vẫn tính công)' }, { value: 'off', label: 'Nghỉ không lương' }]" />
             </label>
-            <div v-if="form.status === 'work'" class="grid grid-cols-2 gap-3">
-                <label class="block"><span class="mb-1 block font-medium">Giờ vào</span><Input v-model="form.check_in" type="time" /></label>
-                <label class="block"><span class="mb-1 block font-medium">Giờ ra</span><Input v-model="form.check_out" type="time" /></label>
-                <label class="col-span-2 flex items-center gap-2"><input v-model="form.excuse_late" type="checkbox" class="size-4" /> Bỏ đi muộn (có lý do)</label>
+            <div v-if="form.status === 'work'" class="grid grid-cols-2 gap-4">
+                <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Giờ vào</span><Input v-model="form.check_in" type="time" /></label>
+                <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Giờ ra</span><Input v-model="form.check_out" type="time" /></label>
+                <label class="col-span-2 flex items-center gap-2.5 text-slate-700"><input v-model="form.excuse_late" type="checkbox" class="size-[18px] rounded border-slate-300 accent-blue-600" /> Bỏ đi muộn (có lý do)</label>
             </div>
-            <label class="block"><span class="mb-1 block font-medium">Ghi chú</span><Input v-model="form.note" maxlength="255" placeholder="VD: đi giao hàng cho khách" /></label>
+            <label class="block"><span class="mb-1.5 block text-[14px] font-medium text-slate-700">Ghi chú</span><Input v-model="form.note" maxlength="255" placeholder="VD: đi giao hàng cho khách" /></label>
         </div>
         <template #footer>
             <Button v-if="editing?.cell?.source === 'manual'" variant="ghost" :loading="saving" @click="saveDay('clear')">Bỏ sửa tay</Button>
