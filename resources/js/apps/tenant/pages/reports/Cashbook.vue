@@ -203,7 +203,7 @@ const money = (v: number) => formatNumber(Math.round(v));
 </script>
 
 <template>
-    <div class="mx-auto max-w-[1440px] pt-2">
+    <div class="pt-2">
         <ReportDetailHead
             title="Sổ quỹ"
             description="Tiền thu từ khách, hoàn tiền, chi trả nhà cung cấp và các phiếu thu chi; tồn quỹ đầu và cuối kỳ của từng quỹ."

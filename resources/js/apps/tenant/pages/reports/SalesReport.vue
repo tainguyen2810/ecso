@@ -152,7 +152,7 @@ const thing = computed(() => ({ day: 'Ngày', channel: 'Kênh', staff: 'Nhân vi
 </script>
 
 <template>
-    <div class="mx-auto max-w-[1440px] pt-2">
+    <div class="pt-2">
         <ReportDetailHead
             :title="TITLES[by]"
             description="Doanh thu đã ghi nhận, giá vốn, phí sàn và lãi. Cùng một khung cho theo ngày, kênh, nhân viên, khách hàng và kho."

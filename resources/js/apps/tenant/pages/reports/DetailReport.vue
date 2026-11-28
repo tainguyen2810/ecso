@@ -305,7 +305,7 @@ async function exportCsv() {
 </script>
 
 <template>
-    <div class="mx-auto max-w-[1440px] pt-2">
+    <div class="pt-2">
         <ReportDetailHead
             :title="report.title"
             :description="report.description"
@@ -441,7 +441,7 @@ async function exportCsv() {
                     <table ref="tableEl" class="w-full text-[14px]" data-testid="report-table">
                         <thead class="border-b border-slate-100 text-left text-[12px] font-semibold uppercase tracking-wider text-slate-400">
                             <tr>
-                                <th v-for="c in columns" :key="c.key" :class="cn('whitespace-nowrap px-4 py-3.5 font-semibold first:pl-5 last:pr-5', numeric(c) && 'text-right', c.bar && 'min-w-36')">{{ c.label }}</th>
+                                <th v-for="c in columns" :key="c.key" :class="cn('px-3 py-3.5 font-semibold leading-snug first:pl-5 last:pr-5', numeric(c) ? 'text-right' : 'whitespace-nowrap')">{{ c.label }}</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100 text-slate-700">
@@ -449,7 +449,7 @@ async function exportCsv() {
                                 <td
                                     v-for="c in columns"
                                     :key="c.key"
-                                    :class="cn('px-4 py-3.5 first:pl-5 last:pr-5', c === columns[0] && 'min-w-56', c.type === 'datetime' && 'whitespace-nowrap', numeric(c) && 'whitespace-nowrap text-right tabular-nums', cellClass(c, row))"
+                                    :class="cn('px-3 py-3.5 first:pl-5 last:pr-5', c.type === 'datetime' && 'whitespace-nowrap', numeric(c) && 'whitespace-nowrap text-right tabular-nums', cellClass(c, row))"
                                 >
                                     <div v-if="c.logo" class="flex items-center gap-3 whitespace-nowrap">
                                         <ChannelMark :kind="c.logo(row)" :name="c.sub?.(row) ?? undefined" />
@@ -461,7 +461,7 @@ async function exportCsv() {
                                     </div>
                                     <span v-else-if="c.badge?.(row)" :class="cn('inline-flex whitespace-nowrap rounded-md px-2 py-0.5 text-[13px] font-medium', badgeClass[c.badge(row)!.tone])">{{ c.badge(row)!.label }}</span>
                                     <div v-else-if="c.bar" class="flex items-center justify-end gap-3">
-                                        <span class="print-hide h-1.5 w-16 overflow-hidden rounded-full bg-slate-100">
+                                        <span class="print-hide hidden h-1.5 w-14 overflow-hidden 2xl:block rounded-full bg-slate-100">
                                             <span
                                                 :class="cn('block h-full rounded-full', Number(raw(c, row)) < 0 ? 'bg-red-500' : 'bg-emerald-500')"
                                                 :style="{ width: `${Math.min(100, Math.max(4, Math.abs(Number(raw(c, row) ?? 0))))}%` }"
@@ -483,7 +483,7 @@ async function exportCsv() {
                         </tbody>
                         <tfoot v-if="hasTotals" class="border-t border-slate-200 bg-slate-50 font-semibold text-slate-900">
                             <tr>
-                                <td v-for="(c, i) in columns" :key="c.key" :class="cn('whitespace-nowrap px-4 py-4 first:pl-5 last:pr-5', numeric(c) && 'text-right tabular-nums', i > 0 && cellClass(c, data.totals ?? {}))">
+                                <td v-for="(c, i) in columns" :key="c.key" :class="cn('whitespace-nowrap px-3 py-4 first:pl-5 last:pr-5', numeric(c) && 'text-right tabular-nums', i > 0 && cellClass(c, data.totals ?? {}))">
                                     {{ i === 0 ? (filtered ? `Tổng ${chip}` : data.truncated ? 'Tổng (toàn bộ)' : 'Tổng') : total(c) }}
                                 </td>
                             </tr>
