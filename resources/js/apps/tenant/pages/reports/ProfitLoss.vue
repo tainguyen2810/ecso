@@ -1,18 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { useElementWidth } from '@/shared/composables/useElementWidth';
 import { RouterLink } from 'vue-router';
 import { ArrowDown, ArrowUp, BarChart3, ChevronDown, ChevronRight, Info, PiggyBank, Receipt, TrendingUp } from 'lucide-vue-next';
 import ReportDetailHead from './ReportDetailHead.vue';
 import ReportKpi from './ReportKpi.vue';
 import ReportChip from './ReportChip.vue';
+import ChannelMark from './ChannelMark.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
 import { cn, formatNumber } from '@/shared/lib/utils';
 
 /**
- * Báo cáo lãi lỗ (mẫu Tailwind 28/11): four headline figures, a waterfall from revenue to profit, then the P&L table
+ * Báo cáo lãi lỗ (mẫu A 28/11): four headline figures, a ladder from revenue to profit with where each 100đ goes and the
+ * profit of each channel, then the P&L table
  * beside the previous period of the same length, groups folding open and shut.
  */
 import { downloadCsv, toCsv } from './range';
@@ -100,46 +101,77 @@ const short = (v: number) => {
     return v < 0 ? `−${s}` : s;
 };
 
-/** Waterfall: revenue, then each amount taken off (red) or added (green), ending on the profit. */
-const steps = computed(() => {
+/**
+ * Bậc thang (mẫu A 28/11): one row per amount, each a bar on the same scale as the revenue. Red bars are taken off,
+ * green ones added, bold rows are what is left (gross, contribution, profit).
+ */
+type Step = { label: string; from: number; to: number; kind: 'total' | 'sub' | 'down' | 'up' | 'end' };
+const steps = computed<Step[]>(() => {
     if (!data.value) return [];
-    const parts: [string, number][] = [
-        ['Giá vốn', -val('cogs')],
-        ['Phí sàn', -val('marketplace_fees')],
-        ['Phí ship thu khách', val('shipping')],
-        ['Chi phí bán hàng', -val('selling_expenses')],
-        ['Hao hụt kho', -val('stock_loss')],
-        ['Chi phí vận hành', -(val('operating_expenses') + val('misc_expenses'))],
-        ['Thu nhập khác', val('other_income')],
-    ];
-    const out: { label: string; from: number; to: number; kind: 'total' | 'up' | 'down' }[] = [{ label: 'Doanh thu thuần', from: 0, to: val('revenue'), kind: 'total' }];
+    const out: Step[] = [{ label: 'Doanh thu thuần', from: 0, to: val('revenue'), kind: 'total' }];
     let run = val('revenue');
-    for (const [label, d] of parts) {
-        if (!d) continue;
+    const add = (label: string, d: number) => {
+        if (!d) return;
         out.push({ label, from: run, to: run + d, kind: d < 0 ? 'down' : 'up' });
         run += d;
-    }
-    out.push({ label: 'Lợi nhuận', from: 0, to: val('profit'), kind: 'total' });
+    };
+    const sub = (label: string, key: string, kind: Step['kind'] = 'sub') => {
+        run = val(key);
+        out.push({ label, from: 0, to: run, kind });
+    };
+    add('Giá vốn', -val('cogs'));
+    sub('Lợi nhuận gộp', 'gross_profit');
+    add('Phí sàn', -val('marketplace_fees'));
+    add('Phí ship thu khách', val('shipping'));
+    add('Chi phí bán hàng', -val('selling_expenses'));
+    sub('Lợi nhuận đóng góp', 'contribution_profit');
+    add('Hao hụt kho', -val('stock_loss'));
+    add('Chi phí vận hành', -val('operating_expenses'));
+    add('Chi phí khác', -val('misc_expenses'));
+    add('Thu nhập khác', val('other_income'));
+    sub('Lợi nhuận ước tính', 'profit', 'end');
     return out;
 });
-const chartBox = ref<HTMLElement | null>(null);
-const boxWidth = useElementWidth(chartBox, 1000);
-const W = computed(() => Math.max(640, boxWidth.value));
-const H = 220;
-const chart = computed(() => {
+const ladder = computed(() => {
     const all = steps.value.flatMap((s) => [s.from, s.to]);
-    const hi = Math.max(1, ...all);
     const lo = Math.min(0, ...all);
-    const y = (v: number) => 30 + ((hi - v) / (hi - lo)) * H;
-    const slot = W.value / Math.max(1, steps.value.length);
-    return steps.value.map((s, i) => {
-        const top = y(Math.max(s.from, s.to));
-        const bottom = y(Math.min(s.from, s.to));
-        const color = s.kind === 'down' ? '#f87171' : s.kind === 'up' ? '#34d399' : s.label === 'Lợi nhuận' ? (s.to < 0 ? '#ef4444' : '#10b981') : '#2563eb';
-        const w = Math.min(slot * 0.64, 120);
-        return { ...s, x: i * slot + (slot - w) / 2, w, top, h: Math.max(3, bottom - top), end: y(s.to), color, amount: s.kind === 'total' ? s.to : s.to - s.from, cx: i * slot + slot / 2 };
+    const span = Math.max(1, ...all) - lo || 1;
+    return steps.value.map((s) => {
+        const a = Math.min(s.from, s.to);
+        const amount = s.kind === 'down' || s.kind === 'up' ? s.to - s.from : s.to;
+        return { ...s, amount, left: ((a - lo) / span) * 100, width: Math.max(0.4, (Math.abs(s.to - s.from) / span) * 100), share: pct(Math.abs(amount), val('revenue')) };
     });
 });
+const barTone = { total: 'bg-blue-600', sub: 'bg-blue-200', down: 'bg-rose-400', up: 'bg-emerald-400', end: 'bg-emerald-500' } as const;
+
+/** "Mỗi 100đ doanh thu đi đâu": only when every part is a cost and the shop made money. */
+const per100 = computed(() => {
+    const rev = val('revenue');
+    if (rev <= 0) return null;
+    const parts = [
+        { label: 'Giá vốn', value: val('cogs'), tone: 'bg-slate-400' },
+        { label: 'Phí sàn', value: val('marketplace_fees'), tone: 'bg-orange-400' },
+        { label: 'Chi phí bán hàng', value: val('selling_expenses') - val('shipping'), tone: 'bg-amber-300' },
+        { label: 'Vận hành, hao hụt, khác', value: val('stock_loss') + val('operating_expenses') + val('misc_expenses') - val('other_income'), tone: 'bg-rose-300' },
+        { label: 'Lãi còn lại', value: val('profit'), tone: 'bg-emerald-500' },
+    ];
+    if (parts.some((p) => p.value < 0)) return null;
+    return parts.filter((p) => p.value > 0).map((p) => ({ ...p, per: Math.round((p.value / rev) * 1000) / 10 }));
+});
+
+/** Lãi theo kênh bán: the "Theo kênh" figures of Báo cáo bán hàng (profit after marketplace fees). */
+interface ChannelRow { label: string; kind: string | null; goods: number; profit_after_fees?: number; margin_after_fees?: number | null }
+const channels = ref<ChannelRow[]>([]);
+async function loadChannels() {
+    try {
+        const d = (await api.get('/reports/sales', { params: { ...range.value, by: 'channel' } })).data.data;
+        channels.value = d.profit_hidden ? [] : (d.rows as ChannelRow[]).filter((r) => r.profit_after_fees !== undefined && r.goods > 0).slice(0, 6);
+    } catch {
+        channels.value = [];
+    }
+}
+onMounted(loadChannels);
+watch(() => [range.value.from, range.value.to], loadChannels);
 
 /** Groups (level 0) fold their lines (level 1); everything starts open. */
 const closed = ref<Set<string>>(new Set());
@@ -205,22 +237,80 @@ const card = 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2
                 </ReportKpi>
             </div>
 
-            <section :class="cn(card, 'mb-5')" data-testid="pl-waterfall">
-                <header class="border-b border-slate-100 px-6 py-4">
-                    <h3 class="text-[16px] font-semibold text-slate-900">Từ doanh thu đến lợi nhuận</h3>
-                    <p class="mt-0.5 text-[13px] text-slate-500">Cột đỏ là khoản bị trừ đi, cột xanh lá là khoản cộng thêm.</p>
-                </header>
-                <div ref="chartBox" class="overflow-x-auto px-4 py-5">
-                    <svg :viewBox="`0 0 ${W} ${H + 70}`" :width="W" :height="H + 70" class="block" role="img" aria-label="Từ doanh thu đến lợi nhuận">
-                        <g v-for="(b, i) in chart" :key="b.label">
-                            <line v-if="i < chart.length - 1" :x1="b.x + b.w" :x2="chart[i + 1]!.x" :y1="b.end" :y2="b.end" stroke="#cbd5e1" stroke-dasharray="3 3" />
-                            <rect :x="b.x" :y="b.top" :width="b.w" :height="b.h" rx="4" :fill="b.color" />
-                            <text :x="b.cx" :y="b.top - 8" text-anchor="middle" class="fill-slate-800 text-[13px] font-semibold">{{ short(b.amount) }}</text>
-                            <text :x="b.cx" :y="H + 58" text-anchor="middle" class="fill-slate-500 text-[13px]">{{ b.label }}</text>
-                        </g>
-                    </svg>
+            <div class="mb-5 grid items-start gap-5 2xl:grid-cols-[minmax(0,1fr)_420px]">
+                <section :class="card" data-testid="pl-waterfall">
+                    <header class="border-b border-slate-100 px-6 py-4">
+                        <h3 class="text-[16px] font-semibold text-slate-900">Từ doanh thu đến lợi nhuận</h3>
+                        <p class="mt-0.5 text-[13px] text-slate-500">Mỗi dòng là một khoản: thanh đỏ bị trừ đi, thanh xanh lá cộng thêm, dòng đậm là phần còn lại.</p>
+                    </header>
+                    <div class="px-6 py-3">
+                        <div
+                            v-for="s in ladder"
+                            :key="s.label"
+                            :class="cn('grid grid-cols-[150px_minmax(0,1fr)_120px] items-center gap-4 py-2 sm:grid-cols-[190px_minmax(0,1fr)_130px_64px]', (s.kind === 'sub' || s.kind === 'end') && 'mt-1 border-t border-slate-100 pt-3')"
+                            :data-testid="`pl-step-${s.kind}`"
+                        >
+                            <p :class="cn('text-[14px]', s.kind === 'down' || s.kind === 'up' ? 'pl-4 text-slate-600' : 'font-semibold text-slate-900')">{{ s.label }}</p>
+                            <div class="relative h-7 rounded-[7px] bg-slate-50">
+                                <span :class="cn('absolute inset-y-0 rounded-[7px]', s.kind === 'end' && s.to < 0 ? 'bg-red-500' : barTone[s.kind])" :style="{ left: `${s.left}%`, width: `${s.width}%` }" />
+                            </div>
+                            <p
+                                :class="
+                                    cn(
+                                        'text-right text-[14px] tabular-nums',
+                                        s.kind === 'down' ? 'text-rose-600' : s.kind === 'up' ? 'text-emerald-600' : s.kind === 'end' ? (s.to < 0 ? 'font-semibold text-red-600' : 'font-semibold text-emerald-600') : 'font-semibold text-slate-900',
+                                    )
+                                "
+                            >
+                                {{ s.kind === 'down' ? '−' : s.kind === 'up' ? '+' : '' }}{{ formatNumber(Math.round(Math.abs(s.amount))) }}
+                            </p>
+                            <p class="hidden text-right text-[13px] tabular-nums text-slate-500 sm:block">{{ s.share === null ? '' : `${vn(s.share)}%` }}</p>
+                        </div>
+                    </div>
+                </section>
+
+                <div class="grid content-start gap-5 md:grid-cols-2 2xl:grid-cols-1">
+                    <section v-if="per100" :class="card" data-testid="pl-per100">
+                        <header class="border-b border-slate-100 px-5 py-4">
+                            <h3 class="font-semibold text-slate-900">Mỗi 100đ doanh thu đi đâu</h3>
+                            <p class="mt-0.5 text-[13px] text-slate-500">Kỳ này, sau khi trừ mọi khoản</p>
+                        </header>
+                        <div class="px-5 py-5">
+                            <div class="flex h-4 overflow-hidden rounded-full bg-slate-100">
+                                <span v-for="p in per100" :key="p.label" :class="p.tone" :style="{ width: `${p.per}%` }" />
+                            </div>
+                            <ul class="mt-3 divide-y divide-slate-100">
+                                <li v-for="p in per100" :key="p.label" class="flex items-center justify-between py-2.5 text-[14px]">
+                                    <span class="flex items-center gap-2.5 text-slate-600"><span :class="cn('size-2.5 rounded-full', p.tone)" />{{ p.label }}</span>
+                                    <span :class="cn('font-semibold tabular-nums', p.label === 'Lãi còn lại' ? 'text-emerald-600' : 'text-slate-900')">{{ vn(p.per) }}đ</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </section>
+                    <section v-if="channels.length" :class="card" data-testid="pl-channels">
+                        <header class="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+                            <div>
+                                <h3 class="font-semibold text-slate-900">Lãi theo kênh bán</h3>
+                                <p class="mt-0.5 text-[13px] text-slate-500">Sau giá vốn và phí sàn, trước chi phí chung</p>
+                            </div>
+                            <RouterLink :to="{ name: 'report-sales', query: { ...range, by: 'channel' } }" class="shrink-0 text-[13px] font-medium text-blue-700 hover:underline">Chi tiết</RouterLink>
+                        </header>
+                        <ul class="divide-y divide-slate-100 px-5">
+                            <li v-for="c in channels" :key="c.label" class="flex items-center gap-3 py-3">
+                                <ChannelMark :kind="c.kind" :name="c.label" size="lg" />
+                                <div class="min-w-0 flex-1">
+                                    <p class="truncate text-[14px] font-medium text-slate-900">{{ c.label }}</p>
+                                    <p class="text-[12px] text-slate-500">Doanh thu {{ short(c.goods) }}</p>
+                                </div>
+                                <div class="text-right">
+                                    <p :class="cn('text-[14px] font-semibold tabular-nums', (c.profit_after_fees ?? 0) < 0 ? 'text-red-600' : 'text-emerald-600')">{{ formatNumber(Math.round(c.profit_after_fees ?? 0)) }}</p>
+                                    <p v-if="c.margin_after_fees != null" class="text-[12px] text-slate-500">biên {{ vn(c.margin_after_fees) }}%</p>
+                                </div>
+                            </li>
+                        </ul>
+                    </section>
                 </div>
-            </section>
+            </div>
 
             <section :class="cn(card, 'overflow-hidden')">
                 <header class="flex flex-wrap items-end justify-between gap-3 border-b border-slate-100 px-6 py-4">
@@ -237,6 +327,7 @@ const card = 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2
                                 <th class="px-6 py-3.5 text-left">Chỉ tiêu</th>
                                 <th class="px-4 py-3.5 text-right">Kỳ trước</th>
                                 <th class="px-4 py-3.5 text-right">Kỳ này</th>
+                                <th class="hidden px-4 py-3.5 text-right md:table-cell">% doanh thu</th>
                                 <th class="px-6 py-3.5 text-right">Thay đổi</th>
                             </tr>
                         </thead>
@@ -270,6 +361,7 @@ const card = 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2
                                 >
                                     {{ formatNumber(Math.round(l.current)) }}<span v-if="l.key === 'profit'" class="ml-1 text-[14px]">đ</span>
                                 </td>
+                                <td class="hidden whitespace-nowrap px-4 py-3.5 text-right text-[13px] tabular-nums text-slate-500 md:table-cell">{{ pct(Math.abs(l.current), val('revenue')) === null ? '' : `${vn(pct(Math.abs(l.current), val('revenue')))}%` }}</td>
                                 <td class="whitespace-nowrap px-6 py-3.5 text-right">
                                     <span v-if="changeGood(l) === null" class="text-slate-300">{{ l.change === 0 ? '0%' : '—' }}</span>
                                     <span v-else :class="cn('inline-flex items-center gap-0.5 rounded-md px-2 py-0.5 text-[13px] font-medium tabular-nums', changeGood(l) ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600')">
