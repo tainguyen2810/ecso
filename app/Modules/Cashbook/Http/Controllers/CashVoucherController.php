@@ -36,7 +36,7 @@ class CashVoucherController extends Controller
             'per_page' => ['nullable', 'integer', 'min:5', 'max:100'],
         ]);
         ['page' => $page, 'totals' => $totals] = $ledger->search($filters, (int) ($filters['per_page'] ?? 20));
-        $pending = CashVoucher::query()->where('status', CashVoucher::PENDING)->selectRaw('COUNT(*) as n, COALESCE(SUM(amount), 0) as amount')->first();
+        $pending = CashVoucher::query()->where('status', CashVoucher::PENDING)->toBase()->selectRaw('COUNT(*) as n, COALESCE(SUM(amount), 0) as amount')->first();
 
         return response()->json([
             'data' => VoucherRowResource::collection($page->getCollection())->resolve($request),
