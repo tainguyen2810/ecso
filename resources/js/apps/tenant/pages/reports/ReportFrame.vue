@@ -23,6 +23,7 @@ const tabLabels: Record<ReportGroupKey, string> = { sales: 'Bán hàng', purchas
 const tabs = computed(() => (Object.keys(reportGroups) as ReportGroupKey[]).filter((g) => tenant.can(reportGroups[g].permission)));
 
 const quick: [Preset, string][] = [
+    ['today', 'Hôm nay'],
     ['7d', '7 ngày'],
     ['month', 'Tháng này'],
     ['last-month', 'Tháng trước'],
@@ -40,31 +41,31 @@ function custom() {
 
 <template>
     <div class="mb-5">
-        <p class="text-[13px] text-muted-foreground">Báo cáo / {{ tabLabels[group] }}</p>
+        <p class="text-[14px] text-slate-500">Báo cáo / {{ tabLabels[group] }}</p>
         <div class="mt-1 flex flex-wrap items-end justify-between gap-4">
             <div class="min-w-0">
-                <h1 class="text-[26px] font-bold leading-tight tracking-tight text-slate-900" data-testid="report-title">{{ reportGroups[group].title }}</h1>
-                <p class="mt-1 text-sm text-muted-foreground">{{ description }}</p>
+                <h1 class="text-[26px] font-bold leading-tight tracking-tight text-slate-900 sm:text-[30px]" data-testid="report-title">{{ reportGroups[group].title }}</h1>
+                <p class="mt-1 text-[15px] text-slate-500">{{ description }}</p>
             </div>
-            <div class="flex flex-wrap items-center gap-2.5">
-                <div class="flex rounded-[10px] bg-slate-100 p-1 text-sm" role="group" aria-label="Chọn nhanh kỳ" data-testid="report-quick-range">
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="flex rounded-[12px] bg-slate-100 p-1 text-[14px]" role="group" aria-label="Chọn nhanh kỳ" data-testid="report-quick-range">
                     <button
                         v-for="[p, label] in quick"
                         :key="p"
                         type="button"
-                        :class="cn('rounded-[7px] px-3 py-1.5 text-slate-600 hover:text-slate-900', active === p && 'bg-white font-medium text-slate-900 shadow-sm')"
+                        :class="cn('rounded-[9px] px-3.5 py-1.5 text-slate-500 hover:text-slate-900', active === p && 'bg-white font-semibold text-slate-900 shadow-sm')"
                         @click="emit('update:range', presetRange(p))"
                     >
                         {{ label }}
                     </button>
-                    <button type="button" :class="cn('rounded-[7px] px-3 py-1.5 text-slate-600 hover:text-slate-900', active === 'custom' && 'bg-white font-medium text-slate-900 shadow-sm')" @click="custom">Tùy chọn</button>
+                    <button type="button" :class="cn('rounded-[9px] px-3.5 py-1.5 text-slate-500 hover:text-slate-900', active === 'custom' && 'bg-white font-semibold text-slate-900 shadow-sm')" @click="custom">Tùy chọn</button>
                 </div>
                 <div ref="picker">
                     <DateRangeInput :from="from" :to="to" aria-label="Khoảng ngày" data-testid="report-range" @update:from="(v) => emit('update:range', { from: v, to })" @update:to="(v) => emit('update:range', { from, to: v })" />
                 </div>
                 <button
                     type="button"
-                    class="inline-flex h-9 items-center gap-2 rounded-[10px] bg-blue-600 px-4 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-60"
+                    class="inline-flex h-11 items-center gap-2 rounded-[12px] bg-blue-600 px-5 text-[15px] font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-60"
                     :disabled="exporting"
                     data-testid="report-export"
                     @click="emit('export')"
@@ -73,14 +74,14 @@ function custom() {
                 </button>
             </div>
         </div>
-        <nav class="mt-5 flex gap-1 overflow-x-auto border-b border-slate-200" aria-label="Nhóm báo cáo" data-testid="report-tabs">
+        <nav class="mt-5 flex gap-5 overflow-x-auto border-b border-slate-200 sm:gap-7" aria-label="Nhóm báo cáo" data-testid="report-tabs">
             <RouterLink
                 v-for="g in tabs"
                 :key="g"
                 :to="{ name: 'report-group', params: { group: g }, query: { from: route.query.from, to: route.query.to } }"
-                :class="cn('-mb-px inline-flex shrink-0 items-center gap-2 border-b-2 px-3.5 py-2.5 text-sm', g === group ? 'border-blue-600 font-semibold text-blue-600' : 'border-transparent text-slate-600 hover:text-slate-900')"
+                :class="cn('-mb-px inline-flex shrink-0 items-center gap-2 border-b-2 px-1 pb-3 pt-1 text-[15px]', g === group ? 'border-blue-600 font-semibold text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-900')"
             >
-                <component :is="tabIcons[g]" class="size-4" /> {{ tabLabels[g] }}
+                <component :is="tabIcons[g]" class="size-[17px]" /> {{ tabLabels[g] }}
             </RouterLink>
         </nav>
     </div>

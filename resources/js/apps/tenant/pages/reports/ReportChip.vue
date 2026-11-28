@@ -14,5 +14,5 @@ const tones: Record<string, string> = {
 </script>
 
 <template>
-    <span :class="cn('inline-flex items-center gap-0.5 whitespace-nowrap rounded-md px-2 py-0.5 font-medium tabular-nums', tones[tone])"><slot /></span>
+    <span :class="cn('inline-flex items-center gap-0.5 whitespace-nowrap rounded-md px-2 py-0.5 text-[12px] font-medium tabular-nums', tones[tone])"><slot /></span>
 </template>

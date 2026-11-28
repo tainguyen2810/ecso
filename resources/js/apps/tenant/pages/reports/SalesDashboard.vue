@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter, type RouteLocationRaw } from 'vue-router';
-import { ArrowDown, ArrowRight, ArrowUp, Box, CircleCheck, CircleHelp, CreditCard, FileText, Hexagon, ShoppingCart, TrendingUp, TriangleAlert, Truck, Undo2 } from 'lucide-vue-next';
+import { ArrowDown, ArrowRight, ArrowUp, Box, Receipt, CircleCheck, CircleHelp, CreditCard, FileText, Hexagon, ShoppingCart, TrendingUp, TriangleAlert, Truck, Undo2 } from 'lucide-vue-next';
 import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
@@ -29,6 +29,7 @@ const overview = ref<any>(null);
 const days = ref<any[]>([]);
 const awaiting = ref<{ orders: number; goods: number } | null>(null);
 const channels = ref<any[]>([]);
+const channelTotals = ref<any>(null);
 const previous = ref<any>(null);
 const products = ref<any[]>([]);
 const error = ref<string | null>(null);
@@ -69,6 +70,7 @@ async function load() {
         days.value = s.data.data.rows;
         awaiting.value = s.data.data.awaiting ?? null;
         channels.value = c.data.data.rows ?? [];
+        channelTotals.value = c.data.data.totals ?? null;
         previous.value = p?.data.data ?? null;
         products.value = ((b?.data.data.rows ?? []) as any[]).filter((x) => x.net > 0).sort((x, y) => y.net - x.net).slice(0, 8);
     } catch (e) {
@@ -86,6 +88,14 @@ const deltas = computed(() => ({
     revenue: change(rec.value?.revenue, previous.value?.recognized?.revenue),
     profit: change(rec.value?.gross_profit, previous.value?.recognized?.gross_profit),
 }));
+/** Marketplace fees of the period (confirmed + estimated), when the role may see profit. */
+// Only for shops selling on a marketplace (some fee, or orders whose fee is not known yet); else the shipping KPI.
+const fees = computed(() => {
+    const t = channelTotals.value;
+    if (t?.fees == null || (!Number(t.fees) && !Number(t.fees_unknown_orders ?? 0))) return null;
+    return Number(t.fees);
+});
+const lossLink = computed(() => props.links.find((l) => l.to && 'report' in l.to && l.to.report === 'loss-orders'));
 const cogsShare = computed(() => (rec.value?.cogs != null && rec.value.revenue > 0 ? (rec.value.cogs / rec.value.revenue) * 100 : null));
 
 // Revenue per day: cost (slate) + gross profit (green), a loss below 0, as before.
@@ -93,10 +103,10 @@ const dayLabel = (d: string) => d.slice(8, 10) + '/' + d.slice(5, 7);
 const chart = computed(() => ({
     labels: days.value.map((d) => dayLabel(d.label)),
     series: !canProfit.value
-        ? [{ key: 'goods', label: 'Tiền hàng', color: '#10b981', values: days.value.map((d) => d.goods) }]
+        ? [{ key: 'goods', label: 'Tiền hàng', color: '#2563eb', values: days.value.map((d) => d.goods) }]
         : [
-              { key: 'cogs', label: 'Giá vốn', color: '#94a3b8', values: days.value.map((d) => (d.gross_profit >= 0 ? d.cogs : Math.max(0, d.goods))) },
-              { key: 'profit', label: 'Lãi gộp', color: '#10b981', values: days.value.map((d) => Math.max(0, d.gross_profit)) },
+              { key: 'cogs', label: 'Giá vốn', color: '#cbd5e1', values: days.value.map((d) => (d.gross_profit >= 0 ? d.cogs : Math.max(0, d.goods))) },
+              { key: 'profit', label: 'Lãi gộp', color: '#2563eb', values: days.value.map((d) => Math.max(0, d.gross_profit)) },
               ...(days.value.some((d) => d.gross_profit < 0) ? [{ key: 'loss', label: 'Lỗ', color: '#f87171', values: days.value.map((d) => Math.min(0, d.gross_profit)) }] : []),
           ],
     tips: days.value.map((d) =>
@@ -211,7 +221,7 @@ const card = 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2
     <div v-else-if="!overview" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Skeleton v-for="i in 4" :key="i" class="h-36" /><Skeleton class="h-72 sm:col-span-2 xl:col-span-4" /></div>
     <div v-else :class="loading && 'opacity-60'">
         <!-- Headline figures -->
-        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-[1.3fr_1fr_1fr_1fr]" data-testid="sales-dashboard-kpis">
+        <div class="grid gap-5 sm:grid-cols-2 xl:grid-cols-4" data-testid="sales-dashboard-kpis">
             <ReportKpi
                 primary
                 label="Doanh thu thuần"
@@ -222,7 +232,7 @@ const card = 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2
             >
                 <template #chips>
                     <ReportChip v-if="deltas.revenue !== null" tone="onblue" data-testid="sales-delta"><component :is="deltas.revenue >= 0 ? ArrowUp : ArrowDown" class="size-3" />{{ pct(deltas.revenue) }}</ReportChip>
-                    <span v-if="deltas.revenue !== null" class="text-blue-50">so với kỳ trước</span>
+                    <span v-if="deltas.revenue !== null" class="text-blue-100">so với kỳ trước</span>
                 </template>
                 {{ formatNumber(overview.sales.orders) }} đơn<template v-if="rec.returns"> · đã trừ trả hàng {{ formatMoney(rec.returns) }}</template>
                 <template #decor>
@@ -257,7 +267,25 @@ const card = 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2
                 </template>
                 Chưa trừ phí sàn
             </ReportKpi>
-            <ReportKpi label="Phí giao hàng thu khách" tip="Phí ship khách trả trên đơn. Dòng riêng, không cộng vào doanh thu thuần." :icon="Truck" tone="blue" plain :value="rec.shipping ?? 0">
+            <ReportKpi
+                v-if="fees !== null"
+                label="Phí sàn"
+                tip-title="Phí sàn của đơn ghi nhận trong kỳ"
+                tip="Theo đối soát của sàn; đơn chưa đối soát thì ước tính theo biểu phí của shop. Cùng số với Tài chính."
+                :icon="Receipt"
+                tone="amber"
+                plain
+                :value="fees"
+                data-testid="sales-fees"
+            >
+                <template #chips>
+                    <ReportChip v-if="rec.revenue > 0">{{ pct((fees / rec.revenue) * 100) }} doanh thu</ReportChip>
+                    <ReportChip v-if="channelTotals?.fees_unknown_orders" tone="amber">{{ formatNumber(channelTotals.fees_unknown_orders) }} đơn chưa có biểu phí</ReportChip>
+                </template>
+                <RouterLink v-if="lossLink" :to="target(lossLink)" class="font-medium text-red-600 hover:underline">Xem đơn lỗ sau phí sàn</RouterLink>
+                <template v-else>Đã trừ trong Báo cáo lãi lỗ</template>
+            </ReportKpi>
+            <ReportKpi v-else label="Phí ship thu khách" tip="Phí ship khách trả trên đơn. Dòng riêng, không cộng vào doanh thu thuần." :icon="Truck" tone="blue" plain :value="rec.shipping ?? 0">
                 <template #chips><ReportChip>Dòng riêng</ReportChip></template>
                 Ngoài doanh thu thuần
             </ReportKpi>
@@ -274,12 +302,12 @@ const card = 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2
         </div>
 
         <!-- Revenue per day and per channel -->
-        <div class="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_25rem]">
+        <div class="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_25rem]">
             <section :class="card">
-                <header class="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+                <header class="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-6 py-5">
                     <div>
-                        <h3 class="font-semibold text-slate-900">Tiền hàng theo ngày</h3>
-                        <p class="mt-0.5 text-[13px] text-muted-foreground">Ghi nhận khi hoàn thành · sau chiết khấu, chưa trừ trả hàng</p>
+                        <h3 class="text-[17px] font-semibold text-slate-900">Tiền hàng theo ngày</h3>
+                        <p class="mt-0.5 text-[14px] text-slate-500">Ghi nhận khi hoàn thành · sau chiết khấu, chưa trừ trả hàng</p>
                     </div>
                     <div class="text-right">
                         <p class="text-2xl font-bold tabular-nums text-slate-900" data-testid="sales-revenue">{{ formatNumber(chartTotal) }}<span class="ml-1 text-sm font-semibold text-slate-400">đ</span></p>
@@ -297,8 +325,8 @@ const card = 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2
             <section :class="card" data-testid="sales-by-channel">
                 <header class="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
                     <div>
-                        <h3 class="font-semibold text-slate-900">Theo kênh bán</h3>
-                        <p class="mt-0.5 text-[13px] text-muted-foreground">Tiền hàng trong kỳ theo shop và kênh</p>
+                        <h3 class="text-[17px] font-semibold text-slate-900">Theo kênh bán</h3>
+                        <p class="mt-0.5 text-[14px] text-slate-500">Tiền hàng trong kỳ theo shop và kênh</p>
                     </div>
                     <span class="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{{ channels.length }} kênh</span>
                 </header>
@@ -323,11 +351,11 @@ const card = 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2
         </div>
 
         <!-- Delivery status, orders, payments, returns -->
-        <div class="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-[1.3fr_1.15fr_1fr]">
+        <div class="mt-5 grid gap-5 lg:grid-cols-2 2xl:grid-cols-[1.3fr_1.15fr_1fr]">
             <section :class="card">
                 <header class="border-b border-slate-100 px-5 py-4">
-                    <h3 class="font-semibold text-slate-900">Tình trạng giao hàng</h3>
-                    <p class="mt-0.5 text-[13px] text-muted-foreground">Đơn tạo trong kỳ theo tình trạng hiện tại</p>
+                    <h3 class="text-[17px] font-semibold text-slate-900">Tình trạng giao hàng</h3>
+                    <p class="mt-0.5 text-[14px] text-slate-500">Đơn tạo trong kỳ theo tình trạng hiện tại</p>
                 </header>
                 <div class="flex flex-col items-center gap-5 p-5 sm:flex-row" data-testid="delivery-status">
                     <div class="relative size-32 shrink-0">
@@ -357,7 +385,7 @@ const card = 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2
                 <header class="flex items-center gap-3 border-b border-slate-100 px-5 py-4">
                     <span class="grid size-9 place-items-center rounded-[10px] bg-blue-50 text-blue-600"><ShoppingCart class="size-[18px]" /></span>
                     <div class="min-w-0 flex-1">
-                        <h3 class="font-semibold text-slate-900">Đơn hàng</h3>
+                        <h3 class="text-[17px] font-semibold text-slate-900">Đơn hàng</h3>
                         <p class="text-[13px] text-muted-foreground">{{ canProfit ? `Lãi gộp ${formatMoney(rec.gross_profit)}` : 'Đơn đã ghi nhận doanh thu' }}</p>
                     </div>
                     <span class="text-2xl font-bold tabular-nums text-slate-900">{{ formatNumber(overview.sales.orders) }}</span>
@@ -371,12 +399,12 @@ const card = 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2
                 </ul>
             </section>
 
-            <div class="grid content-start gap-4 lg:col-span-2 xl:col-span-1">
+            <div class="grid content-start gap-5 lg:col-span-2 lg:grid-cols-2 2xl:col-span-1 2xl:grid-cols-1">
                 <section v-if="byTitle('Thanh toán')" :class="card">
                     <header class="flex items-center gap-3 border-b border-slate-100 px-5 py-4">
                         <span class="grid size-9 place-items-center rounded-[10px] bg-emerald-50 text-emerald-600"><CreditCard class="size-[18px]" /></span>
                         <div class="min-w-0 flex-1">
-                            <h3 class="font-semibold text-slate-900">Thanh toán</h3>
+                            <h3 class="text-[17px] font-semibold text-slate-900">Thanh toán</h3>
                             <p class="text-[13px] text-muted-foreground">Tiền thực thu trong kỳ</p>
                         </div>
                         <span class="whitespace-nowrap text-xl font-bold tabular-nums text-emerald-600">{{ formatNumber(overview.finance?.payments.net ?? 0) }}<span class="ml-0.5 text-sm">đ</span></span>
@@ -391,7 +419,7 @@ const card = 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2
                     <header class="flex items-center gap-3 border-b border-slate-100 px-5 py-4">
                         <span class="grid size-9 place-items-center rounded-[10px] bg-violet-50 text-violet-600"><Undo2 class="size-[18px]" /></span>
                         <div class="min-w-0 flex-1">
-                            <h3 class="font-semibold text-slate-900">Trả hàng</h3>
+                            <h3 class="text-[17px] font-semibold text-slate-900">Trả hàng</h3>
                             <p class="text-[13px] text-muted-foreground">Đã hoàn {{ formatMoney(overview.returns.refund_amount) }}</p>
                         </div>
                         <span class="text-2xl font-bold tabular-nums text-slate-900">{{ formatNumber(overview.returns.returns) }}</span>
@@ -406,11 +434,11 @@ const card = 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2
         </div>
 
         <!-- Best sellers -->
-        <section v-if="products.length" :class="cn(card, 'mt-4 overflow-hidden')" data-testid="sales-top-products">
+        <section v-if="products.length" :class="cn(card, 'mt-5 overflow-hidden')" data-testid="sales-top-products">
             <header class="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
                 <div>
-                    <h3 class="font-semibold text-slate-900">Bán chạy theo sản phẩm</h3>
-                    <p class="mt-0.5 text-[13px] text-muted-foreground">Xếp theo doanh thu trong kỳ</p>
+                    <h3 class="text-[17px] font-semibold text-slate-900">Bán chạy theo sản phẩm</h3>
+                    <p class="mt-0.5 text-[14px] text-slate-500">Xếp theo doanh thu trong kỳ</p>
                 </div>
                 <RouterLink :to="{ name: 'report-detail', params: { report: 'product-sales' }, query: { ...range } }" class="inline-flex items-center gap-1 rounded-[10px] border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">Xem tất cả <ArrowRight class="size-4" /></RouterLink>
             </header>
@@ -449,9 +477,9 @@ const card = 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2
                             <td v-if="canProfit" class="px-5 py-3.5">
                                 <div class="flex items-center justify-end gap-2">
                                     <div class="h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
-                                        <div :class="cn('h-full rounded-full', (p.margin ?? 0) >= 80 ? 'bg-emerald-500' : (p.margin ?? 0) >= 0 ? 'bg-blue-500' : 'bg-red-500')" :style="{ width: `${Math.max(0, Math.min(100, p.margin ?? 0))}%` }" />
+                                        <div :class="cn('h-full rounded-full', (p.margin ?? 0) < 0 ? 'bg-red-500' : (p.margin ?? 0) < 20 ? 'bg-amber-500' : 'bg-emerald-500')" :style="{ width: `${Math.max(0, Math.min(100, p.margin ?? 0))}%` }" />
                                     </div>
-                                    <span class="w-12 text-right tabular-nums text-slate-700">{{ p.margin == null ? '—' : `${p.margin.toLocaleString('vi-VN')}%` }}</span>
+                                    <span :class="cn('w-12 text-right tabular-nums', p.margin != null && p.margin < 20 ? 'text-amber-600' : 'text-slate-700')">{{ p.margin == null ? '—' : `${p.margin.toLocaleString('vi-VN')}%` }}</span>
                                     <span v-if="p.missing_cost_lines" class="grid size-4 place-items-center rounded bg-amber-50 text-amber-600" :title="`${p.missing_cost_lines} dòng chưa có giá vốn: biên lãi đang cao hơn thực tế`"><CircleHelp class="size-3" /></span>
                                     <span v-else class="size-4" />
                                 </div>

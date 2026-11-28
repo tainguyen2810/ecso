@@ -79,6 +79,11 @@ const summary = computed(() => {
     return rows.filter((r) => r.strong || always.includes(r.label) || r.value !== 0);
 });
 
+const costs = computed(() => line('selling_expenses') + line('stock_loss') + line('operating_expenses') + line('misc_expenses'));
+const oldestDebt = computed(() => {
+    const ages = ((data.value?.receivables.rows ?? []) as any[]).map((r) => r.age_days).filter((d): d is number => d !== null && d !== undefined);
+    return ages.length ? Math.max(...ages) : null;
+});
 const weeks = computed(() => (data.value?.book.weeks ?? []) as { from: string; to: string; in: number; out: number }[]);
 const weekMax = computed(() => Math.max(...weeks.value.flatMap((w) => [w.in, w.out]), 0));
 const dm = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
@@ -113,11 +118,12 @@ defineExpose({ exportCsv });
     <div v-else-if="!data" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Skeleton v-for="i in 4" :key="i" class="h-36" /></div>
     <div v-else :class="loading && 'opacity-60'" data-testid="report-group-finance">
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <ReportKpi v-if="hasPl" label="Doanh thu thuần" tip="Cùng con số với Báo cáo lãi lỗ và Báo cáo bán hàng: đơn đã hoàn thành trong kỳ, trừ chiết khấu và hàng trả." :icon="ChartColumn" tone="blue" plain :value="line('revenue')">
+            <ReportKpi v-if="hasPl" primary label="Doanh thu thuần" tip="Cùng con số với Báo cáo lãi lỗ và Báo cáo bán hàng: đơn đã hoàn thành trong kỳ, trừ chiết khấu và hàng trả." :icon="ChartColumn" :value="line('revenue')">
                 <template v-if="lineChange('revenue') !== null" #chips>
-                    <ReportChip :tone="lineChange('revenue')! >= 0 ? 'up' : 'down'"><component :is="lineChange('revenue')! >= 0 ? ArrowUp : ArrowDown" class="size-3" />{{ pct(lineChange('revenue')!) }}</ReportChip>
+                    <ReportChip tone="onblue"><component :is="lineChange('revenue')! >= 0 ? ArrowUp : ArrowDown" class="size-3" />{{ pct(lineChange('revenue')!) }}</ReportChip>
+                    <span class="text-blue-100">so với kỳ trước</span>
                 </template>
-                So với kỳ trước cùng độ dài
+                Đã trừ chiết khấu và hàng trả lại
             </ReportKpi>
             <ReportKpi v-if="hasPl" label="Lợi nhuận ước tính" tip="Lợi nhuận quản trị ước tính của Báo cáo lãi lỗ: đã trừ giá vốn, phí sàn, chi phí và hao hụt kho." :icon="TrendingUp" :tone="line('profit') < 0 ? 'red' : 'green'" :value="line('profit')">
                 <template #chips>
@@ -126,9 +132,9 @@ defineExpose({ exportCsv });
                 </template>
                 Đã trừ giá vốn, phí sàn và chi phí
             </ReportKpi>
-            <ReportKpi label="Tồn quỹ cuối kỳ" tip="Tiền trong các quỹ (tiền mặt, ngân hàng, ví…) cuối kỳ, theo Sổ quỹ." :icon="WalletCards" tone="blue" plain :value="data.book.closing">
+            <ReportKpi :primary="!hasPl" label="Tồn quỹ cuối kỳ" tip="Tiền trong các quỹ (tiền mặt, ngân hàng, ví…) cuối kỳ, theo Sổ quỹ." :icon="WalletCards" tone="blue" plain :value="data.book.closing">
                 <template v-if="fundsDelta !== null" #chips>
-                    <ReportChip :tone="fundsDelta >= 0 ? 'up' : 'down'"><component :is="fundsDelta >= 0 ? ArrowUp : ArrowDown" class="size-3" />{{ pct(fundsDelta) }} so với đầu kỳ</ReportChip>
+                    <ReportChip :tone="!hasPl ? 'onblue' : fundsDelta >= 0 ? 'up' : 'down'"><component :is="fundsDelta >= 0 ? ArrowUp : ArrowDown" class="size-3" />{{ pct(fundsDelta) }} so với đầu kỳ</ReportChip>
                 </template>
                 Hiện có: tiền mặt {{ short(fundsNow.cash) }} · ngân hàng {{ short(fundsNow.bank) }}
             </ReportKpi>
@@ -142,7 +148,7 @@ defineExpose({ exportCsv });
         <div class="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
             <div class="min-w-0 space-y-6">
                 <section v-if="link('Báo cáo lãi lỗ')">
-                    <h2 class="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Kết quả kinh doanh</h2>
+                    <h2 class="mb-3 text-[12px] font-semibold uppercase tracking-wider text-slate-400">Kết quả kinh doanh</h2>
                     <ReportLinkCard
                         :link="link('Báo cáo lãi lỗ')!"
                         :target="target"
@@ -151,28 +157,29 @@ defineExpose({ exportCsv });
                             { label: 'Doanh thu thuần', value: formatMoney(line('revenue')) },
                             { label: 'Giá vốn', value: formatMoney(line('cogs')) },
                             { label: 'Phí sàn', value: formatMoney(line('marketplace_fees')) },
-                            { label: 'Lợi nhuận', value: formatMoney(line('profit')) },
+                            { label: 'Chi phí', value: formatMoney(costs) },
+                            { label: 'Lợi nhuận', value: formatMoney(line('profit')), tone: line('profit') < 0 ? 'red' : 'green' },
                         ]"
                     />
                 </section>
                 <section>
-                    <h2 class="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Dòng tiền</h2>
+                    <h2 class="mb-3 text-[12px] font-semibold uppercase tracking-wider text-slate-400">Dòng tiền</h2>
                     <div class="grid gap-4 lg:grid-cols-2">
-                        <ReportLinkCard v-if="link('Sổ quỹ')" :link="link('Sổ quỹ')!" :target="target" :stats="[{ label: 'Đầu kỳ', value: short(data.book.opening) }, { label: 'Cuối kỳ', value: short(data.book.closing) }]" />
-                        <ReportLinkCard v-if="link('Thu chi theo loại')" :link="link('Thu chi theo loại')!" :target="target" tone="violet" :stats="[{ label: 'Thu', value: short(data.book.in) }, { label: 'Chi', value: short(data.book.out) }]" />
+                        <ReportLinkCard v-if="link('Sổ quỹ')" :link="link('Sổ quỹ')!" :target="target" :stats="[{ label: 'Đầu kỳ', value: short(data.book.opening) }, { label: 'Cuối kỳ', value: short(data.book.closing), tone: 'green' }]" />
+                        <ReportLinkCard v-if="link('Thu chi theo loại')" :link="link('Thu chi theo loại')!" :target="target" tone="violet" :stats="[{ label: 'Thu', value: short(data.book.in), tone: 'green' }, { label: 'Chi', value: short(data.book.out), tone: 'red' }]" />
                     </div>
                 </section>
                 <section>
-                    <h2 class="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Công nợ</h2>
+                    <h2 class="mb-3 text-[12px] font-semibold uppercase tracking-wider text-slate-400">Công nợ</h2>
                     <div class="grid gap-4 lg:grid-cols-2">
-                        <ReportLinkCard v-if="link('Công nợ khách hàng')" :link="link('Công nợ khách hàng')!" :target="target" tone="amber" :stats="[{ label: 'Còn nợ', value: short(data.receivables.totals.due) }, { label: 'Khách', value: formatNumber(data.receivables.totals.customers) }]" />
+                        <ReportLinkCard v-if="link('Công nợ khách hàng')" :link="link('Công nợ khách hàng')!" :target="target" tone="amber" :stats="[{ label: 'Còn nợ', value: short(data.receivables.totals.due), tone: 'amber' }, { label: 'Khách', value: formatNumber(data.receivables.totals.customers) }, ...(oldestDebt !== null ? [{ label: 'Lâu nhất', value: `${formatNumber(oldestDebt)} ngày` }] : [])]" />
                         <ReportLinkCard
                             v-if="link('Công nợ nhà cung cấp') && data.payables"
                             :link="link('Công nợ nhà cung cấp')!"
                             :target="target"
                             tone="red"
                             :badge="overdueSuppliers ? `${overdueSuppliers} quá hạn` : null"
-                            :stats="[{ label: 'Phải trả', value: short(data.payables.totals.debt) }, { label: 'NCC', value: formatNumber(data.payables.totals.suppliers) }]"
+                            :stats="[{ label: 'Phải trả', value: short(data.payables.totals.debt), tone: 'red' }, { label: 'NCC', value: formatNumber(data.payables.totals.suppliers) }]"
                         />
                     </div>
                 </section>
@@ -191,19 +198,20 @@ defineExpose({ exportCsv });
                         </div>
                     </dl>
                 </SideCard>
-                <SideCard title="Thu chi theo tuần" description="Tiền vào, tiền ra các quỹ">
+                <SideCard title="Thu chi theo tuần" description="Tiền vào, tiền ra các quỹ và chênh lệch">
                     <div class="space-y-3 px-5 py-4">
                         <div v-for="(w, i) in weeks" :key="w.from" class="flex items-center gap-3" :title="`${dm(w.from)} – ${dm(w.to)}: thu ${formatMoney(w.in)}, chi ${formatMoney(w.out)}`">
                             <span class="w-14 shrink-0 text-[13px] text-slate-600">Tuần {{ i + 1 }}</span>
                             <div class="min-w-0 flex-1 space-y-1">
                                 <div class="h-2 rounded-full bg-emerald-500" :style="{ width: `${weekMax ? Math.max(w.in ? 2 : 0, (w.in / weekMax) * 100) : 0}%` }" />
-                                <div class="h-2 rounded-full bg-red-400" :style="{ width: `${weekMax ? Math.max(w.out ? 2 : 0, (w.out / weekMax) * 100) : 0}%` }" />
+                                <div class="h-2 rounded-full bg-rose-400" :style="{ width: `${weekMax ? Math.max(w.out ? 2 : 0, (w.out / weekMax) * 100) : 0}%` }" />
                             </div>
+                            <span :class="cn('w-14 shrink-0 text-right text-[13px] font-medium tabular-nums', w.in - w.out < 0 ? 'text-red-600' : 'text-emerald-600')">{{ w.in - w.out > 0 ? '+' : w.in - w.out < 0 ? '−' : '' }}{{ short(Math.abs(w.in - w.out)) }}</span>
                         </div>
                         <p v-if="!weeks.length" class="text-sm text-slate-500">Chưa có thu chi trong kỳ.</p>
                         <div class="flex gap-4 pt-1 text-xs text-slate-600">
                             <span class="flex items-center gap-1.5"><i class="size-2.5 rounded-sm bg-emerald-500" />Thu {{ short(data.book.in) }}</span>
-                            <span class="flex items-center gap-1.5"><i class="size-2.5 rounded-sm bg-red-400" />Chi {{ short(data.book.out) }}</span>
+                            <span class="flex items-center gap-1.5"><i class="size-2.5 rounded-sm bg-rose-400" />Chi {{ short(data.book.out) }}</span>
                         </div>
                     </div>
                 </SideCard>
