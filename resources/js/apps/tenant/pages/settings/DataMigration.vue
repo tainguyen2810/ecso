@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 import { Bookmark, CheckCircle2, Download, FileSpreadsheet, TriangleAlert, Upload } from 'lucide-vue-next';
-import PageHeader from '../../PageHeader.vue';
+import SettingsShell from './SettingsShell.vue';
 import Alert from '@/shared/ui/Alert.vue';
 import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
@@ -315,224 +315,225 @@ function downloadProblems() {
 </script>
 
 <template>
-    <PageHeader title="Chuyển dữ liệu" description="Chuyển sản phẩm, tồn kho, khách hàng, công nợ, đơn hàng cũ và nhập hàng từ Sapo hoặc KiotViet sang EzChat Bán hàng bằng chính file xuất từ phần mềm cũ, không cần sửa cột." :back="{ to: '/settings', label: 'Cấu hình' }" />
+    <SettingsShell title="Chuyển dữ liệu" description="Chuyển sản phẩm, tồn kho, khách hàng, công nợ, đơn hàng cũ và nhập hàng từ Sapo hoặc KiotViet sang EzChat Bán hàng bằng chính file xuất từ phần mềm cũ, không cần sửa cột.">
 
-    <div class="grid gap-4 lg:grid-cols-[1fr_320px]">
-        <div class="space-y-4">
-            <Card class="p-4">
-                <h2 class="mb-3 font-semibold">1. Chọn dữ liệu cần chuyển</h2>
-                <div class="grid gap-3 sm:grid-cols-2">
-                    <button v-for="k in kinds" :key="k.key" type="button" :disabled="!k.allowed" :data-testid="`migrate-${k.key}`"
-                        class="rounded-lg border p-3 text-left transition disabled:opacity-50"
-                        :class="kind === k.key ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-muted/50'" @click="kind = k.key">
-                        <div class="font-medium">{{ k.title }}</div>
-                        <div class="mt-1 text-xs text-muted-foreground">{{ k.allowed ? k.hint : 'Bạn chưa có quyền nhập dữ liệu này.' }}</div>
-                    </button>
-                </div>
-            </Card>
-
-            <template v-if="kind === 'orders'">
-                <Card class="space-y-3 p-4" data-testid="migrate-orders">
-                    <h2 class="font-semibold">2. Lấy đơn hàng từ Sapo GO</h2>
-                    <div class="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
-                        <ol class="list-decimal space-y-1.5 pl-5">
-                            <li>
-                                Kéo nút này lên thanh dấu trang của Chrome (làm một lần):
-                                <a :href="ordersBookmarklet" draggable="true" data-testid="migrate-orders-bookmarklet"
-                                    class="ml-1 inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground no-underline"
-                                    @click.prevent="toast.info('Kéo nút này lên thanh dấu trang, rồi bấm nó khi đang mở trang Sapo.')"><Bookmark class="size-3.5" /> Lấy đơn hàng Sapo</a>
-                            </li>
-                            <li>Đăng nhập Sapo, mở <b>Đơn hàng → Danh sách đơn hàng</b> rồi bấm dấu trang <b>Lấy đơn hàng Sapo</b>. Giữ nguyên tab đến khi nút báo xong. Cứ 2.000 đơn được lưu thành một file <b>sapo-don-hang-….json</b>.</li>
-                            <li>Chọn <b>tất cả</b> các file đó và tải lên ô bên dưới.</li>
-                        </ol>
-                        <p class="text-xs text-muted-foreground">Đơn hủy, đơn hoàn thành và đơn đã giao được lấy sang. Đơn còn đang xử lý trên Sapo (chưa giao, mới giao dưới 14 ngày) được để lại: xử lý xong trên Sapo rồi lấy lại, đơn đã có sẽ không bị tạo trùng.</p>
+        <div class="grid gap-4 xl:grid-cols-[1fr_300px]">
+            <div class="space-y-4">
+                <Card class="p-4">
+                    <h2 class="mb-3 font-semibold">1. Chọn dữ liệu cần chuyển</h2>
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <button v-for="k in kinds" :key="k.key" type="button" :disabled="!k.allowed" :data-testid="`migrate-${k.key}`"
+                            class="rounded-lg border p-3 text-left transition disabled:opacity-50"
+                            :class="kind === k.key ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-muted/50'" @click="kind = k.key">
+                            <div class="font-medium">{{ k.title }}</div>
+                            <div class="mt-1 text-xs text-muted-foreground">{{ k.allowed ? k.hint : 'Bạn chưa có quyền nhập dữ liệu này.' }}</div>
+                        </button>
                     </div>
-                    <label class="flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed p-6 text-center text-sm hover:bg-muted/40">
-                        <Upload class="size-6 text-muted-foreground" />
-                        <span v-if="orderFiles.length" class="font-medium"><FileSpreadsheet class="inline size-4" /> {{ orderFiles.length }} file</span>
-                        <span v-else>Chọn các file sapo-don-hang-….json vừa lưu từ Sapo</span>
-                        <input type="file" accept=".json" multiple class="sr-only" data-testid="migrate-orders-files" @change="onOrderFiles" />
-                    </label>
-                    <p v-if="ordersProgress" class="text-sm text-muted-foreground" data-testid="migrate-orders-progress">{{ ordersProgress }}</p>
-                    <Alert v-for="f in orderFiles.filter((x) => x.error)" :key="f.file.name" tone="red">{{ f.file.name }}: {{ f.error }}</Alert>
-
-                    <template v-if="orderTotals.files && !ordersBusy">
-                        <div class="grid gap-3 sm:grid-cols-4" data-testid="migrate-orders-summary">
-                            <div class="rounded-lg border p-3"><div class="text-xs text-muted-foreground">Đơn sẽ nhập</div><div class="text-xl font-semibold tabular-nums">{{ formatNumber(orderTotals.orders) }}</div><div class="text-xs text-muted-foreground">{{ fmtDate(orderTotals.from) }} → {{ fmtDate(orderTotals.to) }}</div></div>
-                            <div class="rounded-lg border p-3"><div class="text-xs text-muted-foreground">Doanh thu trong các đơn</div><div class="whitespace-nowrap text-xl font-semibold tabular-nums">{{ formatMoneyShort(orderTotals.revenue) }}</div><div class="text-xs text-muted-foreground">Đơn đã giao, trừ đơn hủy</div></div>
-                            <div class="rounded-lg border p-3"><div class="text-xs text-muted-foreground">Đã có, chỉ cập nhật</div><div class="text-xl font-semibold tabular-nums">{{ formatNumber(orderTotals.updated + orderTotals.synced) }}</div><div class="text-xs text-muted-foreground">{{ formatNumber(orderTotals.synced) }} đơn sàn đã đồng bộ về</div></div>
-                            <div class="rounded-lg border p-3"><div class="text-xs text-muted-foreground">Còn xử lý trên Sapo</div><div class="text-xl font-semibold tabular-nums" :class="orderTotals.open ? 'text-amber-600' : ''">{{ formatNumber(orderTotals.open) }}</div><div class="text-xs text-muted-foreground">Để lại, lấy sau</div></div>
-                        </div>
-                        <div class="overflow-x-auto rounded border text-sm">
-                            <table class="w-full">
-                                <thead class="bg-muted/40 text-left text-xs text-muted-foreground"><tr><th class="px-3 py-1.5 font-medium">Mục</th><th class="px-3 py-1.5 font-medium">Kết quả</th><th class="px-3 py-1.5 font-medium">Cách xử lý</th></tr></thead>
-                                <tbody>
-                                    <tr class="border-t"><td class="px-3 py-1.5">Dòng sản phẩm</td><td class="px-3 py-1.5 tabular-nums">{{ formatNumber(orderTotals.lines - orderTotals.unmatchedLines) }}/{{ formatNumber(orderTotals.lines) }} khớp SKU</td><td class="px-3 py-1.5 text-muted-foreground">Khớp theo SKU, rồi mã vạch. Dòng không khớp giữ tên, giá như trên Sapo.</td></tr>
-                                    <tr class="border-t"><td class="px-3 py-1.5">Khách hàng</td><td class="px-3 py-1.5 tabular-nums">{{ formatNumber(orderTotals.customersFound) }} khách đã có · {{ formatNumber(orderTotals.customersNew) }} khách mới</td><td class="px-3 py-1.5 text-muted-foreground">Khớp theo mã khách, rồi số điện thoại. {{ formatNumber(orderTotals.walkIn) }} đơn khách lẻ giữ nguyên tên.</td></tr>
-                                    <tr class="border-t"><td class="px-3 py-1.5">Kênh bán</td><td class="px-3 py-1.5">{{ orderTotals.channels.map(([n, c]) => `${n} (${formatNumber(c)})`).join(', ') }}</td><td class="px-3 py-1.5 text-muted-foreground">Theo nguồn đơn trên Sapo. Kênh chưa có được tạo, để tắt.</td></tr>
-                                    <tr class="border-t"><td class="px-3 py-1.5">Đơn trả hàng</td><td class="px-3 py-1.5 tabular-nums">{{ formatNumber(orderTotals.returns) }}</td><td class="px-3 py-1.5 text-muted-foreground">Nối vào đơn gốc, không cộng lại kho.</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <details v-if="orderTotals.unmatched.length" class="text-sm" data-testid="migrate-orders-unmatched">
-                            <summary class="cursor-pointer text-amber-700">{{ formatNumber(orderTotals.unmatchedLines) }} dòng không khớp sản phẩm nào: xem mã</summary>
-                            <div class="mt-1 flex flex-wrap gap-1.5"><span v-for="[name, n] in orderTotals.unmatched" :key="name" class="rounded border bg-muted/40 px-2 py-0.5 text-xs">{{ name }} · {{ n }}</span></div>
-                        </details>
-                        <Alert tone="green" :icon="CheckCircle2">Đơn cũ chỉ là lịch sử: hiện trong Danh sách đơn hàng với nhãn Sapo và được tính vào mọi báo cáo, nhưng không trừ kho, không gửi tin cho khách. Khoản khách còn nợ đã chuyển ở mục Khách hàng nên không tính thêm lần nữa.</Alert>
-                    </template>
                 </Card>
-                <Card class="flex flex-wrap items-center justify-between gap-3 p-4">
-                    <div>
-                        <h2 class="font-semibold">3. Nhập vào EzChat Bán hàng</h2>
-                        <p class="text-sm text-muted-foreground">Nhập lại cùng file không tạo đơn trùng: đơn đã có chỉ được cập nhật trạng thái và thanh toán.</p>
-                    </div>
-                    <Button :disabled="!ordersReady" :loading="ordersBusy" data-testid="migrate-orders-run" @click="importOrders">Nhập {{ orderTotals.files ? formatNumber(orderTotals.orders + orderTotals.updated) : '' }} đơn</Button>
-                </Card>
-                <Alert v-if="ordersDone" tone="green" :icon="CheckCircle2" data-testid="migrate-orders-done">
-                    Đã nhập {{ formatNumber(orderTotals.orders) }} đơn, cập nhật {{ formatNumber(orderTotals.updated) }} đơn, {{ formatNumber(orderTotals.returns) }} đơn trả.
-                    <RouterLink to="/orders?source=sapo" class="ml-1 underline">Xem đơn cũ</RouterLink>
-                </Alert>
-            </template>
 
-            <SapoPurchasesMigration v-else-if="kind === 'purchases'" />
-            <SapoVouchersMigration v-else-if="kind === 'vouchers'" />
-
-            <template v-else>
-            <Card class="space-y-3 p-4">
-                <h2 class="font-semibold">2. Tải file lên</h2>
-                <template v-if="kind === 'products'">
-                    <div class="flex flex-wrap gap-2" role="tablist">
-                        <button type="button" role="tab" :aria-selected="how === 'file'" data-testid="migrate-how-file"
-                            class="rounded-md border px-3 py-1.5 text-sm" :class="how === 'file' ? 'border-primary bg-primary/5 font-medium text-primary' : 'hover:bg-muted/50'" @click="how = 'file'">Bằng file Excel</button>
-                        <button type="button" role="tab" :aria-selected="how === 'sapo'" data-testid="migrate-how-sapo"
-                            class="rounded-md border px-3 py-1.5 text-sm" :class="how === 'sapo' ? 'border-primary bg-primary/5 font-medium text-primary' : 'hover:bg-muted/50'" @click="how = 'sapo'">Lấy thẳng từ Sapo GO</button>
-                    </div>
-                    <p v-if="how === 'file'" class="text-sm text-muted-foreground">
-                        Trên Sapo: <b>Sản phẩm → Xuất file → Tất cả sản phẩm</b>. Trên KiotViet: <b>Hàng hóa → Xuất file</b>. Tải nguyên file đó lên đây, không cần sửa cột.
-                    </p>
-                    <div v-else class="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm" data-testid="migrate-sapo-steps">
-                        <p>Sapo GO không cấp khóa API cho cửa hàng, nên EzChat Bán hàng dùng một nút chạy ngay trong trang Sapo của bạn. Cách này lấy được tồn thực tế và giá vốn bình quân của từng chi nhánh, ảnh và combo. EzChat Bán hàng không cần mật khẩu Sapo.</p>
-                        <ol class="list-decimal space-y-1.5 pl-5">
-                            <li>
-                                Kéo nút này lên thanh dấu trang của Chrome (làm một lần):
-                                <a :href="bookmarklet" draggable="true" data-testid="migrate-bookmarklet"
-                                    class="ml-1 inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground no-underline"
-                                    @click.prevent="toast.info('Kéo nút này lên thanh dấu trang, rồi bấm nó khi đang mở trang Sapo.')"><Bookmark class="size-3.5" /> Lấy dữ liệu Sapo</a>
-                            </li>
-                            <li>Đăng nhập Sapo, mở <b>Sản phẩm → Danh sách sản phẩm</b> rồi bấm dấu trang <b>Lấy dữ liệu Sapo</b>. Trình duyệt lưu file <b>sapo-du-lieu-….json</b>.</li>
-                            <li>Tải file đó lên ô bên dưới.</li>
-                        </ol>
-                        <p class="text-xs text-muted-foreground">Nút đọc dữ liệu nội bộ của trang Sapo. Nếu Sapo thay đổi và nút báo lỗi, hãy dùng cách file Excel.</p>
-                    </div>
-                </template>
-                <label class="flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed p-6 text-center text-sm hover:bg-muted/40">
-                    <Upload class="size-6 text-muted-foreground" />
-                    <span v-if="file" class="font-medium"><FileSpreadsheet class="inline size-4" /> {{ file.name }}</span>
-                    <span v-else-if="kind === 'products' && how === 'sapo'">Chọn file sapo-du-lieu-….json vừa lưu từ Sapo</span>
-                    <span v-else>Chọn file Excel (.xlsx) hoặc CSV xuất từ Sapo, KiotViet hoặc file mẫu EzChat Bán hàng</span>
-                    <input type="file" :accept="kind === 'products' ? '.xlsx,.csv,.json' : '.xlsx,.csv'" class="sr-only" data-testid="migrate-file" @change="onFile" />
-                </label>
-                <div class="grid gap-3 sm:grid-cols-2">
-                    <FormField v-if="kind === 'products' && warehouses.length && !branches.length" label="Nhập tồn đầu kỳ vào kho">
-                        <Select v-model="warehouse" :options="warehouses.map((w) => ({ value: w.id, label: w.name }))" />
-                    </FormField>
-                    <label class="flex items-center gap-2 self-end pb-2 text-sm">
-                        <input v-model="skipInvalid" type="checkbox" data-testid="migrate-skip" /> Bỏ qua dòng lỗi, nhập các dòng còn lại
-                    </label>
-                    <label v-if="kind === 'products'" class="flex items-center gap-2 self-end pb-2 text-sm">
-                        <input v-model="withImages" type="checkbox" data-testid="migrate-images" /> Tải ảnh sản phẩm từ link trong file<template v-if="check?.images"> ({{ formatNumber(check.images) }} ảnh)</template>
-                    </label>
-                </div>
-                <p v-if="busy" class="text-sm text-muted-foreground">Đang đọc file…</p>
-
-                <template v-if="check && !busy">
-                    <template v-if="check.queued">
-                        <Alert tone="blue">File lớn: kiểm tra và nhập chạy ngầm trên máy chủ. Tiến độ hiện ngay dưới đây (cũng xem được ở <RouterLink to="/customers" class="underline">danh sách khách hàng</RouterLink>).</Alert>
-                        <CustomerImportJobStatus v-if="job" :job="job" />
-                    </template>
-                    <template v-else>
-                        <div class="flex flex-wrap items-center gap-2 text-sm" data-testid="migrate-summary">
-                            <Badge v-if="check.source" tone="info" data-testid="migrate-source">File {{ SOURCES[check.source] }}</Badge>
-                            <span v-if="check.total">{{ formatNumber(check.total) }} dòng</span>
-                            <span v-if="!check.errors.length">· tạo mới <b>{{ formatNumber(check.created) }}</b> · cập nhật <b>{{ formatNumber(check.updated) }}</b></span>
-                            <span v-if="check.debts">· <b>{{ formatNumber(check.debts) }}</b> khách có nợ đầu kỳ</span>
-                            <span v-if="check.skipped?.length" class="text-amber-700">· bỏ qua {{ check.skipped.length }} lỗi</span>
+                <template v-if="kind === 'orders'">
+                    <Card class="space-y-3 p-4" data-testid="migrate-orders">
+                        <h2 class="font-semibold">2. Lấy đơn hàng từ Sapo GO</h2>
+                        <div class="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
+                            <ol class="list-decimal space-y-1.5 pl-5">
+                                <li>
+                                    Kéo nút này lên thanh dấu trang của Chrome (làm một lần):
+                                    <a :href="ordersBookmarklet" draggable="true" data-testid="migrate-orders-bookmarklet"
+                                        class="ml-1 inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground no-underline"
+                                        @click.prevent="toast.info('Kéo nút này lên thanh dấu trang, rồi bấm nó khi đang mở trang Sapo.')"><Bookmark class="size-3.5" /> Lấy đơn hàng Sapo</a>
+                                </li>
+                                <li>Đăng nhập Sapo, mở <b>Đơn hàng → Danh sách đơn hàng</b> rồi bấm dấu trang <b>Lấy đơn hàng Sapo</b>. Giữ nguyên tab đến khi nút báo xong. Cứ 2.000 đơn được lưu thành một file <b>sapo-don-hang-….json</b>.</li>
+                                <li>Chọn <b>tất cả</b> các file đó và tải lên ô bên dưới.</li>
+                            </ol>
+                            <p class="text-xs text-muted-foreground">Đơn hủy, đơn hoàn thành và đơn đã giao được lấy sang. Đơn còn đang xử lý trên Sapo (chưa giao, mới giao dưới 14 ngày) được để lại: xử lý xong trên Sapo rồi lấy lại, đơn đã có sẽ không bị tạo trùng.</p>
                         </div>
-                        <div v-if="kind === 'products' && branches.length" class="text-sm" data-testid="migrate-branches">
-                            <div class="mb-1 text-muted-foreground">Tồn kho theo chi nhánh: chọn kho EzChat Bán hàng nhận tồn và giá vốn của từng chi nhánh</div>
-                            <div class="overflow-x-auto rounded border">
+                        <label class="flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed p-6 text-center text-sm hover:bg-muted/40">
+                            <Upload class="size-6 text-muted-foreground" />
+                            <span v-if="orderFiles.length" class="font-medium"><FileSpreadsheet class="inline size-4" /> {{ orderFiles.length }} file</span>
+                            <span v-else>Chọn các file sapo-don-hang-….json vừa lưu từ Sapo</span>
+                            <input type="file" accept=".json" multiple class="sr-only" data-testid="migrate-orders-files" @change="onOrderFiles" />
+                        </label>
+                        <p v-if="ordersProgress" class="text-sm text-muted-foreground" data-testid="migrate-orders-progress">{{ ordersProgress }}</p>
+                        <Alert v-for="f in orderFiles.filter((x) => x.error)" :key="f.file.name" tone="red">{{ f.file.name }}: {{ f.error }}</Alert>
+
+                        <template v-if="orderTotals.files && !ordersBusy">
+                            <div class="grid gap-3 sm:grid-cols-4" data-testid="migrate-orders-summary">
+                                <div class="rounded-lg border p-3"><div class="text-xs text-muted-foreground">Đơn sẽ nhập</div><div class="text-xl font-semibold tabular-nums">{{ formatNumber(orderTotals.orders) }}</div><div class="text-xs text-muted-foreground">{{ fmtDate(orderTotals.from) }} → {{ fmtDate(orderTotals.to) }}</div></div>
+                                <div class="rounded-lg border p-3"><div class="text-xs text-muted-foreground">Doanh thu trong các đơn</div><div class="whitespace-nowrap text-xl font-semibold tabular-nums">{{ formatMoneyShort(orderTotals.revenue) }}</div><div class="text-xs text-muted-foreground">Đơn đã giao, trừ đơn hủy</div></div>
+                                <div class="rounded-lg border p-3"><div class="text-xs text-muted-foreground">Đã có, chỉ cập nhật</div><div class="text-xl font-semibold tabular-nums">{{ formatNumber(orderTotals.updated + orderTotals.synced) }}</div><div class="text-xs text-muted-foreground">{{ formatNumber(orderTotals.synced) }} đơn sàn đã đồng bộ về</div></div>
+                                <div class="rounded-lg border p-3"><div class="text-xs text-muted-foreground">Còn xử lý trên Sapo</div><div class="text-xl font-semibold tabular-nums" :class="orderTotals.open ? 'text-amber-600' : ''">{{ formatNumber(orderTotals.open) }}</div><div class="text-xs text-muted-foreground">Để lại, lấy sau</div></div>
+                            </div>
+                            <div class="overflow-x-auto rounded border text-sm">
                                 <table class="w-full">
-                                    <thead class="bg-muted/40 text-left text-xs text-muted-foreground">
-                                        <tr><th class="px-2 py-1.5 font-medium">Chi nhánh trong file</th><th class="px-2 py-1.5 text-right font-medium">Tổng tồn</th><th class="px-2 py-1.5 font-medium">Đưa vào kho EzChat Bán hàng</th></tr>
-                                    </thead>
+                                    <thead class="bg-muted/40 text-left text-xs text-muted-foreground"><tr><th class="px-3 py-1.5 font-medium">Mục</th><th class="px-3 py-1.5 font-medium">Kết quả</th><th class="px-3 py-1.5 font-medium">Cách xử lý</th></tr></thead>
                                     <tbody>
-                                        <tr v-for="b in branches" :key="b.name" class="border-t">
-                                            <td class="px-2 py-1.5">{{ b.name }}</td>
-                                            <td class="px-2 py-1.5 text-right tabular-nums">{{ formatNumber(b.quantity) }}</td>
-                                            <td class="px-2 py-1.5">
-                                                <Select :model-value="branchChoice[b.name] ?? ''" class="h-8 min-w-44" :data-testid="`migrate-branch-${b.name}`"
-                                                    :options="[{ value: '', label: 'Không chuyển tồn' }, ...sellingWarehouses.map((w) => ({ value: w.id, label: w.name }))]"
-                                                    @update:model-value="(v: string | undefined) => chooseBranch(b.name, v ?? '')" />
-                                            </td>
-                                        </tr>
+                                        <tr class="border-t"><td class="px-3 py-1.5">Dòng sản phẩm</td><td class="px-3 py-1.5 tabular-nums">{{ formatNumber(orderTotals.lines - orderTotals.unmatchedLines) }}/{{ formatNumber(orderTotals.lines) }} khớp SKU</td><td class="px-3 py-1.5 text-muted-foreground">Khớp theo SKU, rồi mã vạch. Dòng không khớp giữ tên, giá như trên Sapo.</td></tr>
+                                        <tr class="border-t"><td class="px-3 py-1.5">Khách hàng</td><td class="px-3 py-1.5 tabular-nums">{{ formatNumber(orderTotals.customersFound) }} khách đã có · {{ formatNumber(orderTotals.customersNew) }} khách mới</td><td class="px-3 py-1.5 text-muted-foreground">Khớp theo mã khách, rồi số điện thoại. {{ formatNumber(orderTotals.walkIn) }} đơn khách lẻ giữ nguyên tên.</td></tr>
+                                        <tr class="border-t"><td class="px-3 py-1.5">Kênh bán</td><td class="px-3 py-1.5">{{ orderTotals.channels.map(([n, c]) => `${n} (${formatNumber(c)})`).join(', ') }}</td><td class="px-3 py-1.5 text-muted-foreground">Theo nguồn đơn trên Sapo. Kênh chưa có được tạo, để tắt.</td></tr>
+                                        <tr class="border-t"><td class="px-3 py-1.5">Đơn trả hàng</td><td class="px-3 py-1.5 tabular-nums">{{ formatNumber(orderTotals.returns) }}</td><td class="px-3 py-1.5 text-muted-foreground">Nối vào đơn gốc, không cộng lại kho.</td></tr>
                                     </tbody>
                                 </table>
                             </div>
-                            <p class="mt-1 text-xs text-muted-foreground">SKU đã có trong EzChat Bán hàng chỉ được cập nhật thông tin, không cộng thêm tồn.</p>
+                            <details v-if="orderTotals.unmatched.length" class="text-sm" data-testid="migrate-orders-unmatched">
+                                <summary class="cursor-pointer text-amber-700">{{ formatNumber(orderTotals.unmatchedLines) }} dòng không khớp sản phẩm nào: xem mã</summary>
+                                <div class="mt-1 flex flex-wrap gap-1.5"><span v-for="[name, n] in orderTotals.unmatched" :key="name" class="rounded border bg-muted/40 px-2 py-0.5 text-xs">{{ name }} · {{ n }}</span></div>
+                            </details>
+                            <Alert tone="green" :icon="CheckCircle2">Đơn cũ chỉ là lịch sử: hiện trong Danh sách đơn hàng với nhãn Sapo và được tính vào mọi báo cáo, nhưng không trừ kho, không gửi tin cho khách. Khoản khách còn nợ đã chuyển ở mục Khách hàng nên không tính thêm lần nữa.</Alert>
+                        </template>
+                    </Card>
+                    <Card class="flex flex-wrap items-center justify-between gap-3 p-4">
+                        <div>
+                            <h2 class="font-semibold">3. Nhập vào EzChat Bán hàng</h2>
+                            <p class="text-sm text-muted-foreground">Nhập lại cùng file không tạo đơn trùng: đơn đã có chỉ được cập nhật trạng thái và thanh toán.</p>
                         </div>
-                        <div v-if="recognised.length" class="text-sm">
-                            <div class="mb-1 text-muted-foreground">Cột đã nhận ra</div>
-                            <div class="flex flex-wrap gap-1.5" data-testid="migrate-columns">
-                                <span v-for="c in recognised" :key="c.header" class="rounded border bg-muted/40 px-2 py-0.5 text-xs">{{ c.header }} → <b>{{ KEYS[c.key!] ?? c.key }}</b></span>
-                            </div>
-                            <div v-if="ignored.length" class="mt-1 text-xs text-muted-foreground">Không dùng: {{ ignored.map((c) => c.header).join(', ') }}</div>
-                        </div>
-                        <Alert v-if="check.errors.length" tone="red" data-testid="migrate-errors">
-                            {{ check.errors.length }} lỗi, chưa nhập dòng nào. Sửa file rồi tải lại, hoặc tick “Bỏ qua dòng lỗi”.
-                        </Alert>
-                        <Alert v-if="check.zero_cost_rows?.length" tone="amber">{{ check.zero_cost_rows.length }} dòng có tồn nhưng chưa có giá vốn: giá vốn sẽ bắt đầu từ 0 ₫.</Alert>
-                        <div v-if="problems.length || check.warnings?.length" class="max-h-64 overflow-auto rounded border text-sm">
-                            <table class="w-full">
-                                <tbody>
-                                    <tr v-for="(p, i) in problems" :key="`e${i}`" class="border-b last:border-0"><td class="w-16 px-2 py-1 text-muted-foreground">Dòng {{ p.row }}</td><td class="px-2 py-1 text-destructive">{{ p.message }}</td></tr>
-                                    <tr v-for="(p, i) in check.warnings ?? []" :key="`w${i}`" class="border-b last:border-0"><td class="w-16 px-2 py-1 text-muted-foreground">Dòng {{ p.row }}</td><td class="px-2 py-1 text-amber-700"><TriangleAlert class="inline size-3.5" /> {{ p.message }}</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <Button v-if="problems.length" variant="outline" size="sm" @click="downloadProblems"><Download /> Tải danh sách lỗi</Button>
-                    </template>
+                        <Button :disabled="!ordersReady" :loading="ordersBusy" data-testid="migrate-orders-run" @click="importOrders">Nhập {{ orderTotals.files ? formatNumber(orderTotals.orders + orderTotals.updated) : '' }} đơn</Button>
+                    </Card>
+                    <Alert v-if="ordersDone" tone="green" :icon="CheckCircle2" data-testid="migrate-orders-done">
+                        Đã nhập {{ formatNumber(orderTotals.orders) }} đơn, cập nhật {{ formatNumber(orderTotals.updated) }} đơn, {{ formatNumber(orderTotals.returns) }} đơn trả.
+                        <RouterLink to="/orders?source=sapo" class="ml-1 underline">Xem đơn cũ</RouterLink>
+                    </Alert>
                 </template>
-            </Card>
 
-            <Card class="flex flex-wrap items-center justify-between gap-3 p-4">
-                <div>
-                    <h2 class="font-semibold">3. Nhập vào EzChat Bán hàng</h2>
-                    <p class="text-sm text-muted-foreground">SKU, mã khách hoặc số điện thoại đã có sẽ được cập nhật, không tạo trùng. Tồn đầu kỳ và nợ đầu kỳ chỉ ghi một lần.</p>
-                </div>
-                <Button v-if="job" :disabled="job.status !== 'checked'" :loading="jobBusy || jobRunning" data-testid="migrate-run" @click="runJob">{{ job.status === 'done' ? 'Đã nhập xong' : `Nhập ${job.status === 'checked' ? formatNumber(job.total) : ''} dòng` }}</Button>
-                    <Button v-else :disabled="!ready" :loading="busy" data-testid="migrate-run" @click="send(false)">Nhập {{ check && ready ? formatNumber(check.created + check.updated) : '' }} dòng</Button>
-            </Card>
+                <SapoPurchasesMigration v-else-if="kind === 'purchases'" />
+                <SapoVouchersMigration v-else-if="kind === 'vouchers'" />
 
-            <Alert v-if="done" tone="green" :icon="CheckCircle2" data-testid="migrate-done">
-                Đã tạo {{ formatNumber(done.created) }}, cập nhật {{ formatNumber(done.updated) }}<template v-if="done.products"> ({{ done.products }} sản phẩm)</template><template v-if="done.debts">, ghi nợ đầu kỳ cho {{ done.debts }} khách</template><template v-if="done.opening_receipts?.length">, phiếu tồn đầu kỳ {{ done.opening_receipts.join(', ') }}</template><template v-else-if="done.opening_receipt">, phiếu tồn đầu kỳ {{ done.opening_receipt }}</template>.<template v-if="done.images"> {{ formatNumber(done.images) }} ảnh đang được tải về, vài phút sau sẽ hiện trên sản phẩm.</template>
-                <RouterLink :to="kind === 'products' ? '/products' : '/customers'" class="ml-1 underline">Xem {{ kind === 'products' ? 'sản phẩm' : 'khách hàng' }}</RouterLink>
-            </Alert>
-            </template>
+                <template v-else>
+                <Card class="space-y-3 p-4">
+                    <h2 class="font-semibold">2. Tải file lên</h2>
+                    <template v-if="kind === 'products'">
+                        <div class="flex flex-wrap gap-2" role="tablist">
+                            <button type="button" role="tab" :aria-selected="how === 'file'" data-testid="migrate-how-file"
+                                class="rounded-md border px-3 py-1.5 text-sm" :class="how === 'file' ? 'border-primary bg-primary/5 font-medium text-primary' : 'hover:bg-muted/50'" @click="how = 'file'">Bằng file Excel</button>
+                            <button type="button" role="tab" :aria-selected="how === 'sapo'" data-testid="migrate-how-sapo"
+                                class="rounded-md border px-3 py-1.5 text-sm" :class="how === 'sapo' ? 'border-primary bg-primary/5 font-medium text-primary' : 'hover:bg-muted/50'" @click="how = 'sapo'">Lấy thẳng từ Sapo GO</button>
+                        </div>
+                        <p v-if="how === 'file'" class="text-sm text-muted-foreground">
+                            Trên Sapo: <b>Sản phẩm → Xuất file → Tất cả sản phẩm</b>. Trên KiotViet: <b>Hàng hóa → Xuất file</b>. Tải nguyên file đó lên đây, không cần sửa cột.
+                        </p>
+                        <div v-else class="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm" data-testid="migrate-sapo-steps">
+                            <p>Sapo GO không cấp khóa API cho cửa hàng, nên EzChat Bán hàng dùng một nút chạy ngay trong trang Sapo của bạn. Cách này lấy được tồn thực tế và giá vốn bình quân của từng chi nhánh, ảnh và combo. EzChat Bán hàng không cần mật khẩu Sapo.</p>
+                            <ol class="list-decimal space-y-1.5 pl-5">
+                                <li>
+                                    Kéo nút này lên thanh dấu trang của Chrome (làm một lần):
+                                    <a :href="bookmarklet" draggable="true" data-testid="migrate-bookmarklet"
+                                        class="ml-1 inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground no-underline"
+                                        @click.prevent="toast.info('Kéo nút này lên thanh dấu trang, rồi bấm nó khi đang mở trang Sapo.')"><Bookmark class="size-3.5" /> Lấy dữ liệu Sapo</a>
+                                </li>
+                                <li>Đăng nhập Sapo, mở <b>Sản phẩm → Danh sách sản phẩm</b> rồi bấm dấu trang <b>Lấy dữ liệu Sapo</b>. Trình duyệt lưu file <b>sapo-du-lieu-….json</b>.</li>
+                                <li>Tải file đó lên ô bên dưới.</li>
+                            </ol>
+                            <p class="text-xs text-muted-foreground">Nút đọc dữ liệu nội bộ của trang Sapo. Nếu Sapo thay đổi và nút báo lỗi, hãy dùng cách file Excel.</p>
+                        </div>
+                    </template>
+                    <label class="flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed p-6 text-center text-sm hover:bg-muted/40">
+                        <Upload class="size-6 text-muted-foreground" />
+                        <span v-if="file" class="font-medium"><FileSpreadsheet class="inline size-4" /> {{ file.name }}</span>
+                        <span v-else-if="kind === 'products' && how === 'sapo'">Chọn file sapo-du-lieu-….json vừa lưu từ Sapo</span>
+                        <span v-else>Chọn file Excel (.xlsx) hoặc CSV xuất từ Sapo, KiotViet hoặc file mẫu EzChat Bán hàng</span>
+                        <input type="file" :accept="kind === 'products' ? '.xlsx,.csv,.json' : '.xlsx,.csv'" class="sr-only" data-testid="migrate-file" @change="onFile" />
+                    </label>
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <FormField v-if="kind === 'products' && warehouses.length && !branches.length" label="Nhập tồn đầu kỳ vào kho">
+                            <Select v-model="warehouse" :options="warehouses.map((w) => ({ value: w.id, label: w.name }))" />
+                        </FormField>
+                        <label class="flex items-center gap-2 self-end pb-2 text-sm">
+                            <input v-model="skipInvalid" type="checkbox" data-testid="migrate-skip" /> Bỏ qua dòng lỗi, nhập các dòng còn lại
+                        </label>
+                        <label v-if="kind === 'products'" class="flex items-center gap-2 self-end pb-2 text-sm">
+                            <input v-model="withImages" type="checkbox" data-testid="migrate-images" /> Tải ảnh sản phẩm từ link trong file<template v-if="check?.images"> ({{ formatNumber(check.images) }} ảnh)</template>
+                        </label>
+                    </div>
+                    <p v-if="busy" class="text-sm text-muted-foreground">Đang đọc file…</p>
+
+                    <template v-if="check && !busy">
+                        <template v-if="check.queued">
+                            <Alert tone="blue">File lớn: kiểm tra và nhập chạy ngầm trên máy chủ. Tiến độ hiện ngay dưới đây (cũng xem được ở <RouterLink to="/customers" class="underline">danh sách khách hàng</RouterLink>).</Alert>
+                            <CustomerImportJobStatus v-if="job" :job="job" />
+                        </template>
+                        <template v-else>
+                            <div class="flex flex-wrap items-center gap-2 text-sm" data-testid="migrate-summary">
+                                <Badge v-if="check.source" tone="info" data-testid="migrate-source">File {{ SOURCES[check.source] }}</Badge>
+                                <span v-if="check.total">{{ formatNumber(check.total) }} dòng</span>
+                                <span v-if="!check.errors.length">· tạo mới <b>{{ formatNumber(check.created) }}</b> · cập nhật <b>{{ formatNumber(check.updated) }}</b></span>
+                                <span v-if="check.debts">· <b>{{ formatNumber(check.debts) }}</b> khách có nợ đầu kỳ</span>
+                                <span v-if="check.skipped?.length" class="text-amber-700">· bỏ qua {{ check.skipped.length }} lỗi</span>
+                            </div>
+                            <div v-if="kind === 'products' && branches.length" class="text-sm" data-testid="migrate-branches">
+                                <div class="mb-1 text-muted-foreground">Tồn kho theo chi nhánh: chọn kho EzChat Bán hàng nhận tồn và giá vốn của từng chi nhánh</div>
+                                <div class="overflow-x-auto rounded border">
+                                    <table class="w-full">
+                                        <thead class="bg-muted/40 text-left text-xs text-muted-foreground">
+                                            <tr><th class="px-2 py-1.5 font-medium">Chi nhánh trong file</th><th class="px-2 py-1.5 text-right font-medium">Tổng tồn</th><th class="px-2 py-1.5 font-medium">Đưa vào kho EzChat Bán hàng</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="b in branches" :key="b.name" class="border-t">
+                                                <td class="px-2 py-1.5">{{ b.name }}</td>
+                                                <td class="px-2 py-1.5 text-right tabular-nums">{{ formatNumber(b.quantity) }}</td>
+                                                <td class="px-2 py-1.5">
+                                                    <Select :model-value="branchChoice[b.name] ?? ''" class="h-8 min-w-44" :data-testid="`migrate-branch-${b.name}`"
+                                                        :options="[{ value: '', label: 'Không chuyển tồn' }, ...sellingWarehouses.map((w) => ({ value: w.id, label: w.name }))]"
+                                                        @update:model-value="(v: string | undefined) => chooseBranch(b.name, v ?? '')" />
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <p class="mt-1 text-xs text-muted-foreground">SKU đã có trong EzChat Bán hàng chỉ được cập nhật thông tin, không cộng thêm tồn.</p>
+                            </div>
+                            <div v-if="recognised.length" class="text-sm">
+                                <div class="mb-1 text-muted-foreground">Cột đã nhận ra</div>
+                                <div class="flex flex-wrap gap-1.5" data-testid="migrate-columns">
+                                    <span v-for="c in recognised" :key="c.header" class="rounded border bg-muted/40 px-2 py-0.5 text-xs">{{ c.header }} → <b>{{ KEYS[c.key!] ?? c.key }}</b></span>
+                                </div>
+                                <div v-if="ignored.length" class="mt-1 text-xs text-muted-foreground">Không dùng: {{ ignored.map((c) => c.header).join(', ') }}</div>
+                            </div>
+                            <Alert v-if="check.errors.length" tone="red" data-testid="migrate-errors">
+                                {{ check.errors.length }} lỗi, chưa nhập dòng nào. Sửa file rồi tải lại, hoặc tick “Bỏ qua dòng lỗi”.
+                            </Alert>
+                            <Alert v-if="check.zero_cost_rows?.length" tone="amber">{{ check.zero_cost_rows.length }} dòng có tồn nhưng chưa có giá vốn: giá vốn sẽ bắt đầu từ 0 ₫.</Alert>
+                            <div v-if="problems.length || check.warnings?.length" class="max-h-64 overflow-auto rounded border text-sm">
+                                <table class="w-full">
+                                    <tbody>
+                                        <tr v-for="(p, i) in problems" :key="`e${i}`" class="border-b last:border-0"><td class="w-16 px-2 py-1 text-muted-foreground">Dòng {{ p.row }}</td><td class="px-2 py-1 text-destructive">{{ p.message }}</td></tr>
+                                        <tr v-for="(p, i) in check.warnings ?? []" :key="`w${i}`" class="border-b last:border-0"><td class="w-16 px-2 py-1 text-muted-foreground">Dòng {{ p.row }}</td><td class="px-2 py-1 text-amber-700"><TriangleAlert class="inline size-3.5" /> {{ p.message }}</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <Button v-if="problems.length" variant="outline" size="sm" @click="downloadProblems"><Download /> Tải danh sách lỗi</Button>
+                        </template>
+                    </template>
+                </Card>
+
+                <Card class="flex flex-wrap items-center justify-between gap-3 p-4">
+                    <div>
+                        <h2 class="font-semibold">3. Nhập vào EzChat Bán hàng</h2>
+                        <p class="text-sm text-muted-foreground">SKU, mã khách hoặc số điện thoại đã có sẽ được cập nhật, không tạo trùng. Tồn đầu kỳ và nợ đầu kỳ chỉ ghi một lần.</p>
+                    </div>
+                    <Button v-if="job" :disabled="job.status !== 'checked'" :loading="jobBusy || jobRunning" data-testid="migrate-run" @click="runJob">{{ job.status === 'done' ? 'Đã nhập xong' : `Nhập ${job.status === 'checked' ? formatNumber(job.total) : ''} dòng` }}</Button>
+                        <Button v-else :disabled="!ready" :loading="busy" data-testid="migrate-run" @click="send(false)">Nhập {{ check && ready ? formatNumber(check.created + check.updated) : '' }} dòng</Button>
+                </Card>
+
+                <Alert v-if="done" tone="green" :icon="CheckCircle2" data-testid="migrate-done">
+                    Đã tạo {{ formatNumber(done.created) }}, cập nhật {{ formatNumber(done.updated) }}<template v-if="done.products"> ({{ done.products }} sản phẩm)</template><template v-if="done.debts">, ghi nợ đầu kỳ cho {{ done.debts }} khách</template><template v-if="done.opening_receipts?.length">, phiếu tồn đầu kỳ {{ done.opening_receipts.join(', ') }}</template><template v-else-if="done.opening_receipt">, phiếu tồn đầu kỳ {{ done.opening_receipt }}</template>.<template v-if="done.images"> {{ formatNumber(done.images) }} ảnh đang được tải về, vài phút sau sẽ hiện trên sản phẩm.</template>
+                    <RouterLink :to="kind === 'products' ? '/products' : '/customers'" class="ml-1 underline">Xem {{ kind === 'products' ? 'sản phẩm' : 'khách hàng' }}</RouterLink>
+                </Alert>
+                </template>
+            </div>
+
+            <Card class="h-fit space-y-2 p-4 text-sm">
+                <h2 class="font-semibold">Nên chuyển theo thứ tự</h2>
+                <ol class="list-decimal space-y-1 pl-5 text-muted-foreground">
+                    <li>Sản phẩm và tồn kho (tồn kho, giá vốn lấy từ file).</li>
+                    <li>Khách hàng, kèm nợ cần thu hiện tại thành nợ đầu kỳ.</li>
+                    <li>Đơn hàng cũ và trả hàng (Sapo GO): để báo cáo có số của những tháng trước.</li>
+                    <li>Nhà cung cấp và nhập hàng (Sapo GO): công nợ nhà cung cấp tính đúng như Sapo.</li>
+                    <li>Sổ quỹ (Sapo GO): phiếu thu chi tự lập, để báo cáo lãi lỗ có chi phí cũ.</li>
+                    <li>Kiểm tra lại vài sản phẩm, vài khách rồi mới bán.</li>
+                </ol>
+                <p class="text-muted-foreground">Phiên bản cùng tên sản phẩm được gộp làm một sản phẩm; giá trị thuộc tính thành tên phiên bản.</p>
+                <p class="text-muted-foreground">Mỗi chi nhánh Sapo vào một kho EzChat Bán hàng bạn chọn. SKU có dấu cách được đổi dấu cách thành gạch nối; mã vạch trùng chỉ giữ ở SKU đầu tiên. Mọi thay đổi đều được báo trước khi nhập.</p>
+                <p class="text-muted-foreground">Chưa hỗ trợ: điểm tích lũy (tạo lại bằng cộng điểm tay).</p>
+            </Card>
         </div>
-
-        <Card class="h-fit space-y-2 p-4 text-sm">
-            <h2 class="font-semibold">Nên chuyển theo thứ tự</h2>
-            <ol class="list-decimal space-y-1 pl-5 text-muted-foreground">
-                <li>Sản phẩm và tồn kho (tồn kho, giá vốn lấy từ file).</li>
-                <li>Khách hàng, kèm nợ cần thu hiện tại thành nợ đầu kỳ.</li>
-                <li>Đơn hàng cũ và trả hàng (Sapo GO): để báo cáo có số của những tháng trước.</li>
-                <li>Nhà cung cấp và nhập hàng (Sapo GO): công nợ nhà cung cấp tính đúng như Sapo.</li>
-                <li>Sổ quỹ (Sapo GO): phiếu thu chi tự lập, để báo cáo lãi lỗ có chi phí cũ.</li>
-                <li>Kiểm tra lại vài sản phẩm, vài khách rồi mới bán.</li>
-            </ol>
-            <p class="text-muted-foreground">Phiên bản cùng tên sản phẩm được gộp làm một sản phẩm; giá trị thuộc tính thành tên phiên bản.</p>
-            <p class="text-muted-foreground">Mỗi chi nhánh Sapo vào một kho EzChat Bán hàng bạn chọn. SKU có dấu cách được đổi dấu cách thành gạch nối; mã vạch trùng chỉ giữ ở SKU đầu tiên. Mọi thay đổi đều được báo trước khi nhập.</p>
-            <p class="text-muted-foreground">Chưa hỗ trợ: điểm tích lũy (tạo lại bằng cộng điểm tay).</p>
-        </Card>
-    </div>
+    </SettingsShell>
 </template>

@@ -38,7 +38,7 @@ async function save() {
 </script>
 
 <template>
-    <SettingsPage title="Thuế và chính sách giá" :saving="saving" :dirty="dirty" :can-save="tax.canSave.value" @save="save" @cancel="(tax.cancel(), pricing.cancel())">
+    <SettingsPage title="Thuế và chính sách giá" wide :saving="saving" :dirty="dirty" :can-save="tax.canSave.value" @save="save" @cancel="(tax.cancel(), pricing.cancel())">
         <template v-if="tax.form.value && pricing.form.value">
             <SettingsSection title="Thuế mặc định" description="Gán sẵn cho sản phẩm mới và dòng đơn nhập mới. Hộ kinh doanh nộp thuế theo phương pháp trực tiếp nên chọn “Giá đã bao gồm thuế”.">
                 <div class="grid gap-4 sm:grid-cols-2">
@@ -75,6 +75,6 @@ async function save() {
                 </table>
             </SettingsSection>
         </template>
+        <MarketplaceFeeTable />
     </SettingsPage>
-    <MarketplaceFeeTable />
 </template>
