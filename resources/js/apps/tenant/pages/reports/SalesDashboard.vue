@@ -362,10 +362,10 @@ const card = 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2
                     </div>
                     <span class="text-2xl font-bold tabular-nums text-slate-900">{{ formatNumber(overview.sales.orders) }}</span>
                 </header>
-                <ul class="grid gap-x-3 p-3 text-sm sm:grid-cols-2" data-testid="report-group-sales">
+                <ul class="grid grid-cols-2 gap-x-2 p-3 text-[13px]" data-testid="report-group-sales">
                     <li v-for="l in orderLinks" :key="l.title">
-                        <RouterLink :to="target(l)" :class="cn('flex items-center gap-2.5 rounded-md px-2 py-2 hover:bg-slate-50', l.to && 'report' in l.to && l.to.report === 'loss-orders' ? 'text-red-600' : 'text-slate-700 hover:text-blue-600')">
-                            <component :is="l.icon" class="size-4 shrink-0 opacity-70" />{{ l.title }}
+                        <RouterLink :to="target(l)" :class="cn('flex min-w-0 items-center gap-2 rounded-md px-2 py-2 hover:bg-slate-50', l.to && 'report' in l.to && l.to.report === 'loss-orders' ? 'text-red-600' : 'text-slate-700 hover:text-blue-600')">
+                            <component :is="l.icon" class="size-4 shrink-0 opacity-70" /><span class="truncate" :title="l.title">{{ l.title }}</span>
                         </RouterLink>
                     </li>
                 </ul>
@@ -381,9 +381,9 @@ const card = 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2
                         </div>
                         <span class="whitespace-nowrap text-xl font-bold tabular-nums text-emerald-600">{{ formatNumber(overview.finance?.payments.net ?? 0) }}<span class="ml-0.5 text-sm">đ</span></span>
                     </header>
-                    <ul class="grid gap-x-3 p-3 text-sm sm:grid-cols-2">
+                    <ul class="grid grid-cols-2 gap-x-2 p-3 text-[13px]">
                         <li v-for="c in byTitle('Thanh toán')!.chips" :key="c.by">
-                            <RouterLink :to="target(byTitle('Thanh toán')!, c.by)" class="flex items-center gap-2.5 rounded-md px-2 py-2 text-slate-700 hover:bg-slate-50 hover:text-blue-600"><FileText class="size-4 opacity-70" />{{ c.label }}</RouterLink>
+                            <RouterLink :to="target(byTitle('Thanh toán')!, c.by)" class="flex min-w-0 items-center gap-2 rounded-md px-2 py-2 text-slate-700 hover:bg-slate-50 hover:text-blue-600"><FileText class="size-4 shrink-0 opacity-70" /><span class="truncate">{{ c.label }}</span></RouterLink>
                         </li>
                     </ul>
                 </section>
@@ -396,9 +396,9 @@ const card = 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2
                         </div>
                         <span class="text-2xl font-bold tabular-nums text-slate-900">{{ formatNumber(overview.returns.returns) }}</span>
                     </header>
-                    <ul class="grid gap-x-3 p-3 text-sm sm:grid-cols-2">
+                    <ul class="grid grid-cols-2 gap-x-2 p-3 text-[13px]">
                         <li v-for="c in byTitle('Trả hàng')!.chips ?? []" :key="c.by">
-                            <RouterLink :to="target(byTitle('Trả hàng')!, c.by)" class="flex items-center gap-2.5 rounded-md px-2 py-2 text-slate-700 hover:bg-slate-50 hover:text-blue-600"><FileText class="size-4 opacity-70" />{{ c.label }}</RouterLink>
+                            <RouterLink :to="target(byTitle('Trả hàng')!, c.by)" class="flex min-w-0 items-center gap-2 rounded-md px-2 py-2 text-slate-700 hover:bg-slate-50 hover:text-blue-600"><FileText class="size-4 shrink-0 opacity-70" /><span class="truncate">{{ c.label }}</span></RouterLink>
                         </li>
                     </ul>
                 </section>
