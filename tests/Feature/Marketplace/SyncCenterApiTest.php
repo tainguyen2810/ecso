@@ -46,7 +46,10 @@ it('shows the overview of shops, tasks and problems', function () {
         ->assertJsonPath('data.shops.0.id', $this->shop->ulid)->assertJsonPath('data.shops.0.stock_drift', 1)
         ->assertJsonPath('data.tasks.by_type.webhook.success', 1)
         ->assertJsonPath('data.permissions.operate', true)
-        ->assertJsonPath('data.error_codes.rate_limited.auto_retry', true);
+        ->assertJsonPath('data.error_codes.rate_limited.auto_retry', true)
+        ->assertJsonCount(24, 'data.hourly');
+    // The task chart: the webhook of the order falls in the last hour.
+    expect(collect($this->api->getJson('/api/v1/sync-center/overview')->json('data.hourly'))->last()['n'])->toBeGreaterThanOrEqual(1);
 });
 
 it('normalizes statuses and records a standard error code on failed pushes', function () {

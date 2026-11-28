@@ -6,6 +6,7 @@ use App\Modules\Marketplace\Http\Controllers\ListingController;
 use App\Modules\Marketplace\Http\Controllers\MadeToOrderController;
 use App\Modules\Marketplace\Http\Controllers\MarketplaceAccountController;
 use App\Modules\Marketplace\Http\Controllers\MarketplacePricingController;
+use App\Modules\Marketplace\Http\Controllers\MarketplaceStatsController;
 use App\Modules\Marketplace\Http\Controllers\PriceController;
 use App\Modules\Marketplace\Http\Controllers\ShopSetupController;
 use App\Modules\Marketplace\Http\Controllers\SyncCenterController;
@@ -32,6 +33,7 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::post('marketplace-accounts/tiki/connect', [TikiController::class, 'connect'])->middleware(['real-tenant', 'throttle:10,1,marketplace.tiki.connect']);
     Route::post('marketplace-accounts/woocommerce/keys', [WooCommerceController::class, 'connectWithKeys'])->middleware(['real-tenant', 'throttle:10,1,marketplace.woocommerce.keys']);
     Route::get('marketplaces', [MarketplaceAccountController::class, 'catalog']);
+    Route::get('marketplace-stats', MarketplaceStatsController::class);
     Route::get('marketplace-accounts', [MarketplaceAccountController::class, 'index']);
     Route::post('marketplace-accounts/authorize/{marketplace}', [MarketplaceAccountController::class, 'authorizeShop'])->where('marketplace', '[a-z]+')->middleware(['real-tenant', 'throttle:10,1,marketplace.marketplace-accounts.authorize.x']);
     Route::post('marketplace-accounts/callback/{marketplace}', [MarketplaceAccountController::class, 'completeAuthorization'])->where('marketplace', '[a-z]+')->middleware(['real-tenant', 'throttle:10,1,marketplace.marketplace-accounts.callback.x']);

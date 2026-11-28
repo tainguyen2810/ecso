@@ -1,15 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, provide, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { ArrowLeft, Check, ImageOff, Link2, PackagePlus, RefreshCw, Search, Sparkles, Unlink, X } from 'lucide-vue-next';
-import PageHeader from '../../PageHeader.vue';
+import { Check, CircleHelp, ImageOff, Lightbulb, Link2, Link2Off, PackagePlus, Plus, RefreshCw, Search, Sparkles, Store, Unlink } from 'lucide-vue-next';
+import ChannelHead from './ChannelHead.vue';
+import ReportKpi from '../reports/ReportKpi.vue';
+import { btn, card, pill, th } from './channel';
 import Pagination from '../../components/Pagination.vue';
 import SkuPicker from '../../components/SkuPicker.vue';
-import Tabs from '../../components/Tabs.vue';
 import CreateFromMarketplace from './CreateFromMarketplace.vue';
-import Badge from '@/shared/ui/Badge.vue';
 import Button from '@/shared/ui/Button.vue';
-import Card from '@/shared/ui/Card.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
 import EmptyState from '@/shared/ui/EmptyState.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
@@ -28,6 +27,7 @@ import type { ListingSummary, ListingVariantData, MarketplaceAccountData, Varian
  * themselves (switch on top); what is left is "Cần xử lý": create the product from the shop, pick an existing one,
  * or confirm a near SKU.
  */
+provide('soft-cards', true);
 const route = useRoute();
 const tenant = useTenantStore();
 const toast = useToast();
@@ -143,6 +143,9 @@ function state(r: ListingVariantData): { label: string; tone: 'success' | 'warni
     return { label: r.creatable ? 'Chưa có trong kho' : 'Chưa liên kết', tone: 'warning' };
 }
 
+const chipTones = { success: 'bg-emerald-50 text-emerald-700', warning: 'bg-amber-50 text-amber-700', danger: 'bg-red-50 text-red-600', muted: 'bg-slate-100 text-slate-500', default: 'bg-violet-50 text-violet-700' };
+const chip = (r: ListingVariantData) => `inline-flex whitespace-nowrap rounded-md px-2 py-0.5 text-[12px] font-medium ${chipTones[state(r).tone]}`;
+
 /** "Product title · variant name · SKU sàn: X" without the empty parts (simple Woo products have no variant name). */
 function pickingLabel(r: ListingVariantData): string {
     return [r.title, r.name, r.seller_sku ? `SKU trên sàn: ${r.seller_sku}` : 'Sản phẩm trên sàn chưa có SKU'].filter(Boolean).join(' · ');
@@ -154,100 +157,127 @@ function pickVariant(v: Variant) {
 </script>
 
 <template>
-    <RouterLink to="/marketplaces" class="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft class="size-4" /> {{ shopLabel || 'Kết nối sàn' }}</RouterLink>
-    <PageHeader title="Liên kết sản phẩm" description="Mỗi mã trên sàn nối với một mã trong kho, để giữ tồn khi có đơn và đẩy tồn lên sàn. Không bao giờ ghép theo tên.">
-        <Button v-if="canMap" variant="outline" :loading="busy === 'pull'" data-testid="listings-pull" @click="pull"><RefreshCw /> Lấy lại hàng từ sàn</Button>
-    </PageHeader>
+    <ChannelHead title="Liên kết sản phẩm" :description="shopLabel" :marketplace="account?.marketplace" :crumbs="account ? [{ label: marketplaceNames[account.marketplace] ?? account.marketplace, to: `/marketplaces?san=${account.marketplace}` }] : []">
+        <button v-if="canMap" type="button" :class="btn.outline" :disabled="busy === 'pull'" data-testid="listings-pull" @click="pull"><RefreshCw :class="['size-4', busy === 'pull' && 'animate-spin']" /> Lấy lại hàng từ sàn</button>
+        <button v-if="canMap && summary?.creatable_products" type="button" :class="btn.primary" data-testid="listing-create-all" @click="openCreate()"><PackagePlus class="size-4" /> Tạo {{ formatNumber(summary.creatable_products) }} sản phẩm từ sàn</button>
+    </ChannelHead>
 
-    <div v-if="summary" class="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" data-testid="listing-summary">
-        <Card class="p-4"><p class="text-sm text-muted-foreground">Mã trên sàn</p><p class="text-2xl font-semibold tabular-nums">{{ formatNumber(summary.variants) }}</p><p class="text-xs text-muted-foreground">{{ formatNumber(summary.products) }} sản phẩm</p></Card>
-        <Card class="p-4"><p class="text-sm text-muted-foreground">Đã liên kết</p><p class="text-2xl font-semibold tabular-nums text-emerald-700">{{ formatNumber(summary.mapped) }}</p><p class="text-xs text-muted-foreground">{{ formatNumber(summary.linked_by_sku) }} tự liên kết vì SKU trùng</p></Card>
-        <Card class="border-amber-200 bg-amber-50/40 p-4"><p class="text-sm text-muted-foreground">Chưa liên kết</p><p class="text-2xl font-semibold tabular-nums text-amber-700">{{ formatNumber(summary.unmapped) }}</p><p class="text-xs text-muted-foreground">Tạo sản phẩm hoặc chọn mã có sẵn</p></Card>
-        <Card class="border-sky-200 bg-sky-50/40 p-4"><p class="text-sm text-muted-foreground">Cần xác nhận</p><p class="text-2xl font-semibold tabular-nums text-sky-700">{{ formatNumber(summary.suggested) }}</p><p class="text-xs text-muted-foreground">SKU gần giống, chưa chắc</p></Card>
+    <div v-if="summary" class="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="listing-summary">
+        <ReportKpi label="Mã trên sàn" :icon="Store" tone="blue" plain :value="summary.variants" unit="">{{ formatNumber(summary.products) }} sản phẩm · {{ formatNumber(summary.variants) }} phân loại</ReportKpi>
+        <ReportKpi label="Đã liên kết" :icon="Link2" tone="green" plain :value="summary.mapped" unit="">
+            <div class="mb-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-emerald-500" :style="{ width: `${summary.variants ? Math.round((summary.mapped / summary.variants) * 100) : 0}%` }" /></div>
+            {{ formatNumber(summary.linked_by_sku) }} tự liên kết vì SKU trùng
+        </ReportKpi>
+        <ReportKpi label="Chưa liên kết" :icon="Link2Off" tone="amber" :value="summary.unmapped" unit="">Tạo sản phẩm hoặc chọn mã có sẵn</ReportKpi>
+        <ReportKpi label="Cần xác nhận" :icon="CircleHelp" tone="violet" :value="summary.suggested" unit="">SKU gần giống, chưa chắc</ReportKpi>
     </div>
 
-    <Card v-if="canMap && summary?.creatable_products" class="mb-4 flex flex-wrap items-center gap-4 border-primary/20 bg-primary/5 p-4" data-testid="listing-create-banner">
-        <Sparkles class="size-5 text-primary" />
-        <div class="min-w-0 flex-1">
-            <p class="font-medium">{{ formatNumber(summary.creatable_variants) }} mã trên sàn chưa có trong kho</p>
-            <p class="text-sm text-muted-foreground">Tạo {{ formatNumber(summary.creatable_products) }} sản phẩm có sẵn tên, ảnh, phân loại và giá đang bán trên sàn, rồi tự liên kết.</p>
+    <div v-if="canMap && summary?.creatable_products" :class="[card, 'mb-5 flex flex-wrap items-center gap-4 border-blue-100 bg-blue-50/50 p-4']" data-testid="listing-create-banner">
+        <span class="grid size-10 shrink-0 place-items-center rounded-[11px] bg-white text-blue-600 shadow-sm"><Sparkles class="size-5" /></span>
+        <div class="min-w-0 flex-1 text-[14px]">
+            <p class="font-semibold text-slate-900">{{ formatNumber(summary.creatable_variants) }} mã trên sàn chưa có trong kho</p>
+            <p class="text-slate-500">Tạo {{ formatNumber(summary.creatable_products) }} sản phẩm có sẵn tên, ảnh, phân loại và giá đang bán trên sàn, rồi tự liên kết.</p>
         </div>
-        <Button data-testid="listing-create-all" @click="openCreate()"><PackagePlus /> Tạo {{ formatNumber(summary.creatable_products) }} sản phẩm từ sàn</Button>
-    </Card>
+        <button type="button" :class="btn.small" @click="openCreate()"><PackagePlus class="size-4" /> Xem và tạo</button>
+    </div>
+    <div v-else :class="[card, 'mb-5 flex items-center gap-4 border-blue-100 bg-blue-50/40 p-4 text-[14px] text-slate-600']">
+        <span class="grid size-10 shrink-0 place-items-center rounded-[11px] bg-white text-blue-600 shadow-sm"><Lightbulb class="size-5" /></span>
+        Mỗi mã trên sàn nối với một mã trong kho để giữ tồn khi có đơn và đẩy tồn lên sàn. Phần mềm không bao giờ ghép theo tên, chỉ gợi ý khi SKU gần giống để bạn xác nhận.
+    </div>
 
-    <Card>
-        <div class="flex flex-wrap items-center gap-3 border-b px-3">
-            <Tabs v-model="status" :tabs="tabs" variant="underline" />
-            <div v-if="canMap && account" class="ml-auto py-2" data-testid="listing-auto-link"><Switch v-model="autoLink" label="Tự liên kết khi SKU trùng" :disabled="busy === 'auto'" /></div>
-        </div>
-        <div class="border-b p-4">
-            <div class="relative max-w-md">
-                <Search class="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                <Input v-model="q" class="pl-8" placeholder="Tên, SKU trên sàn, ID trên sàn…" />
+    <div :class="card">
+        <div class="flex flex-wrap items-center gap-3 border-b border-slate-100 p-4">
+            <div class="flex max-w-full flex-wrap gap-1 rounded-[12px] bg-slate-100 p-1 text-[14px]">
+                <button v-for="t in tabs" :key="t.value" type="button" :class="pill(status === t.value)" @click="status = t.value">
+                    {{ t.label }}
+                    <span v-if="t.count !== null && t.count !== undefined" :class="['rounded-md px-1.5 text-[12px] tabular-nums', status === t.value ? 'bg-blue-50 text-blue-700' : 'bg-white/70 text-slate-500']">{{ formatNumber(t.count) }}</span>
+                </button>
+            </div>
+            <div class="ml-auto flex flex-wrap items-center gap-4">
+                <div class="relative w-full sm:w-80">
+                    <Search class="pointer-events-none absolute left-3 top-3 size-4 text-slate-400" />
+                    <Input v-model="q" class="h-10 pl-9" placeholder="Tên, SKU trên sàn, ID trên sàn…" />
+                </div>
+                <div v-if="canMap && account" data-testid="listing-auto-link"><Switch v-model="autoLink" label="Tự liên kết khi SKU trùng" :disabled="busy === 'auto'" /></div>
             </div>
         </div>
-        <div v-if="loading && !rows.length" class="space-y-3 p-4"><Skeleton v-for="i in 6" :key="i" class="h-12" /></div>
+        <div v-if="loading && !rows.length" class="space-y-3 p-4"><Skeleton v-for="i in 6" :key="i" class="h-14" /></div>
         <ErrorState v-else-if="loadError" :message="loadError" @retry="load" />
         <EmptyState v-else-if="!rows.length" :icon="Link2" :title="status === 'todo' ? 'Không còn mã nào cần xử lý' : 'Không có mã nào'" :description="status === 'todo' ? 'Mọi mã trên sàn đã liên kết hoặc đã bỏ qua.' : 'Bấm “Lấy lại hàng từ sàn” để lấy danh sách sản phẩm.'" />
         <div v-else class="overflow-x-auto">
-            <table class="w-full text-sm" data-testid="listing-table">
-                <thead class="border-b bg-slate-50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+            <table class="w-full text-[14px]" data-testid="listing-table">
+                <thead class="border-b border-slate-100 text-left">
                     <tr>
-                        <th v-if="canMap" class="w-10 px-4 py-2.5"><input type="checkbox" class="size-4" :checked="allPicked" aria-label="Chọn tất cả" @change="toggleAll" /></th>
-                        <th class="px-4 py-2.5 font-medium">Hàng trên sàn</th>
-                        <th class="px-4 py-2.5 font-medium">SKU trên sàn</th>
-                        <th class="px-4 py-2.5 text-right font-medium">Giá bán</th>
-                        <th class="px-4 py-2.5 text-right font-medium">Tồn sàn</th>
-                        <th class="px-4 py-2.5 font-medium">Trạng thái</th>
-                        <th class="px-4 py-2.5 font-medium">{{ canMap ? 'Việc cần làm' : '' }}</th>
+                        <th v-if="canMap" :class="[th, 'w-10']"><input type="checkbox" class="size-4 accent-blue-600" :checked="allPicked" aria-label="Chọn tất cả" @change="toggleAll" /></th>
+                        <th :class="th">Hàng trên sàn</th>
+                        <th :class="th">SKU trên sàn</th>
+                        <th :class="[th, 'text-right']">Giá bán</th>
+                        <th :class="[th, 'text-right']">Tồn sàn</th>
+                        <th :class="th">Trạng thái</th>
+                        <th :class="[th, 'min-w-[420px]']">Mã trong kho</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y">
-                    <tr v-for="r in rows" :key="r.id" :class="selected.has(r.id) && 'bg-primary/5'">
-                        <td v-if="canMap" class="px-4 py-3"><input type="checkbox" class="size-4" :checked="selected.has(r.id)" :aria-label="r.title" @change="toggle(r.id)" /></td>
-                        <td class="max-w-80 px-4 py-3">
+                <tbody class="divide-y divide-slate-100">
+                    <tr v-for="r in rows" :key="r.id" :class="selected.has(r.id) && 'bg-blue-50/40'">
+                        <td v-if="canMap" class="px-4 py-3.5"><input type="checkbox" class="size-4 accent-blue-600" :checked="selected.has(r.id)" :aria-label="r.title" @change="toggle(r.id)" /></td>
+                        <td class="max-w-80 px-4 py-3.5">
                             <div class="flex items-center gap-3">
-                                <img v-if="r.image_url" :src="r.image_url" alt="" class="size-11 shrink-0 rounded-lg border object-cover" loading="lazy" />
-                                <span v-else class="grid size-11 shrink-0 place-items-center rounded-lg border border-dashed bg-slate-50 text-slate-300"><ImageOff class="size-5" /></span>
+                                <img v-if="r.image_url" :src="r.image_url" alt="" class="size-11 shrink-0 rounded-[10px] border border-slate-200 object-cover" loading="lazy" />
+                                <span v-else class="grid size-11 shrink-0 place-items-center rounded-[10px] bg-slate-50 text-slate-300"><ImageOff class="size-5" /></span>
                                 <div class="min-w-0">
-                                    <div class="truncate font-medium">{{ r.title }}</div>
-                                    <div class="truncate text-xs text-muted-foreground">{{ r.name || `ID ${r.external_sku_id}` }}</div>
+                                    <div class="truncate font-medium text-slate-900">{{ r.title }}</div>
+                                    <div class="truncate text-[12px] text-slate-500">{{ r.name ? `Phân loại: ${r.name} · ` : '' }}ID {{ r.external_sku_id }}</div>
                                 </div>
                             </div>
                         </td>
-                        <td class="px-4 py-3 font-mono text-xs">
+                        <td class="whitespace-nowrap px-4 py-3.5 font-mono text-[13px] text-slate-700">
                             <span v-if="r.seller_sku">{{ r.seller_sku }}</span>
-                            <span v-else class="font-sans text-rose-600">Chưa có SKU trên sàn</span>
+                            <span v-else class="font-sans text-red-600">Chưa có SKU</span>
                         </td>
-                        <td class="whitespace-nowrap px-4 py-3 text-right tabular-nums">{{ formatMoney(r.price) }}</td>
-                        <td class="px-4 py-3 text-right tabular-nums">{{ r.marketplace_stock ?? '—' }}</td>
-                        <td class="px-4 py-3">
-                            <Badge :tone="state(r).tone" class="whitespace-nowrap">{{ state(r).label }}</Badge>
-                            <div v-if="r.mapping_status === 'mapped' && r.variant" class="mt-1 text-xs"><span class="font-mono">{{ r.variant.sku }}</span> <span class="text-muted-foreground">· {{ r.variant.name }}</span></div>
-                            <div v-if="r.push_status && r.mapping_status === 'mapped'" class="mt-1 text-xs">
-                                <span :class="pushStatus[r.push_status]?.tone === 'danger' ? 'text-destructive' : 'text-muted-foreground'">Tồn: {{ pushStatus[r.push_status]?.label ?? r.push_status }}</span>
-                                <span v-if="r.last_pushed_qty !== null" class="text-muted-foreground"> · {{ formatNumber(r.last_pushed_qty) }} · {{ formatDateTime(r.last_pushed_at) }}</span>
-                                <div v-if="r.push_status === 'unsupported'" class="max-w-56 text-muted-foreground">{{ manualStockHint }}</div>
-                                <div v-else-if="r.push_error" class="text-destructive">{{ r.push_error }}</div>
+                        <td class="whitespace-nowrap px-4 py-3.5 text-right tabular-nums">{{ formatMoney(r.price) }}</td>
+                        <td class="px-4 py-3.5 text-right tabular-nums">{{ r.marketplace_stock ?? '—' }}</td>
+                        <td class="px-4 py-3.5">
+                            <span :class="chip(r)">{{ state(r).label }}</span>
+                            <div v-if="r.push_status && r.mapping_status === 'mapped'" class="mt-1 text-[12px]">
+                                <span :class="pushStatus[r.push_status]?.tone === 'danger' ? 'text-red-600' : 'text-slate-500'">Tồn: {{ pushStatus[r.push_status]?.label ?? r.push_status }}</span>
+                                <span v-if="r.last_pushed_qty !== null" class="text-slate-500"> · {{ formatNumber(r.last_pushed_qty) }} · {{ formatDateTime(r.last_pushed_at) }}</span>
+                                <div v-if="r.push_status === 'unsupported'" class="max-w-56 text-slate-500">{{ manualStockHint }}</div>
+                                <div v-else-if="r.push_error" class="max-w-56 text-red-600">{{ r.push_error }}</div>
                             </div>
                         </td>
                         <td class="px-4 py-3">
-                            <div v-if="canMap" class="flex items-center gap-1" :class="r.mapping_status === 'mapped' ? 'flex-nowrap' : 'flex-wrap'">
-                                <template v-if="r.mapping_status === 'suggested' && r.variant">
-                                    <div class="mb-1 w-full text-xs text-muted-foreground">Có thể là <b class="font-mono text-foreground">{{ r.variant.sku }}</b>?</div>
-                                    <Button size="sm" variant="outline" :loading="busy === r.id" @click="map(r, r.variant)"><Check /> Đúng, liên kết</Button>
-                                    <Button size="sm" variant="ghost" @click="picking = r">Chọn khác</Button>
+                            <div v-if="r.mapping_status === 'suggested' && r.variant" class="flex flex-wrap items-center gap-2 rounded-[12px] border border-slate-200 bg-slate-50/60 px-3 py-2">
+                                <div class="min-w-0 flex-1">
+                                    <div class="truncate font-medium text-slate-900">{{ r.variant.name }}</div>
+                                    <div class="text-[12px] text-slate-500"><span class="font-mono">{{ r.variant.sku }}</span> · {{ r.near_match ? 'SKU gần giống' : 'gợi ý' }}</div>
+                                </div>
+                                <template v-if="canMap">
+                                    <button type="button" :class="btn.smallPrimary" :disabled="busy === r.id" @click="map(r, r.variant)"><Check class="size-4" /> Đúng, liên kết</button>
+                                    <button type="button" :class="btn.small" @click="picking = r">Chọn khác</button>
                                 </template>
-                                <template v-else-if="r.mapping_status === 'unmapped'">
-                                    <Button v-if="r.creatable" size="sm" variant="outline" :data-testid="`listing-create-${r.id}`" @click="openCreate([r.listing_id!])"><PackagePlus /> Tạo sản phẩm</Button>
-                                    <Button size="sm" variant="ghost" @click="picking = r">Chọn có sẵn</Button>
-                                    <Button size="sm" variant="ghost" :loading="busy === r.id" title="Bỏ qua mã này" aria-label="Bỏ qua mã này" @click="unmap(r, true)"><X /></Button>
+                            </div>
+                            <div v-else-if="r.mapping_status === 'unmapped'" class="flex flex-wrap items-center gap-2 rounded-[12px] border border-dashed border-amber-300 bg-amber-50/40 px-3 py-2">
+                                <span class="min-w-0 flex-1 text-[13px] text-amber-700">{{ r.creatable ? 'Chưa có mã nào trong kho khớp' : 'Chưa liên kết' }}</span>
+                                <template v-if="canMap">
+                                    <button type="button" :class="btn.small" @click="picking = r"><Search class="size-4" /> Chọn có sẵn</button>
+                                    <button v-if="r.creatable" type="button" :class="[btn.small, 'border-blue-100 bg-blue-50 text-blue-700']" :data-testid="`listing-create-${r.id}`" @click="openCreate([r.listing_id!])"><Plus class="size-4" /> Tạo sản phẩm</button>
+                                    <button type="button" class="px-2 text-[13px] text-slate-500 hover:text-slate-900 disabled:opacity-50" :disabled="busy === r.id" @click="unmap(r, true)">Bỏ qua</button>
                                 </template>
-                                <template v-else-if="r.mapping_status === 'mapped'">
-                                    <Button size="sm" variant="ghost" @click="picking = r">Đổi</Button>
-                                    <Button size="sm" variant="ghost" :loading="busy === r.id" title="Bỏ liên kết" aria-label="Bỏ liên kết" @click="unmap(r)"><Unlink /></Button>
+                            </div>
+                            <div v-else-if="r.mapping_status === 'mapped'" class="flex items-center gap-3 rounded-[12px] bg-slate-50 px-3 py-2">
+                                <Link2 class="size-4 shrink-0 text-emerald-600" />
+                                <div class="min-w-0 flex-1">
+                                    <div class="truncate font-medium text-slate-900">{{ r.variant?.name ?? 'Đã liên kết' }}</div>
+                                    <div class="font-mono text-[12px] text-slate-500">{{ r.variant?.sku ?? '—' }}</div>
+                                </div>
+                                <template v-if="canMap">
+                                    <button type="button" class="px-2 text-[13px] text-slate-600 hover:text-blue-700" @click="picking = r">Đổi</button>
+                                    <button type="button" class="grid size-8 place-items-center rounded-lg text-slate-400 hover:bg-white hover:text-red-600 disabled:opacity-50" :disabled="busy === r.id" title="Bỏ liên kết" aria-label="Bỏ liên kết" @click="unmap(r)"><Unlink class="size-4" /></button>
                                 </template>
-                                <Button v-else size="sm" variant="ghost" @click="picking = r">Liên kết</Button>
+                            </div>
+                            <div v-else class="flex items-center gap-2 rounded-[12px] bg-slate-50 px-3 py-2 text-[13px] text-slate-500">
+                                <span class="flex-1">Đã bỏ qua, không theo dõi tồn mã này</span>
+                                <button v-if="canMap" type="button" :class="btn.small" @click="picking = r">Liên kết</button>
                             </div>
                         </td>
                     </tr>
@@ -261,7 +291,7 @@ function pickVariant(v: Variant) {
             <button type="button" class="ml-auto text-sm text-white/70 hover:text-white" @click="selected = new Set()">Bỏ chọn</button>
         </div>
         <Pagination :page="meta.current_page" :last-page="meta.last_page" :total="meta.total" @go="(p) => ((page = p), load())" />
-    </Card>
+    </div>
 
     <CreateFromMarketplace v-if="account" v-model:open="creating" :account-id="accountId" :marketplace="account.marketplace" :preselected="createOnly" @done="load" />
 
