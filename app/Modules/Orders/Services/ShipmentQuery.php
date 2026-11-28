@@ -26,6 +26,9 @@ class ShipmentQuery
     /** A parcel still on its way this many days after pickup is late. */
     public const LATE_DAYS = 5;
 
+    /** COD a carrier still holds this many days after delivery, or a parcel coming back this long, is flagged. */
+    public const SLOW_DAYS = 7;
+
     /** @return array<string, list<mixed>> */
     public static function rules(): array
     {

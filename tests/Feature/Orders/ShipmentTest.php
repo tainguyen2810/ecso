@@ -44,7 +44,9 @@ it('opens a shipment at handover and follows the order to delivery, with the COD
     expect(array_column($detail['events'], 'status'))->toBe(['delivered', 'picked_up', 'picked_up'])->and($detail['status_label'])->toBe('Giao thành công');
     expect($this->api->getJson("/api/v1/orders/{$id}")->json('data.shipments.0.id'))->toBe($shipment->ulid);
     $summary = $this->api->getJson('/api/v1/shipments/summary')->assertOk()->json('data');
-    expect($summary['by_status'])->toBe(['delivered' => 1])->and($summary['tabs']['delivered'])->toBe(1)->and($summary['cod_held'])->toBe([['carrier' => 'ghn', 'carrier_name' => 'Giao Hàng Nhanh', 'amount' => '300000.00', 'count' => 1]]);
+    expect($summary['by_status'])->toBe(['delivered' => 1])->and($summary['tabs']['delivered'])->toBe(1)->and($summary['cod_held'])->toBe([['carrier' => 'ghn', 'carrier_name' => 'Giao Hàng Nhanh', 'amount' => '300000.00', 'count' => 1, 'slow_amount' => '0.00', 'slow_count' => 0]]);
+    // The list carries the newest step of the journey.
+    expect($this->api->getJson('/api/v1/shipments?q=GHN1002')->json('data.0.last_event.status_label'))->toBe('Giao thành công');
 });
 
 it('counts every failed attempt, marks redelivery, and ends returned when the parcel is back', function () {

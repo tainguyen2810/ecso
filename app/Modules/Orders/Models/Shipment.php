@@ -9,6 +9,7 @@ use App\Shared\Concerns\HasPublicUlid;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 
 /**
@@ -119,5 +120,11 @@ class Shipment extends Model
     public function events(): HasMany
     {
         return $this->hasMany(ShipmentEvent::class)->orderBy('occurred_at')->orderBy('id');
+    }
+
+    /** @return HasOne<ShipmentEvent, $this> The newest step of the journey (the list shows it). */
+    public function latestEvent(): HasOne
+    {
+        return $this->hasOne(ShipmentEvent::class)->ofMany(['occurred_at' => 'max', 'id' => 'max']);
     }
 }

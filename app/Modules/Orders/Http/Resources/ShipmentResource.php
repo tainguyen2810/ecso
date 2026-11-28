@@ -65,6 +65,11 @@ class ShipmentResource extends JsonResource
             'returned_at' => $this->returned_at?->toIso8601String(),
             'cancelled_at' => $this->cancelled_at?->toIso8601String(),
             'last_event_at' => $this->last_event_at?->toIso8601String(),
+            'last_event' => $this->whenLoaded('latestEvent', fn () => $this->latestEvent ? [
+                'status_label' => ShipmentStatus::label($this->latestEvent->status),
+                'description' => $this->latestEvent->description,
+                'occurred_at' => $this->latestEvent->occurred_at->toIso8601String(),
+            ] : null),
             'created_at' => $this->created_at?->toIso8601String(),
             'order' => $this->whenLoaded('order', fn () => [
                 'id' => $this->order->ulid,
