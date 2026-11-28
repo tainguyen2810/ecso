@@ -183,6 +183,8 @@ export interface Warehouse {
     purpose?: 'sale' | 'defective';
     sku_count?: number;
     on_hand?: number;
+    /** Stock value at cost; null when the person may not see cost prices. */
+    stock_value?: number | null;
 }
 
 export interface StockRow extends StockFigures {
@@ -443,6 +445,9 @@ export interface SalesChannel {
     is_active: boolean;
     warehouse?: { id: string; code: string; name: string } | null;
     orders_count?: number;
+    /** Orders and revenue of the last 30 days, without cancelled and returned orders. */
+    orders_30d?: number;
+    revenue_30d?: number;
 }
 
 export interface CustomerGroup {

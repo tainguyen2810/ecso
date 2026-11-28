@@ -5,6 +5,7 @@ namespace App\Modules\Sales\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Inventory\Models\Warehouse;
+use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Sales\Http\Resources\SalesChannelResource;
 use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Tenancy\Support\TenantContext;
@@ -20,7 +21,13 @@ class SalesChannelController extends Controller
     {
         $this->authorize('viewAny', SalesChannel::class);
 
-        return SalesChannelResource::collection(SalesChannel::query()->with('warehouse')->withCount('orders')->orderByDesc('is_active')->orderBy('id')->get());
+        // Orders and revenue of the last 30 days, the same way the sales reports count them (no cancelled or returned orders).
+        $recent = fn ($q) => $q->where('placed_at', '>=', now()->subDays(30))->whereNotIn('status', [OrderStatus::CANCELLED, OrderStatus::RETURNED]);
+
+        return SalesChannelResource::collection(SalesChannel::query()->with('warehouse')
+            ->withCount(['orders', 'orders as orders_30d' => $recent])
+            ->withSum(['orders as revenue_30d' => $recent], 'total')
+            ->orderByDesc('is_active')->orderBy('id')->get());
     }
 
     public function store(Request $request, AuditLogger $audit): JsonResponse

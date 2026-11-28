@@ -1,15 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { AlertTriangle, Check, Copy, Landmark, Minus } from 'lucide-vue-next';
-import PageHeader from '../PageHeader.vue';
-import Badge from '@/shared/ui/Badge.vue';
+import { AlertTriangle, Check, ChevronDown, Copy, Crown, Gauge, Landmark, Minus, Receipt } from 'lucide-vue-next';
+import SettingsShell from './settings/SettingsShell.vue';
 import Button from '@/shared/ui/Button.vue';
-import Card from '@/shared/ui/Card.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
 import ErrorState from '@/shared/ui/ErrorState.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError } from '@/shared/lib/api';
-import { cn, formatDateTime, formatMoney } from '@/shared/lib/utils';
+import { cn, formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import type { Entitlement } from '@/shared/types';
@@ -81,6 +79,15 @@ const invoices = ref<InvoiceRow[]>([]);
 const error = ref<string | null>(null);
 const cycle = ref<Cycle>('monthly');
 const canManage = computed(() => tenant.can('billing.manage'));
+const compare = ref(false);
+const badge: Record<string, string> = { default: 'bg-blue-50 text-blue-700', success: 'bg-emerald-50 text-emerald-700', warning: 'bg-amber-50 text-amber-700', danger: 'bg-red-50 text-red-600', muted: 'bg-slate-100 text-slate-600' };
+/** Days left in the paid period or the trial. */
+const daysLeft = computed(() => {
+    const end = data.value?.status === 'trialing' ? data.value.trial_ends_at : data.value?.current_period_end;
+    return end ? Math.max(0, Math.ceil((new Date(end).getTime() - Date.now()) / 86_400_000)) : null;
+});
+const limitKeys = ['limit.users', 'limit.warehouses', 'limit.shops', 'limit.orders_per_month'] as const;
+const flagKeys = computed(() => Object.keys(featureLabels).filter((k) => !k.startsWith('limit.')));
 
 const target = ref<PlanRow | null>(null);
 const quote = ref<Quote | null>(null);
@@ -197,197 +204,226 @@ async function copy(text: string) {
 </script>
 
 <template>
-    <PageHeader title="Gói dịch vụ" description="Gói hiện tại, mức sử dụng, nâng/hạ gói và hóa đơn." />
-    <ErrorState v-if="error" :message="error" @retry="load" />
-    <div v-else-if="!data" class="grid gap-4 md:grid-cols-3"><Skeleton v-for="i in 3" :key="i" class="h-32" /></div>
-    <template v-else>
-        <div
-            v-if="data.status === 'past_due'"
-            class="mb-4 flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50/70 p-4 text-sm"
-            data-testid="past-due-banner"
-        >
-            <AlertTriangle class="mt-0.5 size-4 text-destructive" />
-            <p>
-                Kỳ thanh toán đã hết nhưng chưa nhận được tiền. Nếu chưa thanh toán trước
-                <strong>{{ formatDateTime(data.grace_until) }}</strong>, doanh nghiệp sẽ chuyển về gói Free (dữ liệu vẫn được giữ nguyên).
-            </p>
-        </div>
+    <SettingsShell title="Gói dịch vụ" description="Gói đang dùng, giới hạn, nâng hạ gói và hóa đơn.">
+        <template #actions>
+            <div class="flex rounded-[12px] bg-slate-100 p-1 text-[14px]" role="group" aria-label="Chu kỳ thanh toán">
+                <button
+                    v-for="c in (['monthly', 'yearly'] as const)"
+                    :key="c"
+                    type="button"
+                    :class="cn('rounded-[9px] px-3.5 py-1.5', cycle === c ? 'bg-white font-semibold text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900')"
+                    :data-testid="`cycle-${c}`"
+                    @click="cycle = c"
+                >
+                    {{ cycleLabels[c] }}
+                </button>
+            </div>
+        </template>
 
-        <div class="grid gap-4 lg:grid-cols-3">
-            <Card class="p-5" data-testid="current-plan">
-                <p class="text-sm text-muted-foreground">Gói hiện tại</p>
-                <p class="mt-2 flex items-center gap-2 text-2xl font-semibold">
-                    {{ data.plan?.name }} <Badge :tone="statusInfo.tone">{{ statusInfo.label }}</Badge>
+        <ErrorState v-if="error" :message="error" @retry="load" />
+        <div v-else-if="!data" class="grid gap-4 xl:grid-cols-[400px_minmax(0,1fr)]"><Skeleton v-for="i in 2" :key="i" class="h-52 rounded-[14px]" /></div>
+        <template v-else>
+            <div v-if="data.status === 'past_due'" class="mb-4 flex items-start gap-3 rounded-[12px] border border-red-200 bg-red-50 p-4 text-[14px] text-red-800" data-testid="past-due-banner">
+                <AlertTriangle class="mt-0.5 size-4 shrink-0" />
+                <p>
+                    Kỳ thanh toán đã hết nhưng chưa nhận được tiền. Nếu chưa thanh toán trước <strong>{{ formatDateTime(data.grace_until) }}</strong>, doanh nghiệp sẽ chuyển về gói Free (dữ liệu vẫn được giữ
+                    nguyên).
                 </p>
-                <p v-if="data.status === 'trialing'" class="mt-1 text-sm text-muted-foreground">Dùng thử đến {{ formatDateTime(data.trial_ends_at) }}</p>
-                <p v-else-if="data.gift" class="mt-1 text-sm text-muted-foreground" data-testid="gift-plan">
-                    Tặng kèm {{ data.gift.label ?? 'EzChat' }}<template v-if="data.current_period_end"> · đến {{ formatDateTime(data.current_period_end) }}</template>. Gia hạn gói EzChat thì gói này tự gia hạn theo.
-                </p>
-                <p v-else-if="data.current_period_end" class="mt-1 text-sm text-muted-foreground">
-                    {{ cycleLabels[data.billing_cycle] }} · hết kỳ {{ formatDateTime(data.current_period_end) }}
-                </p>
-                <p v-else class="mt-1 text-sm text-muted-foreground">Không thu phí.</p>
-                <p v-if="data.pending_plan" class="mt-2 text-sm" data-testid="pending-plan">
-                    Sẽ chuyển sang <strong>{{ data.pending_plan.name }}</strong> khi hết kỳ.
-                </p>
-            </Card>
+            </div>
 
-            <Card class="p-5 lg:col-span-2" data-testid="usage">
-                <p class="text-sm text-muted-foreground">Mức sử dụng</p>
-                <div class="mt-3 grid gap-4 sm:grid-cols-2">
-                    <div v-for="key in usageKeys" :key="key">
-                        <div class="flex items-baseline justify-between text-sm">
-                            <span>{{ featureLabels[key] }}</span>
-                            <span class="tabular-nums">
-                                <strong>{{ (data.usage[key] ?? 0).toLocaleString('vi-VN') }}</strong>
-                                <span class="text-muted-foreground"> / {{ limitText(data.entitlements[key]) }}</span>
-                            </span>
+            <div class="mb-5 grid gap-4 xl:grid-cols-[400px_minmax(0,1fr)]">
+                <div class="relative overflow-hidden rounded-[16px] bg-gradient-to-br from-blue-600 to-indigo-600 p-6 text-white shadow-[0_8px_24px_-8px_rgba(37,99,235,0.55)]" data-testid="current-plan">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <p class="text-[14px] text-blue-100">Gói đang dùng</p>
+                            <p class="mt-1 text-[30px] font-bold leading-tight">{{ data.plan?.name }}</p>
+                            <span class="mt-2 inline-flex rounded-md bg-white/15 px-2 py-0.5 text-[12px] font-medium">{{ statusInfo.label }}</span>
                         </div>
-                        <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-muted">
-                            <div
-                                :class="cn('h-full rounded-full', usagePercent(key) >= 100 ? 'bg-destructive' : usagePercent(key) >= 80 ? 'bg-warning' : 'bg-primary')"
-                                :style="{ width: usagePercent(key) + '%' }"
-                            />
-                        </div>
+                        <span class="grid size-12 shrink-0 place-items-center rounded-[12px] bg-white/15"><Crown class="size-6" /></span>
+                    </div>
+                    <div class="mt-6 text-[14px] text-blue-100">
+                        <p v-if="data.status === 'trialing'">Dùng thử đến <b class="text-white">{{ formatDateTime(data.trial_ends_at) }}</b><template v-if="daysLeft !== null"> · còn {{ daysLeft }} ngày</template></p>
+                        <p v-else-if="data.gift" data-testid="gift-plan">
+                            Tặng kèm {{ data.gift.label ?? 'EzChat' }}<template v-if="data.current_period_end"> · đến {{ formatDateTime(data.current_period_end) }}</template>. Gia hạn gói EzChat thì gói này tự gia hạn
+                            theo.
+                        </p>
+                        <p v-else-if="data.current_period_end">
+                            {{ cycleLabels[data.billing_cycle] }} · hết kỳ <b class="text-white">{{ formatDateTime(data.current_period_end) }}</b><template v-if="daysLeft !== null"> · còn {{ daysLeft }} ngày</template>
+                        </p>
+                        <p v-else>Không thu phí.</p>
+                        <p v-if="data.pending_plan" class="mt-2 rounded-[10px] bg-white/10 px-3 py-2 text-white" data-testid="pending-plan">
+                            Sẽ chuyển sang <strong>{{ data.pending_plan.name }}</strong> khi hết kỳ.
+                        </p>
                     </div>
                 </div>
-                <p v-if="ordersWarning" class="mt-3 text-xs text-amber-600" data-testid="orders-warning">{{ ordersWarning }}</p>
-            </Card>
-        </div>
 
-        <Card v-if="data.open_invoice" class="mt-6" title="Hóa đơn chờ thanh toán" data-testid="open-invoice">
-            <template #actions>
-                <Button v-if="canManage" variant="ghost" size="sm" @click="cancelInvoice(data.open_invoice)">Hủy hóa đơn</Button>
-            </template>
-            <div class="grid gap-6 p-5 md:grid-cols-2">
-                <div class="space-y-1.5 text-sm">
-                    <p class="text-muted-foreground">{{ data.open_invoice.number }} · {{ invoiceKinds[data.open_invoice.kind] ?? data.open_invoice.kind }}</p>
-                    <p>
-                        Gói <strong>{{ data.open_invoice.plan.name }}</strong> · {{ cycleLabels[data.open_invoice.billing_cycle] }}
-                    </p>
-                    <p v-if="Number(data.open_invoice.credit) > 0" class="text-muted-foreground">
-                        Giá gói {{ formatMoney(data.open_invoice.subtotal) }} − trừ thời gian chưa dùng {{ formatMoney(data.open_invoice.credit) }}
-                    </p>
-                    <p class="text-2xl font-semibold">{{ formatMoney(data.open_invoice.amount) }}</p>
-                    <p class="text-muted-foreground">Hạn thanh toán {{ formatDateTime(data.open_invoice.due_at) }}</p>
-                    <p class="text-muted-foreground">
-                        Mã thanh toán <span class="font-mono font-semibold text-foreground" data-testid="transfer-code">{{ data.open_invoice.transfer_code }}</span>
-                    </p>
-                </div>
-                <div v-if="data.open_invoice.payment" class="rounded-lg border bg-muted/40 p-4 text-sm" data-testid="bank-instructions">
-                    <p class="mb-3 flex items-center gap-2 font-medium"><Landmark class="size-4" /> Chuyển khoản ngân hàng</p>
-                    <template v-if="data.open_invoice.payment.configured">
-                        <dl class="grid grid-cols-[auto_1fr_auto] items-center gap-x-3 gap-y-1.5">
-                            <dt class="text-muted-foreground">Ngân hàng</dt>
-                            <dd class="col-span-2">{{ data.open_invoice.payment.bank_name }}<span v-if="data.open_invoice.payment.branch"> – {{ data.open_invoice.payment.branch }}</span></dd>
-                            <dt class="text-muted-foreground">Số tài khoản</dt>
-                            <dd class="font-mono">{{ data.open_invoice.payment.account_number }}</dd>
-                            <button class="text-muted-foreground hover:text-foreground" aria-label="Sao chép số tài khoản" @click="copy(data.open_invoice.payment.account_number ?? '')"><Copy class="size-4" /></button>
-                            <dt class="text-muted-foreground">Chủ tài khoản</dt>
-                            <dd class="col-span-2">{{ data.open_invoice.payment.account_name }}</dd>
-                            <dt class="text-muted-foreground">Số tiền</dt>
-                            <dd class="font-semibold">{{ formatMoney(data.open_invoice.payment.amount) }}</dd>
-                            <span />
-                            <dt class="text-muted-foreground">Nội dung</dt>
-                            <dd class="font-mono font-semibold">{{ data.open_invoice.payment.memo }}</dd>
-                            <button class="text-muted-foreground hover:text-foreground" aria-label="Sao chép nội dung" @click="copy(data.open_invoice.payment.memo)"><Copy class="size-4" /></button>
-                        </dl>
-                        <p class="mt-3 text-xs text-muted-foreground">
-                            Ghi đúng nội dung chuyển khoản. Gói được kích hoạt sau khi bộ phận kế toán đối chiếu sao kê (thường trong giờ làm việc).
-                        </p>
-                    </template>
-                    <p v-else class="text-muted-foreground">Thông tin tài khoản nhận tiền chưa được cấu hình. Vui lòng liên hệ hỗ trợ.</p>
+                <div class="rounded-[14px] border border-slate-200/80 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]" data-testid="usage">
+                    <h2 class="flex items-center gap-2 text-[16px] font-semibold text-slate-900"><Gauge class="size-5 text-blue-600" /> Mức sử dụng</h2>
+                    <div class="mt-4 grid gap-x-8 gap-y-5 sm:grid-cols-2">
+                        <div v-for="key in usageKeys" :key="key">
+                            <div class="flex items-baseline justify-between text-[14px]">
+                                <span class="text-slate-600">{{ featureLabels[key] }}</span>
+                                <span class="tabular-nums">
+                                    <b class="text-slate-900">{{ (data.usage[key] ?? 0).toLocaleString('vi-VN') }}</b><span class="text-slate-400">/{{ limitText(data.entitlements[key]) }}</span>
+                                </span>
+                            </div>
+                            <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+                                <div :class="cn('h-full rounded-full', usagePercent(key) >= 100 ? 'bg-red-500' : usagePercent(key) >= 80 ? 'bg-amber-500' : 'bg-blue-600')" :style="{ width: usagePercent(key) + '%' }" />
+                            </div>
+                        </div>
+                    </div>
+                    <p v-if="ordersWarning" class="mt-4 text-[13px] text-amber-700" data-testid="orders-warning">{{ ordersWarning }}</p>
                 </div>
             </div>
-        </Card>
 
-        <Card class="mt-6 overflow-x-auto" title="Các gói dịch vụ" data-testid="plans">
-            <template #actions>
-                <div class="inline-flex rounded-md border p-0.5 text-sm" role="group" aria-label="Chu kỳ thanh toán">
-                    <button
-                        v-for="c in (['monthly', 'yearly'] as const)"
-                        :key="c"
-                        :class="cn('rounded px-3 py-1', cycle === c ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted')"
-                        :data-testid="`cycle-${c}`"
-                        @click="cycle = c"
-                    >
-                        {{ cycleLabels[c] }}
-                    </button>
+            <section v-if="data.open_invoice" class="mb-5 overflow-hidden rounded-[14px] border border-amber-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]" data-testid="open-invoice">
+                <header class="flex items-center gap-3 border-b border-slate-100 px-6 py-4">
+                    <span class="grid size-9 place-items-center rounded-[10px] bg-amber-50 text-amber-600"><Receipt class="size-[18px]" /></span>
+                    <h2 class="flex-1 text-[16px] font-semibold text-slate-900">Hóa đơn chờ thanh toán</h2>
+                    <button v-if="canManage" type="button" class="rounded-[9px] px-3 py-1.5 text-[13px] font-medium text-red-600 hover:bg-red-50" @click="cancelInvoice(data.open_invoice)">Hủy hóa đơn</button>
+                </header>
+                <div class="grid gap-6 p-6 md:grid-cols-2">
+                    <div class="space-y-1.5 text-[14px] text-slate-600">
+                        <p class="text-slate-500">{{ data.open_invoice.number }} · {{ invoiceKinds[data.open_invoice.kind] ?? data.open_invoice.kind }}</p>
+                        <p>
+                            Gói <b class="text-slate-900">{{ data.open_invoice.plan.name }}</b> · {{ cycleLabels[data.open_invoice.billing_cycle] }}
+                        </p>
+                        <p v-if="Number(data.open_invoice.credit) > 0" class="text-slate-500">
+                            Giá gói {{ formatMoney(data.open_invoice.subtotal) }} − trừ thời gian chưa dùng {{ formatMoney(data.open_invoice.credit) }}
+                        </p>
+                        <p class="text-[28px] font-bold text-slate-900">{{ formatMoney(data.open_invoice.amount) }}</p>
+                        <p class="text-slate-500">Hạn thanh toán {{ formatDateTime(data.open_invoice.due_at) }}</p>
+                        <p class="text-slate-500">
+                            Mã thanh toán <span class="font-mono font-semibold text-slate-900" data-testid="transfer-code">{{ data.open_invoice.transfer_code }}</span>
+                        </p>
+                    </div>
+                    <div v-if="data.open_invoice.payment" class="rounded-[12px] bg-slate-50 p-4 text-[14px]" data-testid="bank-instructions">
+                        <p class="mb-3 flex items-center gap-2 font-semibold text-slate-900"><Landmark class="size-4" /> Chuyển khoản ngân hàng</p>
+                        <template v-if="data.open_invoice.payment.configured">
+                            <dl class="grid grid-cols-[auto_1fr_auto] items-center gap-x-3 gap-y-2">
+                                <dt class="text-slate-500">Ngân hàng</dt>
+                                <dd class="col-span-2">{{ data.open_invoice.payment.bank_name }}<span v-if="data.open_invoice.payment.branch"> – {{ data.open_invoice.payment.branch }}</span></dd>
+                                <dt class="text-slate-500">Số tài khoản</dt>
+                                <dd class="font-mono">{{ data.open_invoice.payment.account_number }}</dd>
+                                <button type="button" class="text-slate-400 hover:text-slate-900" aria-label="Sao chép số tài khoản" @click="copy(data.open_invoice.payment.account_number ?? '')"><Copy class="size-4" /></button>
+                                <dt class="text-slate-500">Chủ tài khoản</dt>
+                                <dd class="col-span-2">{{ data.open_invoice.payment.account_name }}</dd>
+                                <dt class="text-slate-500">Số tiền</dt>
+                                <dd class="font-semibold">{{ formatMoney(data.open_invoice.payment.amount) }}</dd>
+                                <span />
+                                <dt class="text-slate-500">Nội dung</dt>
+                                <dd class="font-mono font-semibold">{{ data.open_invoice.payment.memo }}</dd>
+                                <button type="button" class="text-slate-400 hover:text-slate-900" aria-label="Sao chép nội dung" @click="copy(data.open_invoice.payment.memo)"><Copy class="size-4" /></button>
+                            </dl>
+                            <p class="mt-3 text-[13px] text-slate-500">Ghi đúng nội dung chuyển khoản. Gói được kích hoạt sau khi bộ phận kế toán đối chiếu sao kê (thường trong giờ làm việc).</p>
+                        </template>
+                        <p v-else class="text-slate-500">Thông tin tài khoản nhận tiền chưa được cấu hình. Vui lòng liên hệ hỗ trợ.</p>
+                    </div>
                 </div>
-            </template>
-            <table class="w-full min-w-[720px] text-sm">
-                <thead>
-                    <tr class="border-b">
-                        <th class="px-5 py-3 text-left font-medium text-muted-foreground">Tính năng</th>
-                        <th v-for="p in data.plans" :key="p.key" :class="cn('px-5 py-3 text-left align-top', isCurrent(p) && 'bg-secondary/60')">
-                            <p class="font-semibold">{{ p.name }}</p>
-                            <p class="text-xs font-normal text-muted-foreground">
-                                {{ price(p) ? formatMoney(price(p)) + (cycle === 'yearly' ? '/năm' : '/tháng') : 'Miễn phí' }}
-                            </p>
-                        </th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y">
-                    <tr v-for="(label, key) in featureLabels" :key="key">
-                        <td class="px-5 py-2.5 text-muted-foreground">{{ label }}</td>
-                        <td v-for="p in data.plans" :key="p.key" :class="cn('px-5 py-2.5', isCurrent(p) && 'bg-secondary/60')">
-                            <template v-if="String(key).startsWith('limit.')">{{ limitText(p.features[key]) }}</template>
-                            <Check v-else-if="p.features[key]?.enabled" class="size-4 text-success" />
-                            <Minus v-else class="size-4 text-muted-foreground" />
-                        </td>
-                    </tr>
-                    <tr v-if="canManage">
-                        <td />
-                        <td v-for="p in data.plans" :key="p.key" :class="cn('space-y-2 px-5 py-3', isCurrent(p) && 'bg-secondary/60')">
-                            <Badge v-if="isCurrent(p) && (data.billing_cycle === cycle || price(p) === 0)" tone="success">Đang dùng</Badge>
-                            <Button v-else size="sm" class="w-full" :variant="price(p) === 0 ? 'outline' : 'default'" :data-testid="`choose-${p.key}`" @click="choose(p)">
+            </section>
+
+            <section data-testid="plans">
+                <h2 class="mb-3 text-[16px] font-semibold text-slate-900">Các gói dịch vụ</h2>
+                <div class="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
+                    <div
+                        v-for="p in data.plans"
+                        :key="p.key"
+                        :class="cn('relative flex flex-col rounded-[14px] border bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]', isCurrent(p) ? 'border-blue-600 ring-1 ring-blue-600' : 'border-slate-200/80')"
+                    >
+                        <span v-if="isCurrent(p)" class="absolute -top-3 left-5 rounded-full bg-blue-600 px-2.5 py-0.5 text-[12px] font-semibold text-white">Đang dùng</span>
+                        <p class="text-[16px] font-semibold text-slate-900">{{ p.name }}</p>
+                        <p class="mt-2 text-[26px] font-bold tabular-nums text-slate-900">
+                            {{ formatNumber(price(p)) }}<span class="text-[14px] font-medium text-slate-400"> {{ price(p) ? (cycle === 'yearly' ? 'đ/năm' : 'đ/tháng') : 'Miễn phí' }}</span>
+                        </p>
+                        <ul class="mt-4 flex-1 space-y-2 text-[14px] text-slate-600">
+                            <li v-for="key in limitKeys" :key="key" class="flex gap-2">
+                                <Check class="mt-0.5 size-4 shrink-0 text-emerald-500" /> {{ featureLabels[key] }}: <b class="font-semibold text-slate-900">{{ limitText(p.features[key]) }}</b>
+                            </li>
+                            <li v-for="key in flagKeys" :key="key" :class="cn('flex gap-2', !p.features[key]?.enabled && 'text-slate-400')">
+                                <Check v-if="p.features[key]?.enabled" class="mt-0.5 size-4 shrink-0 text-emerald-500" />
+                                <Minus v-else class="mt-0.5 size-4 shrink-0" />
+                                {{ featureLabels[key] }}
+                            </li>
+                        </ul>
+                        <div v-if="canManage" class="mt-5 space-y-2">
+                            <span v-if="isCurrent(p) && (data.billing_cycle === cycle || price(p) === 0)" class="block rounded-[10px] bg-slate-100 py-2.5 text-center text-[14px] font-medium text-slate-500">Đang dùng</span>
+                            <button
+                                v-else
+                                type="button"
+                                :class="cn('block w-full rounded-[10px] py-2.5 text-center text-[14px] font-medium', price(p) === 0 ? 'border border-slate-200 text-slate-700 hover:border-blue-300' : 'bg-blue-600 text-white hover:bg-blue-700')"
+                                :data-testid="`choose-${p.key}`"
+                                @click="choose(p)"
+                            >
                                 {{ isCurrent(p) ? 'Đổi chu kỳ' : 'Chọn gói' }}
-                            </Button>
-                            <Button
+                            </button>
+                            <button
                                 v-if="data.trial_available && p.trial_days > 0 && !isCurrent(p) && data.status !== 'trialing'"
-                                size="sm"
-                                variant="link"
-                                class="h-auto w-full p-0"
+                                type="button"
+                                class="block w-full text-center text-[13px] font-medium text-blue-700 hover:underline disabled:opacity-50"
                                 :disabled="busy"
                                 :data-testid="`trial-${p.key}`"
                                 @click="startTrial(p)"
                             >
                                 Dùng thử {{ p.trial_days }} ngày
-                            </Button>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </Card>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="mt-3 inline-flex items-center gap-1.5 text-[14px] font-medium text-blue-700" @click="compare = !compare">
+                    <ChevronDown :class="cn('size-4 transition-transform', compare && 'rotate-180')" /> {{ compare ? 'Ẩn bảng so sánh' : 'So sánh đầy đủ các gói' }}
+                </button>
+                <div v-if="compare" class="mt-3 overflow-x-auto rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+                    <table class="w-full text-[14px]">
+                        <thead class="border-b border-slate-100 text-left text-[12px] uppercase tracking-wider text-slate-400">
+                            <tr>
+                                <th class="px-5 py-3.5 font-semibold">Tính năng</th>
+                                <th v-for="p in data.plans" :key="p.key" :class="cn('px-5 py-3.5 font-semibold', isCurrent(p) && 'bg-blue-50/60 text-blue-700')">{{ p.name }}</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-slate-700">
+                            <tr v-for="(label, key) in featureLabels" :key="key">
+                                <td class="px-5 py-3 text-slate-500">{{ label }}</td>
+                                <td v-for="p in data.plans" :key="p.key" :class="cn('px-5 py-3', isCurrent(p) && 'bg-blue-50/60')">
+                                    <template v-if="String(key).startsWith('limit.')">{{ limitText(p.features[key]) }}</template>
+                                    <Check v-else-if="p.features[key]?.enabled" class="size-4 text-emerald-500" />
+                                    <Minus v-else class="size-4 text-slate-300" />
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
 
-        <Card class="mt-6" title="Lịch sử hóa đơn" data-testid="invoices">
-            <p v-if="!invoices.length" class="p-5 text-sm text-muted-foreground">Chưa có hóa đơn.</p>
-            <div v-else class="overflow-x-auto">
-                <table class="w-full min-w-[640px] text-sm">
-                    <thead class="border-b text-left text-muted-foreground">
-                        <tr>
-                            <th class="px-5 py-2.5 font-medium">Số</th>
-                            <th class="px-5 py-2.5 font-medium">Nội dung</th>
-                            <th class="px-5 py-2.5 text-right font-medium">Số tiền</th>
-                            <th class="px-5 py-2.5 font-medium">Trạng thái</th>
-                            <th class="px-5 py-2.5 font-medium">Ngày tạo</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y">
-                        <tr v-for="inv in invoices" :key="inv.id">
-                            <td class="px-5 py-2.5 font-mono text-xs">{{ inv.number }}</td>
-                            <td class="px-5 py-2.5">{{ invoiceKinds[inv.kind] ?? inv.kind }} {{ inv.plan.name }} · {{ cycleLabels[inv.billing_cycle] }}</td>
-                            <td class="px-5 py-2.5 text-right tabular-nums">{{ formatMoney(inv.amount) }}</td>
-                            <td class="px-5 py-2.5">
-                                <Badge :tone="invoiceStatus[inv.status]?.tone ?? 'muted'">{{ invoiceStatus[inv.status]?.label ?? inv.status }}</Badge>
-                            </td>
-                            <td class="px-5 py-2.5 text-muted-foreground">{{ formatDateTime(inv.created_at) }}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </Card>
-    </template>
+            <section class="mt-5 overflow-hidden rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]" data-testid="invoices">
+                <h2 class="border-b border-slate-100 px-6 py-4 text-[16px] font-semibold text-slate-900">Lịch sử hóa đơn</h2>
+                <p v-if="!invoices.length" class="px-6 py-5 text-[14px] text-slate-500">Chưa có hóa đơn.</p>
+                <div v-else class="overflow-x-auto">
+                    <table class="w-full text-[14px]">
+                        <thead class="border-b border-slate-100 text-left text-[12px] uppercase tracking-wider text-slate-400">
+                            <tr>
+                                <th class="px-4 py-3.5 pl-6 font-semibold">Số</th>
+                                <th class="px-4 py-3.5 font-semibold">Ngày tạo</th>
+                                <th class="px-4 py-3.5 font-semibold">Nội dung</th>
+                                <th class="px-4 py-3.5 text-right font-semibold">Số tiền</th>
+                                <th class="px-4 py-3.5 pr-6 font-semibold">Trạng thái</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-slate-700">
+                            <tr v-for="inv in invoices" :key="inv.id">
+                                <td class="px-4 py-3.5 pl-6 font-mono text-[13px] text-blue-700">{{ inv.number }}</td>
+                                <td class="whitespace-nowrap px-4 py-3.5 text-slate-500">{{ formatDateTime(inv.created_at) }}</td>
+                                <td class="px-4 py-3.5">{{ invoiceKinds[inv.kind] ?? inv.kind }} {{ inv.plan.name }} · {{ cycleLabels[inv.billing_cycle] }}</td>
+                                <td class="px-4 py-3.5 text-right tabular-nums">{{ formatMoney(inv.amount) }}</td>
+                                <td class="px-4 py-3.5 pr-6">
+                                    <span :class="cn('rounded-md px-2 py-0.5 text-[12px] font-medium', badge[invoiceStatus[inv.status]?.tone ?? 'muted'])">{{ invoiceStatus[inv.status]?.label ?? inv.status }}</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </template>
+    </SettingsShell>
 
     <Dialog v-model:open="quoteOpen" :title="target ? `Chuyển sang gói ${target.name}` : 'Chuyển gói'" :description="target ? cycleLabels[cycle] : ''">
         <div v-if="!quote" class="space-y-2"><Skeleton class="h-5" /><Skeleton class="h-5" /></div>

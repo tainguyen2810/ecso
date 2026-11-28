@@ -2,6 +2,7 @@
 
 namespace App\Modules\Inventory\Http\Resources;
 
+use App\Modules\Access\Support\DataAccess;
 use App\Modules\Inventory\Models\Warehouse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -24,6 +25,8 @@ class WarehouseResource extends JsonResource
             'purpose' => $this->purpose ?? Warehouse::PURPOSE_SALE,
             'sku_count' => $this->when(isset($this->sku_count), fn () => (int) $this->sku_count),
             'on_hand' => $this->when(isset($this->total_on_hand), fn () => (int) $this->total_on_hand),
+            // Stock value at cost, only for people who may see cost prices.
+            'stock_value' => $this->when(isset($this->stock_value), fn () => app(DataAccess::class)->cost(round((float) $this->stock_value))),
         ];
     }
 }

@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import SettingsShell from './SettingsShell.vue';
 import { computed, onMounted, ref } from 'vue';
-import { AlertTriangle, CircleDashed, Download, FileSpreadsheet, TrendingDown, Upload, XCircle } from 'lucide-vue-next';
+import { AlertTriangle, Check, CircleDashed, Download, FileSpreadsheet, Info, TrendingDown, Upload, XCircle } from 'lucide-vue-next';
 import Button from '@/shared/ui/Button.vue';
-import Card from '@/shared/ui/Card.vue';
 import Dialog from '@/shared/ui/Dialog.vue';
 import MarketplaceLogo from '@/shared/ui/MarketplaceLogo.vue';
 import Select from '@/shared/ui/Select.vue';
 import Skeleton from '@/shared/ui/Skeleton.vue';
 import { api, ApiError, downloadFile } from '@/shared/lib/api';
-import { formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
+import { cn, formatDateTime, formatMoney, formatNumber } from '@/shared/lib/utils';
 import { useToast } from '@/shared/composables/useToast';
 import { useTenantStore } from '@/shared/stores/tenant';
 import type { FeeAlertData, FeeStats } from '@/shared/types';
@@ -114,132 +113,180 @@ const guides: Record<string, { name: string; path: string }> = {
 </script>
 
 <template>
-    <SettingsShell wide title="Kiểm tra phí sàn" description="Phí thực tế sàn đã thu, tính từ dữ liệu đối soát 30 ngày gần nhất (bỏ đơn hủy, hoàn). Tự kiểm tra mỗi sáng lúc 06:00." :back="{ to: '/settings/pricing', label: 'Thuế và chính sách giá' }">
+    <SettingsShell title="Kiểm tra phí sàn" description="So phí sàn thực thu (đối soát 30 ngày gần nhất, bỏ đơn hủy, hoàn) với bảng phí đang cài. Tự kiểm tra mỗi sáng lúc 06:00." :back="{ to: '/settings/pricing', label: 'Thuế và chính sách giá' }">
         <template #actions>
-            <Button v-if="canEdit && shops.length" data-testid="open-import" @click="openImport()"><Upload /> Nhập file đối soát</Button>
+            <button type="button" class="inline-flex h-11 items-center gap-2 rounded-[12px] border border-slate-200 bg-white px-4 text-[15px] text-slate-700 hover:border-blue-300 hover:text-blue-700" @click="downloadFile('/marketplace-pricing/settlements/template', 'mau-doi-soat-san.xlsx')">
+                <Download class="size-4 text-slate-500" /> Tải file mẫu
+            </button>
+            <button v-if="canEdit && shops.length" type="button" class="inline-flex h-11 items-center gap-2 rounded-[12px] bg-blue-600 px-5 text-[15px] font-medium text-white shadow-sm hover:bg-blue-700" data-testid="open-import" @click="openImport()">
+                <Upload class="size-4" /> Nhập file đối soát
+            </button>
         </template>
 
-        <div v-if="loading && !shops.length" class="space-y-3"><Skeleton v-for="i in 3" :key="i" class="h-20" /></div>
+        <div v-if="loading && !shops.length" class="grid gap-4 md:grid-cols-2 2xl:grid-cols-3"><Skeleton v-for="i in 3" :key="i" class="h-44 rounded-[14px]" /></div>
         <template v-else>
-            <Card class="mb-4">
-                <div class="border-b px-4 py-3">
-                    <h2 class="font-semibold">Cảnh báo</h2>
-                    <p class="text-xs text-muted-foreground">Cảnh báo mới được gửi email cho người quản lý cài đặt.</p>
-                </div>
-                <div class="divide-y">
-                    <div v-for="a in alerts" :key="a.id" class="flex flex-wrap items-start gap-3 px-4 py-3" :data-testid="`alert-${a.type}`">
-                        <AlertTriangle v-if="a.type === 'fee_drift'" class="mt-0.5 size-5 shrink-0 text-amber-500" />
-                        <TrendingDown v-else class="mt-0.5 size-5 shrink-0 text-rose-500" />
+            <p v-if="!shops.length" class="rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] px-6 py-8 text-center text-[14px] text-slate-500">Chưa có gian hàng sàn nào đang kết nối.</p>
+            <div v-else class="mb-5 grid gap-4 md:grid-cols-2 2xl:grid-cols-3" data-testid="fee-shops">
+                <div v-for="s in shops" :key="s.account.id" class="rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] flex flex-col p-5">
+                    <div class="flex items-center gap-3">
+                        <MarketplaceLogo :marketplace="s.account.marketplace" size="lg" />
                         <div class="min-w-0 flex-1">
-                            <div class="text-sm font-medium">{{ a.text }}</div>
-                            <div class="text-xs text-muted-foreground">{{ formatDateTime(a.created_at) }}</div>
-                            <table v-if="a.type === 'loss_orders' && expanded === a.id" class="mt-2 w-full max-w-2xl text-sm">
-                                <thead class="text-left text-xs text-muted-foreground">
-                                    <tr><th class="py-1 font-medium">Mã đơn sàn</th><th class="font-medium">SKU</th><th class="text-right font-medium">Thực nhận</th><th class="text-right font-medium">Giá vốn</th><th class="text-right font-medium">Lỗ</th></tr>
+                            <p class="truncate font-semibold text-slate-900">{{ s.account.shop_name }}</p>
+                            <p class="text-[13px] text-slate-500">{{ s.actual ? `${formatNumber(s.actual.orders)} đơn đối soát · 30 ngày` : 'Chưa có dữ liệu đối soát' }}</p>
+                        </div>
+                        <span v-if="s.actual && s.table && Math.abs(drift(s)) >= 0.5" class="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[12px] font-medium text-amber-700">
+                            <AlertTriangle class="size-3" /> {{ drift(s) > 0 ? 'Cao' : 'Thấp' }} hơn bảng {{ fmtPct(Math.abs(drift(s))) }}
+                        </span>
+                        <span v-else-if="s.actual && s.table" class="inline-flex shrink-0 items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[12px] font-medium text-emerald-700"><Check class="size-3" /> Khớp bảng phí</span>
+                    </div>
+                    <div class="mt-4 grid grid-cols-2 gap-3">
+                        <div class="rounded-[12px] bg-slate-50 p-3.5">
+                            <p class="text-[12px] text-slate-500">Bảng phí đang cài</p>
+                            <p class="text-[20px] font-bold tabular-nums text-slate-900">{{ s.table ? fmtPct(s.table.total_pct) : 'Chưa cài' }}</p>
+                        </div>
+                        <div :class="cn('rounded-[12px] p-3.5', !s.actual ? 'bg-slate-50' : Math.abs(drift(s)) >= 0.5 ? 'bg-amber-50' : 'bg-emerald-50')">
+                            <p class="text-[12px] text-slate-500">Phí thực tế</p>
+                            <p :class="cn('text-[20px] font-bold tabular-nums', !s.actual ? 'text-slate-400' : Math.abs(drift(s)) >= 0.5 ? 'text-amber-600' : 'text-emerald-600')">{{ s.actual ? fmtPct(s.actual.total_pct) : '—' }}</p>
+                        </div>
+                    </div>
+                    <p class="mt-3 text-[13px] text-slate-500">{{ s.last_import_at ? `Nhập lần cuối ${formatDateTime(s.last_import_at)}` : s.table ? 'Bảng phí đang dùng số nhập tay.' : 'Chưa cài bảng phí.' }}</p>
+                    <button v-if="canEdit && !s.settlements" type="button" class="mt-3 rounded-[10px] border border-slate-200 py-2.5 text-[14px] font-medium text-slate-700 hover:border-blue-300 hover:text-blue-700" @click="openImport(s.account.id)">Nhập file đối soát</button>
+                </div>
+            </div>
+
+            <section class="rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] mb-5 overflow-hidden">
+                <header class="flex flex-wrap items-center gap-3 border-b border-slate-100 px-6 py-4">
+                    <span class="grid size-9 place-items-center rounded-[10px] bg-amber-50 text-amber-600"><AlertTriangle class="size-[18px]" /></span>
+                    <h2 class="text-[16px] font-semibold text-slate-900">Cảnh báo</h2>
+                    <span v-if="alerts.length" class="rounded-md bg-amber-50 px-2 py-0.5 text-[12px] font-medium text-amber-700">{{ alerts.length }}</span>
+                    <span class="ml-auto text-[13px] text-slate-500">Cảnh báo mới được gửi email cho người quản lý cài đặt.</span>
+                </header>
+                <div class="divide-y divide-slate-100">
+                    <div v-for="a in alerts" :key="a.id" class="flex flex-wrap items-start gap-3 px-6 py-4" :data-testid="`alert-${a.type}`">
+                        <span :class="cn('grid size-9 shrink-0 place-items-center rounded-[10px]', a.type === 'fee_drift' ? 'bg-amber-50 text-amber-600' : 'bg-red-50 text-red-500')">
+                            <AlertTriangle v-if="a.type === 'fee_drift'" class="size-[18px]" />
+                            <TrendingDown v-else class="size-[18px]" />
+                        </span>
+                        <div class="min-w-0 flex-1">
+                            <p class="text-[14px] font-medium text-slate-900">{{ a.text }}</p>
+                            <p class="text-[13px] text-slate-500">{{ formatDateTime(a.created_at) }}</p>
+                            <table v-if="a.type === 'loss_orders' && expanded === a.id" class="mt-3 w-full max-w-3xl text-[14px]">
+                                <thead class="text-left text-[12px] uppercase tracking-wider text-slate-400">
+                                    <tr>
+                                        <th class="py-2 font-semibold">Mã đơn sàn</th>
+                                        <th class="font-semibold">SKU</th>
+                                        <th class="text-right font-semibold">Thực nhận</th>
+                                        <th class="text-right font-semibold">Giá vốn</th>
+                                        <th class="text-right font-semibold">Lỗ</th>
+                                    </tr>
                                 </thead>
-                                <tbody>
-                                    <tr v-for="o in lossOrders(a)" :key="o.external_order_id" class="border-t">
-                                        <td class="py-1 font-mono text-xs">{{ o.external_order_id }}</td>
-                                        <td class="text-xs">{{ o.skus.join(', ') }}</td>
+                                <tbody class="divide-y divide-slate-100 text-slate-700">
+                                    <tr v-for="o in lossOrders(a)" :key="o.external_order_id">
+                                        <td class="py-2 font-mono text-[13px] text-blue-700">{{ o.external_order_id }}</td>
+                                        <td class="text-[13px]">{{ o.skus.join(', ') }}</td>
                                         <td class="text-right tabular-nums">{{ formatMoney(o.net) }}</td>
                                         <td class="text-right tabular-nums">{{ formatMoney(o.cost) }}</td>
-                                        <td class="text-right tabular-nums text-rose-600">{{ formatMoney(o.loss) }}</td>
+                                        <td class="text-right font-semibold tabular-nums text-red-600">{{ formatMoney(o.loss) }}</td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
-                        <div class="flex gap-2">
-                            <template v-if="a.type === 'fee_drift' && canEdit">
-                                <Button size="sm" :loading="busy === `apply-${a.id}`" data-testid="alert-apply" @click="act(a, 'apply')">Dùng số thực tế và tính lại giá</Button>
-                            </template>
-                            <Button v-if="a.type === 'loss_orders'" size="sm" variant="outline" @click="expanded = expanded === a.id ? null : a.id">{{ expanded === a.id ? 'Ẩn đơn' : 'Xem đơn' }}</Button>
-                            <Button v-if="canEdit" size="sm" variant="ghost" :loading="busy === `dismiss-${a.id}`" @click="act(a, 'dismiss')">Bỏ qua</Button>
+                        <div class="flex flex-wrap gap-2">
+                            <button
+                                v-if="a.type === 'fee_drift' && canEdit"
+                                type="button"
+                                class="rounded-[10px] bg-blue-600 px-4 py-2 text-[14px] font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+                                :disabled="busy === `apply-${a.id}`"
+                                data-testid="alert-apply"
+                                @click="act(a, 'apply')"
+                            >
+                                Dùng số thực tế và tính lại giá
+                            </button>
+                            <button v-if="a.type === 'loss_orders'" type="button" class="rounded-[10px] border border-slate-200 px-4 py-2 text-[14px] text-slate-700 hover:border-blue-300" @click="expanded = expanded === a.id ? null : a.id">
+                                {{ expanded === a.id ? 'Ẩn đơn' : 'Xem đơn' }}
+                            </button>
+                            <button v-if="canEdit" type="button" class="rounded-[10px] px-3 py-2 text-[14px] text-slate-500 hover:bg-slate-100 disabled:opacity-60" :disabled="busy === `dismiss-${a.id}`" @click="act(a, 'dismiss')">Bỏ qua</button>
                         </div>
                     </div>
-                    <div v-for="s in noData" :key="`nodata-${s.account.id}`" class="flex flex-wrap items-center gap-3 px-4 py-3">
-                        <CircleDashed class="size-5 shrink-0 text-muted-foreground" />
-                        <div class="min-w-0 flex-1 text-sm">
-                            <span class="font-medium">{{ s.account.shop_name }} chưa có dữ liệu đối soát. </span>
-                            <span class="text-muted-foreground">{{ s.table ? `Bảng phí đang dùng số nhập tay (${fmtPct(s.table.total_pct)}).` : 'Chưa cài bảng phí.' }}</span>
-                        </div>
-                        <Button v-if="canEdit" size="sm" variant="outline" @click="openImport(s.account.id)">Nhập file</Button>
+                    <div v-for="s in noData" :key="`nodata-${s.account.id}`" class="flex flex-wrap items-center gap-3 px-6 py-4">
+                        <span class="grid size-9 shrink-0 place-items-center rounded-[10px] bg-slate-100 text-slate-500"><CircleDashed class="size-[18px]" /></span>
+                        <p class="min-w-0 flex-1 text-[14px]">
+                            <span class="font-medium text-slate-900">{{ s.account.shop_name }} chưa có dữ liệu đối soát. </span>
+                            <span class="text-slate-500">{{ s.table ? `Bảng phí đang dùng số nhập tay (${fmtPct(s.table.total_pct)}).` : 'Chưa cài bảng phí.' }}</span>
+                        </p>
                     </div>
-                    <div v-if="!alerts.length && !noData.length" class="px-4 py-6 text-center text-sm text-muted-foreground">Không có cảnh báo. Phí thực tế đang khớp bảng phí.</div>
+                    <p v-if="!alerts.length && !noData.length" class="flex items-center justify-center gap-2 px-6 py-6 text-[14px] text-slate-500"><Check class="size-4 text-emerald-500" /> Không có cảnh báo. Phí thực tế đang khớp bảng phí.</p>
                 </div>
-            </Card>
+            </section>
 
-            <Card class="mb-4">
-                <div class="border-b px-4 py-3">
-                    <h2 class="font-semibold">Phí thực tế theo gian hàng</h2>
-                    <p class="text-xs text-muted-foreground">% tính trên giá trị hàng. Phí vận chuyển sàn trừ tách riêng, không đưa vào giá.</p>
-                </div>
+            <section v-if="shops.some((x) => x.actual)" class="rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] mb-5 overflow-hidden">
+                <header class="border-b border-slate-100 px-6 py-4">
+                    <h2 class="text-[16px] font-semibold text-slate-900">Phí thực tế theo gian hàng</h2>
+                    <p class="text-[13px] text-slate-500">% tính trên giá trị hàng. Phí vận chuyển sàn trừ tách riêng, không đưa vào giá.</p>
+                </header>
                 <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead class="bg-muted/40 text-left text-xs text-muted-foreground">
+                    <table class="w-full text-[14px]">
+                        <thead class="border-b border-slate-100 text-left text-[12px] uppercase tracking-wider text-slate-400">
                             <tr>
-                                <th class="px-4 py-2 font-medium">Gian hàng</th>
-                                <th class="px-3 py-2 text-right font-medium">Đơn đối soát</th>
-                                <th class="px-3 py-2 text-right font-medium">Doanh thu</th>
-                                <th class="px-3 py-2 text-right font-medium">Hoa hồng</th>
-                                <th class="px-3 py-2 text-right font-medium">Thanh toán</th>
-                                <th class="px-3 py-2 text-right font-medium">Dịch vụ</th>
-                                <th class="px-3 py-2 text-right font-medium">Phí cố định</th>
-                                <th class="px-3 py-2 text-right font-medium">Thực nhận</th>
-                                <th class="px-3 py-2 text-right font-medium">Phí thực tế</th>
-                                <th class="px-4 py-2 text-right font-medium">Đang cài</th>
+                                <th class="px-3 py-3.5 pl-6 font-semibold">Gian hàng</th>
+                                <th class="px-3 py-3.5 text-right font-semibold">Đơn</th>
+                                <th class="px-3 py-3.5 text-right font-semibold">Doanh thu</th>
+                                <th class="px-3 py-3.5 text-right font-semibold">Hoa hồng</th>
+                                <th class="px-3 py-3.5 text-right font-semibold">Thanh toán</th>
+                                <th class="px-3 py-3.5 text-right font-semibold">Dịch vụ</th>
+                                <th class="px-3 py-3.5 text-right font-semibold">Phí cố định</th>
+                                <th class="px-3 py-3.5 text-right font-semibold">Thực nhận</th>
+                                <th class="px-3 py-3.5 text-right font-semibold">Phí thực tế</th>
+                                <th class="px-3 py-3.5 pr-6 text-right font-semibold">Đang cài</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            <template v-for="s in shops" :key="s.account.id">
-                                <tr class="border-t">
-                                    <td class="px-4 py-2"><span class="flex items-center gap-2 font-medium"><MarketplaceLogo :marketplace="s.account.marketplace" size="sm" /> {{ s.account.shop_name }}</span></td>
-                                    <template v-if="s.actual">
-                                        <td class="px-3 py-2 text-right tabular-nums">{{ formatNumber(s.actual.orders) }}</td>
-                                        <td class="px-3 py-2 text-right tabular-nums">{{ formatMoney(s.actual.order_amount) }}</td>
-                                        <td class="px-3 py-2 text-right tabular-nums">{{ fmtPct(s.actual.commission_pct) }}</td>
-                                        <td class="px-3 py-2 text-right tabular-nums">{{ fmtPct(s.actual.payment_pct) }}</td>
-                                        <td class="px-3 py-2 text-right tabular-nums">{{ fmtPct(s.actual.service_pct) }}</td>
-                                        <td class="px-3 py-2 text-right tabular-nums">{{ formatMoney(s.actual.fixed_fee) }}</td>
-                                        <td class="px-3 py-2 text-right tabular-nums">{{ formatMoney(s.actual.net_amount) }}</td>
-                                        <td class="px-3 py-2 text-right font-semibold tabular-nums" :class="Math.abs(drift(s)) >= 0.5 ? 'text-amber-600' : ''">{{ fmtPct(s.actual.total_pct) }}</td>
-                                    </template>
-                                    <td v-else colspan="8" class="px-3 py-2 text-muted-foreground">Chưa nhập file đối soát.</td>
-                                    <td class="px-4 py-2 text-right tabular-nums text-muted-foreground">{{ s.table ? fmtPct(s.table.total_pct) : 'chưa cài' }}</td>
+                        <tbody class="text-slate-700">
+                            <template v-for="s in shops.filter((x) => x.actual)" :key="s.account.id">
+                                <tr class="border-t border-slate-100">
+                                    <td class="px-3 py-3 pl-6"><span class="flex items-center gap-2.5 font-medium text-slate-900"><MarketplaceLogo :marketplace="s.account.marketplace" size="sm" /> {{ s.account.shop_name }}</span></td>
+                                    <td class="px-3 py-3 text-right tabular-nums">{{ formatNumber(s.actual!.orders) }}</td>
+                                    <td class="whitespace-nowrap px-3 py-3 text-right tabular-nums">{{ formatMoney(s.actual!.order_amount) }}</td>
+                                    <td class="px-3 py-3 text-right tabular-nums">{{ fmtPct(s.actual!.commission_pct) }}</td>
+                                    <td class="px-3 py-3 text-right tabular-nums">{{ fmtPct(s.actual!.payment_pct) }}</td>
+                                    <td class="px-3 py-3 text-right tabular-nums">{{ fmtPct(s.actual!.service_pct) }}</td>
+                                    <td class="whitespace-nowrap px-3 py-3 text-right tabular-nums">{{ formatMoney(s.actual!.fixed_fee) }}</td>
+                                    <td class="whitespace-nowrap px-3 py-3 text-right tabular-nums">{{ formatMoney(s.actual!.net_amount) }}</td>
+                                    <td :class="cn('px-3 py-3 text-right font-semibold tabular-nums', Math.abs(drift(s)) >= 0.5 ? 'text-amber-600' : 'text-slate-900')">{{ fmtPct(s.actual!.total_pct) }}</td>
+                                    <td class="px-3 py-3 pr-6 text-right tabular-nums text-slate-500">{{ s.table ? fmtPct(s.table.total_pct) : 'chưa cài' }}</td>
                                 </tr>
-                                <tr v-for="c in s.categories" :key="`${s.account.id}-${c.category_name}`" class="border-t border-dashed text-muted-foreground">
-                                    <td class="py-1.5 pl-11 pr-4">↳ {{ c.category_name }}</td>
-                                    <td class="px-3 py-1.5 text-right tabular-nums">{{ formatNumber(c.orders) }}</td>
-                                    <td class="px-3 py-1.5 text-right tabular-nums">{{ formatMoney(c.order_amount) }}</td>
-                                    <td class="px-3 py-1.5 text-right tabular-nums">{{ fmtPct(c.commission_pct) }}</td>
-                                    <td class="px-3 py-1.5 text-right tabular-nums">{{ fmtPct(c.payment_pct) }}</td>
-                                    <td class="px-3 py-1.5 text-right tabular-nums">{{ fmtPct(c.service_pct) }}</td>
-                                    <td class="px-3 py-1.5 text-right tabular-nums">{{ formatMoney(c.fixed_fee) }}</td>
-                                    <td class="px-3 py-1.5 text-right tabular-nums">{{ formatMoney(c.net_amount) }}</td>
-                                    <td class="px-3 py-1.5 text-right tabular-nums">{{ fmtPct(c.total_pct) }}</td>
-                                    <td class="px-4 py-1.5"></td>
+                                <tr v-for="c in s.categories" :key="`${s.account.id}-${c.category_name}`" class="text-[13px] text-slate-500">
+                                    <td class="py-2 pl-14 pr-3">↳ {{ c.category_name }}</td>
+                                    <td class="px-3 py-2 text-right tabular-nums">{{ formatNumber(c.orders) }}</td>
+                                    <td class="whitespace-nowrap px-3 py-2 text-right tabular-nums">{{ formatMoney(c.order_amount) }}</td>
+                                    <td class="px-3 py-2 text-right tabular-nums">{{ fmtPct(c.commission_pct) }}</td>
+                                    <td class="px-3 py-2 text-right tabular-nums">{{ fmtPct(c.payment_pct) }}</td>
+                                    <td class="px-3 py-2 text-right tabular-nums">{{ fmtPct(c.service_pct) }}</td>
+                                    <td class="whitespace-nowrap px-3 py-2 text-right tabular-nums">{{ formatMoney(c.fixed_fee) }}</td>
+                                    <td class="whitespace-nowrap px-3 py-2 text-right tabular-nums">{{ formatMoney(c.net_amount) }}</td>
+                                    <td class="px-3 py-2 text-right tabular-nums">{{ fmtPct(c.total_pct) }}</td>
+                                    <td class="px-3 py-2 pr-6"></td>
                                 </tr>
                             </template>
-                            <tr v-if="!shops.length"><td colspan="10" class="px-4 py-6 text-center text-muted-foreground">Chưa có gian hàng sàn nào đang kết nối.</td></tr>
                         </tbody>
                     </table>
                 </div>
-            </Card>
+            </section>
 
-            <Card>
-                <div class="border-b px-4 py-3">
-                    <h2 class="font-semibold">Lấy file đối soát ở đâu</h2>
-                    <p class="text-xs text-muted-foreground">Khi sàn duyệt API, EzChat Bán hàng sẽ tự lấy dữ liệu này mỗi ngày, không cần nhập file. Nếu file của sàn không đọc được, hãy dùng file mẫu của EzChat Bán hàng.</p>
-                </div>
-                <div class="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
-                    <div v-for="(g, key) in guides" :key="key" class="rounded-md border p-3 text-sm">
-                        <div class="mb-1 flex items-center gap-2 font-medium"><MarketplaceLogo :marketplace="key" size="sm" /> {{ g.name }}</div>
-                        <p class="text-muted-foreground">{{ g.path }}</p>
-                        <p v-for="s in shops.filter((x) => x.account.marketplace === key)" :key="s.account.id" class="mt-1 text-xs text-muted-foreground">
+            <section class="rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] p-6">
+                <h2 class="text-[16px] font-semibold text-slate-900">Lấy file đối soát ở đâu</h2>
+                <div class="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
+                    <div v-for="(g, key) in guides" :key="key" class="rounded-[12px] bg-slate-50 p-4 text-[14px]">
+                        <p class="mb-1.5 flex items-center gap-2 font-semibold text-slate-900"><MarketplaceLogo :marketplace="key" size="sm" /> {{ g.name }}</p>
+                        <p class="text-slate-600">{{ g.path }}</p>
+                        <p v-for="s in shops.filter((x) => x.account.marketplace === key)" :key="s.account.id" class="mt-1.5 text-[13px] text-slate-500">
                             {{ s.account.shop_name }}: {{ s.last_import_at ? `nhập lần cuối ${formatDateTime(s.last_import_at)} · ${formatNumber(s.settlements)} đơn` : 'chưa nhập' }}
                         </p>
                     </div>
                 </div>
-            </Card>
+                <p class="mt-4 flex items-start gap-2 rounded-[10px] bg-blue-50 p-3 text-[13px] text-blue-800">
+                    <Info class="mt-0.5 size-4 shrink-0" /> Khi sàn duyệt API, EzChat Bán hàng tự lấy dữ liệu này mỗi ngày, không cần nhập file. Nếu file của sàn không đọc được, hãy chép số vào file mẫu.
+                </p>
+            </section>
         </template>
 
         <Dialog v-model:open="importOpen" size="lg" title="Nhập file đối soát" description="File .xlsx hoặc .csv xuất từ Seller Center. Nhập lại cùng đơn sẽ ghi đè số cũ.">

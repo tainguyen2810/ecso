@@ -84,7 +84,7 @@ export const canOpen = (t: SettingsTile, can: (p: string) => boolean) => (t.anyP
 export function ownTileFor(path: string): { group: SettingsGroup; tile: SettingsTile } | null {
     for (const group of settingsGroups) {
         for (const tile of group.tiles) {
-            if (tile.own && (tile.to === path || tile.also?.includes(path))) return { group, tile };
+            if ((tile.own || tile.menu) && (tile.to === path || tile.also?.includes(path))) return { group, tile };
         }
     }
     return null;

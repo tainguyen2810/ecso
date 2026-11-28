@@ -41,7 +41,7 @@ test('owner works in the tenant dashboard', async ({ page }) => {
     await expect(page.getByTestId('tenant-switcher')).toContainText('Cửa hàng Mẫu');
 
     // Staff, plan and activity log are reached from Cấu hình, like Sapo.
-    await page.getByRole('link', { name: 'Cấu hình', exact: true }).click();
+    await page.getByTestId('sidebar').getByRole('link', { name: 'Cấu hình', exact: true }).click();
     await expect(page.getByTestId('settings-hub')).toBeVisible();
     await shot(page, '12-settings');
     await page.getByRole('link', { name: /Nhân viên và phân quyền/ }).click();
@@ -56,14 +56,14 @@ test('owner works in the tenant dashboard', async ({ page }) => {
     await expect(page.getByText('Đã gửi lời mời')).toBeVisible();
     await shot(page, '09-invitations');
 
-    await page.getByRole('link', { name: 'Cấu hình', exact: true }).click();
+    await page.getByTestId('sidebar').getByRole('link', { name: 'Cấu hình', exact: true }).click();
     await page.getByRole('link', { name: /Gói dịch vụ/ }).click();
     await expect(page.getByText('Các gói dịch vụ')).toBeVisible();
     await shot(page, '10-subscription');
 
-    await page.getByRole('link', { name: 'Cấu hình', exact: true }).click();
+    await page.getByTestId('sidebar').getByRole('link', { name: 'Cấu hình', exact: true }).click();
     await page.getByRole('link', { name: /Nhật ký hoạt động/ }).click();
-    await expect(page.getByRole('cell', { name: 'Gửi lời mời' }).first()).toBeVisible();
+    await expect(page.getByTestId('audit-list')).toContainText('Gửi lời mời');
     await shot(page, '11-audit-log');
 
 

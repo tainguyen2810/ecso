@@ -20,13 +20,14 @@ class WarehouseController extends Controller
     {
         $this->authorize('viewAny', Warehouse::class);
 
-        $totals = DB::table('stock_balances')->where('tenant_id', $context->id())
-            ->selectRaw('warehouse_id, SUM(CASE WHEN on_hand <> 0 THEN 1 ELSE 0 END) as sku_count, SUM(on_hand) as total_on_hand')
-            ->groupBy('warehouse_id');
+        $totals = DB::table('stock_balances as b')->where('b.tenant_id', $context->id())
+            ->leftJoin('product_variants as v', 'v.id', '=', 'b.product_variant_id')
+            ->selectRaw('b.warehouse_id, SUM(CASE WHEN b.on_hand <> 0 THEN 1 ELSE 0 END) as sku_count, SUM(b.on_hand) as total_on_hand, SUM(b.on_hand * COALESCE(v.cost_price, 0)) as stock_value')
+            ->groupBy('b.warehouse_id');
 
         $warehouses = Warehouse::query()
             ->leftJoinSub($totals, 't', 't.warehouse_id', '=', 'warehouses.id')
-            ->select('warehouses.*', DB::raw('COALESCE(t.sku_count, 0) as sku_count'), DB::raw('COALESCE(t.total_on_hand, 0) as total_on_hand'))
+            ->select('warehouses.*', DB::raw('COALESCE(t.sku_count, 0) as sku_count'), DB::raw('COALESCE(t.total_on_hand, 0) as total_on_hand'), DB::raw('COALESCE(t.stock_value, 0) as stock_value'))
             ->orderByDesc('is_default')->orderBy('code')->get();
 
         $limit = $context->entitlements()->limit('limit.warehouses');
