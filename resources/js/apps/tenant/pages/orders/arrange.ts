@@ -8,6 +8,8 @@ export interface ArrangeOrder {
     source: 'marketplace';
     marketplace_shipping: true;
     ship_by_at: string | null;
+    /** Kiểu giao: 'express' = Hỏa tốc (these come first). */
+    delivery_type?: string | null;
     /** Short of goods (or waiting for goods bought from the supplier). */
     shortage: boolean;
     /** Units of each product in this order, by product key. */

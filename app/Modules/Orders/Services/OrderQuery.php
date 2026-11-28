@@ -11,6 +11,7 @@ use App\Modules\Marketplace\Models\MarketplaceAccount;
 use App\Modules\Orders\Domain\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
+use App\Modules\Orders\Support\DeliveryType;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Sales\Support\PhoneNumber;
@@ -62,6 +63,12 @@ class OrderQuery
         }
         if ($marketplace = $filters['marketplace'] ?? null) {
             $query->where('marketplace', $marketplace);
+        }
+        if ($delivery = $filters['delivery'] ?? null) {
+            $query->where('delivery_type', $delivery);
+        }
+        if ($carrier = $filters['carrier'] ?? null) {
+            $query->where('shipping_carrier', $carrier);
         }
         if ($from = $filters['from'] ?? null) {
             $query->where('placed_at', '>=', ReportRange::date($from));
@@ -163,6 +170,26 @@ class OrderQuery
         return $counts;
     }
 
+    /**
+     * "Kiểu giao" row above the list: marketplace orders per delivery group and per carrier under the current filters
+     * (tab included, the delivery / carrier filters themselves left out so every chip keeps its count).
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{types: array<string, int>, carriers: list<array{name: string, count: int}>}
+     */
+    public function deliveryCounts(array $filters, ?int $userId): array
+    {
+        $base = $this->build([...$filters, 'delivery' => null, 'carrier' => null], $userId)->where('marketplace', '!=', Order::SOURCE_MANUAL);
+        $types = (clone $base)->toBase()->whereNotNull('delivery_type')->selectRaw('delivery_type, count(*) as c')->groupBy('delivery_type')->pluck('c', 'delivery_type');
+        $carriers = $this->build([...$filters, 'carrier' => null], $userId)->where('marketplace', '!=', Order::SOURCE_MANUAL)->toBase()
+            ->whereNotNull('shipping_carrier')->selectRaw('shipping_carrier, count(*) as c')->groupBy('shipping_carrier')->orderByDesc('c')->limit(20)->get();
+
+        return [
+            'types' => collect(array_keys(DeliveryType::LABELS))->mapWithKeys(fn ($t) => [$t => (int) ($types[$t] ?? 0)])->all(),
+            'carriers' => $carriers->map(fn ($r) => ['name' => (string) $r->shipping_carrier, 'count' => (int) $r->c])->values()->all(),
+        ];
+    }
+
     /** Most orders "Chuẩn bị hàng" takes in one go (same cap as the bulk actions). */
     public const ARRANGE_MAX = 200;
 
@@ -179,7 +206,7 @@ class OrderQuery
         $query = $this->build([...$filters, 'flags' => ['not_arranged']], $userId, withTab: false);
         $count = (clone $query)->count();
         $orders = $query->with(['items.variant.product.images'])
-            ->orderByRaw('ship_by_at IS NULL')->orderBy('ship_by_at')->orderBy('id')
+            ->orderByRaw("delivery_type <=> 'express' DESC")->orderByRaw('ship_by_at IS NULL')->orderBy('ship_by_at')->orderBy('id')
             ->limit(self::ARRANGE_MAX)->get();
 
         $items = $orders->flatMap(fn (Order $o) => $o->items)->filter(fn (OrderItem $i) => $i->mapping_status !== OrderItem::SERVICE);
@@ -226,6 +253,7 @@ class OrderQuery
                 'source' => 'marketplace',
                 'marketplace_shipping' => true,
                 'ship_by_at' => $order->ship_by_at?->toIso8601String(),
+                'delivery_type' => $order->delivery_type,
                 'shortage' => (bool) $order->has_shortage || (bool) $order->awaiting_purchase,
                 // Units of each product in this order, by product key.
                 'products' => (object) $keys,

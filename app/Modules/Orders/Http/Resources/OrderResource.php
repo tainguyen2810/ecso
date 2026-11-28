@@ -74,6 +74,9 @@ class OrderResource extends JsonResource
             'shipping_province_code' => $this->shipping_province_code,
             'shipping_ward_code' => $this->shipping_ward_code,
             'carrier' => $this->shipping_carrier,
+            // Kiểu giao: the group for the badge (express / standard / economy / bulky / other) and the marketplace's words.
+            'delivery_type' => $this->delivery_type,
+            'delivery_option' => $this->delivery_option,
             'tracking_number' => $this->tracking_number,
             'buyer_note' => $this->buyer_note,
             'tags' => $this->tags ?? [],

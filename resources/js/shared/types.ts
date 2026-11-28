@@ -308,6 +308,9 @@ export interface OrderSummary {
     shipping_province_code?: string | null;
     shipping_ward_code?: string | null;
     carrier: string | null;
+    /** Kiểu giao (Shopee / TikTok): express | standard | economy | bulky | other, and the marketplace's words. */
+    delivery_type?: string | null;
+    delivery_option?: string | null;
     tracking_number: string | null;
     buyer_note: string | null;
     tags?: string[];

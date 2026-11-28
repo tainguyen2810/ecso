@@ -58,5 +58,7 @@ final class OrderData
         // their contact details.
         public readonly ?string $buyerAccountId = null,
         public readonly ?string $buyerAccountName = null,
+        // Kiểu giao the buyer chose, in the marketplace's words (Shopee "Hỏa Tốc" / "Nhanh", TikTok's delivery option).
+        public readonly ?string $deliveryOption = null,
     ) {}
 }

@@ -14,6 +14,7 @@ use App\Modules\Orders\Models\OrderItem;
 use App\Modules\Orders\Models\OrderRefund;
 use App\Modules\Orders\Models\OrderReturn;
 use App\Modules\Orders\Models\OrderStatusHistory;
+use App\Modules\Orders\Support\DeliveryType;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Services\CustomerResolver;
 use App\Modules\Sales\Support\PhoneNumber;
@@ -216,6 +217,7 @@ class OrderIngestor
             // and the carrier it was typed with stays as well.
             'shipping_carrier' => blank($data->trackingNumber) && filled($order->tracking_number) ? $order->shipping_carrier : ($data->carrier ?? $order->shipping_carrier),
             'tracking_number' => filled($data->trackingNumber) ? $data->trackingNumber : $order->tracking_number,
+            'delivery_option' => $data->deliveryOption ?? $order->delivery_option,
             'buyer_note' => $data->buyerNote,
             'placed_at' => $data->placedAt ?? $order->placed_at ?? now(),
             'paid_at' => $data->paidAt,
@@ -229,6 +231,8 @@ class OrderIngestor
             'raw' => $data->raw,
             'version' => ($order->version ?? 0) + 1,
         ]);
+
+        $order->delivery_type = DeliveryType::classify($order->delivery_option, $order->shipping_carrier);
 
         if ($data->ownsCustomer) {
             $this->fillStoreDetails($order, $data);

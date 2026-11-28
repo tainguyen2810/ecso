@@ -1,3 +1,6 @@
+import type { Component } from 'vue';
+import { Box, Package, PiggyBank, Truck, Zap } from 'lucide-vue-next';
+
 type Tone = 'success' | 'danger' | 'warning' | 'muted' | 'default';
 
 export const orderStatus: Record<string, { label: string; tone: Tone }> = {
@@ -54,6 +57,15 @@ export const orderFlags: { value: string; label: string }[] = [
     { value: 'warning', label: 'Cảnh báo đồng bộ' },
     { value: 'not_printed', label: 'Chưa in phiếu đóng gói' },
     { value: 'label_unprinted', label: 'Chưa in phiếu sàn' },
+];
+
+/** Kiểu giao the buyer picked on Shopee / TikTok, grouped by ECSO (same words as Shopee's Seller Center). */
+export const deliveryTypes: { value: string; label: string; icon: Component; tone: string }[] = [
+    { value: 'express', label: 'Hỏa tốc', icon: Zap, tone: 'border-rose-200 bg-rose-50 text-rose-600' },
+    { value: 'standard', label: 'Nhanh', icon: Truck, tone: 'border-blue-200 bg-blue-50 text-blue-700' },
+    { value: 'economy', label: 'Tiết kiệm', icon: PiggyBank, tone: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+    { value: 'bulky', label: 'Cồng kềnh', icon: Box, tone: 'border-amber-200 bg-amber-50 text-amber-700' },
+    { value: 'other', label: 'Khác', icon: Package, tone: 'border-slate-200 bg-slate-50 text-slate-600' },
 ];
 
 export const actionLabels: Record<string, string> = {

@@ -45,7 +45,7 @@ class ShopeeConnector extends GatewayConnector
     /** get_order_list accepts at most 15 days per call. */
     private const MAX_WINDOW_SECONDS = 15 * 86400;
 
-    private const ORDER_FIELDS = 'buyer_user_id,buyer_username,estimated_shipping_fee,actual_shipping_fee,recipient_address,item_list,pay_time,payment_method,total_amount,shipping_carrier,cancel_reason,cod,note,message_to_seller';
+    private const ORDER_FIELDS = 'buyer_user_id,buyer_username,estimated_shipping_fee,actual_shipping_fee,recipient_address,item_list,pay_time,payment_method,total_amount,shipping_carrier,checkout_shipping_carrier,cancel_reason,cod,note,message_to_seller';
 
     public function marketplace(): string
     {
@@ -173,6 +173,8 @@ class ShopeeConnector extends GatewayConnector
             raw: ['order_status' => $status],
             buyerAccountId: isset($o['buyer_user_id']) ? (string) $o['buyer_user_id'] : null,
             buyerAccountName: filled($o['buyer_username'] ?? null) ? (string) $o['buyer_username'] : null,
+            // What the buyer picked at checkout ("Hỏa Tốc", "Nhanh"); shipping_carrier is who carries it (SPX Instant).
+            deliveryOption: filled($o['checkout_shipping_carrier'] ?? null) ? (string) $o['checkout_shipping_carrier'] : null,
         );
     }
 

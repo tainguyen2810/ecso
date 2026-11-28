@@ -31,6 +31,7 @@ use App\Modules\Orders\Services\OrderQuery;
 use App\Modules\Orders\Services\OrderSync;
 use App\Modules\Orders\Services\ReturnService;
 use App\Modules\Orders\Services\ShipmentSync;
+use App\Modules\Orders\Support\DeliveryType;
 use App\Modules\Orders\Support\OrderTags;
 use App\Modules\Orders\Support\Tracking;
 use App\Modules\Sales\Http\Resources\PaymentResource;
@@ -57,17 +58,19 @@ class OrderController extends Controller
         $this->authorize('viewAny', Order::class);
         $filters = $this->filters($request);
 
+        $sort = $filters['sort'] ?? 'newest';
         $page = $orders->build($filters, $request->user()->id)
             ->with(['account', 'channel', 'customer', 'assignee', 'items.variant.product.images'])->withCount('items')
-            ->orderBy(match ($filters['sort'] ?? 'newest') {
-                'ship_by' => 'ship_by_at',
-                'oldest', 'newest' => 'placed_at',
+            // "Hỏa tốc trước": express orders first (the marketplace gives them a few hours), then soonest deadline.
+            ->when($sort === 'urgent', fn ($q) => $q->orderByRaw("delivery_type <=> 'express' DESC")->orderByRaw('ship_by_at IS NULL'))
+            ->orderBy(match ($sort) {
+                'ship_by', 'urgent' => 'ship_by_at',
                 default => 'placed_at',
-            }, ($filters['sort'] ?? 'newest') === 'newest' ? 'desc' : 'asc')
+            }, $sort === 'newest' ? 'desc' : 'asc')
             ->orderByDesc('id')
             ->paginate((int) ($filters['per_page'] ?? 30));
 
-        return OrderResource::collection($page)->additional(['meta' => ['counts' => $orders->tabCounts($filters, $request->user()->id), 'has_imported' => Order::query()->whereNotNull('imported_from')->exists()]])->response();
+        return OrderResource::collection($page)->additional(['meta' => ['counts' => $orders->tabCounts($filters, $request->user()->id), 'delivery' => $orders->deliveryCounts($filters, $request->user()->id), 'has_imported' => Order::query()->whereNotNull('imported_from')->exists()]])->response();
     }
 
     /** "Orders to handle" strip above the order list. */
@@ -674,7 +677,9 @@ class OrderController extends Controller
             'assignee' => ['nullable', 'string'],
             'flags' => ['nullable', 'array'],
             'flags.*' => [Rule::in(['shortage', 'awaiting_purchase', 'unmapped', 'overdue', 'due_soon', 'warning', 'not_printed', 'payment_due', 'not_arranged', 'label_unprinted'])],
-            'sort' => ['nullable', Rule::in(['newest', 'oldest', 'ship_by'])],
+            'delivery' => ['nullable', Rule::in(array_keys(DeliveryType::LABELS))],
+            'carrier' => ['nullable', 'string', 'max:100'],
+            'sort' => ['nullable', Rule::in(['newest', 'oldest', 'ship_by', 'urgent'])],
             'per_page' => ['nullable', 'integer', 'min:10', 'max:100'],
         ]);
     }
