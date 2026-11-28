@@ -1,14 +1,10 @@
 <script setup lang="ts">
-import { cn } from "@/shared/lib/utils";
-import { SOFT_FIELD, SOFT_INVALID, useSoft } from "./soft";
+import { cn } from '@/shared/lib/utils';
+import { SOFT_FIELD, SOFT_INVALID, useSoft } from './soft';
 
 defineOptions({ inheritAttrs: false });
 const model = defineModel<string>();
-defineProps<{
-    options: { value: string; label: string; disabled?: boolean }[];
-    class?: string;
-    invalid?: boolean;
-}>();
+defineProps<{ options: { value: string; label: string; disabled?: boolean }[]; class?: string; invalid?: boolean }>();
 const soft = useSoft();
 </script>
 
@@ -26,13 +22,6 @@ const soft = useSoft();
             )
         "
     >
-        <option
-            v-for="o in options"
-            :key="o.value"
-            :value="o.value"
-            :disabled="o.disabled"
-        >
-            {{ o.label }}
-        </option>
+        <option v-for="o in options" :key="o.value" :value="o.value" :disabled="o.disabled">{{ o.label }}</option>
     </select>
 </template>
