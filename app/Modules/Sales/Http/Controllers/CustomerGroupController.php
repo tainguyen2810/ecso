@@ -4,6 +4,8 @@ namespace App\Modules\Sales\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Orders\Domain\OrderStatus;
+use App\Modules\Orders\Models\Order;
 use App\Modules\Sales\Http\Resources\CustomerGroupResource;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\CustomerGroup;
@@ -23,11 +25,26 @@ class CustomerGroupController extends Controller
 {
     public function __construct(private readonly AuditLogger $audit) {}
 
-    public function index(): AnonymousResourceCollection
+    public function index(Request $request): AnonymousResourceCollection
     {
         $this->authorize('viewAny', Customer::class);
+        $groups = CustomerGroup::query()->withCount('customers')->orderBy('name')->get();
+        if (! $request->boolean('stats')) {
+            return CustomerGroupResource::collection($groups);
+        }
+        // The page of groups (mẫu 28/11) also shows what each group bought in the last 12 months, and the totals.
+        $since = now()->subYear();
+        $revenue = Order::query()->join('customers', 'customers.id', '=', 'orders.customer_id')
+            ->whereNotIn('orders.status', [OrderStatus::CANCELLED, OrderStatus::RETURNED])->where('orders.placed_at', '>=', $since)
+            ->groupBy('customers.customer_group_id')->selectRaw('customers.customer_group_id as g, COALESCE(SUM(orders.total), 0) as v')
+            ->toBase()->pluck('v', 'g');
+        $groups->each(fn (CustomerGroup $g) => $g->setAttribute('revenue_12m', bcadd((string) ($revenue[$g->id] ?? 0), '0', 2)));
 
-        return CustomerGroupResource::collection(CustomerGroup::query()->withCount('customers')->orderBy('name')->get());
+        return CustomerGroupResource::collection($groups)->additional(['meta' => [
+            'customers' => Customer::query()->count(),
+            'revenue_12m' => bcadd((string) $revenue->sum(), '0', 2),
+            // Revenue of buyers who have no customer card is left out: only customers can be in a group.
+        ]]);
     }
 
     public function store(Request $request): JsonResponse

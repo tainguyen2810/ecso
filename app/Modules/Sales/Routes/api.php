@@ -64,11 +64,13 @@ Route::middleware(['auth:sanctum', 'verified', 'tenant'])->group(function () {
     Route::get('customers/{customer}/loyalty', [LoyaltyController::class, 'customer']);
     Route::post('customers/{customer}/loyalty/adjust', [LoyaltyController::class, 'adjust'])->middleware('throttle:60,1,sales.customers.loyalty');
     Route::get('customers/tags', [CustomerController::class, 'tags']);
+    Route::get('customers/summary', [CustomerController::class, 'overview']);
     Route::get('customers/staff', [CustomerController::class, 'staff']);
     Route::post('customers/bulk', [CustomerController::class, 'bulk']);
     Route::get('customers/export', [CustomerTransferController::class, 'export'])->middleware('throttle:10,1,sales.customers.export');
     Route::get('customer-tasks', [CustomerTaskController::class, 'index']);
     Route::get('customers/duplicates', [CustomerMergeController::class, 'duplicates']);
+    Route::post('customers/duplicates/dismiss', [CustomerMergeController::class, 'dismiss']);
     Route::get('customers/import-template', [CustomerTransferController::class, 'template']);
     Route::post('customers/import', [CustomerTransferController::class, 'import'])->middleware('throttle:10,1,sales.customers.import');
     Route::get('customers/imports/latest', [CustomerTransferController::class, 'latestImport']);

@@ -112,6 +112,12 @@ it('shows the overview: parcels now, what needs the shop, each carrier, and the 
         ->and($data['now']['fee_gap'])->toBe(['count' => 1, 'amount' => '6000.00'])->and($data['total'])->toBe(2);
     expect($data['carriers'][0])->toMatchArray(['count' => 2, 'delivered_rate' => 100.0, 'avg_fee' => '23000.00']);
     expect(collect($data['days'])->sum('delivered'))->toBe(1)->and(collect($data['days'])->sum('problem'))->toBe(1);
+    // Results of the period and the one before it, fees the shop paid, parcels per sales channel.
+    expect($data['summary'])->toMatchArray(['count' => 2, 'delivered' => 1, 'failed' => 1, 'finished' => 1, 'delivered_rate' => 100.0])
+        ->and((float) $data['summary']['fee_total'])->toBeGreaterThan(0)
+        ->and($data['previous']['count'])->toBe(0)
+        ->and(collect($data['channels'])->sum('count'))->toBe(2)
+        ->and((float) $data['carriers'][0]['fee_total'])->toBe((float) $data['summary']['fee_total']);
 
     $gap = $this->api->getJson('/api/v1/shipments?fee=gap')->assertOk()->json('data');
     expect($gap)->toHaveCount(1)->and($gap[0]['id'])->toBe($a['id']);

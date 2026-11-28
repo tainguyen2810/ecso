@@ -3,6 +3,7 @@
 namespace App\Modules\Sales\Services;
 
 use App\Modules\Sales\Models\Customer;
+use App\Modules\Sales\Models\CustomerDuplicateDismissal;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -23,6 +24,7 @@ class CustomerDuplicates
     public function groups(): array
     {
         $groups = [];
+        $dismissed = array_flip(CustomerDuplicateDismissal::query()->pluck('group_key')->all());
         foreach (['email' => 'email_key', 'tax_code' => 'tax_code', 'name' => 'LOWER(TRIM(name))'] as $reason => $expr) {
             $keys = Customer::query()->selectRaw("{$expr} as k")->whereRaw("{$expr} IS NOT NULL AND {$expr} <> ''")
                 ->groupByRaw($expr)->havingRaw('COUNT(*) > 1')->orderByRaw('COUNT(*) DESC')->limit(self::LIMIT)->pluck('k');
@@ -33,7 +35,14 @@ class CustomerDuplicates
                 if (isset($groups[$ids])) {
                     continue;
                 }
+                $groupKey = self::key($cards->pluck('id')->all());
+                if (isset($dismissed[$groupKey])) {
+                    $groups[$ids] = null; // still blocks the same cards from coming back under the name
+
+                    continue;
+                }
                 $groups[$ids] = [
+                    'key' => $groupKey,
                     'reason' => $reason,
                     'value' => (string) ($reason === 'name' ? $cards->first()?->name : $key),
                     'customers' => $cards->map(fn (Customer $c) => [
@@ -48,7 +57,31 @@ class CustomerDuplicates
             }
         }
 
-        return array_values($groups);
+        return array_values(array_filter($groups));
+    }
+
+    /**
+     * Key of a group: a hash of its cards, so a group marked "Không phải trùng" comes back only if its cards change.
+     *
+     * @param  list<int>  $ids
+     */
+    public static function key(array $ids): string
+    {
+        sort($ids);
+
+        return sha1(implode(',', $ids));
+    }
+
+    /** Marks a group as not duplicates (the key must be one of the groups shown now). */
+    public function dismiss(string $key, ?int $by): bool
+    {
+        $group = collect($this->groups())->firstWhere('key', $key);
+        if ($group === null) {
+            return false;
+        }
+        CustomerDuplicateDismissal::query()->firstOrCreate(['group_key' => $key], ['reason' => $group['reason'], 'value' => mb_substr($group['value'], 0, 200), 'created_by' => $by]);
+
+        return true;
     }
 
     /** How many groups there are now (for the badge on the tab), capped at the limit. */

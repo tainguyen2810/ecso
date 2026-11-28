@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Catalog\Models\Category;
 use App\Modules\Catalog\Models\ProductVariant;
+use App\Modules\Orders\Models\Order;
 use App\Modules\Sales\Loyalty\LoyaltyService;
 use App\Modules\Sales\Models\Customer;
 use App\Modules\Sales\Models\CustomerGroup;
@@ -14,6 +15,7 @@ use App\Modules\Sales\Models\PromotionUsage;
 use App\Modules\Sales\Models\SalesChannel;
 use App\Modules\Sales\Promotions\PromotionEngine;
 use App\Modules\Tenancy\Support\TenantContext;
+use App\Shared\Support\ReportRange;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -41,7 +43,38 @@ class PromotionController extends Controller
             $list = $list->where('state', $state)->values();
         }
 
-        return response()->json(['data' => $list]);
+        return response()->json(['data' => $list, 'meta' => $this->month()]);
+    }
+
+    /**
+     * This month's figures for the head of the page (mẫu 28/11): money given away, the orders that got it and what
+     * they brought in (vs last month), code redemptions, and the promotions that gave the most.
+     *
+     * @return array<string, mixed>
+     */
+    private function month(): array
+    {
+        $start = ReportRange::now()->startOfMonth();
+        $usages = fn ($from, $to) => PromotionUsage::query()->join('orders', 'orders.id', '=', 'promotion_usages.order_id')
+            ->where('orders.status', '!=', 'CANCELLED')->where('orders.placed_at', '>=', $from->utc())->where('orders.placed_at', '<', $to->utc());
+        $revenue = fn ($from, $to) => (string) (DB::query()->fromSub($usages($from, $to)->toBase()->select('orders.id', 'orders.total')->distinct(), 'o')->sum('total'));
+        $now = $usages($start, $start->addMonth())->toBase()
+            ->selectRaw('COALESCE(SUM(promotion_usages.amount), 0) as amount, COUNT(DISTINCT promotion_usages.order_id) as orders')->first();
+        $own = (string) Order::query()->whereNull('marketplace_account_id')
+            ->where('status', '!=', 'CANCELLED')->where('placed_at', '>=', $start->utc())->sum('total');
+        $top = $usages($start, $start->addMonth())->toBase()->groupBy('promotion_usages.promotion_id')
+            ->selectRaw('promotion_usages.promotion_id as id, SUM(promotion_usages.amount) as amount, COUNT(*) as uses')->orderByDesc('amount')->limit(5)->get();
+        $ulids = Promotion::query()->whereIn('id', $top->pluck('id'))->pluck('ulid', 'id');
+
+        return [
+            'amount' => bcadd((string) $now->amount, '0', 2),
+            'orders' => (int) $now->orders,
+            'revenue' => bcadd($revenue($start, $start->addMonth()), '0', 2),
+            'revenue_before' => bcadd($revenue($start->subMonth(), $start), '0', 2),
+            'own_revenue' => bcadd($own, '0', 2),
+            'code_uses' => (int) $usages($start, $start->addMonth())->join('promotions', 'promotions.id', '=', 'promotion_usages.promotion_id')->whereNotNull('promotions.code')->count(),
+            'top' => $top->map(fn ($r) => ['id' => $ulids[$r->id] ?? null, 'amount' => bcadd((string) $r->amount, '0', 2), 'uses' => (int) $r->uses])->values(),
+        ];
     }
 
     public function store(Request $request): JsonResponse

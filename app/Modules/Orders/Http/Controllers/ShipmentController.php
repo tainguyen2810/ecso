@@ -29,8 +29,8 @@ class ShipmentController extends Controller
         $this->authorize('viewAny', Order::class);
         $filters = $request->validate(ShipmentQuery::rules());
 
-        $page = ShipmentQuery::build($filters)->with(['order.channel', 'warehouse'])
-            ->orderByDesc('last_event_at')->orderByDesc('id')->paginate(30);
+        $page = ShipmentQuery::build($filters)->with(['order.channel', 'warehouse', 'latestEvent'])
+            ->orderByDesc('last_event_at')->orderByDesc('id')->paginate(max(10, min(100, $request->integer('per_page', 30))));
         ShipmentResource::rememberAreas($page->getCollection());
 
         return ShipmentResource::collection($page);
@@ -83,6 +83,7 @@ class ShipmentController extends Controller
     {
         $this->authorize('viewAny', Order::class);
         $byStatus = ShipmentQuery::visible()->toBase()->selectRaw('status, COUNT(*) as n')->groupBy('status')->pluck('n', 'status')->map(fn ($n) => (int) $n);
+        $slow = now()->subDays(ShipmentQuery::SLOW_DAYS)->toDateTimeString();
 
         return response()->json(['data' => [
             'tabs' => collect(ShipmentQuery::TABS)->map(fn ($statuses) => (int) collect($statuses)->sum(fn ($s) => $byStatus[$s] ?? 0))->put('all', (int) $byStatus->sum()),
@@ -90,8 +91,19 @@ class ShipmentController extends Controller
             'late' => ShipmentQuery::late(ShipmentQuery::visible())->count(),
             'late_days' => ShipmentQuery::LATE_DAYS,
             'cod_held' => ShipmentQuery::visible()->toBase()->where('cod_status', Shipment::COD_COLLECTED)
-                ->selectRaw('carrier, MAX(carrier_name) as carrier_name, SUM(cod_amount) as amount, COUNT(*) as n')->groupBy('carrier')->orderByDesc('amount')->get()
-                ->map(fn ($r) => ['carrier' => $r->carrier, 'carrier_name' => $r->carrier_name, 'amount' => number_format((float) $r->amount, 2, '.', ''), 'count' => (int) $r->n])->values(),
+                ->selectRaw('carrier, MAX(carrier_name) as carrier_name, SUM(cod_amount) as amount, COUNT(*) as n, '
+                    .'SUM(CASE WHEN delivered_at < ? THEN cod_amount ELSE 0 END) as slow_amount, SUM(CASE WHEN delivered_at < ? THEN 1 ELSE 0 END) as slow_n', [$slow, $slow])
+                ->groupBy('carrier')->orderByDesc('amount')->get()
+                ->map(fn ($r) => [
+                    'carrier' => $r->carrier,
+                    'carrier_name' => $r->carrier_name,
+                    'amount' => number_format((float) $r->amount, 2, '.', ''),
+                    'count' => (int) $r->n,
+                    // Held longer than a week after delivery: worth asking the carrier.
+                    'slow_amount' => number_format((float) $r->slow_amount, 2, '.', ''),
+                    'slow_count' => (int) $r->slow_n,
+                ])->values(),
+            'slow_days' => ShipmentQuery::SLOW_DAYS,
         ]]);
     }
 
