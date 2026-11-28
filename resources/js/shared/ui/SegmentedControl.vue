@@ -4,7 +4,8 @@ import { cn } from '@/shared/lib/utils';
 
 /** Two to four choices in one grey track (Cá nhân / Doanh nghiệp, % / Số tiền). `full` stretches it to the row. */
 const model = defineModel<T>({ required: true });
-defineProps<{ options: { value: T; label: string; icon?: Component }[]; full?: boolean; disabled?: boolean; class?: string }>();
+/** `testid`: each option gets data-testid="<testid>-<value>". */
+defineProps<{ options: { value: T; label: string; icon?: Component }[]; full?: boolean; disabled?: boolean; class?: string; testid?: string }>();
 </script>
 
 <template>
@@ -16,6 +17,7 @@ defineProps<{ options: { value: T; label: string; icon?: Component }[]; full?: b
             role="radio"
             :aria-checked="model === o.value"
             :disabled="disabled"
+            :data-testid="testid ? `${testid}-${o.value}` : undefined"
             :class="
                 cn(
                     'flex h-full items-center justify-center gap-1.5 whitespace-nowrap rounded-[8px] px-3.5 text-[14px] transition-colors [&_svg]:size-4',

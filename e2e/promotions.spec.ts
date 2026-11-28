@@ -25,7 +25,7 @@ test('promotions: create a coupon, apply it on an order, see it on the order', a
     await page.getByTestId('p-name').fill('Khách mới giảm 50K');
     await page.getByTestId('p-code').fill(code.toLowerCase());
     await page.getByTestId('p-value').fill('50000');
-    await page.getByTestId('p-kind').selectOption('amount');
+    await page.getByTestId('p-kind-amount').click();
     await expect(page.getByTestId('p-per')).toHaveValue('1');
     await expect(page.getByTestId('promotion-summary')).toContainText(`Khách đọc mã ${code}`);
     await shot(page, '01-tao-ma-giam-gia');
