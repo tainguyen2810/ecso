@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useElementWidth } from '@/shared/composables/useElementWidth';
 import { RouterLink } from 'vue-router';
 import { ArrowDown, ArrowUp, BarChart3, ChevronDown, ChevronRight, Info, PiggyBank, Receipt, TrendingUp } from 'lucide-vue-next';
 import ReportDetailHead from './ReportDetailHead.vue';
@@ -121,14 +122,16 @@ const steps = computed(() => {
     out.push({ label: 'Lợi nhuận', from: 0, to: val('profit'), kind: 'total' });
     return out;
 });
-const W = 1000;
-const H = 240;
+const chartBox = ref<HTMLElement | null>(null);
+const boxWidth = useElementWidth(chartBox, 1000);
+const W = computed(() => Math.max(640, boxWidth.value));
+const H = 220;
 const chart = computed(() => {
     const all = steps.value.flatMap((s) => [s.from, s.to]);
     const hi = Math.max(1, ...all);
     const lo = Math.min(0, ...all);
     const y = (v: number) => 30 + ((hi - v) / (hi - lo)) * H;
-    const slot = W / Math.max(1, steps.value.length);
+    const slot = W.value / Math.max(1, steps.value.length);
     return steps.value.map((s, i) => {
         const top = y(Math.max(s.from, s.to));
         const bottom = y(Math.min(s.from, s.to));
@@ -207,8 +210,8 @@ const card = 'rounded-[14px] border border-slate-200/80 bg-white shadow-[0_1px_2
                     <h3 class="text-[16px] font-semibold text-slate-900">Từ doanh thu đến lợi nhuận</h3>
                     <p class="mt-0.5 text-[13px] text-slate-500">Cột đỏ là khoản bị trừ đi, cột xanh lá là khoản cộng thêm.</p>
                 </header>
-                <div class="overflow-x-auto px-4 py-5">
-                    <svg :viewBox="`0 0 ${W} ${H + 70}`" class="h-auto w-full min-w-[640px]" role="img" aria-label="Từ doanh thu đến lợi nhuận">
+                <div ref="chartBox" class="overflow-x-auto px-4 py-5">
+                    <svg :viewBox="`0 0 ${W} ${H + 70}`" :width="W" :height="H + 70" class="block" role="img" aria-label="Từ doanh thu đến lợi nhuận">
                         <g v-for="(b, i) in chart" :key="b.label">
                             <line v-if="i < chart.length - 1" :x1="b.x + b.w" :x2="chart[i + 1]!.x" :y1="b.end" :y2="b.end" stroke="#cbd5e1" stroke-dasharray="3 3" />
                             <rect :x="b.x" :y="b.top" :width="b.w" :height="b.h" rx="4" :fill="b.color" />
